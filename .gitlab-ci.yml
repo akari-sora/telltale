@@ -1,5 +1,5 @@
 # On-demand gate for Grok box project runner (tags: grok-box, ondemand, telltale).
-# Keep jobs tagged so GitLab.com shared runners never pick them up.
+# Image is local on the Grok box (NDK 28.2 baked); pull_policy=if-not-present.
 stages:
   - gate
 
@@ -9,6 +9,8 @@ default:
 variables:
   PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
   GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false"
+  ANDROID_HOME: "/opt/android-sdk-linux"
+  ANDROID_SDK_ROOT: "/opt/android-sdk-linux"
 
 full-gate:
   stage: gate
@@ -16,7 +18,7 @@ full-gate:
     - grok-box
     - ondemand
     - telltale
-  image: ghcr.io/project516/flutter:3.47.0
+  image: localhost/telltale-ci-flutter:3.47.0
   timeout: 3h
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
@@ -48,14 +50,23 @@ full-gate:
           FLUTTER_BIN=$(command -v flutter)
           FLUTTER_HOME=$(dirname "$(dirname "$FLUTTER_BIN")")
         fi
-        echo "NONROOT=$NONROOT FLUTTER_HOME=$FLUTTER_HOME"
-        chown -R "$NONROOT:$NONROOT" "$CI_PROJECT_DIR"
-        # SDK may be root-owned; grant read/exec without rewriting the whole tree if chown fails.
+        ANDROID_SDK="${ANDROID_HOME:-/opt/android-sdk-linux}"
+        echo "NONROOT=$NONROOT FLUTTER_HOME=$FLUTTER_HOME ANDROID_SDK=$ANDROID_SDK"
+        # Ensure Flutter 3.47 NDK is present (baked into localhost image; install if missing).
+        if [ ! -d "$ANDROID_SDK/ndk/28.2.13676358" ]; then
+          export PATH="$ANDROID_SDK/cmdline-tools/latest/bin:$PATH"
+          mkdir -p "$ANDROID_SDK/licenses"
+          yes | sdkmanager --licenses >/tmp/sdk-lic.log 2>&1 || true
+          sdkmanager --install "ndk;28.2.13676358"
+        fi
+        chown -R "$NONROOT:$NONROOT" "$CI_PROJECT_DIR" "$ANDROID_SDK"
         chown -R "$NONROOT:$NONROOT" "$FLUTTER_HOME" 2>/dev/null || chmod -R a+rX "$FLUTTER_HOME"
         printf '%s\n' '#!/bin/bash' 'set -euo pipefail' \
           "export PATH=\"$FLUTTER_HOME/bin:\$PATH\"" \
           "export PUB_CACHE=\"$CI_PROJECT_DIR/.pub-cache\"" \
           "export GRADLE_OPTS=\"${GRADLE_OPTS}\"" \
+          "export ANDROID_HOME=\"$ANDROID_SDK\"" \
+          "export ANDROID_SDK_ROOT=\"$ANDROID_SDK\"" \
           "cd \"$CI_PROJECT_DIR\"" \
           'exec "$@"' > /usr/local/bin/as-nonroot
         chmod 755 /usr/local/bin/as-nonroot
