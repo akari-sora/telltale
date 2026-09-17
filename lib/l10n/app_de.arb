@@ -1204,7 +1204,7 @@
       "reason": { "type": "String" }
     }
   },
-  "serviceRecipesDiscoveryPartialWarning": "Erkennung unvollständig ({reason}). Nicht abgeschlossene Blöcke: {blocks}. Hinweis: Nicht gefunden bedeutet nicht nicht unterstützt (未查到不代表不支援).",
+  "serviceRecipesDiscoveryPartialWarning": "Erkennung unvollständig ({reason}). Nicht abgeschlossene Blöcke: {blocks}. Hinweis: Nicht gefunden bedeutet nicht nicht unterstützt.",
   "@serviceRecipesDiscoveryPartialWarning": {
     "placeholders": {
       "reason": { "type": "String" },
@@ -1245,5 +1245,18 @@
   },
   "serviceRecipesNoPreconditions": "Keine",
   "settingsServiceRecipesEntry": "Service-Rezepte & Aktive Tests",
-  "settingsServiceRecipesDesc": "Werkstatt-Service-Rezepte prüfen und unterstützte Mode 08 Tests sicher erkennen"
+  "settingsServiceRecipesDesc": "Werkstatt-Service-Rezepte prüfen und unterstützte Mode 08 Tests sicher erkennen",
+  "mode08ReasonUnheaderedLimitation": "Quellzuordnung und Abdeckung unbestätigt: Antworten ohne Header können keine blockübergreifende ECU-Identität herstellen",
+  "mode08ReasonNoResponseWithEcu": "Keine Antwort für Block {block} von {ecu}: {marker}",
+  "mode08ReasonNoResponse": "Keine Antwort für Block {block}: {marker}",
+  "mode08ReasonNegativeWithEcu": "Negative Antwort für Block {block} von {ecu} (NRC {nrc})",
+  "mode08ReasonNegative": "Negative Antwort für Block {block} (NRC {nrc})",
+  "mode08ReasonMalformedWithEcu": "Fehlerhafte Antwort für Block {block} von {ecu}: {details}",
+  "mode08ReasonMalformed": "Fehlerhafte Antwort für Block {block}: {details}",
+  "mode08ReasonTimeout": "Zeitüberschreitung bei Abfrage von Block {block}",
+  "mode08ReasonBudgetExceeded": "Erkennungszeitbudget erschöpft, bevor alle Blöcke abgefragt wurden",
+  "mode08ReasonSessionDisconnected": "Sitzung während der Erkennung getrennt oder ersetzt",
+  "mode08ReasonUnqueriedAnnounced": "Von Steuergeräten angekündigte, nicht abgefragte Blöcke: {blocks}",
+  "mode08ReasonRequiresCanBus": "Mode 08-Funktionserkennung erfordert einen aufgelösten OBD-II CAN-Bus",
+  "mode08ReasonUnexpectedExecution": "Unerwartete Ausführungsantwort auf Abfrage unterstützter TIDs"
 }

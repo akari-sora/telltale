@@ -19,6 +19,7 @@ final class ElmCompositeTransactionConfig {
     this.canReceiveFilter,
     this.flowControl,
     this.hostVisibleIsoTp = false,
+    this.responseHeaders = false,
     this.timeout,
     this.budget,
     this.drainBudget,
@@ -48,6 +49,14 @@ final class ElmCompositeTransactionConfig {
   /// Host-visible ISO-TP PCI framing (`ATCAF0`). Restores to `ATCAF1`.
   final bool hostVisibleIsoTp;
 
+  /// Whether to negotiate response headers (`ATH1`) during the transaction.
+  ///
+  /// If true, `ATH1` is negotiated at transaction start. If accepted (`OK`),
+  /// the transaction parses replies with response headers enabled, and `ATH0`
+  /// is restored in `finally` (unless headers were already on prior to transaction).
+  /// If refused, queries proceed anonymously without throwing immediately.
+  final bool responseHeaders;
+
   /// Timeout for each query command in the transaction.
   final Duration? timeout;
 
@@ -73,5 +82,6 @@ final class ElmCompositeTransactionConfig {
       canReceiveFilter != null ||
       flowControl != null ||
       hostVisibleIsoTp ||
+      responseHeaders ||
       header != null;
 }

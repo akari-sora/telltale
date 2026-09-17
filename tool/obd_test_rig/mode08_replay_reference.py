@@ -253,6 +253,11 @@ class ReplayServer:
             await self._send_reply(writer, state, "OK", echo=raw_cmd)
             return False
         if compact == "ATH1":
+            scenario = self.scenarios.get(state.active_scenario_id)
+            if scenario and (scenario.get("headers") is False or scenario.get("refuse_headers") is True):
+                state.headers = False
+                await self._send_reply(writer, state, "?", echo=raw_cmd)
+                return False
             state.headers = True
             await self._send_reply(writer, state, "OK", echo=raw_cmd)
             return False
