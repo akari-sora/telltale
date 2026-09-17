@@ -159,7 +159,7 @@ void main() {
     });
 
     test(
-      'a caller budget that expires mid-resync is not an adapter failure',
+      'a caller budget that has expired before sending throws pre-send TimeoutException',
       () async {
         final transport = _ScriptedTransport({
           '010C': ('', const Duration(hours: 1)),
@@ -174,23 +174,71 @@ void main() {
         await expectLater(
           client.sendGlobal(
             '03',
-            // Slightly wider window still ≪ resyncTimeout; under full-suite
-            // load the chain may burn the deadline before resync starts.
-            deadline: DateTime.now().add(const Duration(milliseconds: 500)),
+            deadline: DateTime.now().subtract(const Duration(milliseconds: 10)),
           ),
           throwsA(
             isA<TimeoutException>().having(
               (e) => e.message,
               'message',
-              anyOf(
-                'This operation\'s time limit was reached before the '
-                    'connection finished synchronising. Try again.',
-                'The time limit for this operation has passed, so 03 was not sent.',
-              ),
+              'The time limit for this operation has passed, so 03 was not sent.',
             ),
           ),
         );
         expect(client.isInitialized, isTrue);
+
+        await client.dispose();
+      },
+    );
+
+    test(
+      'a caller budget that expires mid-resync is not an adapter failure',
+      () async {
+        final transport = _ScriptedTransport({
+          '010C': ('', const Duration(hours: 1)),
+        });
+        var simulatedNow = DateTime(2026, 9, 17, 12, 0, 0);
+        final client = Elm327Client(
+          transport,
+          commandTimeout: const Duration(milliseconds: 80),
+          clock: () => simulatedNow,
+        );
+        final resyncStarted = Completer<void>();
+        client.onResyncStarted = () {
+          if (!resyncStarted.isCompleted) resyncStarted.complete();
+        };
+
+        expect(await client.connect(), isTrue);
+
+        await expectLater(client.send('010C'), throwsA(isA<TimeoutException>()));
+
+        // Controllable deadline is anchored to simulated clock and starts 60ms in the future.
+        // Even under heavy CI scheduling delay before sendGlobal begins, the pre-send
+        // check evaluates against simulatedNow, guaranteeing that the operation enters resync.
+        final deadline = simulatedNow.add(const Duration(milliseconds: 60));
+        final sendGlobalFuture = client.sendGlobal('03', deadline: deadline);
+
+        // Barrier: confirm that resync has actually started before drain window finishes.
+        await resyncStarted.future;
+        expect(client.isResyncing, isTrue);
+
+        await expectLater(
+          sendGlobalFuture,
+          throwsA(
+            isA<TimeoutException>().having(
+              (e) => e.message,
+              'message',
+              'This operation\'s time limit was reached before the '
+                  'connection finished synchronising. Try again.',
+            ),
+          ),
+        );
+        expect(client.isInitialized, isTrue);
+        expect(
+          client.transcript.entries.any(
+            (e) => e.note == 'Connection is out of sync, starting realignment',
+          ),
+          isTrue,
+        );
 
         await client.dispose();
       },
