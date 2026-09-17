@@ -77,16 +77,21 @@ final class Mode08DiscoveryState {
 
   const Mode08DiscoveryState.failed({
     required String message,
+    Mode08DiscoveryResult? result,
     int? nrc,
   }) : this._(
           phase: Mode08DiscoveryPhase.failed,
+          result: result,
           message: message,
           nrc: nrc,
         );
 
-  const Mode08DiscoveryState.refused({required String reason})
-      : this._(
+  const Mode08DiscoveryState.refused({
+    required String reason,
+    Mode08DiscoveryResult? result,
+  }) : this._(
           phase: Mode08DiscoveryPhase.refused,
+          result: result,
           message: reason,
         );
 
@@ -148,8 +153,13 @@ class Mode08DiscoveryNotifier extends Notifier<Mode08DiscoveryState> {
 
     final connection = ref.read(obdSessionProvider);
     if (!connection.isConnected) {
-      state = const Mode08DiscoveryState.refused(
+      state = Mode08DiscoveryState.refused(
         reason: 'OBD session is not connected',
+        result: Mode08DiscoveryResult.failure(
+          supportStatus: EcuSupportStatus.unknown,
+          reason: 'OBD session is not connected',
+          incompletionReason: Mode08IncompletionReason.sessionDisconnected,
+        ),
       );
       return;
     }
@@ -157,15 +167,25 @@ class Mode08DiscoveryNotifier extends Notifier<Mode08DiscoveryState> {
     final sessionController = ref.read(obdSessionProvider.notifier);
     final client = sessionController.client;
     if (client == null) {
-      state = const Mode08DiscoveryState.refused(
+      state = Mode08DiscoveryState.refused(
         reason: 'OBD client is not available',
+        result: Mode08DiscoveryResult.failure(
+          supportStatus: EcuSupportStatus.unknown,
+          reason: 'OBD client is not available',
+          incompletionReason: Mode08IncompletionReason.sessionDisconnected,
+        ),
       );
       return;
     }
 
     if (!client.addressing.isCan || !client.addressing.supportsObd2) {
-      state = const Mode08DiscoveryState.refused(
+      state = Mode08DiscoveryState.refused(
         reason: 'Mode 08 capability discovery requires an OBD-II CAN bus',
+        result: Mode08DiscoveryResult.failure(
+          supportStatus: EcuSupportStatus.unknown,
+          reason: 'Mode 08 capability discovery requires an OBD-II CAN bus',
+          incompletionReason: Mode08IncompletionReason.requiresCanBus,
+        ),
       );
       return;
     }
@@ -194,6 +214,7 @@ class Mode08DiscoveryNotifier extends Notifier<Mode08DiscoveryState> {
         state = Mode08DiscoveryState.completed(result: discoveryResult);
       } else {
         state = Mode08DiscoveryState.failed(
+          result: discoveryResult,
           message: discoveryResult.failureReason ?? 'Mode 08 discovery inconclusive',
           nrc: discoveryResult.nrc,
         );

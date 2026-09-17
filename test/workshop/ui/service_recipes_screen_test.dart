@@ -18,7 +18,9 @@ import 'package:torque_obd/ui/screens/settings/settings_screen.dart';
 import 'package:torque_obd/ui/screens/workshop/service_recipe_detail_sheet.dart';
 import 'package:torque_obd/ui/screens/workshop/service_recipes_screen.dart';
 
+import '../../support/fake_elm327.dart';
 import '../../support/localized_app.dart';
+import 'package:torque_obd/obd/elm327_client.dart';
 
 class _DisconnectedSession extends ObdSession {
   @override
@@ -32,6 +34,45 @@ class _ConnectedCanSession extends ObdSession {
     protocol: 'ISO 15765-4 (CAN 11/500)',
   );
 }
+
+class _RealControllerCanSession extends ObdSession {
+  _RealControllerCanSession(this._clientInstance);
+
+  final Elm327Client _clientInstance;
+
+  @override
+  Elm327Client? get client => _clientInstance;
+
+  @override
+  int get generation => _clientInstance.connectionGeneration;
+
+  @override
+  ObdConnectionState build() => const ObdConnectionState(
+    phase: ConnectionPhase.connected,
+    protocol: 'ISO 15765-4 (CAN 11/500)',
+  );
+}
+
+Map<String, List<int>> _physicsReplies() => {
+  '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x13],
+  '0105': [0x41, 0x05, 0x7B],
+  '010C': [0x41, 0x0C, 0x1A, 0xF8],
+};
+
+FakeElm327 _createTestCan11Transport({
+  Map<String, List<String>> literalResponses = const {},
+}) => FakeElm327(
+  protocol: BusProtocol.can11,
+  ecus: [
+    FakeEcu(
+      name: 'ECM',
+      requestId: '7E0',
+      responseId: '7E8',
+      responses: _physicsReplies(),
+      literalResponses: literalResponses,
+    ),
+  ],
+);
 
 class _TestDiscoveryNotifier extends Mode08DiscoveryNotifier {
   _TestDiscoveryNotifier(this._initialState);
@@ -765,5 +806,281 @@ void main() {
         expect(warning, findsOneWidget);
       },
     );
+
+    group('real Mode08DiscoveryNotifier -> UI classification and localization', () {
+      Future<void> pumpScreenAndTriggerDiscovery(
+        WidgetTester tester, {
+        required ObdSession session,
+        required Locale locale,
+      }) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            key: UniqueKey(),
+            overrides: [
+              obdSessionProvider.overrideWith(() => session),
+              serviceRecipesMatrixProvider.overrideWith(
+                (ref) async => bundledMatrix,
+              ),
+            ],
+            child: localizedMaterialApp(
+              home: const ServiceRecipesScreen(),
+              locale: locale,
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        final discoverButton = find.byKey(const Key('mode08_discovery_button'));
+        await tester.scrollUntilVisible(
+          discoverButton,
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(discoverButton);
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      }
+
+      testWidgets('NO DATA outcome renders unknown in EN', (tester) async {
+        await tester.runAsync(() async {
+          final transport = _createTestCan11Transport();
+          final client = Elm327Client(transport);
+          expect(await client.connect(), isTrue);
+          client.cancelWatchdogForTesting();
+          try {
+            await pumpScreenAndTriggerDiscovery(
+              tester,
+              session: _RealControllerCanSession(client),
+              locale: const Locale('en'),
+            );
+
+            expect(find.textContaining('unknown', findRichText: true), findsWidgets);
+            expect(find.textContaining('0x00'), findsWidgets);
+          } finally {
+            await client.disconnect();
+          }
+        });
+      });
+
+      testWidgets('NO DATA outcome renders unknown in zh-Hant', (tester) async {
+        await tester.runAsync(() async {
+          final transport = _createTestCan11Transport();
+          final client = Elm327Client(transport);
+          expect(await client.connect(), isTrue);
+          client.cancelWatchdogForTesting();
+          try {
+            await pumpScreenAndTriggerDiscovery(
+              tester,
+              session: _RealControllerCanSession(client),
+              locale: testUiLocale,
+            );
+
+            expect(find.textContaining('未知', findRichText: true), findsWidgets);
+            expect(find.textContaining('0x00'), findsWidgets);
+          } finally {
+            await client.disconnect();
+          }
+        });
+      });
+
+      testWidgets('NRC 22 outcome renders unknown in EN', (tester) async {
+        await tester.runAsync(() async {
+          final transport = _createTestCan11Transport(
+            literalResponses: {
+              '0800': ['7E8 03 7F 08 22'],
+            },
+          );
+          final client = Elm327Client(transport);
+          expect(await client.connect(), isTrue);
+          client.cancelWatchdogForTesting();
+          try {
+            await pumpScreenAndTriggerDiscovery(
+              tester,
+              session: _RealControllerCanSession(client),
+              locale: const Locale('en'),
+            );
+
+            expect(find.textContaining('unknown', findRichText: true), findsWidgets);
+            expect(find.textContaining('0x22'), findsWidgets);
+          } finally {
+            await client.disconnect();
+          }
+        });
+      });
+
+      testWidgets('NRC 22 outcome renders unknown in zh-Hant', (tester) async {
+        await tester.runAsync(() async {
+          final transport = _createTestCan11Transport(
+            literalResponses: {
+              '0800': ['7E8 03 7F 08 22'],
+            },
+          );
+          final client = Elm327Client(transport);
+          expect(await client.connect(), isTrue);
+          client.cancelWatchdogForTesting();
+          try {
+            await pumpScreenAndTriggerDiscovery(
+              tester,
+              session: _RealControllerCanSession(client),
+              locale: testUiLocale,
+            );
+
+            expect(find.textContaining('未知', findRichText: true), findsWidgets);
+            expect(find.textContaining('0x22'), findsWidgets);
+          } finally {
+            await client.disconnect();
+          }
+        });
+      });
+
+      testWidgets(
+        'NRC 12 outcome renders unsupported in EN without unknown',
+        (tester) async {
+          await tester.runAsync(() async {
+            final transport = _createTestCan11Transport(
+              literalResponses: {
+                '0800': ['7E8 03 7F 08 12'],
+              },
+            );
+            final client = Elm327Client(transport);
+            expect(await client.connect(), isTrue);
+            client.cancelWatchdogForTesting();
+            try {
+              await pumpScreenAndTriggerDiscovery(
+                tester,
+                session: _RealControllerCanSession(client),
+                locale: const Locale('en'),
+              );
+
+              expect(
+                find.textContaining('not supported', findRichText: true),
+                findsWidgets,
+              );
+              expect(find.textContaining('0x12'), findsWidgets);
+              expect(
+                find.textContaining('unknown', findRichText: true),
+                findsNothing,
+              );
+              expect(
+                find.textContaining('Unknown', findRichText: true),
+                findsNothing,
+              );
+            } finally {
+              await client.disconnect();
+            }
+          });
+        },
+      );
+
+      testWidgets(
+        'NRC 12 outcome renders unsupported in zh-Hant without unknown',
+        (tester) async {
+          await tester.runAsync(() async {
+            final transport = _createTestCan11Transport(
+              literalResponses: {
+                '0800': ['7E8 03 7F 08 12'],
+              },
+            );
+            final client = Elm327Client(transport);
+            expect(await client.connect(), isTrue);
+            client.cancelWatchdogForTesting();
+            try {
+              await pumpScreenAndTriggerDiscovery(
+                tester,
+                session: _RealControllerCanSession(client),
+                locale: testUiLocale,
+              );
+
+              expect(
+                find.textContaining('不支援', findRichText: true),
+                findsWidgets,
+              );
+              expect(find.textContaining('0x12'), findsWidgets);
+              expect(find.textContaining('未知', findRichText: true), findsNothing);
+            } finally {
+              await client.disconnect();
+            }
+          });
+        },
+      );
+
+      testWidgets(
+        'Malformed response renders localized reason and hides raw enum in EN',
+        (tester) async {
+          await tester.runAsync(() async {
+            final transport = _createTestCan11Transport(
+              literalResponses: {
+                '0800': ['7E8 ZZ INVALID HEX DATA'],
+              },
+            );
+            final client = Elm327Client(transport);
+            expect(await client.connect(), isTrue);
+            client.cancelWatchdogForTesting();
+            try {
+              await pumpScreenAndTriggerDiscovery(
+                tester,
+                session: _RealControllerCanSession(client),
+                locale: const Locale('en'),
+              );
+
+              expect(
+                find.textContaining('Invalid hex', findRichText: true),
+                findsWidgets,
+              );
+              expect(find.textContaining('invalidHex'), findsNothing);
+              expect(
+                find.textContaining('7E8 ZZ INVALID HEX DATA'),
+                findsWidgets,
+              );
+            } finally {
+              await client.disconnect();
+            }
+          });
+        },
+      );
+
+      testWidgets(
+        'Malformed response renders localized reason and hides raw enum in zh-Hant',
+        (tester) async {
+          await tester.runAsync(() async {
+            final transport = _createTestCan11Transport(
+              literalResponses: {
+                '0800': ['7E8 ZZ INVALID HEX DATA'],
+              },
+            );
+            final client = Elm327Client(transport);
+            expect(await client.connect(), isTrue);
+            client.cancelWatchdogForTesting();
+            try {
+              await pumpScreenAndTriggerDiscovery(
+                tester,
+                session: _RealControllerCanSession(client),
+                locale: testUiLocale,
+              );
+
+              expect(
+                find.textContaining('十六進位格式無效', findRichText: true),
+                findsWidgets,
+              );
+              expect(find.textContaining('invalidHex'), findsNothing);
+              expect(
+                find.textContaining('7E8 ZZ INVALID HEX DATA'),
+                findsWidgets,
+              );
+            } finally {
+              await client.disconnect();
+            }
+          });
+        },
+      );
+    });
   });
 }

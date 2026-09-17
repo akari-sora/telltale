@@ -587,6 +587,10 @@ class FakeElm327 extends BaseObdTransport {
   /// Optional callback invoked whenever a command is received and logged.
   void Function(String command)? onCommandWritten;
 
+  /// Optional barrier hook. If provided and returns a Future, the adapter
+  /// awaits the future before emitting response bytes / prompt to the client.
+  Future<void>? Function(String command)? responseBarrier;
+
   @override
   Future<void> connect() async {
     _searchPending = requiresProtocolSearch;
@@ -774,6 +778,16 @@ class FakeElm327 extends BaseObdTransport {
         final timer = Timer(at, () => _emitChunked('$frame\r'));
         _scheduled.add(timer);
       }
+    }
+
+    final barrier = responseBarrier?.call(command);
+    if (barrier != null) {
+      barrier.then((_) {
+        if (isConnected) {
+          send();
+        }
+      });
+      return;
     }
 
     if (latency == Duration.zero) {

@@ -817,6 +817,8 @@ class Elm327Client {
     _canReceiveFilterState = const ElmCanReceiveFilterOff();
     _headerRestoreFailed = false;
     _headersOn = false;
+    _responseHeadersUncertain = false;
+    _responseHeadersRestoreFailed = false;
     _connectionSession++;
     _connectionGeneration++;
     await transport.connect();
@@ -1556,6 +1558,11 @@ class Elm327Client {
       // already arrived; a late flush failure must not skip the restore
       // that still has to walk). A write *timeout* is still unknown even
       // when a reply arrived first — R7 H-01 — so that path resyncs.
+      if (normalised == 'ATH1' || normalised == 'ATH0') {
+        if (e is! WriteRefusedException) {
+          _responseHeadersUncertain = true;
+        }
+      }
       if (e is! WriteRefusedException &&
           (e is TimeoutException || !replyAlreadyArrived)) {
         _outOfSync = true;
@@ -1589,6 +1596,8 @@ class Elm327Client {
       // A reset restores the documented defaults regardless of what it prints
       // — `ATZ` answers with the version string, not `OK`.
       _headersOn = false;
+      _responseHeadersUncertain = false;
+      _responseHeadersRestoreFailed = false;
       // And the header selection goes with it. Only `_headersOn` was cleared,
       // so a reset mid-session left the client naming a header the adapter had
       // just discarded — and the next query for that header would skip `ATSH`
@@ -1606,6 +1615,32 @@ class Elm327Client {
       _extendedAddressingState = const ElmExtendedAddressingOff();
       _canPriorityState = const ElmCanPriorityDefault();
       _canReceiveFilterState = const ElmCanReceiveFilterOff();
+      return;
+    }
+    if (normalised == 'ATH1') {
+      if (_saidOk(response)) {
+        _headersOn = true;
+        _responseHeadersUncertain = false;
+      } else if (_saidRefused(response)) {
+        _headersOn = false;
+        _responseHeadersUncertain = false;
+      } else {
+        _responseHeadersUncertain = true;
+      }
+      return;
+    }
+    if (normalised == 'ATH0') {
+      if (_saidOk(response)) {
+        _headersOn = false;
+        _responseHeadersUncertain = false;
+      } else if (_saidRefused(response)) {
+        // Explicit refusal to ATH0: adapter declined to turn headers off.
+        // Truthful H1 fallback: headers are still ON and model truthfully reflects it.
+        _headersOn = true;
+        _responseHeadersUncertain = false;
+      } else {
+        _responseHeadersUncertain = true;
+      }
       return;
     }
     if (!_saidOk(response)) return;
@@ -1636,11 +1671,7 @@ class Elm327Client {
       _canReceiveFilterState = const ElmCanReceiveFilterUnknown();
       return;
     }
-    if (normalised == 'ATH1') {
-      _headersOn = true;
-    } else if (normalised == 'ATH0') {
-      _headersOn = false;
-    } else if (normalised == ElmHostIsoTpConfig.applyCommand) {
+    if (normalised == ElmHostIsoTpConfig.applyCommand) {
       _hostVisibleIsoTp = true;
     } else if (normalised == ElmHostIsoTpConfig.restoreCommand) {
       _hostVisibleIsoTp = false;
@@ -1717,6 +1748,12 @@ class Elm327Client {
       throw const TransportException(
         ElmCanReceiveFilterMessages.restoreFailed,
         issue: TransportIssue.canReceiveFilterUnavailable,
+      );
+    }
+    if (_responseHeadersRestoreFailed || _responseHeadersUncertain) {
+      throw const TransportException(
+        'The adapter response headers rendering state is uncertain or restore failed.',
+        issue: TransportIssue.headerRestoreFailed,
       );
     }
     if (_headerRestoreFailed) {
@@ -1973,6 +2010,10 @@ class Elm327Client {
 
   static bool _saidOk(ObdResponse r) =>
       r.isSuccess && r.rawLines.any((l) => l.trim().toUpperCase() == 'OK');
+
+  static bool _saidRefused(ObdResponse r) =>
+      r.errorCode == Elm327ErrorCode.unknownCommand ||
+      r.rawLines.any((l) => l.trim() == '?');
 
   /// Sends [command] to [header], selecting it only when it means something on
   /// the detected bus.
@@ -3058,39 +3099,83 @@ class Elm327Client {
         final headersWereOn = _headersOn;
         var headersTurnedOn = false;
         if (!headersWereOn) {
-          final ack = await _sendNow(
-            'ATH1',
-            commandTimeout,
-            owner: owner,
-            deadline: stepDeadline(),
-            expectedGeneration: txGeneration,
-          );
-          if (_saidOk(ack)) {
-            headersTurnedOn = true;
+          try {
+            final ack = await _sendNow(
+              'ATH1',
+              commandTimeout,
+              owner: owner,
+              deadline: stepDeadline(),
+              expectedGeneration: txGeneration,
+            );
+            if (_saidOk(ack)) {
+              headersTurnedOn = true;
+              _responseHeadersUncertain = false;
+            } else if (_saidRefused(ack)) {
+              headersTurnedOn = false;
+              _responseHeadersUncertain = false;
+            } else {
+              _responseHeadersUncertain = true;
+              throw TransportException(
+                'The adapter returned an ambiguous response to ATH1: ${ack.rawLines.join(' ')}',
+                issue: TransportIssue.queryHeaderRefused,
+              );
+            }
+          } on WriteRefusedException {
+            rethrow;
+          } catch (e) {
+            if (_connectionSession == txSession) {
+              _responseHeadersUncertain = true;
+            }
+            rethrow;
           }
         }
         if (headersTurnedOn) {
           appliedRestores.add(() async {
             if (_connectionSession != txSession) return;
-            if (!transport.isConnected) return;
+            if (!transport.isConnected) {
+              _responseHeadersRestoreFailed = true;
+              _responseHeadersUncertain = true;
+              return;
+            }
             var canRestore = true;
             if (_outOfSync) {
               try {
                 await _resync(deadline: DateTime.now().add(cleanupBudget));
               } on Object {
                 canRestore = false;
+                _responseHeadersRestoreFailed = true;
+                _responseHeadersUncertain = true;
               }
             }
             if (canRestore && _connectionSession == txSession) {
               try {
-                await _sendNow(
+                final ack = await _sendNow(
                   'ATH0',
                   commandTimeout,
                   deadline: DateTime.now().add(cleanupBudget),
                   completesCommittedTransaction: true,
                   expectedGeneration: txGeneration,
                 );
-              } catch (_) {}
+                if (_connectionSession != txSession) return;
+                if (_saidOk(ack)) {
+                  _headersOn = false;
+                  _responseHeadersUncertain = false;
+                  _responseHeadersRestoreFailed = false;
+                } else if (_saidRefused(ack)) {
+                  // Explicit refusal to ATH0: adapter declined to turn headers off.
+                  // Truthful H1 fallback: headers are still ON and model truthfully reflects it.
+                  _headersOn = true;
+                  _responseHeadersUncertain = false;
+                } else {
+                  _responseHeadersRestoreFailed = true;
+                  _responseHeadersUncertain = true;
+                }
+              } catch (_) {
+                if (_connectionSession == txSession) {
+                  _responseHeadersRestoreFailed = true;
+                  _responseHeadersUncertain = true;
+                }
+              }
             }
           });
         }
@@ -5060,6 +5145,8 @@ class Elm327Client {
       const ElmCanReceiveFilterOff();
   bool _canReceiveFilterRestoreFailed = false;
   bool _headerRestoreFailed = false;
+  bool _responseHeadersUncertain = false;
+  bool _responseHeadersRestoreFailed = false;
 
   /// Byte length of the last prompt-delimited frame, before `_parse` drops
   /// NULs and command echoes.
@@ -5076,6 +5163,10 @@ class Elm327Client {
   bool get headerRestoreFailed => _headerRestoreFailed;
 
   bool get headersOn => _headersOn;
+
+  bool get responseHeadersUncertain => _responseHeadersUncertain;
+
+  bool get responseHeadersRestoreFailed => _responseHeadersRestoreFailed;
 
   String? get currentHeader => _currentHeader;
 
@@ -5530,6 +5621,11 @@ class Elm327Client {
       );
       onConnectionLost?.call();
     });
+  }
+
+  void cancelWatchdogForTesting() {
+    _watchdog?.cancel();
+    _watchdog = null;
   }
 
   // ------------------------------------------------------------- parsing ----

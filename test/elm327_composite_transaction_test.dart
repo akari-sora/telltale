@@ -150,8 +150,14 @@ final class _ReconnectingTransport implements ObdTransport {
   FakeElm327 get active => _active;
 
   Map<String, Duration> get slowCommands => _active.slowCommands;
+  List<String> get commandLog => _active.commandLog;
+  Future<void>? Function(String command)? responseBarrier;
 
-  FakeElm327 _create() => _can11Transport();
+  FakeElm327 _create() {
+    final t = _can11Transport();
+    t.responseBarrier = (cmd) => responseBarrier?.call(cmd);
+    return t;
+  }
 
   @override
   bool get isConnected => _active.isConnected;
@@ -2066,6 +2072,136 @@ void main() {
         greaterThan(atshRestoreIndex),
         reason: 'ATH0 restored after ATSH in LIFO',
       );
+
+      await client.disconnect();
+    });
+
+    test('ATH1 timeout marks responseHeadersUncertain and blocks subsequent queries until reconnect', () async {
+      final transport = _ReconnectingTransport();
+      final client = await _connect(transport, commandTimeout: const Duration(milliseconds: 50));
+
+      final barrier = Completer<void>();
+      transport.responseBarrier = (cmd) {
+        if (cmd == 'ATH1') {
+          return barrier.future;
+        }
+        return null;
+      };
+
+      // Attempt transaction with responseHeaders: true -> times out on ATH1
+      await expectLater(
+        client.sendTransacted(
+          '010C',
+          header: '7E0',
+          responseHeaders: true,
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+
+      // Release the barrier so adapter finishes emitting late response
+      barrier.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(client.responseHeadersUncertain, isTrue);
+
+      // Subsequent query must be rejected with wire-zero (TransportException)
+      final writeCountBefore = transport.commandLog.length;
+      expect(
+        () => client.send('010C'),
+        throwsA(
+          isA<TransportException>().having(
+            (e) => e.issue,
+            'issue',
+            TransportIssue.headerRestoreFailed,
+          ),
+        ),
+      );
+      expect(transport.commandLog.length, writeCountBefore, reason: 'Wire-zero rejection');
+
+      // Reconnect heals uncertainty
+      transport.responseBarrier = null;
+      await client.disconnect();
+      final reconnected = await client.connect();
+      expect(reconnected, isTrue);
+      expect(client.responseHeadersUncertain, isFalse);
+
+      final reply = await client.send('010C');
+      expect(reply.isSuccess, isTrue);
+
+      await client.disconnect();
+    });
+
+    test('ATH0 teardown timeout marks responseHeadersRestoreFailed/uncertain and blocks subsequent queries', () async {
+      final transport = _can11Transport();
+      final client = await _connect(transport, commandTimeout: const Duration(milliseconds: 50));
+
+      final barrier = Completer<void>();
+      transport.responseBarrier = (cmd) {
+        if (cmd == 'ATH0') {
+          return barrier.future;
+        }
+        return null;
+      };
+
+      // Transaction queries successfully, but ATH0 restore times out during teardown
+      await expectLater(
+        client.sendTransacted(
+          '010C',
+          header: '7E0',
+          responseHeaders: true,
+          budget: const Duration(milliseconds: 150),
+          cleanupBudget: const Duration(milliseconds: 50),
+        ),
+        throwsA(isA<TransportException>()),
+      );
+
+      // Release late barrier
+      barrier.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(client.responseHeadersRestoreFailed || client.responseHeadersUncertain, isTrue);
+
+      // Subsequent query must be rejected with wire-zero
+      final writeCountBefore = transport.commandLog.length;
+      expect(
+        () => client.send('010C'),
+        throwsA(
+          isA<TransportException>().having(
+            (e) => e.issue,
+            'issue',
+            TransportIssue.headerRestoreFailed,
+          ),
+        ),
+      );
+      expect(transport.commandLog.length, writeCountBefore, reason: 'Wire-zero rejection');
+
+      await client.disconnect();
+    });
+
+    test('ATH0 explicit refusal (?) falls back to truthful H1 without failing restore', () async {
+      final transport = _can11Transport(
+        faults: const AdapterFaults(refuseHeadersOff: true),
+      );
+      final client = await _connect(transport);
+
+      expect(client.headersOn, isFalse);
+
+      final reply = await client.sendTransacted(
+        '010C',
+        header: '7E0',
+        responseHeaders: true,
+      );
+
+      expect(reply.isSuccess, isTrue);
+      // Explicit refusal to ATH0 leaves adapter with headers ON
+      // Client truthfully reflects headersOn == true, without flagging restoreFailed or uncertain
+      expect(client.headersOn, isTrue);
+      expect(client.responseHeadersRestoreFailed, isFalse);
+      expect(client.responseHeadersUncertain, isFalse);
+
+      // Subsequent ordinary send can proceed without sticky failure
+      final nextReply = await client.send('010C');
+      expect(nextReply.isSuccess, isTrue);
 
       await client.disconnect();
     });
