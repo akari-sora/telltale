@@ -1,5 +1,4 @@
 # On-demand gate for Grok box project runner (tags: grok-box, ondemand, telltale).
-# Keep jobs tagged so GitLab.com shared runners never pick them up.
 stages:
   - gate
 
@@ -7,10 +6,10 @@ default:
   interruptible: true
 
 variables:
-  # Match GitHub CI pin / pubspec floor.
   PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
-  # Reduce Gradle memory pressure inside 5.5Gi job cgroup.
   GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false"
+  # Used by the non-root wrapper below.
+  FLUTTER_HOME: "/opt/flutter"
 
 full-gate:
   stage: gate
@@ -26,14 +25,43 @@ full-gate:
     key: pub-3.47.0
     paths:
       - .pub-cache/
+  before_script:
+    # release_notes_contract_test uses chmod 000; root can still read those files.
+    - |
+      set -e
+      if [ "$(id -u)" = "0" ]; then
+        if ! id -u flutter >/dev/null 2>&1; then
+          useradd -m -u 1000 -s /bin/bash flutter
+        fi
+        # Discover flutter SDK for PATH
+        if [ -x /opt/flutter/bin/flutter ]; then
+          export FLUTTER_HOME=/opt/flutter
+        elif [ -x /flutter/bin/flutter ]; then
+          export FLUTTER_HOME=/flutter
+        else
+          FLUTTER_BIN=$(command -v flutter)
+          export FLUTTER_HOME=$(dirname "$(dirname "$FLUTTER_BIN")")
+        fi
+        echo "FLUTTER_HOME=$FLUTTER_HOME"
+        chown -R flutter:flutter "$CI_PROJECT_DIR" "$FLUTTER_HOME" || chown -R flutter:flutter "$CI_PROJECT_DIR"
+        printf '%s\n' '#!/bin/bash' 'set -euo pipefail' "export PATH=\"$FLUTTER_HOME/bin:\$PATH\"" "export PUB_CACHE=\"$CI_PROJECT_DIR/.pub-cache\"" "export GRADLE_OPTS=\"$GRADLE_OPTS\"" "cd \"$CI_PROJECT_DIR\"" 'exec "$@"' > /usr/local/bin/as-flutter
+        chmod 755 /usr/local/bin/as-flutter
+      fi
   script:
-    - flutter --version
-    - flutter config --no-analytics
-    - flutter pub get
-    - flutter analyze
-    - flutter test
-    # Field debug APK keeps the GitHub `app` build signal without Play signing.
-    - flutter build apk --debug --flavor field
+    - |
+      run() {
+        if [ "$(id -u)" = "0" ]; then
+          runuser -u flutter -- /usr/local/bin/as-flutter "$@"
+        else
+          "$@"
+        fi
+      }
+      run flutter --version
+      run flutter config --no-analytics
+      run flutter pub get
+      run flutter analyze
+      run flutter test
+      run flutter build apk --debug --flavor field
   artifacts:
     when: on_success
     expire_in: 7 days
