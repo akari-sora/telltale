@@ -144,7 +144,7 @@ class BundledPlanTest(unittest.TestCase):
         self.assertEqual(len(data["tasks"]), 29)
         self.assertEqual(data["policy"], "USABILITY-R2")
         ws08 = next(task for task in data["tasks"] if task["id"] == "WS-08")
-        self.assertIn(ws08["depends_on"], ([5], [9]))
+        self.assertEqual(ws08["depends_on"], [5])
         ws20 = next(task for task in data["tasks"] if task["id"] == "WS-20")
         self.assertTrue(ws20["hardware_or_license_blockers"])
         self.assertEqual(ws20["run_commands"], [])
