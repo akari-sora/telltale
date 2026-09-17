@@ -14,12 +14,11 @@ variables:
 
 full-gate:
   stage: gate
-  name: "analyze, test, build"
   tags:
     - grok-box
     - ondemand
     - telltale
-  image: ghcr.io/cirruslabs/flutter:3.47.0
+  image: ghcr.io/project516/flutter:3.47.0
   timeout: 3h
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
