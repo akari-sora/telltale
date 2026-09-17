@@ -1,0 +1,42 @@
+# On-demand gate for Grok box project runner (tags: grok-box, ondemand, telltale).
+# Keep jobs tagged so GitLab.com shared runners never pick them up.
+stages:
+  - gate
+
+default:
+  interruptible: true
+
+variables:
+  # Match GitHub CI pin / pubspec floor.
+  PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
+  # Reduce Gradle memory pressure inside 5.5Gi job cgroup.
+  GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false"
+
+full-gate:
+  stage: gate
+  name: "analyze, test, build"
+  tags:
+    - grok-box
+    - ondemand
+    - telltale
+  image: ghcr.io/cirruslabs/flutter:3.47.0
+  timeout: 3h
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  cache:
+    key: pub-3.47.0
+    paths:
+      - .pub-cache/
+  script:
+    - flutter --version
+    - flutter config --no-analytics
+    - flutter pub get
+    - flutter analyze
+    - flutter test
+    # Field debug APK keeps the GitHub `app` build signal without Play signing.
+    - flutter build apk --debug --flavor field
+  artifacts:
+    when: on_success
+    expire_in: 7 days
+    paths:
+      - build/app/outputs/flutter-apk/*.apk
