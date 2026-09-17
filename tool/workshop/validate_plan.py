@@ -20,6 +20,7 @@ from typing import Any
 ALLOWED_STATUS = {"pending", "in_progress", "completed", "blocked"}
 ALLOWED_PRIORITY = {"P0", "P1", "P2", "P3"}
 ALLOWED_REVIEWER = {"implementation", "review"}
+ALLOWED_REPOSITORIES = {"ImL1s/telltale", "aa22396584/telltale"}
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 ALLOWED_COMMAND_NAMES = {"python3", "bash", "flutter"}
@@ -305,8 +306,9 @@ def validate_plan(
         errors.append("schemaVersion must be 1")
     if data.get("policy") != "USABILITY-R2":
         errors.append("policy must be USABILITY-R2")
-    if data.get("repository") != "ImL1s/telltale":
-        errors.append("repository must be ImL1s/telltale")
+    repo = data.get("repository")
+    if repo not in ALLOWED_REPOSITORIES:
+        errors.append("repository must be ImL1s/telltale or aa22396584/telltale")
 
     def _audited_sha() -> None:
         sha = data.get("audited_sha")
@@ -342,9 +344,11 @@ def validate_plan(
                 raise PlanError(f"duplicate issue number: {issue}")
             issue_numbers.add(issue)
             url = _as_str(raw.get("issue_url"), f"{ident}.issue_url")
-            expected = f"https://github.com/ImL1s/telltale/issues/{issue}"
-            if url != expected:
-                raise PlanError(f"{ident}: issue_url must be {expected}")
+            expected_gh = f"https://github.com/{repo}/issues/{issue}"
+            expected_gl = f"https://gitlab.com/{repo}/-/issues/{issue}"
+            expected_gl_alt = f"https://gitlab.com/{repo}/issues/{issue}"
+            if url not in (expected_gh, expected_gl, expected_gl_alt):
+                raise PlanError(f"{ident}: issue_url must be {expected_gh} or {expected_gl}")
             if raw.get("priority") not in ALLOWED_PRIORITY:
                 raise PlanError(f"{ident}: priority invalid")
             status = raw.get("status", "pending")
