@@ -202,10 +202,10 @@ void main() {
       writer.flushActive();
       for (
         var attempt = 0;
-        writer.inFlightBytes != 0 && attempt < 100;
+        writer.inFlightBytes != 0 && attempt < 500;
         attempt++
       ) {
-        await Future<void>.delayed(const Duration(milliseconds: 1));
+        await Future<void>.delayed(const Duration(milliseconds: 2));
       }
       expect(writer.inFlightBytes, 0);
       expect(

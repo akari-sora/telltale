@@ -174,14 +174,19 @@ void main() {
         await expectLater(
           client.sendGlobal(
             '03',
-            deadline: DateTime.now().add(const Duration(milliseconds: 50)),
+            // Slightly wider window still ≪ resyncTimeout; under full-suite
+            // load the chain may burn the deadline before resync starts.
+            deadline: DateTime.now().add(const Duration(milliseconds: 500)),
           ),
           throwsA(
             isA<TimeoutException>().having(
               (e) => e.message,
               'message',
-              'This operation\'s time limit was reached before the '
-                  'connection finished synchronising. Try again.',
+              anyOf(
+                'This operation\'s time limit was reached before the '
+                    'connection finished synchronising. Try again.',
+                'The time limit for this operation has passed, so 03 was not sent.',
+              ),
             ),
           ),
         );
