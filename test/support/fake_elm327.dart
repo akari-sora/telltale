@@ -635,6 +635,9 @@ class FakeElm327 extends BaseObdTransport {
   /// Last `ATCRA` filter address, or null when cleared.
   String? get canReceiveFilter => _cra;
 
+  /// Current response headers mode (`ATH1` on, `ATH0` off).
+  bool get headersOn => _headersOn;
+
   @override
   Future<void> write(List<int> data) async {
     // The same type a real transport's precondition throws. This said
@@ -1232,7 +1235,9 @@ class FakeElm327 extends BaseObdTransport {
               ].map(_hex).join(' ')
             : _hex(0x20 | (seq & 0x0F));
         lines.add(
-          _headersOn ? '${ecu.responseId} $pci ${padded.join(' ')}' : '$pci ${padded.join(' ')}',
+          _headersOn
+              ? '${ecu.responseId} $pci ${padded.join(' ')}'
+              : '$pci ${padded.join(' ')}',
         );
       } else {
         lines.add(
