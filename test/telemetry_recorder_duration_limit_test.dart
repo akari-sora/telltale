@@ -8,6 +8,7 @@ import 'package:torque_obd/state/pid_mutation_lock.dart';
 import 'package:torque_obd/state/telemetry_recorder.dart';
 import 'package:torque_obd/telemetry/session/telemetry_recorder.dart';
 import 'package:torque_obd/telemetry/session/telemetry_session.dart';
+import 'package:torque_obd/telemetry/session/telemetry_session_writer.dart';
 
 void main() {
   late DateTime now;
