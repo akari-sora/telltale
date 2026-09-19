@@ -1248,6 +1248,19 @@
   },
   "serviceRecipesNoPreconditions": "無",
   "settingsServiceRecipesEntry": "車行診斷配方與主動測試",
-  "settingsServiceRecipesDesc": "檢視工作站服務配方並安全探索 Mode 08 支援項目"
+  "settingsServiceRecipesDesc": "檢視工作站服務配方並安全探索 Mode 08 支援項目",
+  "mode08ReasonUnheaderedLimitation": "來源歸因與覆蓋完整度未確認：無標頭回應無法建立跨區塊 ECU 身分",
+  "mode08ReasonNoResponseWithEcu": "區塊 {block} 來自 {ecu} 無回應：{marker}",
+  "mode08ReasonNoResponse": "區塊 {block} 無回應：{marker}",
+  "mode08ReasonNegativeWithEcu": "區塊 {block} 來自 {ecu} 負回應 (NRC {nrc})",
+  "mode08ReasonNegative": "區塊 {block} 負回應 (NRC {nrc})",
+  "mode08ReasonMalformedWithEcu": "區塊 {block} 來自 {ecu} 格式錯誤：{details}",
+  "mode08ReasonMalformed": "區塊 {block} 格式錯誤：{details}",
+  "mode08ReasonTimeout": "區塊 {block} 查詢逾時",
+  "mode08ReasonBudgetExceeded": "在查詢所有區塊前已超出預算時間",
+  "mode08ReasonSessionDisconnected": "探索期間連線中斷或被取代",
+  "mode08ReasonUnqueriedAnnounced": "ECU 宣告但未查詢的區塊：{blocks}",
+  "mode08ReasonRequiresCanBus": "Mode 08 功能探索需要解析的 OBD-II CAN 匯流排",
+  "mode08ReasonUnexpectedExecution": "查詢支援 TID 時收到非預期的執行回應"
 }
 

@@ -2649,6 +2649,7 @@ class Elm327Client {
     ElmCanReceiveFilterConfig? canReceiveFilter,
     ElmFlowControlConfig? flowControl,
     bool hostVisibleIsoTp = false,
+    bool responseHeaders = false,
     ElmCompositeTransactionConfig? configuration,
     Duration? budget,
     Duration? drainBudget,
@@ -2670,6 +2671,8 @@ class Elm327Client {
     final effectiveFlowControl = configuration?.flowControl ?? flowControl;
     final effectiveHostVisibleIsoTp =
         configuration?.hostVisibleIsoTp ?? hostVisibleIsoTp;
+    final effectiveResponseHeaders =
+        configuration?.responseHeaders ?? responseHeaders;
     final effectiveBudget =
         configuration?.budget ?? budget ?? const Duration(seconds: 8);
     final Duration totalBudget;
@@ -2715,6 +2718,7 @@ class Elm327Client {
             canReceiveFilter: effectiveCanReceiveFilter,
             flowControl: effectiveFlowControl,
             hostVisibleIsoTp: effectiveHostVisibleIsoTp,
+            responseHeaders: effectiveResponseHeaders,
             owner: owner,
             totalBudget: totalBudget,
             getElapsed: getElapsed,
@@ -2742,6 +2746,7 @@ class Elm327Client {
     ElmCanReceiveFilterConfig? canReceiveFilter,
     ElmFlowControlConfig? flowControl,
     bool hostVisibleIsoTp = false,
+    bool responseHeaders = false,
     ElmCompositeTransactionConfig? configuration,
     Duration? timeout,
     Duration? budget,
@@ -2762,6 +2767,7 @@ class Elm327Client {
       canReceiveFilter: canReceiveFilter,
       flowControl: flowControl,
       hostVisibleIsoTp: hostVisibleIsoTp,
+      responseHeaders: responseHeaders,
       configuration: configuration,
       budget: budget,
       drainBudget: drainBudget,
@@ -2783,6 +2789,7 @@ class Elm327Client {
     ElmCanReceiveFilterConfig? canReceiveFilter,
     ElmFlowControlConfig? flowControl,
     bool hostVisibleIsoTp = false,
+    bool responseHeaders = false,
     ElmCompositeTransactionConfig? configuration,
     Duration? timeout,
     Duration? budget,
@@ -2802,6 +2809,7 @@ class Elm327Client {
         canReceiveFilter: canReceiveFilter,
         flowControl: flowControl,
         hostVisibleIsoTp: hostVisibleIsoTp,
+        responseHeaders: responseHeaders,
         configuration: configuration,
         timeout: timeout,
         budget: budget,
@@ -2822,6 +2830,7 @@ class Elm327Client {
     required ElmCanReceiveFilterConfig? canReceiveFilter,
     required ElmFlowControlConfig? flowControl,
     required bool hostVisibleIsoTp,
+    required bool responseHeaders,
     required Object? owner,
     required Duration totalBudget,
     required Duration Function() getElapsed,
@@ -3028,7 +3037,54 @@ class Elm327Client {
         });
       }
 
-      // 6. Header switch if specified
+      // 6. Apply Response Headers (ATH1)
+      if (responseHeaders) {
+        if (getElapsed() >= totalBudget) {
+          throw TimeoutException(
+              'Transaction monotonic budget exceeded before ATH1');
+        }
+        final headersWereOn = _headersOn;
+        var headersTurnedOn = false;
+        if (!headersWereOn) {
+          final ack = await _sendNow(
+            'ATH1',
+            commandTimeout,
+            owner: owner,
+            deadline: stepDeadline(),
+            expectedGeneration: txGeneration,
+          );
+          if (_saidOk(ack)) {
+            headersTurnedOn = true;
+          }
+        }
+        if (headersTurnedOn) {
+          appliedRestores.add(() async {
+            if (_connectionSession != txSession) return;
+            if (!transport.isConnected) return;
+            var canRestore = true;
+            if (_outOfSync) {
+              try {
+                await _resync(deadline: DateTime.now().add(cleanupBudget));
+              } on Object {
+                canRestore = false;
+              }
+            }
+            if (canRestore && _connectionSession == txSession) {
+              try {
+                await _sendNow(
+                  'ATH0',
+                  commandTimeout,
+                  deadline: DateTime.now().add(cleanupBudget),
+                  completesCommittedTransaction: true,
+                  expectedGeneration: txGeneration,
+                );
+              } catch (_) {}
+            }
+          });
+        }
+      }
+
+      // 7. Header switch if specified
       if (header != null && header != _currentHeader) {
         if (getElapsed() >= totalBudget) {
           throw TimeoutException(
@@ -3158,7 +3214,9 @@ class Elm327Client {
               owner: owner,
               expectedGeneration: txGeneration,
             );
-            if (!completer.isCompleted) completer.complete(resp);
+            if (!completer.isCompleted) {
+              completer.complete(resp.withHeadersEnabled(_headersOn));
+            }
           } catch (e, st) {
             txSenderError ??= e;
             txSenderStackTrace ??= st;
@@ -5489,16 +5547,8 @@ class Elm327Client {
 
   /// A line captured with `ATH1`: the responding address, then payload bytes.
   ///
-  /// Three hex digits for 11-bit CAN, eight for 29-bit. Note this deliberately
-  /// does not match a plain byte-pair line — the whole point is telling the two
-  /// renderings apart, because with headers off the address is absent and with
-  /// them on it must not be read as data.
-  static final RegExp _headeredCanLine = RegExp(
-    r'^([0-9A-Fa-f]{3}|[0-9A-Fa-f]{8})((?: ?[0-9A-Fa-f]{2})+)$',
-  );
-
   /// The two CAN widths, separately, for callers that know which bus they are
-  /// on. [_headeredCanLine] accepts either and must not be used where the
+  /// on. A shared width regex accepts either and must not be used where the
   /// width is known, because the wrong alternative will happily consume
   /// payload as an address.
   static final RegExp _headeredCan11Line = RegExp(
@@ -5961,7 +6011,7 @@ class Elm327Client {
       // mistake in the other direction.
       final looksHeadered = lines.any((l) {
         final trimmed = l.trim();
-        return _headeredCanLine.hasMatch(trimmed) || _canLine(trimmed) != null;
+        return _canLine(trimmed) != null;
       });
       if (headered.isSuccess || looksHeadered) return headered;
     }

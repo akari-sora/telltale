@@ -231,7 +231,11 @@ class _Mode08DiscoveryPanel extends StatelessWidget {
               color: palette.danger,
               icon: Icons.error_outline,
               message: l10n.serviceRecipesDiscoveryUnknown(
-                state.message ?? 'Unknown error',
+                state.result != null &&
+                        state.result!.incompletionReason !=
+                            Mode08IncompletionReason.none
+                    ? resolveMode08IncompletionText(l10n, state.result!)
+                    : (state.message ?? 'Unknown error'),
               ),
             ),
           ] else if (state.isRefused) ...[
@@ -287,7 +291,7 @@ class _Mode08DiscoveryPanel extends StatelessWidget {
                   Expanded(
                     child: Text(
                       l10n.serviceRecipesDiscoveryPartialWarning(
-                        result.failureReason ?? 'Partial',
+                        resolveMode08IncompletionText(l10n, result),
                         uncompletedFormatted,
                       ),
                       style: context.texts.bodySmall?.copyWith(
@@ -345,11 +349,16 @@ class _Mode08DiscoveryPanel extends StatelessWidget {
         ],
       );
     } else {
+      final message = result.incompletionReason != Mode08IncompletionReason.none
+          ? l10n.serviceRecipesDiscoveryUnknown(
+              resolveMode08IncompletionText(l10n, result),
+            )
+          : l10n.serviceRecipesDiscoveryUnsupported;
       return _buildStatusContainer(
         context: context,
         color: palette.warning,
         icon: Icons.info_outline,
-        message: l10n.serviceRecipesDiscoveryUnsupported,
+        message: message,
       );
     }
   }
@@ -527,3 +536,58 @@ class _Badge extends StatelessWidget {
     );
   }
 }
+
+/// Dynamically resolves structured [Mode08IncompletionReason] and parameters into localized text.
+String resolveMode08IncompletionText(
+  AppLocalizations l10n,
+  Mode08DiscoveryResult result,
+) {
+  final blockStr = result.failedBlock != null
+      ? '0x${result.failedBlock!.toRadixString(16).padLeft(2, '0').toUpperCase()}'
+      : (result.unqueriedBlocks.isNotEmpty
+          ? '0x${result.unqueriedBlocks.first.toRadixString(16).padLeft(2, '0').toUpperCase()}'
+          : 'N/A');
+  final nrcStr = result.nrc != null
+      ? '0x${result.nrc!.toRadixString(16).padLeft(2, '0').toUpperCase()}'
+      : 'N/A';
+  final ecuStr = result.ecu;
+  final markerStr = result.rawMarker ?? 'NO DATA';
+
+  switch (result.incompletionReason) {
+    case Mode08IncompletionReason.unheaderedCrossBlockLimitation:
+      return l10n.mode08ReasonUnheaderedLimitation;
+    case Mode08IncompletionReason.noResponse:
+      return ecuStr != null
+          ? l10n.mode08ReasonNoResponseWithEcu(blockStr, ecuStr, markerStr)
+          : l10n.mode08ReasonNoResponse(blockStr, markerStr);
+    case Mode08IncompletionReason.negativeResponse:
+      return ecuStr != null
+          ? l10n.mode08ReasonNegativeWithEcu(blockStr, ecuStr, nrcStr)
+          : l10n.mode08ReasonNegative(blockStr, nrcStr);
+    case Mode08IncompletionReason.malformedResponse:
+      final details = result.malformedReason != null
+          ? '${result.malformedReason!.name} ($markerStr)'
+          : markerStr;
+      return ecuStr != null
+          ? l10n.mode08ReasonMalformedWithEcu(blockStr, ecuStr, details)
+          : l10n.mode08ReasonMalformed(blockStr, details);
+    case Mode08IncompletionReason.timeout:
+      return l10n.mode08ReasonTimeout(blockStr);
+    case Mode08IncompletionReason.budgetExceeded:
+      return l10n.mode08ReasonBudgetExceeded;
+    case Mode08IncompletionReason.sessionDisconnected:
+      return l10n.mode08ReasonSessionDisconnected;
+    case Mode08IncompletionReason.unqueriedAnnouncedBlocks:
+      final blocksStr = result.unqueriedBlocks
+          .map((b) => '0x${b.toRadixString(16).padLeft(2, '0').toUpperCase()}')
+          .join(', ');
+      return l10n.mode08ReasonUnqueriedAnnounced(blocksStr.isEmpty ? blockStr : blocksStr);
+    case Mode08IncompletionReason.requiresCanBus:
+      return l10n.mode08ReasonRequiresCanBus;
+    case Mode08IncompletionReason.unexpectedExecutionResponse:
+      return l10n.mode08ReasonUnexpectedExecution;
+    case Mode08IncompletionReason.none:
+      return result.failureReason ?? 'Incomplete';
+  }
+}
+

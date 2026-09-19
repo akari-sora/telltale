@@ -416,9 +416,16 @@ void main() {
         expect(
           find.descendant(
             of: warningContainer,
-            matching: find.textContaining('未查到不代表不支援'),
+            matching: find.textContaining('Not found does not mean unsupported'),
           ),
           findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: warningContainer,
+            matching: find.textContaining('未查到不代表不支援'),
+          ),
+          findsNothing,
         );
         expect(
           find.byKey(const Key('mode08_discovery_success_container')),
@@ -426,6 +433,143 @@ void main() {
         );
         expect(find.text('TID \$01'), findsOneWidget);
         expect(find.text('TID \$02'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Mode 08 discovery partial warning renders purely in German without Chinese leak',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final result = Mode08DiscoveryResult(
+          isSupported: true,
+          supportStatus: EcuSupportStatus.supported,
+          supportedTids: const {0x01, 0x02},
+          queriedBlocks: const [0x00],
+          unqueriedBlocks: const [0x20],
+          isComplete: false,
+          incompletionReason: Mode08IncompletionReason.unheaderedCrossBlockLimitation,
+          discoveredAt: DateTime.utc(2026, 9, 14),
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            key: UniqueKey(),
+            overrides: [
+              obdSessionProvider.overrideWith(_ConnectedCanSession.new),
+              serviceRecipesMatrixProvider.overrideWith(
+                (ref) async => bundledMatrix,
+              ),
+              mode08DiscoveryStateProvider.overrideWith(
+                () => _TestDiscoveryNotifier(
+                  Mode08DiscoveryState.completed(result: result),
+                ),
+              ),
+            ],
+            child: localizedMaterialApp(
+              home: const ServiceRecipesScreen(),
+              locale: const Locale('de'),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        final warningContainer = find.byKey(const Key('mode08_discovery_partial_warning'));
+        expect(warningContainer, findsOneWidget);
+        expect(
+          find.descendant(
+            of: warningContainer,
+            matching: find.textContaining('Quellzuordnung und Abdeckung unbestätigt'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: warningContainer,
+            matching: find.textContaining('Hinweis: Nicht gefunden bedeutet nicht nicht unterstützt.'),
+          ),
+          findsOneWidget,
+        );
+        // Pure German: no Chinese characters
+        expect(
+          find.descendant(
+            of: warningContainer,
+            matching: find.textContaining('未查到不代表不支援'),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: warningContainer,
+            matching: find.textContaining('來源歸因'),
+          ),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'Mode 08 discovery partial warning renders Traditional Chinese correctly',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final result = Mode08DiscoveryResult(
+          isSupported: true,
+          supportStatus: EcuSupportStatus.supported,
+          supportedTids: const {0x01, 0x02},
+          queriedBlocks: const [0x00],
+          unqueriedBlocks: const [0x20],
+          isComplete: false,
+          incompletionReason: Mode08IncompletionReason.unheaderedCrossBlockLimitation,
+          discoveredAt: DateTime.utc(2026, 9, 14),
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            key: UniqueKey(),
+            overrides: [
+              obdSessionProvider.overrideWith(_ConnectedCanSession.new),
+              serviceRecipesMatrixProvider.overrideWith(
+                (ref) async => bundledMatrix,
+              ),
+              mode08DiscoveryStateProvider.overrideWith(
+                () => _TestDiscoveryNotifier(
+                  Mode08DiscoveryState.completed(result: result),
+                ),
+              ),
+            ],
+            child: localizedMaterialApp(
+              home: const ServiceRecipesScreen(),
+              locale: testUiLocale,
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        final warningContainer = find.byKey(const Key('mode08_discovery_partial_warning'));
+        expect(warningContainer, findsOneWidget);
+        expect(
+          find.descendant(
+            of: warningContainer,
+            matching: find.textContaining('來源歸因與覆蓋完整度未確認'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: warningContainer,
+            matching: find.textContaining('未查到不代表不支援'),
+          ),
+          findsOneWidget,
+        );
       },
     );
 
