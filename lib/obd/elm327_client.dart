@@ -1622,8 +1622,8 @@ class Elm327Client {
         _headersOn = true;
         _responseHeadersUncertain = false;
       } else if (_saidRefused(response)) {
-        _headersOn = false;
-        _responseHeadersUncertain = false;
+        // Explicit refusal to ATH1: retain previously known _headersOn state.
+        // Do not invert to false and do not clear _responseHeadersUncertain.
       } else {
         _responseHeadersUncertain = true;
       }
@@ -1634,10 +1634,8 @@ class Elm327Client {
         _headersOn = false;
         _responseHeadersUncertain = false;
       } else if (_saidRefused(response)) {
-        // Explicit refusal to ATH0: adapter declined to turn headers off.
-        // Truthful H1 fallback: headers are still ON and model truthfully reflects it.
-        _headersOn = true;
-        _responseHeadersUncertain = false;
+        // Explicit refusal to ATH0: retain previously known _headersOn state.
+        // Do not invert to true and do not clear _responseHeadersUncertain.
       } else {
         _responseHeadersUncertain = true;
       }
@@ -2008,12 +2006,32 @@ class Elm327Client {
     return completer.future;
   }
 
+  static final RegExp _adapterInternalErrorRegex = RegExp(r'\bERR\d{2}\b');
+
+  static bool _hasAdapterError(ObdResponse r) {
+    if (r.errorCode != Elm327ErrorCode.none &&
+        r.errorCode != Elm327ErrorCode.unknownCommand) {
+      return true;
+    }
+    for (final line in r.rawLines) {
+      final u = line.trim().toUpperCase();
+      if (u.contains('BUS INIT') && u.contains('ERROR')) return true;
+      if (_adapterInternalErrorRegex.hasMatch(u)) return true;
+      for (final key in _errorStrings.keys) {
+        if (u.contains(key)) return true;
+      }
+    }
+    return false;
+  }
+
   static bool _saidOk(ObdResponse r) =>
       r.isSuccess && r.rawLines.any((l) => l.trim().toUpperCase() == 'OK');
 
-  static bool _saidRefused(ObdResponse r) =>
-      r.errorCode == Elm327ErrorCode.unknownCommand ||
-      r.rawLines.any((l) => l.trim() == '?');
+  static bool _saidRefused(ObdResponse r) {
+    if (_hasAdapterError(r)) return false;
+    return r.errorCode == Elm327ErrorCode.unknownCommand ||
+        r.rawLines.any((l) => l.trim() == '?');
+  }
 
   /// Sends [command] to [header], selecting it only when it means something on
   /// the detected bus.
@@ -3112,7 +3130,6 @@ class Elm327Client {
               _responseHeadersUncertain = false;
             } else if (_saidRefused(ack)) {
               headersTurnedOn = false;
-              _responseHeadersUncertain = false;
             } else {
               _responseHeadersUncertain = true;
               throw TransportException(
@@ -3165,7 +3182,6 @@ class Elm327Client {
                   // Explicit refusal to ATH0: adapter declined to turn headers off.
                   // Truthful H1 fallback: headers are still ON and model truthfully reflects it.
                   _headersOn = true;
-                  _responseHeadersUncertain = false;
                 } else {
                   _responseHeadersRestoreFailed = true;
                   _responseHeadersUncertain = true;
