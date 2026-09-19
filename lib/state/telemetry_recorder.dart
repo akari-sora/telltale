@@ -1,9 +1,6 @@
 /// Root ownership and lifecycle coordination for telemetry recording.
 library;
 
-export '../telemetry/session/telemetry_session_writer.dart'
-    show TelemetryAppendResult;
-
 import 'dart:async';
 import 'dart:convert';
 
