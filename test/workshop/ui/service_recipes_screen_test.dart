@@ -28,9 +28,9 @@ class _DisconnectedSession extends ObdSession {
 class _ConnectedCanSession extends ObdSession {
   @override
   ObdConnectionState build() => const ObdConnectionState(
-        phase: ConnectionPhase.connected,
-        protocol: 'ISO 15765-4 (CAN 11/500)',
-      );
+    phase: ConnectionPhase.connected,
+    protocol: 'ISO 15765-4 (CAN 11/500)',
+  );
 }
 
 class _TestDiscoveryNotifier extends Mode08DiscoveryNotifier {
@@ -110,9 +110,7 @@ void main() {
 
         // Bundled recipes
         expect(
-          find.byKey(
-            const Key('service_recipe_tile_synthetic_mode08_evap_01'),
-          ),
+          find.byKey(const Key('service_recipe_tile_synthetic_mode08_evap_01')),
           findsOneWidget,
         );
         expect(
@@ -130,10 +128,7 @@ void main() {
 
         // Badges
         expect(find.text('Simulation Ready'), findsNWidgets(3));
-        expect(
-          find.text('Live Blocked (0 Live Candidates)'),
-          findsNWidgets(3),
-        );
+        expect(find.text('Live Blocked (0 Live Candidates)'), findsNWidgets(3));
       },
     );
 
@@ -188,10 +183,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.descendant(
-            of: sheet,
-            matching: find.text('ECU Header: 7E0'),
-          ),
+          find.descendant(of: sheet, matching: find.text('ECU Header: 7E0')),
           findsOneWidget,
         );
         expect(
@@ -228,42 +220,41 @@ void main() {
       },
     );
 
-    testWidgets(
-      'Mode 08 discovery button is disabled when not connected',
-      (tester) async {
-        tester.view.physicalSize = const Size(1080, 2400);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('Mode 08 discovery button is disabled when not connected', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-        await tester.pumpWidget(
-          ProviderScope(
-            key: UniqueKey(),
-            overrides: [
-              obdSessionProvider.overrideWith(_DisconnectedSession.new),
-              serviceRecipesMatrixProvider.overrideWith(
-                (ref) async => bundledMatrix,
-              ),
-            ],
-            child: localizedMaterialApp(
-              home: const ServiceRecipesScreen(),
-              locale: const Locale('en'),
+      await tester.pumpWidget(
+        ProviderScope(
+          key: UniqueKey(),
+          overrides: [
+            obdSessionProvider.overrideWith(_DisconnectedSession.new),
+            serviceRecipesMatrixProvider.overrideWith(
+              (ref) async => bundledMatrix,
             ),
+          ],
+          child: localizedMaterialApp(
+            home: const ServiceRecipesScreen(),
+            locale: const Locale('en'),
           ),
-        );
-        await tester.pump();
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
 
-        final button = tester.widget<FilledButton>(
-          find.byKey(const Key('mode08_discovery_button')),
-        );
-        expect(button.onPressed, isNull);
-        expect(
-          find.text('Requires an active OBD-II CAN bus connection.'),
-          findsOneWidget,
-        );
-      },
-    );
+      final button = tester.widget<FilledButton>(
+        find.byKey(const Key('mode08_discovery_button')),
+      );
+      expect(button.onPressed, isNull);
+      expect(
+        find.text('Requires an active OBD-II CAN bus connection.'),
+        findsOneWidget,
+      );
+    });
 
     testWidgets(
       'Mode 08 discovery triggers runDiscovery on tap when connected',
@@ -273,7 +264,9 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
 
-        final notifier = _TestDiscoveryNotifier(const Mode08DiscoveryState.idle());
+        final notifier = _TestDiscoveryNotifier(
+          const Mode08DiscoveryState.idle(),
+        );
 
         await tester.pumpWidget(
           ProviderScope(
@@ -397,7 +390,9 @@ void main() {
         await tester.pump();
         await tester.pumpAndSettle();
 
-        final warningContainer = find.byKey(const Key('mode08_discovery_partial_warning'));
+        final warningContainer = find.byKey(
+          const Key('mode08_discovery_partial_warning'),
+        );
         expect(warningContainer, findsOneWidget);
         expect(
           find.descendant(
@@ -416,7 +411,9 @@ void main() {
         expect(
           find.descendant(
             of: warningContainer,
-            matching: find.textContaining('Not found does not mean unsupported'),
+            matching: find.textContaining(
+              'Not found does not mean unsupported',
+            ),
           ),
           findsOneWidget,
         );
@@ -451,7 +448,8 @@ void main() {
           queriedBlocks: const [0x00],
           unqueriedBlocks: const [0x20],
           isComplete: false,
-          incompletionReason: Mode08IncompletionReason.unheaderedCrossBlockLimitation,
+          incompletionReason:
+              Mode08IncompletionReason.unheaderedCrossBlockLimitation,
           discoveredAt: DateTime.utc(2026, 9, 14),
         );
 
@@ -478,19 +476,25 @@ void main() {
         await tester.pump();
         await tester.pumpAndSettle();
 
-        final warningContainer = find.byKey(const Key('mode08_discovery_partial_warning'));
+        final warningContainer = find.byKey(
+          const Key('mode08_discovery_partial_warning'),
+        );
         expect(warningContainer, findsOneWidget);
         expect(
           find.descendant(
             of: warningContainer,
-            matching: find.textContaining('Quellzuordnung und Abdeckung unbestätigt'),
+            matching: find.textContaining(
+              'Quellzuordnung und Abdeckung unbestätigt',
+            ),
           ),
           findsOneWidget,
         );
         expect(
           find.descendant(
             of: warningContainer,
-            matching: find.textContaining('Hinweis: Nicht gefunden bedeutet nicht nicht unterstützt.'),
+            matching: find.textContaining(
+              'Hinweis: Nicht gefunden bedeutet nicht nicht unterstützt.',
+            ),
           ),
           findsOneWidget,
         );
@@ -527,7 +531,8 @@ void main() {
           queriedBlocks: const [0x00],
           unqueriedBlocks: const [0x20],
           isComplete: false,
-          incompletionReason: Mode08IncompletionReason.unheaderedCrossBlockLimitation,
+          incompletionReason:
+              Mode08IncompletionReason.unheaderedCrossBlockLimitation,
           discoveredAt: DateTime.utc(2026, 9, 14),
         );
 
@@ -554,7 +559,9 @@ void main() {
         await tester.pump();
         await tester.pumpAndSettle();
 
-        final warningContainer = find.byKey(const Key('mode08_discovery_partial_warning'));
+        final warningContainer = find.byKey(
+          const Key('mode08_discovery_partial_warning'),
+        );
         expect(warningContainer, findsOneWidget);
         expect(
           find.descendant(
@@ -619,42 +626,39 @@ void main() {
       },
     );
 
-    testWidgets(
-      'Mode 08 discovery refused state renders refused message',
-      (tester) async {
-        tester.view.physicalSize = const Size(1080, 2400);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('Mode 08 discovery refused state renders refused message', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-        await tester.pumpWidget(
-          ProviderScope(
-            key: UniqueKey(),
-            overrides: [
-              obdSessionProvider.overrideWith(_ConnectedCanSession.new),
-              serviceRecipesMatrixProvider.overrideWith(
-                (ref) async => bundledMatrix,
-              ),
-              mode08DiscoveryStateProvider.overrideWith(
-                () => _TestDiscoveryNotifier(
-                  const Mode08DiscoveryState.refused(
-                    reason: 'CAN bus required',
-                  ),
-                ),
-              ),
-            ],
-            child: localizedMaterialApp(
-              home: const ServiceRecipesScreen(),
-              locale: const Locale('en'),
+      await tester.pumpWidget(
+        ProviderScope(
+          key: UniqueKey(),
+          overrides: [
+            obdSessionProvider.overrideWith(_ConnectedCanSession.new),
+            serviceRecipesMatrixProvider.overrideWith(
+              (ref) async => bundledMatrix,
             ),
+            mode08DiscoveryStateProvider.overrideWith(
+              () => _TestDiscoveryNotifier(
+                const Mode08DiscoveryState.refused(reason: 'CAN bus required'),
+              ),
+            ),
+          ],
+          child: localizedMaterialApp(
+            home: const ServiceRecipesScreen(),
+            locale: const Locale('en'),
           ),
-        );
-        await tester.pump();
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
 
-        expect(find.text('CAN bus required'), findsOneWidget);
-      },
-    );
+      expect(find.text('CAN bus required'), findsOneWidget);
+    });
   });
 
   group('SettingsScreen navigation tile', () {
@@ -701,5 +705,65 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets(
+      'Mode 08 discovery outcome renders without overflow on narrow screen (320dp) and 200% text scale',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final result = Mode08DiscoveryResult(
+          isSupported: true,
+          supportStatus: EcuSupportStatus.supported,
+          supportedTids: const {0x01, 0x02, 0x20, 0x22},
+          queriedBlocks: const [0x00, 0x20],
+          unqueriedBlocks: const [0x40],
+          isComplete: false,
+          incompletionReason:
+              Mode08IncompletionReason.unheaderedCrossBlockLimitation,
+          discoveredAt: DateTime.utc(2026, 9, 14),
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            key: UniqueKey(),
+            overrides: [
+              obdSessionProvider.overrideWith(_ConnectedCanSession.new),
+              serviceRecipesMatrixProvider.overrideWith(
+                (ref) async => bundledMatrix,
+              ),
+              mode08DiscoveryStateProvider.overrideWith(
+                () => _TestDiscoveryNotifier(
+                  Mode08DiscoveryState.completed(result: result),
+                ),
+              ),
+            ],
+            child: localizedMaterialApp(
+              home: const ServiceRecipesScreen(),
+              locale: const Locale('en'),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        final warning = find.byKey(
+          const Key('mode08_discovery_partial_warning'),
+        );
+        await tester.scrollUntilVisible(
+          warning,
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(warning, findsOneWidget);
+      },
+    );
   });
 }
