@@ -9,7 +9,8 @@ import 'package:torque_obd/obd/transport/wifi_transport.dart';
 import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/state/service_recipes_provider.dart';
 
-import 'mode08_replay_oracle_test.dart' show WireBarrierWifiTransport;
+import 'mode08_replay_oracle_test.dart'
+    show WireBarrierWifiTransport, oracleIdentity, verifyOraclePreflight;
 
 const _oracleHost = '127.0.0.1';
 const _oraclePort = 35008;
@@ -56,6 +57,17 @@ class _SupplementSession extends ObdSession {
 
 void main() {
   test('Mode 08 In-Flight Hold Lifecycle Supplement: 3-Run Evidence Generation', () async {
+    final available = await verifyOraclePreflight(
+      host: _oracleHost,
+      port: _oraclePort,
+      requiredMode: const bool.fromEnvironment('MODE08_ORACLE_REQUIRED'),
+      identity: oracleIdentity,
+    );
+    if (!available) {
+      markTestSkipped('Mode 08 replay reference not running on $_oracleHost:$_oraclePort');
+      return;
+    }
+
     final trafficEntries = <Map<String, dynamic>>[];
     final lifecycleLogs = <String>[];
     final bindings = <Map<String, dynamic>>[];
@@ -399,36 +411,39 @@ void main() {
     }
     logEvent('RUN3_COMPLETE', 'Triple Mode 08 in-flight hold cycle completed with complete stability');
 
-    // Write out artifacts to docs/verification/evidence/d05_mode08_supplement/
-    final trafficFile = File('${outDir.path}/d05_mode08_inflight_traffic.jsonl');
-    final trafficSink = trafficFile.openWrite();
-    for (final e in trafficEntries) {
-      trafficSink.writeln(jsonEncode(e));
+    // Write out artifacts to docs/verification/evidence/d05_mode08_supplement/ if explicitly requested
+    const generateEvidence = bool.fromEnvironment('GENERATE_MODE08_EVIDENCE');
+    if (generateEvidence) {
+      final trafficFile = File('${outDir.path}/d05_mode08_inflight_traffic.jsonl');
+      final trafficSink = trafficFile.openWrite();
+      for (final e in trafficEntries) {
+        trafficSink.writeln(jsonEncode(e));
+      }
+      await trafficSink.flush();
+      await trafficSink.close();
+
+      final logFile = File('${outDir.path}/d05_mode08_lifecycle_events.log');
+      await logFile.writeAsString('${lifecycleLogs.join('\n')}\n');
+
+      final bindingsFile = File('${outDir.path}/d05_mode08_bindings.json');
+      await bindingsFile.writeAsString('${const JsonEncoder.withIndent('  ').convert(bindings)}\n');
+
+      final manifest = {
+        'package': 'gate2_d05_mode08_supplement',
+        'version': '1.0.0',
+        'generated_at': DateTime.now().toUtc().toIso8601String(),
+        'candidate_apk_sha256': 'acc80f75b599d7f85e5c11416ec6c2e92f774f6b9e1699584414ca35abbade9e',
+        'replay_fixtures_sha256': 'e0a10d417983d02db39a9b0088e15fb6a947b542370f0fddd2b77c7bd02fc136',
+        'contract': 'Mode 08 In-Flight Query Hold and Stale Completion Rejection',
+        'runs_executed': 3,
+        'files': [
+          'd05_mode08_inflight_traffic.jsonl',
+          'd05_mode08_lifecycle_events.log',
+          'd05_mode08_bindings.json',
+        ],
+      };
+      final manifestFile = File('${outDir.path}/d05_mode08_manifest.json');
+      await manifestFile.writeAsString('${const JsonEncoder.withIndent('  ').convert(manifest)}\n');
     }
-    await trafficSink.flush();
-    await trafficSink.close();
-
-    final logFile = File('${outDir.path}/d05_mode08_lifecycle_events.log');
-    await logFile.writeAsString('${lifecycleLogs.join('\n')}\n');
-
-    final bindingsFile = File('${outDir.path}/d05_mode08_bindings.json');
-    await bindingsFile.writeAsString('${const JsonEncoder.withIndent('  ').convert(bindings)}\n');
-
-    final manifest = {
-      'package': 'gate2_d05_mode08_supplement',
-      'version': '1.0.0',
-      'generated_at': DateTime.now().toUtc().toIso8601String(),
-      'candidate_apk_sha256': 'acc80f75b599d7f85e5c11416ec6c2e92f774f6b9e1699584414ca35abbade9e',
-      'replay_fixtures_sha256': 'e0a10d417983d02db39a9b0088e15fb6a947b542370f0fddd2b77c7bd02fc136',
-      'contract': 'Mode 08 In-Flight Query Hold and Stale Completion Rejection',
-      'runs_executed': 3,
-      'files': [
-        'd05_mode08_inflight_traffic.jsonl',
-        'd05_mode08_lifecycle_events.log',
-        'd05_mode08_bindings.json',
-      ],
-    };
-    final manifestFile = File('${outDir.path}/d05_mode08_manifest.json');
-    await manifestFile.writeAsString('${const JsonEncoder.withIndent('  ').convert(manifest)}\n');
   });
 }
