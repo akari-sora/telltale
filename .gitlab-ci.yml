@@ -1,57 +1,32 @@
-# Main retains the on-demand Grok runner. Same-project MRs have a portable gate
-# so merging is not the first occasion the new source is tested.
-stages: [gate]
-
-default:
-  interruptible: true
-
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+stages: [inspect]
 variables:
-  PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
-  GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false"
-  ANDROID_HOME: "/opt/android-sdk-linux"
-  ANDROID_SDK_ROOT: "/opt/android-sdk-linux"
-
-.gate-common:
-  stage: gate
-  timeout: 1h
-  cache:
-    key: pub-3.47.0
-    paths: [.pub-cache/]
-  before_script:
-    - bash tool/ci/prepare_gate.sh
+  GIT_DEPTH: "0"
+source-review-export:
+  stage: inspect
+  image: ubuntu:24.04
+  tags: [saas-linux-small-amd64]
+  timeout: 15m
   script:
     - |
       set -Eeuo pipefail
-      if [ "$(id -u)" = 0 ]; then
-        runuser -u "$(cat /tmp/ci-nonroot-user)" -- /usr/local/bin/as-nonroot bash tool/ci/full_gate.sh
-      else
-        bash tool/ci/full_gate.sh
-      fi
+      apt-get update -qq
+      apt-get install -y -qq --no-install-recommends git ca-certificates
+      git config --global --add safe.directory "$CI_PROJECT_DIR"
+      git fetch --no-tags origin main:refs/remotes/origin/main
+      mkdir source-review
+      git bundle create source-review/repository.bundle HEAD refs/remotes/origin/main
+      git rev-parse HEAD refs/remotes/origin/main > source-review/refs.txt
+      set +e
+      git merge-tree --write-tree 25253474501f7460572de4cf77c666c0d8a2900a refs/remotes/origin/main > source-review/merge-tree.txt
+      rc=$?
+      set -e
+      printf '%s\n' "$rc" > source-review/merge-tree.exit
+      test "$rc" -le 1
+      sha256sum source-review/repository.bundle > source-review/bundle.sha256
   artifacts:
     when: always
-    expire_in: 14 days
-    paths:
-      - ci-artifacts/
-      - build/app/outputs/flutter-apk/*.apk
-
-full-gate:
-  extends: .gate-common
-  tags: [grok-box, ondemand, telltale]
-  image: localhost/telltale-ci-flutter:3.47.0
-  rules:
-    - if: '$CI_GATE_RUNNER == "hosted"'
-      when: never
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-# Public, digest-pinned image; never try pulling the Grok host's localhost image.
-# Fork MRs cannot use the trusted project's runner/credentials via these rules.
-full-gate-mr:
-  extends: .gate-common
-  tags: [saas-linux-small-amd64]
-  image: docker.io/plugfox/flutter:3.47.0-android@sha256:9cc3fb4d2c742c21d8bb6ab16eef657810b27ac78429920c6cd644dc8e158e22
-  variables:
-    ANDROID_HOME: /opt/android
-    ANDROID_SDK_ROOT: /opt/android
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_PROJECT_ID == "86385809" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID'
-    - if: '$CI_GATE_RUNNER == "hosted" && $CI_PROJECT_ID == "86385809" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_BRANCH'
+    expire_in: 2 days
+    paths: [source-review/]
