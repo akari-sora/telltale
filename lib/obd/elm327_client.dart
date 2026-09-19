@@ -3135,6 +3135,7 @@ class Elm327Client {
               throw TransportException(
                 'The adapter returned an ambiguous response to ATH1: ${ack.rawLines.join(' ')}',
                 issue: TransportIssue.queryHeaderRefused,
+                issueDetail: 'ATH1',
               );
             }
           } on WriteRefusedException {
