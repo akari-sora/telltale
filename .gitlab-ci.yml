@@ -13,27 +13,17 @@ receipt-review:
     - |
       set -Eeuo pipefail
       apt-get update -qq
-      apt-get install -y -qq --no-install-recommends curl ca-certificates
+      apt-get install -y -qq --no-install-recommends curl ca-certificates unzip
       mkdir receipt-review
-      fetch() {
-        job="$1"; path="$2"; dest="$3"
-        curl --fail --silent --show-error --location --max-time 60 \
-          --header "JOB-TOKEN: $CI_JOB_TOKEN" \
-          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/$job/artifacts/$path" \
-          -o "receipt-review/$dest"
-      }
-      fetch 16604391702 ci-artifacts/mode08-required/guard/attempt.json mr-required-guard.json
-      fetch 16604391702 ci-artifacts/mode08-required/result.json mr-required-result.json
-      fetch 16604391702 ci-artifacts/apks.sha256 mr-apks.sha256
-      fetch 16604391702 ci-artifacts/source.stdout mr-source.txt
-      fetch 16604411708 android-probe/emulator.log android-emulator.log
-      printf '\n=== MR_REQUIRED_GUARD ===\n'; cat receipt-review/mr-required-guard.json
-      printf '\n=== MR_REQUIRED_RESULT ===\n'; cat receipt-review/mr-required-result.json
-      printf '\n=== MR_APK_HASH ===\n'; cat receipt-review/mr-apks.sha256
-      printf '\n=== MR_SOURCE ===\n'; cat receipt-review/mr-source.txt
-      printf '\n=== ANDROID_BOOT_DIAGNOSTIC ===\n'
-      grep -Ei 'error|warning|KVM|accel|fatal|boot|crash|failed' receipt-review/android-emulator.log | tail -n 60 || true
-      printf '\nREAD_ONLY_RECEIPTS_END\n'
+      curl --fail --silent --show-error --location --max-time 120 \
+        'https://gitlab.com/aa22396584/telltale/-/jobs/16604391702/artifacts/download' \
+        -o receipts.zip
+      unzip -t receipts.zip > receipt-review/archive-check.txt
+      for path in ci-artifacts/mode08-required/guard/attempt.json ci-artifacts/mode08-required/result.json ci-artifacts/apks.sha256 ci-artifacts/source.stdout; do
+        printf '\n=== %s ===\n' "$path"
+        unzip -p receipts.zip "$path" | tee "receipt-review/$(basename "$path")"
+      done
+      echo READ_ONLY_RECEIPTS_END
   artifacts:
     when: always
     expire_in: 7 days
