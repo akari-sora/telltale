@@ -747,6 +747,12 @@ class Elm327Client {
   /// state rather than showing frozen gauges.
   void Function()? onConnectionLost;
 
+  /// Fires when [_resync] begins draining the connection.
+  void Function()? onResyncStarted;
+
+  /// Whether [_resync] is currently draining the link waiting for a prompt.
+  bool get isResyncing => _draining != null;
+
   Stream<InitProgress> get initProgress => _initProgress.stream;
 
   /// Connects the transport and runs the handshake. Returns false if a step
@@ -1068,7 +1074,7 @@ class Elm327Client {
   Duration _withinDeadline(Duration proposed) {
     final deadline = _deadlineAt;
     if (deadline == null) return proposed;
-    final left = deadline.difference(DateTime.now());
+    final left = deadline.difference(_clock());
     if (left <= Duration.zero) return Duration.zero;
     return left < proposed ? left : proposed;
   }
@@ -1303,7 +1309,7 @@ class Elm327Client {
     // deadline itself.
     _deadlineAt = deadline;
     if (deadline != null) {
-      final left = deadline.difference(DateTime.now());
+      final left = deadline.difference(_clock());
       if (left <= Duration.zero) {
         throw TimeoutException(
           'The time limit for this operation has passed, so $command was not sent.',
@@ -1625,6 +1631,7 @@ class Elm327Client {
     transcript.recordNote('Connection is out of sync, starting realignment');
     _buffer.clear();
     _resyncDrainedWireBytes = 0;
+    onResyncStarted?.call();
     final drain = Completer<bool>();
     _draining = drain;
 
@@ -1632,11 +1639,11 @@ class Elm327Client {
     // Within the caller's budget when it has one. Three fixed seconds meant a
     // command with a millisecond left still spent them here, and a link that
     // stays quiet then ends the session — long after whoever asked had gone.
-    final started = DateTime.now();
+    final started = _clock();
     final window = deadline == null
         ? resyncTimeout
         : (() {
-            final left = deadline.difference(DateTime.now());
+            final left = deadline.difference(_clock());
             if (left <= Duration.zero) return Duration.zero;
             return left < resyncTimeout ? left : resyncTimeout;
           })();
@@ -1904,7 +1911,7 @@ class Elm327Client {
             'This session has ended or gone to the background, so the command was not sent.',
           );
         }
-        if (deadline != null && !deadline.isAfter(DateTime.now())) {
+        if (deadline != null && !deadline.isAfter(_clock())) {
           throw TimeoutException(
             'The time limit for this operation has passed, so $command was not sent.',
           );
