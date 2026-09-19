@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "policy": "USABILITY-R2",
-  "repository": "ImL1s/telltale",
-  "epic": 8,
+  "repository": "aa22396584/telltale",
+  "epic": 4,
   "audited_sha": "fda1dbc9cbab107fe4473643a244f5319d96bb9f",
-  "notes": "Seeded from telltale#11 comment 5549388272. This is #11.A (plan/validator/ready-list/handoff), not the full agent runner (#11.B). BACKLOG-CLEAR R1 issues 45/47/70/79/90/127/128 are tracked on those issues; they are not extra WS ids.",
+  "notes": "Seeded from telltale#11 comment 5549388272. This is #11.A (plan/validator/ready-list/handoff), not the full agent runner (#11.B). Reconciled under #105 to aa22396584/telltale for #7. BACKLOG-CLEAR R1 issues are tracked on those issues; they are not extra WS ids.",
   "tasks": [
     {
       "id": "WS-01",
-      "issue": 9,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/9",
+      "issue": 5,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/5",
       "priority": "P0",
       "status": "pending",
       "depends_on": [],
@@ -30,8 +30,8 @@
     },
     {
       "id": "WS-02",
-      "issue": 10,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/10",
+      "issue": 6,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/6",
       "priority": "P0",
       "status": "pending",
       "depends_on": [],
@@ -52,13 +52,13 @@
     },
     {
       "id": "WS-03",
-      "issue": 11,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/11",
+      "issue": 7,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/7",
       "priority": "P0",
       "status": "pending",
       "depends_on": [
-        9,
-        10
+        5,
+        6
       ],
       "writable_dirs": [
         "tool/workshop/"
@@ -77,12 +77,12 @@
     },
     {
       "id": "WS-04",
-      "issue": 12,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/12",
+      "issue": 8,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/8",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        10
+        6
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-04/"
@@ -97,12 +97,12 @@
     },
     {
       "id": "WS-05",
-      "issue": 13,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/13",
+      "issue": 9,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/9",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        9
+        5
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-05/"
@@ -121,13 +121,13 @@
     },
     {
       "id": "WS-06",
-      "issue": 14,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/14",
+      "issue": 10,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/10",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        9,
-        13
+        5,
+        9
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-06/"
@@ -146,12 +146,12 @@
     },
     {
       "id": "WS-07",
-      "issue": 15,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/15",
+      "issue": 11,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/11",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        9
+        5
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-07/"
@@ -170,12 +170,12 @@
     },
     {
       "id": "WS-08",
-      "issue": 16,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/16",
+      "issue": 12,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/12",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        9
+        5
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-08/"
@@ -194,15 +194,15 @@
     },
     {
       "id": "WS-09",
-      "issue": 17,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/17",
+      "issue": 13,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/13",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        12,
-        13,
-        14,
-        15
+        8,
+        9,
+        10,
+        11
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-09/"
@@ -221,14 +221,14 @@
     },
     {
       "id": "WS-10",
-      "issue": 18,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/18",
+      "issue": 14,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/14",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        13,
-        14,
-        15
+        9,
+        10,
+        11
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-10/"
@@ -247,14 +247,14 @@
     },
     {
       "id": "WS-11",
-      "issue": 19,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/19",
+      "issue": 15,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/15",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        13,
-        14,
-        15
+        9,
+        10,
+        11
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-11/"
@@ -273,14 +273,14 @@
     },
     {
       "id": "WS-12",
-      "issue": 20,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/20",
+      "issue": 16,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/16",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        13,
-        14,
-        15
+        9,
+        10,
+        11
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-12/"
@@ -299,16 +299,16 @@
     },
     {
       "id": "WS-13",
-      "issue": 21,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/21",
+      "issue": 17,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/17",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        9,
-        14,
-        15,
-        16,
-        17
+        5,
+        10,
+        11,
+        12,
+        13
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-13/"
@@ -327,15 +327,15 @@
     },
     {
       "id": "WS-14",
-      "issue": 22,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/22",
+      "issue": 18,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/18",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        9,
-        14,
-        15,
-        16
+        5,
+        10,
+        11,
+        12
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-14/"
@@ -354,15 +354,15 @@
     },
     {
       "id": "WS-15",
-      "issue": 23,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/23",
+      "issue": 19,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/19",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
+        5,
         9,
-        13,
-        14,
-        15
+        10,
+        11
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-15/"
@@ -381,15 +381,15 @@
     },
     {
       "id": "WS-16",
-      "issue": 24,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/24",
+      "issue": 20,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/20",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        9,
-        14,
-        15,
-        18
+        5,
+        10,
+        11,
+        14
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-16/"
@@ -408,14 +408,14 @@
     },
     {
       "id": "WS-17",
-      "issue": 25,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/25",
+      "issue": 21,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/21",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        14,
-        17,
-        21
+        10,
+        13,
+        17
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-17/"
@@ -434,16 +434,16 @@
     },
     {
       "id": "WS-18",
-      "issue": 26,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/26",
+      "issue": 22,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/22",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        14,
-        15,
-        20,
-        21,
-        25
+        10,
+        11,
+        16,
+        17,
+        21
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-18/"
@@ -462,15 +462,15 @@
     },
     {
       "id": "WS-19",
-      "issue": 27,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/27",
+      "issue": 23,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/23",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        9,
-        12,
-        14,
-        15
+        5,
+        8,
+        10,
+        11
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-19/"
@@ -485,13 +485,13 @@
     },
     {
       "id": "WS-20",
-      "issue": 28,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/28",
+      "issue": 24,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/24",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        12,
-        27
+        8,
+        23
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-20/"
@@ -506,14 +506,14 @@
     },
     {
       "id": "WS-21",
-      "issue": 29,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/29",
+      "issue": 25,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/25",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        9,
-        15,
-        16
+        5,
+        11,
+        12
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-21/"
@@ -532,14 +532,14 @@
     },
     {
       "id": "WS-22",
-      "issue": 30,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/30",
+      "issue": 26,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/26",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        9,
-        15,
-        16
+        5,
+        11,
+        12
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-22/"
@@ -558,14 +558,14 @@
     },
     {
       "id": "WS-23",
-      "issue": 31,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/31",
+      "issue": 27,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/27",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        15,
-        16,
-        30
+        11,
+        12,
+        26
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-23/"
@@ -584,13 +584,13 @@
     },
     {
       "id": "WS-24",
-      "issue": 32,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/32",
+      "issue": 28,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/28",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        30,
-        31
+        26,
+        27
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-24/"
@@ -609,16 +609,16 @@
     },
     {
       "id": "WS-25",
-      "issue": 34,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/34",
+      "issue": 30,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/30",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        15,
-        30,
-        31,
-        32,
-        33
+        11,
+        26,
+        27,
+        28,
+        29
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-25/"
@@ -637,13 +637,13 @@
     },
     {
       "id": "WS-26",
-      "issue": 33,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/33",
+      "issue": 29,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/29",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        15,
-        30
+        11,
+        26
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-26/"
@@ -662,18 +662,18 @@
     },
     {
       "id": "WS-27",
-      "issue": 35,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/35",
+      "issue": 31,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/31",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        9,
-        14,
-        16,
-        30,
-        31,
-        32,
-        33
+        5,
+        10,
+        12,
+        26,
+        27,
+        28,
+        29
       ],
       "writable_dirs": [
         "lib/ui",
@@ -698,16 +698,16 @@
     },
     {
       "id": "WS-28",
-      "issue": 36,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/36",
+      "issue": 32,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/32",
       "priority": "P2",
       "status": "pending",
       "depends_on": [
-        9,
-        15,
-        30,
-        31,
-        33
+        5,
+        11,
+        26,
+        27,
+        29
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-28/"
@@ -726,17 +726,17 @@
     },
     {
       "id": "WS-29",
-      "issue": 37,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/37",
+      "issue": 33,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/33",
       "priority": "P1",
       "status": "pending",
       "depends_on": [
-        9,
+        5,
+        7,
+        8,
+        10,
         11,
-        12,
-        14,
-        15,
-        16
+        12
       ],
       "writable_dirs": [
         "docs/workshop/ws/ws-29/"
