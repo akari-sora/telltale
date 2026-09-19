@@ -1,0 +1,83 @@
+[
+  {
+    "run": 1,
+    "stage": "run1_inflight_0800_held",
+    "pause_epoch": 0,
+    "in_flight_command": "0800",
+    "barrier_status": "held_at_gate",
+    "provider_state": "discovering",
+    "timestamp": "2026-09-19T09:54:14.880409Z"
+  },
+  {
+    "run": 1,
+    "stage": "run1_pause_home",
+    "pause_epoch": 1,
+    "in_flight_command": "0800",
+    "barrier_status": "held_at_gate",
+    "provider_state": "idle",
+    "timestamp": "2026-09-19T09:54:14.880848Z"
+  },
+  {
+    "run": 1,
+    "stage": "run1_resume_revalidation_complete",
+    "pause_epoch": 1,
+    "in_flight_command": "none",
+    "barrier_status": "released_and_discarded",
+    "provider_state": "idle",
+    "timestamp": "2026-09-19T09:54:14.890714Z"
+  },
+  {
+    "run": 2,
+    "stage": "run2_inflight_0820_held",
+    "pause_epoch": 1,
+    "in_flight_command": "0820",
+    "barrier_status": "held_at_gate",
+    "provider_state": "discovering",
+    "timestamp": "2026-09-19T09:54:14.899138Z"
+  },
+  {
+    "run": 2,
+    "stage": "run2_pause_screen_off",
+    "pause_epoch": 2,
+    "in_flight_command": "0820",
+    "barrier_status": "held_at_gate",
+    "provider_state": "idle",
+    "timestamp": "2026-09-19T09:54:14.899240Z"
+  },
+  {
+    "run": 2,
+    "stage": "run2_resume_unlock_complete",
+    "pause_epoch": 2,
+    "in_flight_command": "none",
+    "barrier_status": "released_and_discarded",
+    "provider_state": "idle",
+    "timestamp": "2026-09-19T09:54:14.903834Z"
+  },
+  {
+    "run": 3,
+    "stage": "run3_inflight_0800_held",
+    "pause_epoch": 2,
+    "in_flight_command": "0800",
+    "barrier_status": "held_at_gate",
+    "provider_state": "discovering",
+    "timestamp": "2026-09-19T09:54:14.909649Z"
+  },
+  {
+    "run": 3,
+    "stage": "run3_pause_home",
+    "pause_epoch": 3,
+    "in_flight_command": "0800",
+    "barrier_status": "held_at_gate",
+    "provider_state": "idle",
+    "timestamp": "2026-09-19T09:54:14.909739Z"
+  },
+  {
+    "run": 3,
+    "stage": "run3_final_stable",
+    "pause_epoch": 3,
+    "in_flight_command": "none",
+    "barrier_status": "released_and_discarded",
+    "provider_state": "idle",
+    "timestamp": "2026-09-19T09:54:14.913780Z"
+  }
+]

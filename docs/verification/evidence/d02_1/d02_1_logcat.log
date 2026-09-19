@@ -1,0 +1,11 @@
+--------- beginning of system
+09-18 20:59:41.377 W/ActivityTaskManager(  705): Force removing ActivityRecord{40353026 u0 com.cbstudio.telltale/.MainActivity t137 f}}: app died, no saved state
+09-18 20:59:41.412 W/ActivityTaskManager(  705): callingPackage for (uid=2000, pid=16411) has no WPC
+09-18 20:59:41.417 I/ActivityTaskManager(  705): Add Task{3244249 #137 type=standard I=com.cbstudio.telltale/.MainActivity} to hidden list because adding Task{4f8857b #138 type=standard I=com.cbstudio.telltale/.MainActivity}
+09-18 20:59:41.417 I/ActivityTaskManager(  705): START u0 {flg=0x10000000 xflg=0x5 cmp=com.cbstudio.telltale/.MainActivity} with LAUNCH_SINGLE_TOP from uid 2000 (BAL_ALLOW_PERMISSION) result code=0
+--------- beginning of main
+09-18 20:59:41.919 I/flutter (16414): [IMPORTANT:flutter/shell/platform/android/android_context_gl_impeller.cc(104)] Using the Impeller rendering backend (OpenGLES).
+09-18 20:59:41.963 I/flutter (16414): The Dart VM service is listening on http://127.0.0.1:36957/kQRhLsAqkkQ=/
+09-18 20:59:42.432 I/flutter (16414): renderer: impeller-default (ro.board.platform=(empty) ro.hardware.vulkan=ranchu); engine reports impeller
+09-18 20:59:42.887 I/ActivityTaskManager(  705): Displayed com.cbstudio.telltale/.MainActivity for user 0: +1s476ms
+09-18 20:59:42.887 I/ActivityTaskManager(  705): Fully drawn com.cbstudio.telltale/.MainActivity: +1s476ms

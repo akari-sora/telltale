@@ -1,0 +1,72 @@
+{"ts": 1789736382.132768, "event": "ready", "hash": "e0a10d417983d02db39a9b0088e15fb6a947b542370f0fddd2b77c7bd02fc136", "port": 35000, "scenarios": ["normal_headered_single_block", "normal_headered_multi_block", "entry_raw_fallback_with_error", "entry_multiline_raw_structured_equivalence", "transport_chunking_multi_block", "source_attribution_multi_node", "source_attribution_anonymous_multi_block", "evidence_declared_node_missing", "evidence_conditions_not_correct_nrc22", "lifecycle_disconnect_in_flight"]}
+{"ts": 1789736382.133109, "event": "ready", "hash": "e0a10d417983d02db39a9b0088e15fb6a947b542370f0fddd2b77c7bd02fc136", "port": 35000, "scenarios": ["normal_headered_single_block", "normal_headered_multi_block", "entry_raw_fallback_with_error", "entry_multiline_raw_structured_equivalence", "transport_chunking_multi_block", "source_attribution_multi_node", "source_attribution_anonymous_multi_block", "evidence_declared_node_missing", "evidence_conditions_not_correct_nrc22", "lifecycle_disconnect_in_flight"]}
+{"ts": 1789736388.384511, "event": "connect", "client": "('127.0.0.1', 57738)"}
+{"ts": 1789736388.389833, "event": "command", "command": "ATZ", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.4105191, "event": "command", "command": "ATE0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.412182, "event": "command", "command": "ATL0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.413429, "event": "command", "command": "ATM0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.414411, "event": "command", "command": "ATS0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.415801, "event": "command", "command": "ATAT1", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.417345, "event": "command", "command": "ATST66", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.419157, "event": "command", "command": "ATSP0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.4352808, "event": "command", "command": "ATI", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.454411, "event": "command", "command": "AT@1", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.458226, "event": "command", "command": "ATRV", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.460611, "event": "command", "command": "0100", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.462713, "event": "command", "command": "ATDP", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.464353, "event": "command", "command": "ATDPN", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.466636, "event": "command", "command": "ATPPS", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.4743638, "event": "command", "command": "ATSH 7E0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.573911, "event": "command", "command": "0100", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.577121, "event": "command", "command": "ATH1", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.578228, "event": "command", "command": "ATSH 7DF", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.57899, "event": "command", "command": "0100", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.581356, "event": "command", "command": "ATH0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.582189, "event": "command", "command": "ATRV", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.582996, "event": "command", "command": "ATSH 7E0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.5859149, "event": "command", "command": "0120", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.60434, "event": "command", "command": "010C0D04110B10", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.709163, "event": "command", "command": "010C", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.755491, "event": "command", "command": "0120", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.756883, "event": "command", "command": "0140", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.81251, "event": "command", "command": "010C", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.9110122, "event": "command", "command": "0140", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.930923, "event": "command", "command": "0160", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736388.935935, "event": "command", "command": "010C", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.0424461, "event": "command", "command": "010D", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.09308, "event": "command", "command": "0160", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.148216, "event": "command", "command": "010D", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.253258, "event": "command", "command": "010D", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.359942, "event": "command", "command": "0104", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.466963, "event": "command", "command": "0104", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.571952, "event": "command", "command": "0104", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.674936, "event": "command", "command": "0111", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.7827048, "event": "command", "command": "0111", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.8868659, "event": "command", "command": "0111", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736389.990535, "event": "command", "command": "010B", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736390.095055, "event": "command", "command": "010B", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736390.199031, "event": "command", "command": "010B", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736390.3026931, "event": "command", "command": "0110", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736390.420974, "event": "command", "command": "0110", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736390.534768, "event": "command", "command": "0110", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736390.639689, "event": "command", "command": "0105", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736390.7446668, "event": "command", "command": "0105", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736390.848685, "event": "command", "command": "0105", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736390.951515, "event": "command", "command": "010F", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736391.055659, "event": "command", "command": "010F", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736391.1644979, "event": "command", "command": "010F", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736391.267809, "event": "command", "command": "015E", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736391.375099, "event": "command", "command": "015E", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736391.478857, "event": "command", "command": "015E", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736403.4802408, "event": "command", "command": "ATRV", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736415.4417121, "event": "command", "command": "ATH1", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736415.456634, "event": "command", "command": "ATSH 7DF", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736415.459235, "event": "command", "command": "0800", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736415.461282, "event": "command", "command": "ATSH 7E0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736415.4629629, "event": "command", "command": "ATH0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736415.46645, "event": "command", "command": "ATH1", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736415.467249, "event": "command", "command": "ATSH 7DF", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736415.468071, "event": "command", "command": "0820", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736415.469383, "event": "command", "command": "ATSH 7E0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736415.476609, "event": "command", "command": "ATH0", "scenario": "normal_headered_multi_block"}
+{"ts": 1789736418.4811509, "event": "command", "command": "ATRV", "scenario": "normal_headered_multi_block"}
