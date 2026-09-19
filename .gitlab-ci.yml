@@ -8,7 +8,7 @@ source-review-export:
   stage: inspect
   image: ubuntu:24.04
   tags: [saas-linux-small-amd64]
-  timeout: 15m
+  timeout: 10m
   script:
     - |
       set -Eeuo pipefail
@@ -17,15 +17,15 @@ source-review-export:
       git config --global --add safe.directory "$CI_PROJECT_DIR"
       git fetch --no-tags origin main:refs/remotes/origin/main
       mkdir source-review
-      git bundle create source-review/repository.bundle HEAD refs/remotes/origin/main
-      git rev-parse HEAD refs/remotes/origin/main > source-review/refs.txt
+      git rev-parse refs/remotes/origin/main
       set +e
       git merge-tree --write-tree 25253474501f7460572de4cf77c666c0d8a2900a refs/remotes/origin/main > source-review/merge-tree.txt
       rc=$?
       set -e
-      printf '%s\n' "$rc" > source-review/merge-tree.exit
+      cat source-review/merge-tree.txt
       test "$rc" -le 1
-      sha256sum source-review/repository.bundle > source-review/bundle.sha256
+      git diff --stat 546b2aa70f90c14bb4045a6e922a5b3929445328 refs/remotes/origin/main
+      echo REVIEW_DIAGNOSTICS_END
   artifacts:
     when: always
     expire_in: 2 days
