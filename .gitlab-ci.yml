@@ -9,20 +9,30 @@ receipt-review:
   timeout: 5m
   variables:
     DEBIAN_FRONTEND: noninteractive
+    ARTIFACT_JOB: "16604478148"
   script:
     - |
       set -Eeuo pipefail
+      case "$ARTIFACT_JOB" in ''|*[!0-9]*) echo Invalid_job_id >&2; exit 2;; esac
       apt-get update -qq
       apt-get install -y -qq --no-install-recommends curl ca-certificates unzip
       mkdir receipt-review
       curl --fail --silent --show-error --location --max-time 120 \
-        'https://gitlab.com/aa22396584/telltale/-/jobs/16604391702/artifacts/download' \
+        "https://gitlab.com/aa22396584/telltale/-/jobs/$ARTIFACT_JOB/artifacts/download" \
         -o receipts.zip
       unzip -t receipts.zip > receipt-review/archive-check.txt
       for path in ci-artifacts/mode08-required/guard/attempt.json ci-artifacts/mode08-required/result.json ci-artifacts/apks.sha256 ci-artifacts/source.stdout; do
         printf '\n=== %s ===\n' "$path"
         unzip -p receipts.zip "$path" | tee "receipt-review/$(basename "$path")"
       done
+      unzip -p receipts.zip build/app/outputs/flutter-apk/app-field-debug.apk > receipt-check.apk
+      expected=$(cut -d ' ' -f1 receipt-review/apks.sha256)
+      actual=$(sha256sum receipt-check.apk | cut -d ' ' -f1)
+      test "$actual" = "$expected"
+      printf '%s\n' "$actual" > receipt-review/independent-apk.sha256
+      stat -c %s receipt-check.apk > receipt-review/apk-bytes.txt
+      printf '\n=== INDEPENDENT_APK_BYTES_AND_HASH ===\n'
+      cat receipt-review/apk-bytes.txt receipt-review/independent-apk.sha256
       echo READ_ONLY_RECEIPTS_END
   artifacts:
     when: always
