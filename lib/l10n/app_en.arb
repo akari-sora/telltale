@@ -1011,7 +1011,7 @@
   "performanceSpeedGaugeLabel": "Speed",
   "performanceSpeedTraceHeading": "Speed trace",
   "performanceSplitsHeading": "Splits",
-  "performanceStateAborted": "The speed signal stopped — this run was not completed; below is what was recorded before it went",
+  "performanceStateAborted": "This run was not completed; below is what was recorded before it stopped",
   "@performanceStateAborted": {
     "description": "An incomplete run whose partial evidence is kept. Must never read as a finished time."
   },
@@ -3230,6 +3230,10 @@
   "@settingsManualCommandCanReceiveFilterUnavailable": {
     "description": "TransportIssue.canReceiveFilterUnavailable. ATCRA with an address was refused or bare ATCRA could not clear the filter. Zero decoded value. ATCRA is a machine token."
   },
+  "settingsManualCommandHeaderRestoreFailed": "The adapter refused to restore the header (ATSH), so polling is stopped until you reconnect.",
+  "@settingsManualCommandHeaderRestoreFailed": {
+    "description": "TransportIssue.headerRestoreFailed. The adapter answered ATSH with '?' during header restoration. Commands are refused until reconnect."
+  },
   "manualCommandRefusedEmpty": "Nothing was typed, so nothing was sent.",
   "@manualCommandRefusedEmpty": {
     "description": "ManualCommandRefusalReason.emptyCommand. The box refuses before the adapter is involved at all, so it must not read as a failure of anything."
@@ -3937,6 +3941,69 @@
     "placeholders": {
       "fields": { "type": "String" }
     }
-  }
-
+  },
+  "serviceRecipesTitle": "Service Recipes & Active Diagnostics",
+  "serviceRecipesSubtitle": "Standard-referenced service recipes and non-actuating capability discovery",
+  "serviceRecipesSafetyBannerTitle": "Zero Live Candidates",
+  "serviceRecipesSafetyBannerBody": "Live physical vehicle actuation is strictly prohibited (0 qualified vehicles). Available recipes are simulation fixtures only.",
+  "serviceRecipesDiscoverySection": "Mode 08 Non-Actuating Discovery",
+  "serviceRecipesDiscoveryDescription": "Queries standard base Test IDs ($00, $20, ...) over CAN without actuating any component.",
+  "serviceRecipesDiscoveryButton": "Discover Mode 08 Supported TIDs",
+  "serviceRecipesDiscovering": "Querying supported TIDs...",
+  "serviceRecipesDiscoverySuccess": "Mode 08 is supported by ECU. Supported TIDs: {tids}",
+  "@serviceRecipesDiscoverySuccess": {
+    "placeholders": {
+      "tids": { "type": "String" }
+    }
+  },
+  "serviceRecipesDiscoveryUnsupported": "Mode 08 is not supported by this ECU",
+  "serviceRecipesDiscoveryUnknown": "Mode 08 support is unknown: {reason}",
+  "@serviceRecipesDiscoveryUnknown": {
+    "placeholders": {
+      "reason": { "type": "String" }
+    }
+  },
+  "serviceRecipesDiscoveryPartialWarning": "Discovery partially completed ({reason}). Uncompleted blocks: {blocks}. Note: Not found does not mean unsupported (未查到不代表不支援).",
+  "@serviceRecipesDiscoveryPartialWarning": {
+    "placeholders": {
+      "reason": { "type": "String" },
+      "blocks": { "type": "String" }
+    }
+  },
+  "serviceRecipesCatalogSection": "Available Service Recipes",
+  "serviceRecipesSimulationBadge": "Simulation Ready",
+  "serviceRecipesLiveBlockedBadge": "Live Blocked (0 Live Candidates)",
+  "serviceRecipesStandard": "Standard: {standard}",
+  "@serviceRecipesStandard": {
+    "placeholders": {
+      "standard": { "type": "String" }
+    }
+  },
+  "serviceRecipesEcuHeader": "ECU Header: {header}",
+  "@serviceRecipesEcuHeader": {
+    "placeholders": {
+      "header": { "type": "String" }
+    }
+  },
+  "serviceRecipesHash": "Canonical Hash: {hash}",
+  "@serviceRecipesHash": {
+    "placeholders": {
+      "hash": { "type": "String" }
+    }
+  },
+  "serviceRecipesDetailTitle": "Service Recipe Details",
+  "serviceRecipesPreconditions": "Safety Preconditions",
+  "serviceRecipesRecovery": "Recovery Command",
+  "serviceRecipesClose": "Close",
+  "serviceRecipesDiscoveryRequiresCan": "Requires an active OBD-II CAN bus connection.",
+  "serviceRecipesLoadError": "Error loading service recipes: {error}",
+  "@serviceRecipesLoadError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "serviceRecipesNoPreconditions": "None",
+  "settingsServiceRecipesEntry": "Service Recipes & Active Tests",
+  "settingsServiceRecipesDesc": "Inspect workshop service recipes and discover supported Mode 08 tests"
 }
+
