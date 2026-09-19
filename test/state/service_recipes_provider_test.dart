@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:torque_obd/diagnostics/service_recipes/qualification_tier.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
 import 'package:torque_obd/obd/elm_can_addressing.dart';
+import 'package:torque_obd/obd/elm_composite_transaction.dart';
 import 'package:torque_obd/obd/elm_flow_control.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
 import 'package:torque_obd/state/obd_session.dart';
