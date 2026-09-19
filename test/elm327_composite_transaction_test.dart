@@ -22,72 +22,70 @@ BusAddressing get _can11 => BusAddressing.forProtocolNumber('6');
 BusAddressing get _can29 => BusAddressing.forProtocolNumber('7');
 
 Map<String, List<int>> _physicsReplies() => {
-      '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x13],
-      '0105': [0x41, 0x05, 0x7B],
-      '010C': [0x41, 0x0C, 0x1A, 0xF8],
-    };
+  '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x13],
+  '0105': [0x41, 0x05, 0x7B],
+  '010C': [0x41, 0x0C, 0x1A, 0xF8],
+};
 
 FakeElm327 _can11Transport({
   AdapterFaults faults = const AdapterFaults(),
   Map<String, List<int>> didReplies = const {},
   Map<String, List<String>> literalReplies = const {},
-}) =>
-    FakeElm327(
-      protocol: BusProtocol.can11,
-      faults: faults,
-      ecus: [
-        FakeEcu(
-          name: 'ECM',
-          requestId: '7E0',
-          responseId: '7E8',
-          responses: {..._physicsReplies(), ...didReplies},
-          literalResponses: literalReplies,
-        ),
-        FakeEcu(
-          name: 'SME',
-          requestId: '6F1',
-          responseId: '607',
-          responses: {
-            '22DDBC': [0x62, 0xDD, 0xBC, 0x54, 0x20],
-            ...didReplies,
-          },
-          literalResponses: literalReplies,
-        ),
-        FakeEcu(
-          name: 'TCM',
-          requestId: '7E2',
-          responseId: '7EA',
-          responses: {..._physicsReplies(), ...didReplies},
-          literalResponses: literalReplies,
-        ),
-      ],
-    );
+}) => FakeElm327(
+  protocol: BusProtocol.can11,
+  faults: faults,
+  ecus: [
+    FakeEcu(
+      name: 'ECM',
+      requestId: '7E0',
+      responseId: '7E8',
+      responses: {..._physicsReplies(), ...didReplies},
+      literalResponses: literalReplies,
+    ),
+    FakeEcu(
+      name: 'SME',
+      requestId: '6F1',
+      responseId: '607',
+      responses: {
+        '22DDBC': [0x62, 0xDD, 0xBC, 0x54, 0x20],
+        ...didReplies,
+      },
+      literalResponses: literalReplies,
+    ),
+    FakeEcu(
+      name: 'TCM',
+      requestId: '7E2',
+      responseId: '7EA',
+      responses: {..._physicsReplies(), ...didReplies},
+      literalResponses: literalReplies,
+    ),
+  ],
+);
 
 FakeElm327 _can29Transport({
   AdapterFaults faults = const AdapterFaults(),
   Map<String, List<int>> didReplies = const {},
-}) =>
-    FakeElm327(
-      protocol: BusProtocol.can29,
-      faults: faults,
-      ecus: [
-        FakeEcu(
-          name: 'ECM',
-          requestId: '18DA10F1',
-          responseId: '18DAF110',
-          responses: _physicsReplies(),
-        ),
-        FakeEcu(
-          name: 'BMS',
-          requestId: '18DADBF1',
-          responseId: '18DAF1DB',
-          responses: {
-            '221234': [0x62, 0x12, 0x34, 0x2A],
-            ...didReplies,
-          },
-        ),
-      ],
-    );
+}) => FakeElm327(
+  protocol: BusProtocol.can29,
+  faults: faults,
+  ecus: [
+    FakeEcu(
+      name: 'ECM',
+      requestId: '18DA10F1',
+      responseId: '18DAF110',
+      responses: _physicsReplies(),
+    ),
+    FakeEcu(
+      name: 'BMS',
+      requestId: '18DADBF1',
+      responseId: '18DAF1DB',
+      responses: {
+        '221234': [0x62, 0x12, 0x34, 0x2A],
+        ...didReplies,
+      },
+    ),
+  ],
+);
 
 Future<Elm327Client> _connect(
   ObdTransport transport, {
@@ -152,8 +150,14 @@ final class _ReconnectingTransport implements ObdTransport {
   FakeElm327 get active => _active;
 
   Map<String, Duration> get slowCommands => _active.slowCommands;
+  List<String> get commandLog => _active.commandLog;
+  Future<void>? Function(String command)? responseBarrier;
 
-  FakeElm327 _create() => _can11Transport();
+  FakeElm327 _create() {
+    final t = _can11Transport();
+    t.responseBarrier = (cmd) => responseBarrier?.call(cmd);
+    return t;
+  }
 
   @override
   bool get isConnected => _active.isConnected;
@@ -190,77 +194,98 @@ final class _ReconnectingTransport implements ObdTransport {
 
 void main() {
   group('composite query transaction apply -> query -> reverse-restore', () {
-    test('full composite BMW i3 style query: CEA + CRA + FCS + CAF0 + ATSH',
-        () async {
-      final transport = _can11Transport();
-      final client = await _connect(transport);
+    test(
+      'full composite BMW i3 style query: CEA + CRA + FCS + CAF0 + ATSH',
+      () async {
+        final transport = _can11Transport();
+        final client = await _connect(transport);
 
-      final filter = ElmCanReceiveFilterConfig(
-        address: '607',
-        addressing: _can11,
-      );
-      final fc = ElmFlowControlConfig.customHeaderAndData(
-        header: '6F1',
-        data: [0x07, 0x30, 0x00, 0x00],
-        addressing: _can11,
-      );
+        final filter = ElmCanReceiveFilterConfig(
+          address: '607',
+          addressing: _can11,
+        );
+        final fc = ElmFlowControlConfig.customHeaderAndData(
+          header: '6F1',
+          data: [0x07, 0x30, 0x00, 0x00],
+          addressing: _can11,
+        );
 
-      final before = transport.commandLog.length;
-      final reply = await client.sendTransacted(
-        '22DDBC',
-        header: '6F1',
-        extendedAddressByte: 0x07,
-        canReceiveFilter: filter,
-        flowControl: fc,
-        hostVisibleIsoTp: true,
-      );
+        final before = transport.commandLog.length;
+        final reply = await client.sendTransacted(
+          '22DDBC',
+          header: '6F1',
+          extendedAddressByte: 0x07,
+          canReceiveFilter: filter,
+          flowControl: fc,
+          hostVisibleIsoTp: true,
+        );
 
-      expect(reply.isSuccess, isTrue);
-      final log = transport.commandLog.skip(before).toList();
+        expect(reply.isSuccess, isTrue);
+        final log = transport.commandLog.skip(before).toList();
 
-      // Verify sequence of commands on the wire:
-      // Apply: ATCEA07 -> ATCRA607 -> ATFCSH6F1/ATFCSD/ATFCSM1 -> ATCAF0 -> ATSH6F1 -> 22DDBC (framed)
-      final ceaIndex = log.indexOf('ATCEA07');
-      final craIndex = log.indexOf('ATCRA607');
-      final fcsmIndex = log.indexOf('ATFCSM1');
-      final caf0Index = log.indexOf('ATCAF0');
-      final atshIndex = log.indexOf('ATSH6F1');
+        // Verify sequence of commands on the wire:
+        // Apply: ATCEA07 -> ATCRA607 -> ATFCSH6F1/ATFCSD/ATFCSM1 -> ATCAF0 -> ATSH6F1 -> 22DDBC (framed)
+        final ceaIndex = log.indexOf('ATCEA07');
+        final craIndex = log.indexOf('ATCRA607');
+        final fcsmIndex = log.indexOf('ATFCSM1');
+        final caf0Index = log.indexOf('ATCAF0');
+        final atshIndex = log.indexOf('ATSH6F1');
 
-      expect(ceaIndex, greaterThanOrEqualTo(0), reason: 'ATCEA07 must be sent');
-      expect(craIndex, greaterThan(ceaIndex), reason: 'ATCRA after ATCEA');
-      expect(fcsmIndex, greaterThan(craIndex), reason: 'ATFCSM1 after ATCRA');
-      expect(caf0Index, greaterThan(fcsmIndex), reason: 'ATCAF0 after ATFCSM1');
-      expect(atshIndex, greaterThan(caf0Index), reason: 'ATSH after ATCAF0');
+        expect(
+          ceaIndex,
+          greaterThanOrEqualTo(0),
+          reason: 'ATCEA07 must be sent',
+        );
+        expect(craIndex, greaterThan(ceaIndex), reason: 'ATCRA after ATCEA');
+        expect(fcsmIndex, greaterThan(craIndex), reason: 'ATFCSM1 after ATCRA');
+        expect(
+          caf0Index,
+          greaterThan(fcsmIndex),
+          reason: 'ATCAF0 after ATFCSM1',
+        );
+        expect(atshIndex, greaterThan(caf0Index), reason: 'ATSH after ATCAF0');
 
-      // Reverse restoration in finally:
-      // Restore order must be reverse: ATCAF1 -> ATFCSM0 -> ATCRA -> ATCEA
-      final caf1Index = log.indexOf('ATCAF1');
-      final fcsm0Index = log.indexOf('ATFCSM0');
-      final craRestoreIndex = log.indexOf('ATCRA');
-      final ceaRestoreIndex = log.indexOf('ATCEA');
+        // Reverse restoration in finally:
+        // Restore order must be reverse: ATCAF1 -> ATFCSM0 -> ATCRA -> ATCEA
+        final caf1Index = log.indexOf('ATCAF1');
+        final fcsm0Index = log.indexOf('ATFCSM0');
+        final craRestoreIndex = log.indexOf('ATCRA');
+        final ceaRestoreIndex = log.indexOf('ATCEA');
 
-      expect(caf1Index, greaterThan(atshIndex), reason: 'ATCAF1 after query');
-      expect(fcsm0Index, greaterThan(caf1Index), reason: 'ATFCSM0 after ATCAF1');
-      expect(craRestoreIndex, greaterThan(fcsm0Index),
-          reason: 'ATCRA after ATFCSM0');
-      expect(ceaRestoreIndex, greaterThan(craRestoreIndex),
-          reason: 'ATCEA after ATCRA');
+        expect(caf1Index, greaterThan(atshIndex), reason: 'ATCAF1 after query');
+        expect(
+          fcsm0Index,
+          greaterThan(caf1Index),
+          reason: 'ATFCSM0 after ATCAF1',
+        );
+        expect(
+          craRestoreIndex,
+          greaterThan(fcsm0Index),
+          reason: 'ATCRA after ATFCSM0',
+        );
+        expect(
+          ceaRestoreIndex,
+          greaterThan(craRestoreIndex),
+          reason: 'ATCEA after ATCRA',
+        );
 
-      // Verify adapter internal states are back to normal defaults
-      expect(client.extendedAddressingState, isA<ElmExtendedAddressingOff>());
-      expect(client.canReceiveFilterState, isA<ElmCanReceiveFilterOff>());
-      expect(client.flowControlState, isA<ElmFlowControlAutomatic>());
-      expect(client.hostVisibleIsoTp, isFalse);
-      expect(transport.extendedAddressByte, isNull);
-      expect(transport.canReceiveFilter, isNull);
-      expect(transport.flowControlMode, 0);
-      expect(transport.autoFormatMode, 1);
+        // Verify adapter internal states are back to normal defaults
+        expect(client.extendedAddressingState, isA<ElmExtendedAddressingOff>());
+        expect(client.canReceiveFilterState, isA<ElmCanReceiveFilterOff>());
+        expect(client.flowControlState, isA<ElmFlowControlAutomatic>());
+        expect(client.hostVisibleIsoTp, isFalse);
+        expect(transport.extendedAddressByte, isNull);
+        expect(transport.canReceiveFilter, isNull);
+        expect(transport.flowControlMode, 0);
+        expect(transport.autoFormatMode, 1);
 
-      // Verify subsequent ordinary query succeeds without residue
-      final standard = await client.sendOnHeader('7E0', '010C');
-      expect(standard.isSuccess, isTrue);
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        // Verify subsequent ordinary query succeeds without residue
+        final standard = await client.sendOnHeader('7E0', '010C');
+        expect(standard.isSuccess, isTrue);
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
 
     test('29-bit CAN priority and receive filter transaction', () async {
       final transport = _can29Transport();
@@ -303,10 +328,7 @@ void main() {
       final transport = _can11Transport();
       final client = await _connect(transport);
 
-      final reply = await client.transact(
-        '010C',
-        extendedAddressByte: 0x07,
-      );
+      final reply = await client.transact('010C', extendedAddressByte: 0x07);
 
       expect(reply.isSuccess, isTrue);
       expect(client.extendedAddressingState, isA<ElmExtendedAddressingOff>());
@@ -315,81 +337,82 @@ void main() {
       await client.disconnect();
     }, timeout: const Timeout(Duration(seconds: 20)));
 
-    test('accepts ElmCompositeTransactionConfig configuration bundle',
-        () async {
-      final transport = _can11Transport();
-      final client = await _connect(transport);
+    test(
+      'accepts ElmCompositeTransactionConfig configuration bundle',
+      () async {
+        final transport = _can11Transport();
+        final client = await _connect(transport);
 
-      const config = ElmCompositeTransactionConfig(
-        extendedAddressByte: 0x07,
-      );
-      expect(config.hasMutations, isTrue);
+        const config = ElmCompositeTransactionConfig(extendedAddressByte: 0x07);
+        expect(config.hasMutations, isTrue);
 
-      final reply = await client.sendTransacted(
-        '010C',
-        configuration: config,
-      );
+        final reply = await client.sendTransacted(
+          '010C',
+          configuration: config,
+        );
 
-      expect(reply.isSuccess, isTrue);
-      expect(transport.commandLog, contains('ATCEA07'));
-      expect(transport.commandLog, contains('ATCEA'));
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        expect(reply.isSuccess, isTrue);
+        expect(transport.commandLog, contains('ATCEA07'));
+        expect(transport.commandLog, contains('ATCEA'));
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
   });
 
   group('retirement gate: skips measurement and attempts reverse restoration', () {
-    test('skips measurement when retired after mutations and restores in finally',
-        () async {
-      final transport = _can11Transport();
-      final client = await _connect(transport);
+    test(
+      'skips measurement when retired after mutations and restores in finally',
+      () async {
+        final transport = _can11Transport();
+        final client = await _connect(transport);
 
-      // Active during initial apply, turns retired once ATCEA07 lands
-      client.mayTransmit = (_) => !transport.commandLog.contains('ATCEA07');
+        // Active during initial apply, turns retired once ATCEA07 lands
+        client.mayTransmit = (_) => !transport.commandLog.contains('ATCEA07');
 
-      final before = transport.commandLog.length;
-      await expectLater(
-        client.sendTransacted(
-          '22DDBC',
-          extendedAddressByte: 0x07,
-        ),
-        throwsA(isA<OperationRetiredException>()),
-      );
+        final before = transport.commandLog.length;
+        await expectLater(
+          client.sendTransacted('22DDBC', extendedAddressByte: 0x07),
+          throwsA(isA<OperationRetiredException>()),
+        );
 
-      final log = transport.commandLog.skip(before).toList();
-      // ATCEA07 was applied
-      expect(log, contains('ATCEA07'));
-      // The query itself was SKIPPED (never sent)
-      expect(log.where((c) => c.contains('22DDBC')), isEmpty);
-      // Reverse-restoration in finally was ATTEMPTED and succeeded
-      expect(log, contains('ATCEA'));
-      expect(client.extendedAddressingState, isA<ElmExtendedAddressingOff>());
-      expect(transport.extendedAddressByte, isNull);
+        final log = transport.commandLog.skip(before).toList();
+        // ATCEA07 was applied
+        expect(log, contains('ATCEA07'));
+        // The query itself was SKIPPED (never sent)
+        expect(log.where((c) => c.contains('22DDBC')), isEmpty);
+        // Reverse-restoration in finally was ATTEMPTED and succeeded
+        expect(log, contains('ATCEA'));
+        expect(client.extendedAddressingState, isA<ElmExtendedAddressingOff>());
+        expect(transport.extendedAddressByte, isNull);
 
-      // Reset mayTransmit; subsequent polling works
-      client.mayTransmit = (_) => true;
-      expect((await client.send('010C')).isSuccess, isTrue);
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        // Reset mayTransmit; subsequent polling works
+        client.mayTransmit = (_) => true;
+        expect((await client.send('010C')).isSuccess, isTrue);
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
 
-    test('refuses immediately before writing anything if already retired',
-        () async {
-      final transport = _can11Transport();
-      final client = await _connect(transport);
+    test(
+      'refuses immediately before writing anything if already retired',
+      () async {
+        final transport = _can11Transport();
+        final client = await _connect(transport);
 
-      client.mayTransmit = (_) => false;
+        client.mayTransmit = (_) => false;
 
-      final before = transport.commandLog.length;
-      await expectLater(
-        client.sendTransacted(
-          '010C',
-          extendedAddressByte: 0x07,
-        ),
-        throwsA(isA<OperationRetiredException>()),
-      );
+        final before = transport.commandLog.length;
+        await expectLater(
+          client.sendTransacted('010C', extendedAddressByte: 0x07),
+          throwsA(isA<OperationRetiredException>()),
+        );
 
-      expect(transport.commandLog.length, before);
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        expect(transport.commandLog.length, before);
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
   });
 
   group('failure recovery in finally', () {
@@ -422,20 +445,16 @@ void main() {
       await client.disconnect();
     }, timeout: const Timeout(Duration(seconds: 20)));
 
-    test('reverse-restores in finally when parser throws exception in runTransacted',
-        () async {
+    test('reverse-restores in finally when parser throws exception in runTransacted', () async {
       final transport = _can11Transport();
       final client = await _connect(transport);
 
       await expectLater(
-        client.runTransacted(
-          (send) async {
-            final resp = await send('010C');
-            expect(resp.isSuccess, isTrue);
-            throw const FormatException('Parser failure in user code');
-          },
-          extendedAddressByte: 0x07,
-        ),
+        client.runTransacted((send) async {
+          final resp = await send('010C');
+          expect(resp.isSuccess, isTrue);
+          throw const FormatException('Parser failure in user code');
+        }, extendedAddressByte: 0x07),
         throwsA(isA<FormatException>()),
       );
 
@@ -447,46 +466,49 @@ void main() {
       await client.disconnect();
     }, timeout: const Timeout(Duration(seconds: 20)));
 
-    test('rollbacks earlier mutations in reverse order if apply fails midway',
-        () async {
-      final transport = _can11Transport(
-        faults: const AdapterFaults(refuseCra: true),
-      );
-      final client = await _connect(transport);
+    test(
+      'rollbacks earlier mutations in reverse order if apply fails midway',
+      () async {
+        final transport = _can11Transport(
+          faults: const AdapterFaults(refuseCra: true),
+        );
+        final client = await _connect(transport);
 
-      final filter = ElmCanReceiveFilterConfig(
-        address: '607',
-        addressing: _can11,
-      );
+        final filter = ElmCanReceiveFilterConfig(
+          address: '607',
+          addressing: _can11,
+        );
 
-      final before = transport.commandLog.length;
-      await expectLater(
-        client.sendTransacted(
-          '010C',
-          extendedAddressByte: 0x07,
-          canReceiveFilter: filter,
-        ),
-        throwsA(
-          isA<TransportException>().having(
-            (e) => e.issue,
-            'issue',
-            TransportIssue.canReceiveFilterUnavailable,
+        final before = transport.commandLog.length;
+        await expectLater(
+          client.sendTransacted(
+            '010C',
+            extendedAddressByte: 0x07,
+            canReceiveFilter: filter,
           ),
-        ),
-      );
+          throwsA(
+            isA<TransportException>().having(
+              (e) => e.issue,
+              'issue',
+              TransportIssue.canReceiveFilterUnavailable,
+            ),
+          ),
+        );
 
-      final log = transport.commandLog.skip(before).toList();
-      // ATCEA07 was applied, then ATCRA607 was refused
-      expect(log, contains('ATCEA07'));
-      expect(log, contains('ATCRA607'));
-      // ATCEA was rolled back in finally!
-      expect(log, contains('ATCEA'));
-      expect(client.extendedAddressingState, isA<ElmExtendedAddressingOff>());
+        final log = transport.commandLog.skip(before).toList();
+        // ATCEA07 was applied, then ATCRA607 was refused
+        expect(log, contains('ATCEA07'));
+        expect(log, contains('ATCRA607'));
+        // ATCEA was rolled back in finally!
+        expect(log, contains('ATCEA'));
+        expect(client.extendedAddressingState, isA<ElmExtendedAddressingOff>());
 
-      // Polling continues
-      expect((await client.send('010C')).isSuccess, isTrue);
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        // Polling continues
+        expect((await client.send('010C')).isSuccess, isTrue);
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
 
     test('leaves sticky blocked state when reverse restore fails', () async {
       final transport = _can11Transport(
@@ -495,10 +517,7 @@ void main() {
       final client = await _connect(transport);
 
       await expectLater(
-        client.sendTransacted(
-          '010C',
-          extendedAddressByte: 0x07,
-        ),
+        client.sendTransacted('010C', extendedAddressByte: 0x07),
         throwsA(
           isA<TransportException>().having(
             (e) => e.issue,
@@ -526,77 +545,84 @@ void main() {
   });
 
   group('unrelated polling exclusion throughout mutated adapter state', () {
-    test('concurrent polling on command chain cannot interleave during mutation',
-        () async {
-      final transport = _can11Transport();
-      final client = await _connect(transport);
+    test(
+      'concurrent polling on command chain cannot interleave during mutation',
+      () async {
+        final transport = _can11Transport();
+        final client = await _connect(transport);
 
-      // Start a slow transaction that sleeps during measurement
-      final transactionFuture = client.runTransacted(
-        (send) async {
+        // Start a slow transaction that sleeps during measurement
+        final transactionFuture = client.runTransacted((send) async {
           await Future<void>.delayed(const Duration(milliseconds: 50));
           return send('010C');
-        },
-        extendedAddressByte: 0x07,
-      );
+        }, extendedAddressByte: 0x07);
 
-      // Simultaneously queue an ordinary poll on a different header
-      final pollFuture = client.sendOnHeader('7E0', '0105');
+        // Simultaneously queue an ordinary poll on a different header
+        final pollFuture = client.sendOnHeader('7E0', '0105');
 
-      final results = await Future.wait([transactionFuture, pollFuture]);
-      expect(results[0].isSuccess, isTrue);
-      expect(results[1].isSuccess, isTrue);
+        final results = await Future.wait([transactionFuture, pollFuture]);
+        expect(results[0].isSuccess, isTrue);
+        expect(results[1].isSuccess, isTrue);
 
-      // Examine log: sendOnHeader must execute strictly AFTER ATCEA restore
-      final log = transport.commandLog;
-      final ceaRestoreIndex = log.lastIndexOf('ATCEA');
-      final pollIndex = log.indexOf('0105');
+        // Examine log: sendOnHeader must execute strictly AFTER ATCEA restore
+        final log = transport.commandLog;
+        final ceaRestoreIndex = log.lastIndexOf('ATCEA');
+        final pollIndex = log.indexOf('0105');
 
-      expect(ceaRestoreIndex, greaterThanOrEqualTo(0));
-      expect(pollIndex, greaterThan(ceaRestoreIndex),
-          reason: 'unrelated poll must not run while extended addressing is active');
+        expect(ceaRestoreIndex, greaterThanOrEqualTo(0));
+        expect(
+          pollIndex,
+          greaterThan(ceaRestoreIndex),
+          reason:
+              'unrelated poll must not run while extended addressing is active',
+        );
 
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
   });
 
   group('bus validation and preflight checks', () {
-    test('refuses CAN mutations on non-CAN protocols without sending AT commands',
-        () async {
-      final transport = FakeElm327(
-        protocol: BusProtocol.iso9141,
-        ecus: [
-          FakeEcu(
-            name: 'ECM',
-            requestId: '6C10F1',
-            responseId: '486B10',
-            responses: {
-              '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x13],
-              '010C': [0x41, 0x0C, 0x1A, 0xF8],
-            },
-          ),
-        ],
-      );
-      final client = await _connect(transport);
-      final before = transport.commandLog.length;
+    test(
+      'refuses CAN mutations on non-CAN protocols without sending AT commands',
+      () async {
+        final transport = FakeElm327(
+          protocol: BusProtocol.iso9141,
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '6C10F1',
+              responseId: '486B10',
+              responses: {
+                '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x13],
+                '010C': [0x41, 0x0C, 0x1A, 0xF8],
+              },
+            ),
+          ],
+        );
+        final client = await _connect(transport);
+        final before = transport.commandLog.length;
 
-      await expectLater(
-        client.sendTransacted('010C', extendedAddressByte: 0x07),
-        throwsA(
-          isA<TransportException>().having(
-            (e) => e.issue,
-            'issue',
-            TransportIssue.extendedAddressingUnavailable,
+        await expectLater(
+          client.sendTransacted('010C', extendedAddressByte: 0x07),
+          throwsA(
+            isA<TransportException>().having(
+              (e) => e.issue,
+              'issue',
+              TransportIssue.extendedAddressingUnavailable,
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(
-        transport.commandLog.skip(before).where((c) => c.startsWith('ATCEA')),
-        isEmpty,
-      );
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        expect(
+          transport.commandLog.skip(before).where((c) => c.startsWith('ATCEA')),
+          isEmpty,
+        );
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
 
     test('DemoTransport refuses composite CAN mutations cleanly', () async {
       final transport = DemoTransport();
@@ -643,9 +669,7 @@ void main() {
       await client.disconnect();
     }, timeout: const Timeout(Duration(seconds: 20)));
 
-    test(
-        'header restore refusal sets sticky failure, leaves header unknown, and refuses next send with zero writes',
-        () async {
+    test('header restore refusal sets sticky failure, leaves header unknown, and refuses next send with zero writes', () async {
       final transport = _can11Transport(
         faults: const AdapterFaults(refuseHeaderAfterCount: 2),
       );
@@ -661,11 +685,7 @@ void main() {
       // Query: 22DDBC (succeeds)
       // 3rd ATSH: 7E0 restore (refused with '?')
       await expectLater(
-        client.sendTransacted(
-          '22DDBC',
-          header: '6F1',
-          restoreHeader: true,
-        ),
+        client.sendTransacted('22DDBC', header: '6F1', restoreHeader: true),
         throwsA(
           isA<TransportException>().having(
             (e) => e.issue,
@@ -697,84 +717,82 @@ void main() {
           ),
         ),
       );
-      expect(transport.commandLog.length, logLengthBeforeSend,
-          reason: 'Next normal send must have zero writes on the wire');
+      expect(
+        transport.commandLog.length,
+        logLengthBeforeSend,
+        reason: 'Next normal send must have zero writes on the wire',
+      );
 
       await client.disconnect();
     }, timeout: const Timeout(Duration(seconds: 20)));
 
     test(
-        'header restore timeout sets sticky failure and leaves header unknown',
-        () async {
-      final transport = _can11Transport(
-        faults: const AdapterFaults(
-          refuseHeaderAfterCount: 2,
-          delayHeaderRestore: true,
-        ),
-      );
-      final client = await _connect(
-        transport,
-        commandTimeout: const Duration(milliseconds: 100),
-      );
-
-      await client.sendOnHeader('7E0', '010C');
-      expect(client.currentHeader, '7E0');
-
-      await expectLater(
-        client.sendTransacted(
-          '22DDBC',
-          header: '6F1',
-          restoreHeader: true,
-        ),
-        throwsA(
-          isA<TransportException>().having(
-            (e) => e.issue,
-            'issue',
-            TransportIssue.headerRestoreFailed,
+      'header restore timeout sets sticky failure and leaves header unknown',
+      () async {
+        final transport = _can11Transport(
+          faults: const AdapterFaults(
+            refuseHeaderAfterCount: 2,
+            delayHeaderRestore: true,
           ),
-        ),
-      );
+        );
+        final client = await _connect(
+          transport,
+          commandTimeout: const Duration(milliseconds: 100),
+        );
 
-      expect(client.currentHeader, isNull);
-      expect(client.headerRestoreFailed, isTrue);
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        await client.sendOnHeader('7E0', '010C');
+        expect(client.currentHeader, '7E0');
 
-    test('header restore disconnect leaves header unknown and refuses next send',
-        () async {
-      final transport = _can11Transport(
-        faults: const AdapterFaults(
-          refuseHeaderAfterCount: 2,
-          dropOnHeaderRestore: true,
-        ),
-      );
-      final client = await _connect(transport);
-
-      await client.sendOnHeader('7E0', '010C');
-      expect(client.currentHeader, '7E0');
-
-      await expectLater(
-        client.sendTransacted(
-          '22DDBC',
-          header: '6F1',
-          restoreHeader: true,
-        ),
-        throwsA(
-          isA<TransportException>().having(
-            (e) => e.issue,
-            'issue',
-            TransportIssue.headerRestoreFailed,
+        await expectLater(
+          client.sendTransacted('22DDBC', header: '6F1', restoreHeader: true),
+          throwsA(
+            isA<TransportException>().having(
+              (e) => e.issue,
+              'issue',
+              TransportIssue.headerRestoreFailed,
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(client.currentHeader, isNull);
-      expect(client.headerRestoreFailed, isTrue);
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        expect(client.currentHeader, isNull);
+        expect(client.headerRestoreFailed, isTrue);
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
 
     test(
-        'header restore throw sets sticky failure, leaves header unknown, and refuses next send with zero writes',
-        () async {
+      'header restore disconnect leaves header unknown and refuses next send',
+      () async {
+        final transport = _can11Transport(
+          faults: const AdapterFaults(
+            refuseHeaderAfterCount: 2,
+            dropOnHeaderRestore: true,
+          ),
+        );
+        final client = await _connect(transport);
+
+        await client.sendOnHeader('7E0', '010C');
+        expect(client.currentHeader, '7E0');
+
+        await expectLater(
+          client.sendTransacted('22DDBC', header: '6F1', restoreHeader: true),
+          throwsA(
+            isA<TransportException>().having(
+              (e) => e.issue,
+              'issue',
+              TransportIssue.headerRestoreFailed,
+            ),
+          ),
+        );
+
+        expect(client.currentHeader, isNull);
+        expect(client.headerRestoreFailed, isTrue);
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
+
+    test('header restore throw sets sticky failure, leaves header unknown, and refuses next send with zero writes', () async {
       final transport = _can11Transport(
         faults: const AdapterFaults(
           refuseHeaderAfterCount: 2,
@@ -791,11 +809,7 @@ void main() {
       // Query: 22DDBC (succeeds)
       // 3rd ATSH: 7E0 restore (transport throws exception)
       await expectLater(
-        client.sendTransacted(
-          '22DDBC',
-          header: '6F1',
-          restoreHeader: true,
-        ),
+        client.sendTransacted('22DDBC', header: '6F1', restoreHeader: true),
         throwsA(
           isA<TransportException>().having(
             (e) => e.issue,
@@ -821,15 +835,16 @@ void main() {
           ),
         ),
       );
-      expect(transport.commandLog.length, logLengthBeforeSend,
-          reason: 'Next normal send must have zero writes on the wire');
+      expect(
+        transport.commandLog.length,
+        logLengthBeforeSend,
+        reason: 'Next normal send must have zero writes on the wire',
+      );
 
       await client.disconnect();
     }, timeout: const Timeout(Duration(seconds: 20)));
 
-    test(
-        'restoreHeader with previousHeader null leaves currentHeader on transaction header without restore',
-        () async {
+    test('restoreHeader with previousHeader null leaves currentHeader on transaction header without restore', () async {
       final transport = _can11Transport();
       final client = await _connect(transport);
 
@@ -851,87 +866,111 @@ void main() {
   });
 
   group('F2: transaction sender lifecycle, serialization, and isolation', () {
-    test('leaked sender post-transaction throws operationRetired with zero writes',
-        () async {
-      final transport = _can11Transport();
-      final client = await _connect(transport);
+    test(
+      'leaked sender post-transaction throws operationRetired with zero writes',
+      () async {
+        final transport = _can11Transport();
+        final client = await _connect(transport);
 
-      Future<ObdResponse> Function(String, {Duration? timeout})? leakedSender;
+        Future<ObdResponse> Function(String, {Duration? timeout})? leakedSender;
 
-      final res = await client.runTransacted((sender) async {
-        leakedSender = sender;
-        return await sender('010C');
-      }, header: '7E0');
+        final res = await client.runTransacted((sender) async {
+          leakedSender = sender;
+          return await sender('010C');
+        }, header: '7E0');
 
-      expect(res.isSuccess, isTrue);
-      expect(leakedSender, isNotNull);
+        expect(res.isSuccess, isTrue);
+        expect(leakedSender, isNotNull);
 
-      final logLengthBeforeLeakedSend = transport.commandLog.length;
-      await expectLater(
-        leakedSender!('010D'),
-        throwsA(
-          isA<TransportException>().having(
-            (e) => e.issue,
-            'issue',
-            TransportIssue.operationRetired,
+        final logLengthBeforeLeakedSend = transport.commandLog.length;
+        await expectLater(
+          leakedSender!('010D'),
+          throwsA(
+            isA<TransportException>().having(
+              (e) => e.issue,
+              'issue',
+              TransportIssue.operationRetired,
+            ),
           ),
-        ),
-      );
-      expect(transport.commandLog.length, logLengthBeforeLeakedSend,
-          reason: 'Calling leaked sender must produce zero writes on wire');
+        );
+        expect(
+          transport.commandLog.length,
+          logLengthBeforeLeakedSend,
+          reason: 'Calling leaked sender must produce zero writes on wire',
+        );
 
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
 
-    test('concurrent senders inside callback are serialized without interleaving',
-        () async {
-      final transport = _can11Transport();
-      final client = await _connect(transport);
+    test(
+      'concurrent senders inside callback are serialized without interleaving',
+      () async {
+        final transport = _can11Transport();
+        final client = await _connect(transport);
 
-      await client.runTransacted((sender) async {
-        final f1 = sender('0100');
-        final f2 = sender('010C');
-        final results = await Future.wait([f1, f2]);
-        expect(results[0].isSuccess, isTrue);
-        expect(results[1].isSuccess, isTrue);
-      }, header: '7E0');
+        await client.runTransacted((sender) async {
+          final f1 = sender('0100');
+          final f2 = sender('010C');
+          final results = await Future.wait([f1, f2]);
+          expect(results[0].isSuccess, isTrue);
+          expect(results[1].isSuccess, isTrue);
+        }, header: '7E0');
 
-      final log = transport.commandLog;
-      final idx1 = log.indexOf('0100');
-      final idx2 = log.indexOf('010C');
-      expect(idx1, greaterThan(-1));
-      expect(idx2, greaterThan(idx1),
-          reason: '0100 and 010C must execute sequentially');
+        final log = transport.commandLog;
+        final idx1 = log.indexOf('0100');
+        final idx2 = log.indexOf('010C');
+        expect(idx1, greaterThan(-1));
+        expect(
+          idx2,
+          greaterThan(idx1),
+          reason: '0100 and 010C must execute sequentially',
+        );
 
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
 
-    test('un-awaited send completes before reverse restores execute on wire',
-        () async {
-      final transport = _can11Transport();
-      final client = await _connect(transport);
+    test(
+      'un-awaited send completes before reverse restores execute on wire',
+      () async {
+        final transport = _can11Transport();
+        final client = await _connect(transport);
 
-      await client.sendOnHeader('7E0', '010C');
+        await client.sendOnHeader('7E0', '010C');
 
-      await client.runTransacted((sender) async {
-        // Fire and do NOT await sender
-        unawaited(sender('221234'));
-        // Return immediately from action
-      }, header: '6F1', restoreHeader: true);
+        await client.runTransacted(
+          (sender) async {
+            // Fire and do NOT await sender
+            unawaited(sender('221234'));
+            // Return immediately from action
+          },
+          header: '6F1',
+          restoreHeader: true,
+        );
 
-      final log = transport.commandLog;
-      final queryIdx = log.indexOf('221234');
-      final restoreIdx = log.lastIndexOf('ATSH7E0');
-      expect(queryIdx, greaterThan(-1),
-          reason: 'Un-awaited send must be written to wire');
-      expect(restoreIdx, greaterThan(queryIdx),
-          reason: 'Reverse restore must happen AFTER un-awaited send completes');
+        final log = transport.commandLog;
+        final queryIdx = log.indexOf('221234');
+        final restoreIdx = log.lastIndexOf('ATSH7E0');
+        expect(
+          queryIdx,
+          greaterThan(-1),
+          reason: 'Un-awaited send must be written to wire',
+        );
+        expect(
+          restoreIdx,
+          greaterThan(queryIdx),
+          reason: 'Reverse restore must happen AFTER un-awaited send completes',
+        );
 
-      await client.disconnect();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+        await client.disconnect();
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
 
-    test('callback reentrancy: client.send or setter inside callback throws StateError',
-        () async {
+    test('callback reentrancy: client.send or setter inside callback throws StateError', () async {
       final transport = _can11Transport();
       final client = await _connect(transport);
 
@@ -954,10 +993,16 @@ void main() {
         return await sender('010D');
       }, header: '7E0');
 
-      expect(sendThrewStateError, isTrue,
-          reason: 'client.send inside runTransacted must throw StateError to prevent deadlock');
-      expect(setterThrewStateError, isTrue,
-          reason: 'client setter inside runTransacted must throw StateError to prevent deadlock');
+      expect(
+        sendThrewStateError,
+        isTrue,
+        reason: 'client.send inside runTransacted must throw StateError to prevent deadlock',
+      );
+      expect(
+        setterThrewStateError,
+        isTrue,
+        reason: 'client setter inside runTransacted must throw StateError to prevent deadlock',
+      );
 
       await client.disconnect();
     }, timeout: const Timeout(Duration(seconds: 20)));
@@ -993,14 +1038,16 @@ void main() {
           ),
         ),
       );
-      expect(transport.commandLog.length, logLengthBeforeLeakedSend,
-          reason: 'Sender revoked after timeout, must produce zero writes');
+      expect(
+        transport.commandLog.length,
+        logLengthBeforeLeakedSend,
+        reason: 'Sender revoked after timeout, must produce zero writes',
+      );
 
       await client.disconnect();
     }, timeout: const Timeout(Duration(seconds: 20)));
 
-    test('connection generation isolation: sender from prior connection cannot write',
-        () async {
+    test('connection generation isolation: sender from prior connection cannot write', () async {
       final transport = _can11Transport();
       final client = await _connect(transport);
 
@@ -1041,22 +1088,20 @@ void main() {
           isA<TransportException>().having(
             (e) => e.issue,
             'issue',
-            anyOf(
-              TransportIssue.operationRetired,
-              TransportIssue.notConnected,
-            ),
+            anyOf(TransportIssue.operationRetired, TransportIssue.notConnected),
           ),
         ),
       );
-      expect(transport.commandLog.length, logLengthBeforeSend,
-          reason: 'Sender from prior generation must produce zero writes on wire');
+      expect(
+        transport.commandLog.length,
+        logLengthBeforeSend,
+        reason: 'Sender from prior generation must produce zero writes on wire',
+      );
 
       await client.disconnect();
     }, timeout: const Timeout(Duration(seconds: 20)));
 
-    test(
-        'late continuation from timed out action cannot interleave with concurrent polling and is zero-write rejected',
-        () async {
+    test('late continuation from timed out action cannot interleave with concurrent polling and is zero-write rejected', () async {
       final transport = _can11Transport();
       final client = await _connect(transport);
 
@@ -1118,14 +1163,16 @@ void main() {
           .skip(logBeforeLate)
           .where((cmd) => cmd.contains('22DDBC'))
           .toList();
-      expect(lateWrites, isEmpty,
-          reason: 'Late continuation must produce ZERO wire writes');
+      expect(
+        lateWrites,
+        isEmpty,
+        reason: 'Late continuation must produce ZERO wire writes',
+      );
 
       await client.disconnect();
     }, timeout: const Timeout(Duration(seconds: 20)));
 
-    test('monotonic budget ignores backward wall-clock shifts and times out strictly on monotonic elapsed time',
-        () async {
+    test('monotonic budget ignores backward wall-clock shifts and times out strictly on monotonic elapsed time', () async {
       final transport = _can11Transport();
       final client = await _connect(transport);
 
@@ -1197,7 +1244,9 @@ void main() {
         budget: const Duration(minutes: 10),
         elapsedProvider: () => Duration(milliseconds: elapsedMs),
       );
-      final nearDeadline = DateTime.now().add(const Duration(milliseconds: 100));
+      final nearDeadline = DateTime.now().add(
+        const Duration(milliseconds: 100),
+      );
 
       final txFuture = client.runTransacted(
         (send) async {
@@ -1212,7 +1261,8 @@ void main() {
       await expectLater(
         txFuture,
         throwsA(isA<TimeoutException>()),
-        reason: 'Near deadline must enforce timeout even when budget is 10 minutes',
+        reason:
+            'Near deadline must enforce timeout even when budget is 10 minutes',
       );
 
       await client.disconnect();
@@ -1239,7 +1289,11 @@ void main() {
         throwsA(isA<TimeoutException>()),
         reason: 'Zero budget must time out immediately despite future deadline',
       );
-      expect(actionRan, isFalse, reason: 'Action must not run when budget is zero');
+      expect(
+        actionRan,
+        isFalse,
+        reason: 'Action must not run when budget is zero',
+      );
 
       await client.disconnect();
     });
@@ -1265,13 +1319,16 @@ void main() {
         throwsA(isA<TimeoutException>()),
         reason: 'Expired deadline must time out immediately despite positive budget',
       );
-      expect(actionRan, isFalse, reason: 'Action must not run when deadline is expired');
+      expect(
+        actionRan,
+        isFalse,
+        reason: 'Action must not run when deadline is expired',
+      );
 
       await client.disconnect();
     });
 
-    test('monotonic budget permits execution when monotonic elapsed time is within budget',
-        () async {
+    test('monotonic budget permits execution when monotonic elapsed time is within budget', () async {
       final transport = _can11Transport();
       final client = await _connect(transport);
 
@@ -1281,20 +1338,16 @@ void main() {
         elapsedProvider: () => Duration(milliseconds: elapsedMs),
       );
 
-      final resp = await client.runTransacted(
-        (send) async {
-          elapsedMs = 50; // Within 200ms
-          return await send('010C');
-        },
-        configuration: config,
-      );
+      final resp = await client.runTransacted((send) async {
+        elapsedMs = 50; // Within 200ms
+        return await send('010C');
+      }, configuration: config);
 
       expect(resp.isSuccess, isTrue);
       await client.disconnect();
     });
 
-    test('undrained in-flight command on timeout bounds drain, quarantines connection, and disables polling',
-        () async {
+    test('undrained in-flight command on timeout bounds drain, quarantines connection, and disables polling', () async {
       final transport = _can11Transport();
       // Configure transport so '22_HANG' will take 1 hour to answer
       transport.slowCommands['22_HANG'] = const Duration(hours: 1);
@@ -1305,16 +1358,13 @@ void main() {
         drainBudget: Duration(milliseconds: 40),
       );
 
-      final txFuture = client.runTransacted(
-        (send) async {
-          // Send hanging query
-          final _ = send('22_HANG');
-          // Wait for budget to expire
-          await Future<void>.delayed(const Duration(milliseconds: 60));
-          return 'finished';
-        },
-        configuration: config,
-      );
+      final txFuture = client.runTransacted((send) async {
+        // Send hanging query
+        final _ = send('22_HANG');
+        // Wait for budget to expire
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        return 'finished';
+      }, configuration: config);
 
       await expectLater(txFuture, throwsA(isA<TimeoutException>()));
 
@@ -1340,23 +1390,19 @@ void main() {
       await client.disconnect();
     });
 
-    test('callback return closes acceptance of new commands while allowing prior in-flight commands to drain',
-        () async {
+    test('callback return closes acceptance of new commands while allowing prior in-flight commands to drain', () async {
       final transport = _can11Transport();
       final client = await _connect(transport);
 
       Future<ObdResponse> Function(String, {Duration? timeout})? escapedSender;
 
-      final result = await client.runTransacted(
-        (send) async {
-          escapedSender = send;
-          // Launch valid command without awaiting it
-          final _ = send('010C');
-          // Callback returns immediately with a placeholder string
-          return 'callback_done';
-        },
-        header: '7E0',
-      );
+      final result = await client.runTransacted((send) async {
+        escapedSender = send;
+        // Launch valid command without awaiting it
+        final _ = send('010C');
+        // Callback returns immediately with a placeholder string
+        return 'callback_done';
+      }, header: '7E0');
 
       expect(result, 'callback_done');
       expect(escapedSender, isNotNull);
@@ -1385,22 +1431,18 @@ void main() {
       await client.disconnect();
     });
 
-    test('un-awaited in-flight command failure is not swallowed and rethrows on transaction completion',
-        () async {
+    test('un-awaited in-flight command failure is not swallowed and rethrows on transaction completion', () async {
       final transport = _can11Transport();
       // Configure 'UNKNOWN_ERR_CMD' to be refused by adapter
       transport.refuseWriteBeforeAcceptingFor = {'UNKNOWN_ERR_CMD'};
       final client = await _connect(transport);
 
-      final txFuture = client.runTransacted(
-        (send) async {
-          // Launch failing command without awaiting it
-          final _ = send('UNKNOWN_ERR_CMD');
-          // Callback returns 'full_success'
-          return 'full_success';
-        },
-        header: '7E0',
-      );
+      final txFuture = client.runTransacted((send) async {
+        // Launch failing command without awaiting it
+        final _ = send('UNKNOWN_ERR_CMD');
+        // Callback returns 'full_success'
+        return 'full_success';
+      }, header: '7E0');
 
       // Transaction must NOT report 'full_success', it must rethrow the in-flight failure!
       await expectLater(
@@ -1412,8 +1454,7 @@ void main() {
       await client.disconnect();
     });
 
-    test('reconnect during restore loop aborts remaining restores before touching new generation',
-        () async {
+    test('reconnect during restore loop aborts remaining restores before touching new generation', () async {
       final transport = _can11Transport();
       final client = await _connect(transport);
 
@@ -1463,12 +1504,12 @@ void main() {
       await client.disconnect();
     });
 
-    test(
-        'acceptance 1: old generation drain timeout after reconnect does not fail or quarantine new generation pending request',
-        () async {
+    test('acceptance 1: old generation drain timeout after reconnect does not fail or quarantine new generation pending request', () async {
       final transport = _ReconnectingTransport();
-      final client = await _connect(transport,
-          commandTimeout: const Duration(seconds: 1));
+      final client = await _connect(
+        transport,
+        commandTimeout: const Duration(seconds: 1),
+      );
       expect(client.connectionSession, 1);
 
       // Configure slow reply for in-flight command in generation 1
@@ -1477,8 +1518,7 @@ void main() {
       // Start transaction with 80ms drainBudget
       final oldTxFuture = client.runTransacted(
         (send) async {
-          unawaited(
-              send('22DDBC').catchError((_) => const ObdResponse()));
+          unawaited(send('22DDBC').catchError((_) => const ObdResponse()));
           return 'action-done';
         },
         header: '6F1',
@@ -1503,18 +1543,24 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 120));
 
       // Old transaction completes with error
-      await expectLater(
-        oldTxFuture,
-        throwsA(isA<TransportException>()),
-      );
+      await expectLater(oldTxFuture, throwsA(isA<TransportException>()));
 
       // Generation 2 must NOT be quarantined, desynced, or disconnected by old drain timeout
-      expect(client.isTransactionQuarantined, isFalse,
-          reason: 'Old drain timeout must not quarantine new generation');
-      expect(client.isOutOfSync, isFalse,
-          reason: 'Old drain timeout must not desync new generation');
-      expect(client.transport.isConnected, isTrue,
-          reason: 'Old drain timeout must not disconnect new generation');
+      expect(
+        client.isTransactionQuarantined,
+        isFalse,
+        reason: 'Old drain timeout must not quarantine new generation',
+      );
+      expect(
+        client.isOutOfSync,
+        isFalse,
+        reason: 'Old drain timeout must not desync new generation',
+      );
+      expect(
+        client.transport.isConnected,
+        isTrue,
+        reason: 'Old drain timeout must not disconnect new generation',
+      );
 
       // The generation 2 pending command must succeed when its response arrives
       final gen2Reply = await gen2SendFuture;
@@ -1524,12 +1570,12 @@ void main() {
       await client.disconnect();
     });
 
-    test(
-        'acceptance 2: delayed header restore does not overwrite cached header or set restoreFailed on new generation',
-        () async {
+    test('acceptance 2: delayed header restore does not overwrite cached header or set restoreFailed on new generation', () async {
       final transport = _ReconnectingTransport();
-      final client = await _connect(transport,
-          commandTimeout: const Duration(seconds: 1));
+      final client = await _connect(
+        transport,
+        commandTimeout: const Duration(seconds: 1),
+      );
       expect(client.connectionSession, 1);
 
       // Establish initial header
@@ -1564,16 +1610,19 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 250));
 
       // Old transaction throws because connection dropped mid-transaction
-      await expectLater(
-        oldTxFuture,
-        throwsA(isA<TransportException>()),
-      );
+      await expectLater(oldTxFuture, throwsA(isA<TransportException>()));
 
       // Cached header on new generation must remain 7E2 and must not be overwritten by 7E0
-      expect(client.currentHeader, '7E2',
-          reason: 'Delayed old restore must not overwrite new generation currentHeader');
-      expect(client.headerRestoreFailed, isFalse,
-          reason: 'Delayed old restore must not poison new generation headerRestoreFailed');
+      expect(
+        client.currentHeader,
+        '7E2',
+        reason: 'Delayed old restore must not overwrite new generation currentHeader',
+      );
+      expect(
+        client.headerRestoreFailed,
+        isFalse,
+        reason: 'Delayed old restore must not poison new generation headerRestoreFailed',
+      );
       expect(client.isTransactionQuarantined, isFalse);
 
       // Normal send on new generation succeeds
@@ -1583,9 +1632,7 @@ void main() {
       await client.disconnect();
     });
 
-    test(
-        'acceptance 3: reconnect safely serializes until old asynchronous teardown finishes and captures teardown errors',
-        () async {
+    test('acceptance 3: reconnect safely serializes until old asynchronous teardown finishes and captures teardown errors', () async {
       final inner = _can11Transport();
       final transport = _TeardownHoldingTransport(inner);
       final client = await _connect(transport);
@@ -1611,11 +1658,16 @@ void main() {
 
       // Let event loop spin: connect() must NOT finish before teardown completes!
       await Future<void>.delayed(const Duration(milliseconds: 30));
-      expect(connectFinished, isFalse,
-          reason: 'connect() must serialize and wait for in-flight teardown to complete');
+      expect(
+        connectFinished,
+        isFalse,
+        reason: 'connect() must serialize and wait for in-flight teardown to complete',
+      );
 
       // Complete teardown with an error to verify error capture
-      disconnectCompleter.completeError(Exception('underlying socket reset on teardown'));
+      disconnectCompleter.completeError(
+        Exception('underlying socket reset on teardown'),
+      );
 
       // Now connect() safely proceeds and completes without leaking unhandled future error
       final reconnected = await connectFuture;
@@ -1631,9 +1683,7 @@ void main() {
       await client.disconnect();
     });
 
-    test(
-        'acceptance 4: multiple rapid reconnections during slow teardown serialize cleanly and increment sessions without gap',
-        () async {
+    test('acceptance 4: multiple rapid reconnections during slow teardown serialize cleanly and increment sessions without gap', () async {
       final inner = _ReconnectingTransport();
       final transport = _TeardownHoldingTransport(inner);
       final client = await _connect(transport);
@@ -1674,9 +1724,7 @@ void main() {
       await client.disconnect();
     });
 
-    test(
-        'acceptance 5: concurrent teardowns D1 and D2 merge into single in-flight teardown and handle out-of-order await completion safely',
-        () async {
+    test('acceptance 5: concurrent teardowns D1 and D2 merge into single in-flight teardown and handle out-of-order await completion safely', () async {
       final inner = _ReconnectingTransport();
       final transport = _TeardownHoldingTransport(inner);
       final client = await _connect(transport);
@@ -1704,8 +1752,11 @@ void main() {
 
       // Let microtasks run: D2 must observe existing _activeTeardown and merge, not calling transport.disconnect() again
       await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(transport.disconnectCallCount, 1,
-          reason: 'D2 must merge into existing in-flight teardown rather than issuing duplicate transport teardown');
+      expect(
+        transport.disconnectCallCount,
+        1,
+        reason: 'D2 must merge into existing in-flight teardown rather than issuing duplicate transport teardown',
+      );
       expect(d1Done, isFalse);
       expect(d2Done, isFalse);
 
@@ -1734,9 +1785,7 @@ void main() {
       await client.disconnect();
     });
 
-    test(
-        'acceptance 6: reconnect immediately after D2 completion when D1 and D2 were concurrent does not race or corrupt new session',
-        () async {
+    test('acceptance 6: reconnect immediately after D2 completion when D1 and D2 were concurrent does not race or corrupt new session', () async {
       final inner = _ReconnectingTransport();
       final transport = _TeardownHoldingTransport(inner);
       final client = await _connect(transport);
@@ -1776,9 +1825,7 @@ void main() {
       await client.disconnect();
     });
 
-    test(
-        'acceptance 7: quarantine teardown merges with active teardown and clears properly upon completion',
-        () async {
+    test('acceptance 7: quarantine teardown merges with active teardown and clears properly upon completion', () async {
       final inner = _ReconnectingTransport();
       final transport = _TeardownHoldingTransport(inner);
       final client = await _connect(transport);
@@ -1807,6 +1854,354 @@ void main() {
       final reconnected = await client.connect();
       expect(reconnected, isTrue);
       expect(client.connectionSession, 2);
+
+      await client.disconnect();
+    });
+  });
+
+  group('composite transaction responseHeaders negotiation (ATH1/ATH0)', () {
+    test('scenario 1: originally H0, responseHeaders: true negotiates ATH1, enables headers on reply, and reverse-restores ATH0', () async {
+      final transport = _can11Transport();
+      final client = await _connect(transport);
+      expect(client.headersOn, isFalse);
+      expect(transport.headersOn, isFalse);
+
+      final before = transport.commandLog.length;
+      final reply = await client.sendTransacted('010C', responseHeaders: true);
+
+      expect(reply.isSuccess, isTrue);
+      expect(reply.headersEnabled, isTrue);
+
+      final log = transport.commandLog.skip(before).toList();
+      final ath1Index = log.indexOf('ATH1');
+      final queryIndex = log.indexOf('010C');
+      final ath0Index = log.indexOf('ATH0');
+
+      expect(
+        ath1Index,
+        greaterThanOrEqualTo(0),
+        reason: 'ATH1 must be sent before query',
+      );
+      expect(queryIndex, greaterThan(ath1Index), reason: '010C after ATH1');
+      expect(
+        ath0Index,
+        greaterThan(queryIndex),
+        reason: 'ATH0 restored after query',
+      );
+
+      expect(
+        client.headersOn,
+        isFalse,
+        reason: 'client model reflects ATH0 restored',
+      );
+      expect(
+        transport.headersOn,
+        isFalse,
+        reason: 'adapter reflects ATH0 restored',
+      );
+
+      await client.disconnect();
+    });
+
+    test('scenario 2: originally H1, responseHeaders: true does not revert to H0 on transaction completion', () async {
+      final transport = _can11Transport();
+      final client = await _connect(transport);
+
+      // Turn headers on explicitly prior to transaction
+      final atOk = await client.send('ATH1');
+      expect(atOk.isSuccess, isTrue);
+      expect(client.headersOn, isTrue);
+      expect(transport.headersOn, isTrue);
+
+      final before = transport.commandLog.length;
+      final reply = await client.sendTransacted('010C', responseHeaders: true);
+
+      expect(reply.isSuccess, isTrue);
+      expect(reply.headersEnabled, isTrue);
+
+      final log = transport.commandLog.skip(before).toList();
+      expect(
+        log,
+        isNot(contains('ATH0')),
+        reason: 'Must not revert pre-existing H1 to H0',
+      );
+
+      expect(client.headersOn, isTrue, reason: 'client model stays H1');
+      expect(transport.headersOn, isTrue, reason: 'adapter stays H1');
+
+      await client.disconnect();
+    });
+
+    test('scenario 3: ATH1 refused by adapter, transaction proceeds anonymously without throwing and skips ATH0 restore', () async {
+      final transport = _can11Transport(
+        faults: const AdapterFaults(refuseHeaders: true),
+      );
+      final client = await _connect(transport);
+      expect(client.headersOn, isFalse);
+      expect(transport.headersOn, isFalse);
+
+      final before = transport.commandLog.length;
+      final reply = await client.sendTransacted('010C', responseHeaders: true);
+
+      expect(reply.isSuccess, isTrue);
+      expect(
+        reply.headersEnabled,
+        isFalse,
+        reason: 'Anonymous reply when ATH1 refused',
+      );
+
+      final log = transport.commandLog.skip(before).toList();
+      expect(log, contains('ATH1'));
+      expect(
+        log,
+        isNot(contains('ATH0')),
+        reason: 'No restore needed when headers were never turned on',
+      );
+
+      expect(client.headersOn, isFalse);
+      expect(transport.headersOn, isFalse);
+
+      await client.disconnect();
+    });
+
+    test('scenario 4: ATH1 timeout aborts transaction fail-closed and marks connection out of sync', () async {
+      final transport = _can11Transport(
+        faults: const AdapterFaults(swallowPromptFor: {'ATH1'}),
+      );
+      final client = await _connect(
+        transport,
+        commandTimeout: const Duration(milliseconds: 100),
+      );
+
+      await expectLater(
+        client.sendTransacted('010C', responseHeaders: true),
+        throwsA(isA<TimeoutException>()),
+      );
+
+      expect(client.isOutOfSync, isTrue);
+      expect(client.headersOn, isFalse);
+
+      await client.disconnect();
+    });
+
+    test('scenario 5: reconnect during restore aborts ATH0 restore before touching new generation', () async {
+      final transport = _can11Transport();
+      final client = await _connect(transport);
+
+      // Establish initial header
+      await client.sendOnHeader('7DF', '010C');
+      expect(client.currentHeader, '7DF');
+
+      var didReconnect = false;
+      transport.onCommandWritten = (cmd) {
+        // When ATSH 7DF restore is written in finally (before ATH0 in LIFO), trigger reconnect!
+        if (cmd == 'ATSH7DF' && !didReconnect) {
+          didReconnect = true;
+          unawaited(client.connect());
+        }
+      };
+
+      final txFuture = client.runTransacted(
+        (send) async {
+          return await send('010C');
+        },
+        header: '7E0',
+        restoreHeader: true,
+        responseHeaders: true,
+      );
+
+      await expectLater(
+        txFuture,
+        throwsA(isA<TransportException>()),
+        reason: 'Mid-restore reconnect leaves transaction completed with error',
+      );
+
+      expect(didReconnect, isTrue);
+
+      final ath0Restores = transport.commandLog
+          .where((cmd) => cmd == 'ATH0')
+          .toList();
+      expect(
+        ath0Restores,
+        isEmpty,
+        reason: 'ATH0 restore must abort when generation changes and never touch new generation',
+      );
+
+      await client.disconnect();
+    });
+
+    test('LIFO reverse-restoration order: ATSH restored before ATH0', () async {
+      final transport = _can11Transport();
+      final client = await _connect(transport);
+
+      // Establish initial header
+      await client.sendOnHeader('7DF', '010C');
+
+      final before = transport.commandLog.length;
+      final reply = await client.sendTransacted(
+        '010C',
+        header: '7E0',
+        restoreHeader: true,
+        responseHeaders: true,
+      );
+
+      expect(reply.isSuccess, isTrue);
+      expect(reply.headersEnabled, isTrue);
+
+      final log = transport.commandLog.skip(before).toList();
+      final ath1Index = log.indexOf('ATH1');
+      final atshIndex = log.indexOf('ATSH7E0');
+      final queryIndex = log.indexOf('010C');
+      final atshRestoreIndex = log.indexOf('ATSH7DF');
+      final ath0Index = log.indexOf('ATH0');
+
+      expect(ath1Index, greaterThanOrEqualTo(0));
+      expect(
+        atshIndex,
+        greaterThan(ath1Index),
+        reason: 'ATSH applied after ATH1',
+      );
+      expect(queryIndex, greaterThan(atshIndex));
+      expect(
+        atshRestoreIndex,
+        greaterThan(queryIndex),
+        reason: 'ATSH restored before ATH0 in LIFO',
+      );
+      expect(
+        ath0Index,
+        greaterThan(atshRestoreIndex),
+        reason: 'ATH0 restored after ATSH in LIFO',
+      );
+
+      await client.disconnect();
+    });
+
+    test('ATH1 timeout marks responseHeadersUncertain and blocks subsequent queries until reconnect', () async {
+      final transport = _ReconnectingTransport();
+      final client = await _connect(transport, commandTimeout: const Duration(milliseconds: 50));
+
+      final barrier = Completer<void>();
+      transport.responseBarrier = (cmd) {
+        if (cmd == 'ATH1') {
+          return barrier.future;
+        }
+        return null;
+      };
+
+      // Attempt transaction with responseHeaders: true -> times out on ATH1
+      await expectLater(
+        client.sendTransacted(
+          '010C',
+          header: '7E0',
+          responseHeaders: true,
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+
+      // Release the barrier so adapter finishes emitting late response
+      barrier.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(client.responseHeadersUncertain, isTrue);
+
+      // Subsequent query must be rejected with wire-zero (TransportException)
+      final writeCountBefore = transport.commandLog.length;
+      expect(
+        () => client.send('010C'),
+        throwsA(
+          isA<TransportException>().having(
+            (e) => e.issue,
+            'issue',
+            TransportIssue.headerRestoreFailed,
+          ),
+        ),
+      );
+      expect(transport.commandLog.length, writeCountBefore, reason: 'Wire-zero rejection');
+
+      // Reconnect heals uncertainty
+      transport.responseBarrier = null;
+      await client.disconnect();
+      final reconnected = await client.connect();
+      expect(reconnected, isTrue);
+      expect(client.responseHeadersUncertain, isFalse);
+
+      final reply = await client.send('010C');
+      expect(reply.isSuccess, isTrue);
+
+      await client.disconnect();
+    });
+
+    test('ATH0 teardown timeout marks responseHeadersRestoreFailed/uncertain and blocks subsequent queries', () async {
+      final transport = _can11Transport();
+      final client = await _connect(transport, commandTimeout: const Duration(milliseconds: 50));
+
+      final barrier = Completer<void>();
+      transport.responseBarrier = (cmd) {
+        if (cmd == 'ATH0') {
+          return barrier.future;
+        }
+        return null;
+      };
+
+      // Transaction queries successfully, but ATH0 restore times out during teardown
+      await expectLater(
+        client.sendTransacted(
+          '010C',
+          header: '7E0',
+          responseHeaders: true,
+          budget: const Duration(milliseconds: 150),
+          cleanupBudget: const Duration(milliseconds: 50),
+        ),
+        throwsA(isA<TransportException>()),
+      );
+
+      // Release late barrier
+      barrier.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(client.responseHeadersRestoreFailed || client.responseHeadersUncertain, isTrue);
+
+      // Subsequent query must be rejected with wire-zero
+      final writeCountBefore = transport.commandLog.length;
+      expect(
+        () => client.send('010C'),
+        throwsA(
+          isA<TransportException>().having(
+            (e) => e.issue,
+            'issue',
+            TransportIssue.headerRestoreFailed,
+          ),
+        ),
+      );
+      expect(transport.commandLog.length, writeCountBefore, reason: 'Wire-zero rejection');
+
+      await client.disconnect();
+    });
+
+    test('ATH0 explicit refusal (?) falls back to truthful H1 without failing restore', () async {
+      final transport = _can11Transport(
+        faults: const AdapterFaults(refuseHeadersOff: true),
+      );
+      final client = await _connect(transport);
+
+      expect(client.headersOn, isFalse);
+
+      final reply = await client.sendTransacted(
+        '010C',
+        header: '7E0',
+        responseHeaders: true,
+      );
+
+      expect(reply.isSuccess, isTrue);
+      // Explicit refusal to ATH0 leaves adapter with headers ON
+      // Client truthfully reflects headersOn == true, without flagging restoreFailed or uncertain
+      expect(client.headersOn, isTrue);
+      expect(client.responseHeadersRestoreFailed, isFalse);
+      expect(client.responseHeadersUncertain, isFalse);
+
+      // Subsequent ordinary send can proceed without sticky failure
+      final nextReply = await client.send('010C');
+      expect(nextReply.isSuccess, isTrue);
 
       await client.disconnect();
     });

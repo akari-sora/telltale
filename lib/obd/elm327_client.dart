@@ -816,6 +816,9 @@ class Elm327Client {
     _canReceiveFilterRestoreFailed = false;
     _canReceiveFilterState = const ElmCanReceiveFilterOff();
     _headerRestoreFailed = false;
+    _headersOn = false;
+    _responseHeadersUncertain = false;
+    _responseHeadersRestoreFailed = false;
     _connectionSession++;
     _connectionGeneration++;
     await transport.connect();
@@ -1524,8 +1527,7 @@ class Elm327Client {
         if (!previouslyWritten) writeAudit?._commands.remove(normalised);
         requestedProtocol = previousRequested;
       }
-      final replyAlreadyArrived =
-          _pending == null || _pending!.isCompleted;
+      final replyAlreadyArrived = _pending == null || _pending!.isCompleted;
       _pendingTimeout?.cancel();
       _pendingTimeout = null;
       _pending = null;
@@ -1556,6 +1558,11 @@ class Elm327Client {
       // already arrived; a late flush failure must not skip the restore
       // that still has to walk). A write *timeout* is still unknown even
       // when a reply arrived first — R7 H-01 — so that path resyncs.
+      if (normalised == 'ATH1' || normalised == 'ATH0') {
+        if (e is! WriteRefusedException) {
+          _responseHeadersUncertain = true;
+        }
+      }
       if (e is! WriteRefusedException &&
           (e is TimeoutException || !replyAlreadyArrived)) {
         _outOfSync = true;
@@ -1589,6 +1596,8 @@ class Elm327Client {
       // A reset restores the documented defaults regardless of what it prints
       // — `ATZ` answers with the version string, not `OK`.
       _headersOn = false;
+      _responseHeadersUncertain = false;
+      _responseHeadersRestoreFailed = false;
       // And the header selection goes with it. Only `_headersOn` was cleared,
       // so a reset mid-session left the client naming a header the adapter had
       // just discarded — and the next query for that header would skip `ATSH`
@@ -1606,6 +1615,30 @@ class Elm327Client {
       _extendedAddressingState = const ElmExtendedAddressingOff();
       _canPriorityState = const ElmCanPriorityDefault();
       _canReceiveFilterState = const ElmCanReceiveFilterOff();
+      return;
+    }
+    if (normalised == 'ATH1') {
+      if (_saidOk(response)) {
+        _headersOn = true;
+        _responseHeadersUncertain = false;
+      } else if (_saidRefused(response)) {
+        // Explicit refusal to ATH1: retain previously known _headersOn state.
+        // Do not invert to false and do not clear _responseHeadersUncertain.
+      } else {
+        _responseHeadersUncertain = true;
+      }
+      return;
+    }
+    if (normalised == 'ATH0') {
+      if (_saidOk(response)) {
+        _headersOn = false;
+        _responseHeadersUncertain = false;
+      } else if (_saidRefused(response)) {
+        // Explicit refusal to ATH0: retain previously known _headersOn state.
+        // Do not invert to true and do not clear _responseHeadersUncertain.
+      } else {
+        _responseHeadersUncertain = true;
+      }
       return;
     }
     if (!_saidOk(response)) return;
@@ -1636,11 +1669,7 @@ class Elm327Client {
       _canReceiveFilterState = const ElmCanReceiveFilterUnknown();
       return;
     }
-    if (normalised == 'ATH1') {
-      _headersOn = true;
-    } else if (normalised == 'ATH0') {
-      _headersOn = false;
-    } else if (normalised == ElmHostIsoTpConfig.applyCommand) {
+    if (normalised == ElmHostIsoTpConfig.applyCommand) {
       _hostVisibleIsoTp = true;
     } else if (normalised == ElmHostIsoTpConfig.restoreCommand) {
       _hostVisibleIsoTp = false;
@@ -1649,8 +1678,9 @@ class Elm327Client {
     } else if (normalised.startsWith('ATCEA') && normalised.length == 7) {
       final hex = normalised.substring(5);
       if (RegExp(r'^[0-9A-F]{2}$').hasMatch(hex)) {
-        _extendedAddressingState =
-            ElmExtendedAddressingOn(int.parse(hex, radix: 16));
+        _extendedAddressingState = ElmExtendedAddressingOn(
+          int.parse(hex, radix: 16),
+        );
       }
     } else if (normalised == ElmCanPriorityConfig.restoreCommand) {
       _canPriorityState = const ElmCanPriorityDefault();
@@ -1716,6 +1746,12 @@ class Elm327Client {
       throw const TransportException(
         ElmCanReceiveFilterMessages.restoreFailed,
         issue: TransportIssue.canReceiveFilterUnavailable,
+      );
+    }
+    if (_responseHeadersRestoreFailed || _responseHeadersUncertain) {
+      throw const TransportException(
+        'The adapter response headers rendering state is uncertain or restore failed.',
+        issue: TransportIssue.headerRestoreFailed,
       );
     }
     if (_headerRestoreFailed) {
@@ -1970,8 +2006,32 @@ class Elm327Client {
     return completer.future;
   }
 
+  static final RegExp _adapterInternalErrorRegex = RegExp(r'\bERR\d{2}\b');
+
+  static bool _hasAdapterError(ObdResponse r) {
+    if (r.errorCode != Elm327ErrorCode.none &&
+        r.errorCode != Elm327ErrorCode.unknownCommand) {
+      return true;
+    }
+    for (final line in r.rawLines) {
+      final u = line.trim().toUpperCase();
+      if (u.contains('BUS INIT') && u.contains('ERROR')) return true;
+      if (_adapterInternalErrorRegex.hasMatch(u)) return true;
+      for (final key in _errorStrings.keys) {
+        if (u.contains(key)) return true;
+      }
+    }
+    return false;
+  }
+
   static bool _saidOk(ObdResponse r) =>
       r.isSuccess && r.rawLines.any((l) => l.trim().toUpperCase() == 'OK');
+
+  static bool _saidRefused(ObdResponse r) {
+    if (_hasAdapterError(r)) return false;
+    return r.errorCode == Elm327ErrorCode.unknownCommand ||
+        r.rawLines.any((l) => l.trim() == '?');
+  }
 
   /// Sends [command] to [header], selecting it only when it means something on
   /// the detected bus.
@@ -2368,11 +2428,7 @@ class Elm327Client {
     _commandChain = _commandChain.then((_) async {
       try {
         completer.complete(
-          await _applyFlowControlNow(
-            config,
-            owner: owner,
-            deadline: deadline,
-          ),
+          await _applyFlowControlNow(config, owner: owner, deadline: deadline),
         );
       } on Object catch (e, st) {
         if (!completer.isCompleted) completer.completeError(e, st);
@@ -2425,10 +2481,7 @@ class Elm327Client {
     _commandChain = _commandChain.then((_) async {
       try {
         completer.complete(
-          await _applyHostVisibleIsoTpNow(
-            owner: owner,
-            deadline: deadline,
-          ),
+          await _applyHostVisibleIsoTpNow(owner: owner, deadline: deadline),
         );
       } on Object catch (e, st) {
         if (!completer.isCompleted) completer.completeError(e, st);
@@ -2641,7 +2694,10 @@ class Elm327Client {
   /// reverse order of application. If any restore fails, the respective sticky
   /// restore failure flag is set and subsequent commands fail closed.
   Future<T> runTransacted<T>(
-    Future<T> Function(Future<ObdResponse> Function(String command, {Duration? timeout}) send) action, {
+    Future<T> Function(
+      Future<ObdResponse> Function(String command, {Duration? timeout}) send,
+    )
+    action, {
     String? header,
     bool restoreHeader = false,
     int? extendedAddressByte,
@@ -2649,6 +2705,7 @@ class Elm327Client {
     ElmCanReceiveFilterConfig? canReceiveFilter,
     ElmFlowControlConfig? flowControl,
     bool hostVisibleIsoTp = false,
+    bool responseHeaders = false,
     ElmCompositeTransactionConfig? configuration,
     Duration? budget,
     Duration? drainBudget,
@@ -2670,6 +2727,8 @@ class Elm327Client {
     final effectiveFlowControl = configuration?.flowControl ?? flowControl;
     final effectiveHostVisibleIsoTp =
         configuration?.hostVisibleIsoTp ?? hostVisibleIsoTp;
+    final effectiveResponseHeaders =
+        configuration?.responseHeaders ?? responseHeaders;
     final effectiveBudget =
         configuration?.budget ?? budget ?? const Duration(seconds: 8);
     final Duration totalBudget;
@@ -2683,20 +2742,24 @@ class Elm327Client {
         totalBudget = effectiveBudget;
       }
     } else {
-      totalBudget =
-          effectiveBudget.isNegative ? Duration.zero : effectiveBudget;
+      totalBudget = effectiveBudget.isNegative
+          ? Duration.zero
+          : effectiveBudget;
     }
-    final effectiveDrainBudget = configuration?.drainBudget ??
+    final effectiveDrainBudget =
+        configuration?.drainBudget ??
         drainBudget ??
         const Duration(milliseconds: 500);
-    final effectiveCleanupBudget = configuration?.cleanupBudget ??
+    final effectiveCleanupBudget =
+        configuration?.cleanupBudget ??
         cleanupBudget ??
         const Duration(seconds: 2);
     final effectiveElapsedProvider =
         configuration?.elapsedProvider ?? elapsedProvider;
     final effectiveStopwatch =
         (configuration?.stopwatchProvider ?? stopwatchProvider)?.call() ??
-            Stopwatch()..start();
+              Stopwatch()
+          ..start();
 
     Duration getElapsed() =>
         effectiveElapsedProvider?.call() ?? effectiveStopwatch.elapsed;
@@ -2715,6 +2778,7 @@ class Elm327Client {
             canReceiveFilter: effectiveCanReceiveFilter,
             flowControl: effectiveFlowControl,
             hostVisibleIsoTp: effectiveHostVisibleIsoTp,
+            responseHeaders: effectiveResponseHeaders,
             owner: owner,
             totalBudget: totalBudget,
             getElapsed: getElapsed,
@@ -2742,6 +2806,7 @@ class Elm327Client {
     ElmCanReceiveFilterConfig? canReceiveFilter,
     ElmFlowControlConfig? flowControl,
     bool hostVisibleIsoTp = false,
+    bool responseHeaders = false,
     ElmCompositeTransactionConfig? configuration,
     Duration? timeout,
     Duration? budget,
@@ -2762,6 +2827,7 @@ class Elm327Client {
       canReceiveFilter: canReceiveFilter,
       flowControl: flowControl,
       hostVisibleIsoTp: hostVisibleIsoTp,
+      responseHeaders: responseHeaders,
       configuration: configuration,
       budget: budget,
       drainBudget: drainBudget,
@@ -2783,6 +2849,7 @@ class Elm327Client {
     ElmCanReceiveFilterConfig? canReceiveFilter,
     ElmFlowControlConfig? flowControl,
     bool hostVisibleIsoTp = false,
+    bool responseHeaders = false,
     ElmCompositeTransactionConfig? configuration,
     Duration? timeout,
     Duration? budget,
@@ -2792,29 +2859,32 @@ class Elm327Client {
     DateTime? deadline,
     Stopwatch Function()? stopwatchProvider,
     Duration Function()? elapsedProvider,
-  }) =>
-      sendTransacted(
-        command,
-        header: header,
-        restoreHeader: restoreHeader,
-        extendedAddressByte: extendedAddressByte,
-        canPriorityByte: canPriorityByte,
-        canReceiveFilter: canReceiveFilter,
-        flowControl: flowControl,
-        hostVisibleIsoTp: hostVisibleIsoTp,
-        configuration: configuration,
-        timeout: timeout,
-        budget: budget,
-        drainBudget: drainBudget,
-        cleanupBudget: cleanupBudget,
-        owner: owner,
-        deadline: deadline,
-        stopwatchProvider: stopwatchProvider,
-        elapsedProvider: elapsedProvider,
-      );
+  }) => sendTransacted(
+    command,
+    header: header,
+    restoreHeader: restoreHeader,
+    extendedAddressByte: extendedAddressByte,
+    canPriorityByte: canPriorityByte,
+    canReceiveFilter: canReceiveFilter,
+    flowControl: flowControl,
+    hostVisibleIsoTp: hostVisibleIsoTp,
+    responseHeaders: responseHeaders,
+    configuration: configuration,
+    timeout: timeout,
+    budget: budget,
+    drainBudget: drainBudget,
+    cleanupBudget: cleanupBudget,
+    owner: owner,
+    deadline: deadline,
+    stopwatchProvider: stopwatchProvider,
+    elapsedProvider: elapsedProvider,
+  );
 
   Future<T> _runTransactedNow<T>(
-    Future<T> Function(Future<ObdResponse> Function(String command, {Duration? timeout}) send) action, {
+    Future<T> Function(
+      Future<ObdResponse> Function(String command, {Duration? timeout}) send,
+    )
+    action, {
     required String? header,
     required bool restoreHeader,
     required int? extendedAddressByte,
@@ -2822,6 +2892,7 @@ class Elm327Client {
     required ElmCanReceiveFilterConfig? canReceiveFilter,
     required ElmFlowControlConfig? flowControl,
     required bool hostVisibleIsoTp,
+    required bool responseHeaders,
     required Object? owner,
     required Duration totalBudget,
     required Duration Function() getElapsed,
@@ -2876,7 +2947,8 @@ class Elm327Client {
       if (extendedAddressByte != null) {
         if (getElapsed() >= totalBudget) {
           throw TimeoutException(
-              'Transaction monotonic budget exceeded before ATCEA');
+            'Transaction monotonic budget exceeded before ATCEA',
+          );
         }
         final outcome = await _applyExtendedAddressingNow(
           extendedAddressByte,
@@ -2886,7 +2958,8 @@ class Elm327Client {
         if (outcome.result != ElmExtendedAddressingResult.applied) {
           throw TransportException(
             ElmExtendedAddressingMessages.unavailable,
-            issue: outcome.refusalIssue ??
+            issue:
+                outcome.refusalIssue ??
                 TransportIssue.extendedAddressingUnavailable,
           );
         }
@@ -2907,7 +2980,8 @@ class Elm327Client {
       if (canPriorityByte != null) {
         if (getElapsed() >= totalBudget) {
           throw TimeoutException(
-              'Transaction monotonic budget exceeded before ATCP');
+            'Transaction monotonic budget exceeded before ATCP',
+          );
         }
         final outcome = await _applyCanPriorityNow(
           canPriorityByte,
@@ -2918,8 +2992,8 @@ class Elm327Client {
             outcome.result != ElmCanPriorityResult.restored) {
           throw TransportException(
             ElmCanPriorityMessages.unavailable,
-            issue: outcome.refusalIssue ??
-                TransportIssue.canPriorityUnavailable,
+            issue:
+                outcome.refusalIssue ?? TransportIssue.canPriorityUnavailable,
           );
         }
         appliedRestores.add(() async {
@@ -2939,7 +3013,8 @@ class Elm327Client {
       if (canReceiveFilter != null) {
         if (getElapsed() >= totalBudget) {
           throw TimeoutException(
-              'Transaction monotonic budget exceeded before ATCRA');
+            'Transaction monotonic budget exceeded before ATCRA',
+          );
         }
         final outcome = await _applyCanReceiveFilterNow(
           canReceiveFilter,
@@ -2949,7 +3024,8 @@ class Elm327Client {
         if (outcome.result != ElmCanReceiveFilterResult.applied) {
           throw TransportException(
             ElmCanReceiveFilterMessages.unavailable,
-            issue: outcome.refusalIssue ??
+            issue:
+                outcome.refusalIssue ??
                 TransportIssue.canReceiveFilterUnavailable,
           );
         }
@@ -2970,7 +3046,8 @@ class Elm327Client {
       if (flowControl != null) {
         if (getElapsed() >= totalBudget) {
           throw TimeoutException(
-              'Transaction monotonic budget exceeded before ATFCS');
+            'Transaction monotonic budget exceeded before ATFCS',
+          );
         }
         final outcome = await _applyFlowControlNow(
           flowControl,
@@ -2980,7 +3057,8 @@ class Elm327Client {
         if (outcome.result != ElmFlowControlResult.applied) {
           throw TransportException(
             ElmFlowControlMessages.customRejected,
-            issue: outcome.refusalIssue ??
+            issue:
+                outcome.refusalIssue ??
                 TransportIssue.customFlowControlRejected,
           );
         }
@@ -3002,7 +3080,8 @@ class Elm327Client {
       if (hostVisibleIsoTp) {
         if (getElapsed() >= totalBudget) {
           throw TimeoutException(
-              'Transaction monotonic budget exceeded before ATCAF0');
+            'Transaction monotonic budget exceeded before ATCAF0',
+          );
         }
         final outcome = await _applyHostVisibleIsoTpNow(
           owner: owner,
@@ -3011,8 +3090,8 @@ class Elm327Client {
         if (outcome.result != ElmHostIsoTpResult.applied) {
           throw TransportException(
             ElmHostIsoTpMessages.unavailable,
-            issue: outcome.refusalIssue ??
-                TransportIssue.rawIsoTpModeUnavailable,
+            issue:
+                outcome.refusalIssue ?? TransportIssue.rawIsoTpModeUnavailable,
           );
         }
         appliedRestores.add(() async {
@@ -3028,11 +3107,103 @@ class Elm327Client {
         });
       }
 
-      // 6. Header switch if specified
+      // 6. Apply Response Headers (ATH1)
+      if (responseHeaders) {
+        if (getElapsed() >= totalBudget) {
+          throw TimeoutException(
+            'Transaction monotonic budget exceeded before ATH1',
+          );
+        }
+        final headersWereOn = _headersOn;
+        var headersTurnedOn = false;
+        if (!headersWereOn) {
+          try {
+            final ack = await _sendNow(
+              'ATH1',
+              commandTimeout,
+              owner: owner,
+              deadline: stepDeadline(),
+              expectedGeneration: txGeneration,
+            );
+            if (_saidOk(ack)) {
+              headersTurnedOn = true;
+              _responseHeadersUncertain = false;
+            } else if (_saidRefused(ack)) {
+              headersTurnedOn = false;
+            } else {
+              _responseHeadersUncertain = true;
+              throw TransportException(
+                'The adapter returned an ambiguous response to ATH1: ${ack.rawLines.join(' ')}',
+                issue: TransportIssue.queryHeaderRefused,
+                issueDetail: 'ATH1',
+              );
+            }
+          } on WriteRefusedException {
+            rethrow;
+          } catch (e) {
+            if (_connectionSession == txSession) {
+              _responseHeadersUncertain = true;
+            }
+            rethrow;
+          }
+        }
+        if (headersTurnedOn) {
+          appliedRestores.add(() async {
+            if (_connectionSession != txSession) return;
+            if (!transport.isConnected) {
+              _responseHeadersRestoreFailed = true;
+              _responseHeadersUncertain = true;
+              return;
+            }
+            var canRestore = true;
+            if (_outOfSync) {
+              try {
+                await _resync(deadline: DateTime.now().add(cleanupBudget));
+              } on Object {
+                canRestore = false;
+                _responseHeadersRestoreFailed = true;
+                _responseHeadersUncertain = true;
+              }
+            }
+            if (canRestore && _connectionSession == txSession) {
+              try {
+                final ack = await _sendNow(
+                  'ATH0',
+                  commandTimeout,
+                  deadline: DateTime.now().add(cleanupBudget),
+                  completesCommittedTransaction: true,
+                  expectedGeneration: txGeneration,
+                );
+                if (_connectionSession != txSession) return;
+                if (_saidOk(ack)) {
+                  _headersOn = false;
+                  _responseHeadersUncertain = false;
+                  _responseHeadersRestoreFailed = false;
+                } else if (_saidRefused(ack)) {
+                  // Explicit refusal to ATH0: adapter declined to turn headers off.
+                  // Truthful H1 fallback: headers are still ON and model truthfully reflects it.
+                  _headersOn = true;
+                } else {
+                  _responseHeadersRestoreFailed = true;
+                  _responseHeadersUncertain = true;
+                }
+              } catch (_) {
+                if (_connectionSession == txSession) {
+                  _responseHeadersRestoreFailed = true;
+                  _responseHeadersUncertain = true;
+                }
+              }
+            }
+          });
+        }
+      }
+
+      // 7. Header switch if specified
       if (header != null && header != _currentHeader) {
         if (getElapsed() >= totalBudget) {
           throw TimeoutException(
-              'Transaction monotonic budget exceeded before ATSH');
+            'Transaction monotonic budget exceeded before ATSH',
+          );
         }
         _currentHeader = null;
         final ack = await _sendNow(
@@ -3042,7 +3213,8 @@ class Elm327Client {
           deadline: stepDeadline(),
           expectedGeneration: txGeneration,
         );
-        final acknowledged = ack.isSuccess &&
+        final acknowledged =
+            ack.isSuccess &&
             ack.rawLines.any((l) => l.trim().toUpperCase() == 'OK');
         if (!acknowledged) {
           throw TransportException(
@@ -3130,45 +3302,50 @@ class Elm327Client {
         final completer = Completer<ObdResponse>();
         completer.future.ignore();
         final prev = inFlight;
-        inFlight = prev.then((_) async {
-          try {
-            if (!isTxActive) {
-              throw const TransportException(
-                'Transaction sender is no longer active or has completed.',
-                issue: TransportIssue.operationRetired,
+        inFlight = prev.then(
+          (_) async {
+            try {
+              if (!isTxActive) {
+                throw const TransportException(
+                  'Transaction sender is no longer active or has completed.',
+                  issue: TransportIssue.operationRetired,
+                );
+              }
+              if (_connectionGeneration != txGeneration) {
+                throw const TransportException(
+                  'Connection generation changed; sender belongs to a prior connection.',
+                  issue: TransportIssue.notConnected,
+                );
+              }
+              if (!(mayTransmit?.call(owner) ?? true)) {
+                throw const OperationRetiredException(
+                  'This session has ended or gone to the background, so the command was not sent.',
+                );
+              }
+              if (getElapsed() >= totalBudget) {
+                throw TimeoutException('Transaction budget exceeded');
+              }
+              final resp = await _sendNow(
+                command,
+                timeout ?? commandTimeout,
+                owner: owner,
+                expectedGeneration: txGeneration,
               );
+              if (!completer.isCompleted) {
+                completer.complete(resp.withHeadersEnabled(_headersOn));
+              }
+            } catch (e, st) {
+              txSenderError ??= e;
+              txSenderStackTrace ??= st;
+              if (!completer.isCompleted) completer.completeError(e, st);
             }
-            if (_connectionGeneration != txGeneration) {
-              throw const TransportException(
-                'Connection generation changed; sender belongs to a prior connection.',
-                issue: TransportIssue.notConnected,
-              );
-            }
-            if (!(mayTransmit?.call(owner) ?? true)) {
-              throw const OperationRetiredException(
-                'This session has ended or gone to the background, so the command was not sent.',
-              );
-            }
-            if (getElapsed() >= totalBudget) {
-              throw TimeoutException('Transaction budget exceeded');
-            }
-            final resp = await _sendNow(
-              command,
-              timeout ?? commandTimeout,
-              owner: owner,
-              expectedGeneration: txGeneration,
-            );
-            if (!completer.isCompleted) completer.complete(resp);
-          } catch (e, st) {
+          },
+          onError: (Object e, StackTrace st) {
             txSenderError ??= e;
             txSenderStackTrace ??= st;
             if (!completer.isCompleted) completer.completeError(e, st);
-          }
-        }, onError: (Object e, StackTrace st) {
-          txSenderError ??= e;
-          txSenderStackTrace ??= st;
-          if (!completer.isCompleted) completer.completeError(e, st);
-        });
+          },
+        );
         return completer.future;
       }
 
@@ -3176,7 +3353,8 @@ class Elm327Client {
       final remainingBudget = remainingMonotonic();
       if (remainingBudget <= Duration.zero) {
         throw TimeoutException(
-            'Transaction budget exceeded before action execution');
+          'Transaction budget exceeded before action execution',
+        );
       }
 
       result = await runZoned(
@@ -3688,10 +3866,7 @@ class Elm327Client {
         cleaned.result == ElmExtendedAddressingResult.disconnected) {
       return cleaned;
     }
-    return ElmExtendedAddressingOutcome(
-      result: failure,
-      state: cleaned.state,
-    );
+    return ElmExtendedAddressingOutcome(result: failure, state: cleaned.state);
   }
 
   Future<ElmExtendedAddressingOutcome> _restoreExtendedAddressingNow({
@@ -3708,7 +3883,7 @@ class Elm327Client {
     }
     final mustRestore =
         _extendedAddressingState is ElmExtendedAddressingOn ||
-            afterUnconfirmedApply;
+        afterUnconfirmedApply;
     if (DateTime.now().isAfter(deadline) ||
         responseBytesUsed > ElmExtendedAddressingConfig.maxResponseBytes) {
       if (!mustRestore) {
@@ -3997,10 +4172,7 @@ class Elm327Client {
         cleaned.result == ElmCanPriorityResult.disconnected) {
       return cleaned;
     }
-    return ElmCanPriorityOutcome(
-      result: failure,
-      state: cleaned.state,
-    );
+    return ElmCanPriorityOutcome(result: failure, state: cleaned.state);
   }
 
   Future<ElmCanPriorityOutcome> _restoreCanPriorityNow({
@@ -4305,10 +4477,7 @@ class Elm327Client {
         cleaned.result == ElmCanReceiveFilterResult.disconnected) {
       return cleaned;
     }
-    return ElmCanReceiveFilterOutcome(
-      result: failure,
-      state: cleaned.state,
-    );
+    return ElmCanReceiveFilterOutcome(result: failure, state: cleaned.state);
   }
 
   Future<ElmCanReceiveFilterOutcome> _restoreCanReceiveFilterNow({
@@ -4325,7 +4494,7 @@ class Elm327Client {
     }
     final mustRestore =
         _canReceiveFilterState is ElmCanReceiveFilterOn ||
-            afterUnconfirmedApply;
+        afterUnconfirmedApply;
     if (DateTime.now().isAfter(deadline) ||
         responseBytesUsed > ElmCanReceiveFilterConfig.maxResponseBytes) {
       if (!mustRestore) {
@@ -4416,8 +4585,7 @@ class Elm327Client {
           state: _canReceiveFilterState,
         );
       }
-      if (!mustRestore &&
-          _canReceiveFilterState is ElmCanReceiveFilterOff) {
+      if (!mustRestore && _canReceiveFilterState is ElmCanReceiveFilterOff) {
         return ElmCanReceiveFilterOutcome(
           result: ElmCanReceiveFilterResult.restoreRejected,
           state: _canReceiveFilterState,
@@ -4769,10 +4937,7 @@ class Elm327Client {
         'This session has ended or gone to the background, so the command was not sent.',
       );
     }
-    return ElmFlowControlOutcome(
-      result: failure!,
-      state: _flowControlState,
-    );
+    return ElmFlowControlOutcome(result: failure!, state: _flowControlState);
   }
 
   Future<ElmFlowControlOutcome> _restoreFlowControlNow({
@@ -4997,6 +5162,8 @@ class Elm327Client {
       const ElmCanReceiveFilterOff();
   bool _canReceiveFilterRestoreFailed = false;
   bool _headerRestoreFailed = false;
+  bool _responseHeadersUncertain = false;
+  bool _responseHeadersRestoreFailed = false;
 
   /// Byte length of the last prompt-delimited frame, before `_parse` drops
   /// NULs and command echoes.
@@ -5011,6 +5178,12 @@ class Elm327Client {
   bool get flowControlRestoreFailed => _flowControlRestoreFailed;
 
   bool get headerRestoreFailed => _headerRestoreFailed;
+
+  bool get headersOn => _headersOn;
+
+  bool get responseHeadersUncertain => _responseHeadersUncertain;
+
+  bool get responseHeadersRestoreFailed => _responseHeadersRestoreFailed;
 
   String? get currentHeader => _currentHeader;
 
@@ -5040,15 +5213,13 @@ class Elm327Client {
   ElmExtendedAddressingState get extendedAddressingState =>
       _extendedAddressingState;
 
-  bool get extendedAddressingRestoreFailed =>
-      _extendedAddressingRestoreFailed;
+  bool get extendedAddressingRestoreFailed => _extendedAddressingRestoreFailed;
 
   ElmCanPriorityState get canPriorityState => _canPriorityState;
 
   bool get canPriorityRestoreFailed => _canPriorityRestoreFailed;
 
-  ElmCanReceiveFilterState get canReceiveFilterState =>
-      _canReceiveFilterState;
+  ElmCanReceiveFilterState get canReceiveFilterState => _canReceiveFilterState;
 
   bool get canReceiveFilterRestoreFailed => _canReceiveFilterRestoreFailed;
 
@@ -5469,6 +5640,11 @@ class Elm327Client {
     });
   }
 
+  void cancelWatchdogForTesting() {
+    _watchdog?.cancel();
+    _watchdog = null;
+  }
+
   // ------------------------------------------------------------- parsing ----
 
   static final RegExp _seqPrefix = RegExp(r'^[0-9A-Fa-f]{1,2}:\s*');
@@ -5489,16 +5665,8 @@ class Elm327Client {
 
   /// A line captured with `ATH1`: the responding address, then payload bytes.
   ///
-  /// Three hex digits for 11-bit CAN, eight for 29-bit. Note this deliberately
-  /// does not match a plain byte-pair line — the whole point is telling the two
-  /// renderings apart, because with headers off the address is absent and with
-  /// them on it must not be read as data.
-  static final RegExp _headeredCanLine = RegExp(
-    r'^([0-9A-Fa-f]{3}|[0-9A-Fa-f]{8})((?: ?[0-9A-Fa-f]{2})+)$',
-  );
-
   /// The two CAN widths, separately, for callers that know which bus they are
-  /// on. [_headeredCanLine] accepts either and must not be used where the
+  /// on. A shared width regex accepts either and must not be used where the
   /// width is known, because the wrong alternative will happily consume
   /// payload as an address.
   static final RegExp _headeredCan11Line = RegExp(
@@ -5961,7 +6129,7 @@ class Elm327Client {
       // mistake in the other direction.
       final looksHeadered = lines.any((l) {
         final trimmed = l.trim();
-        return _headeredCanLine.hasMatch(trimmed) || _canLine(trimmed) != null;
+        return _canLine(trimmed) != null;
       });
       if (headered.isSuccess || looksHeadered) return headered;
     }

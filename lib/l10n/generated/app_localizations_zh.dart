@@ -4158,6 +4158,70 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsServiceRecipesDesc => '檢視工作站服務配方並安全探索 Mode 08 支援項目';
+
+  @override
+  String get mode08ReasonUnheaderedLimitation =>
+      '來源歸因與覆蓋完整度未確認：無標頭回應無法建立跨區塊 ECU 身分';
+
+  @override
+  String mode08ReasonNoResponseWithEcu(
+    String block,
+    String ecu,
+    String marker,
+  ) {
+    return '區塊 $block 來自 $ecu 無回應：$marker';
+  }
+
+  @override
+  String mode08ReasonNoResponse(String block, String marker) {
+    return '區塊 $block 無回應：$marker';
+  }
+
+  @override
+  String mode08ReasonNegativeWithEcu(String block, String ecu, String nrc) {
+    return '區塊 $block 來自 $ecu 負回應 (NRC $nrc)';
+  }
+
+  @override
+  String mode08ReasonNegative(String block, String nrc) {
+    return '區塊 $block 負回應 (NRC $nrc)';
+  }
+
+  @override
+  String mode08ReasonMalformedWithEcu(
+    String block,
+    String ecu,
+    String details,
+  ) {
+    return '區塊 $block 來自 $ecu 格式錯誤：$details';
+  }
+
+  @override
+  String mode08ReasonMalformed(String block, String details) {
+    return '區塊 $block 格式錯誤：$details';
+  }
+
+  @override
+  String mode08ReasonTimeout(String block) {
+    return '區塊 $block 查詢逾時';
+  }
+
+  @override
+  String get mode08ReasonBudgetExceeded => '在查詢所有區塊前已超出預算時間';
+
+  @override
+  String get mode08ReasonSessionDisconnected => '探索期間連線中斷或被取代';
+
+  @override
+  String mode08ReasonUnqueriedAnnounced(String blocks) {
+    return 'ECU 宣告但未查詢的區塊：$blocks';
+  }
+
+  @override
+  String get mode08ReasonRequiresCanBus => 'Mode 08 功能探索需要解析的 OBD-II CAN 匯流排';
+
+  @override
+  String get mode08ReasonUnexpectedExecution => '查詢支援 TID 時收到非預期的執行回應';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -8313,4 +8377,68 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get settingsServiceRecipesDesc => '檢視工作站服務配方並安全探索 Mode 08 支援項目';
+
+  @override
+  String get mode08ReasonUnheaderedLimitation =>
+      '來源歸因與覆蓋完整度未確認：無標頭回應無法建立跨區塊 ECU 身分';
+
+  @override
+  String mode08ReasonNoResponseWithEcu(
+    String block,
+    String ecu,
+    String marker,
+  ) {
+    return '區塊 $block 來自 $ecu 無回應：$marker';
+  }
+
+  @override
+  String mode08ReasonNoResponse(String block, String marker) {
+    return '區塊 $block 無回應：$marker';
+  }
+
+  @override
+  String mode08ReasonNegativeWithEcu(String block, String ecu, String nrc) {
+    return '區塊 $block 來自 $ecu 負回應 (NRC $nrc)';
+  }
+
+  @override
+  String mode08ReasonNegative(String block, String nrc) {
+    return '區塊 $block 負回應 (NRC $nrc)';
+  }
+
+  @override
+  String mode08ReasonMalformedWithEcu(
+    String block,
+    String ecu,
+    String details,
+  ) {
+    return '區塊 $block 來自 $ecu 格式錯誤：$details';
+  }
+
+  @override
+  String mode08ReasonMalformed(String block, String details) {
+    return '區塊 $block 格式錯誤：$details';
+  }
+
+  @override
+  String mode08ReasonTimeout(String block) {
+    return '區塊 $block 查詢逾時';
+  }
+
+  @override
+  String get mode08ReasonBudgetExceeded => '在查詢所有區塊前已超出預算時間';
+
+  @override
+  String get mode08ReasonSessionDisconnected => '探索期間連線中斷或被取代';
+
+  @override
+  String mode08ReasonUnqueriedAnnounced(String blocks) {
+    return 'ECU 宣告但未查詢的區塊：$blocks';
+  }
+
+  @override
+  String get mode08ReasonRequiresCanBus => 'Mode 08 功能探索需要解析的 OBD-II CAN 匯流排';
+
+  @override
+  String get mode08ReasonUnexpectedExecution => '查詢支援 TID 時收到非預期的執行回應';
 }

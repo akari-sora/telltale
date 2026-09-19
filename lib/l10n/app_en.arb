@@ -3963,7 +3963,7 @@
       "reason": { "type": "String" }
     }
   },
-  "serviceRecipesDiscoveryPartialWarning": "Discovery partially completed ({reason}). Uncompleted blocks: {blocks}. Note: Not found does not mean unsupported (未查到不代表不支援).",
+  "serviceRecipesDiscoveryPartialWarning": "Discovery partially completed ({reason}). Uncompleted blocks: {blocks}. Note: Not found does not mean unsupported.",
   "@serviceRecipesDiscoveryPartialWarning": {
     "placeholders": {
       "reason": { "type": "String" },
@@ -4004,6 +4004,68 @@
   },
   "serviceRecipesNoPreconditions": "None",
   "settingsServiceRecipesEntry": "Service Recipes & Active Tests",
-  "settingsServiceRecipesDesc": "Inspect workshop service recipes and discover supported Mode 08 tests"
+  "settingsServiceRecipesDesc": "Inspect workshop service recipes and discover supported Mode 08 tests",
+  "mode08ReasonUnheaderedLimitation": "Source attribution and coverage unconfirmed: unheadered responses cannot establish cross-block ECU identity",
+  "mode08ReasonNoResponseWithEcu": "No response on block {block} from {ecu}: {marker}",
+  "@mode08ReasonNoResponseWithEcu": {
+    "placeholders": {
+      "block": { "type": "String" },
+      "ecu": { "type": "String" },
+      "marker": { "type": "String" }
+    }
+  },
+  "mode08ReasonNoResponse": "No response on block {block}: {marker}",
+  "@mode08ReasonNoResponse": {
+    "placeholders": {
+      "block": { "type": "String" },
+      "marker": { "type": "String" }
+    }
+  },
+  "mode08ReasonNegativeWithEcu": "Negative response on block {block} from {ecu} (NRC {nrc})",
+  "@mode08ReasonNegativeWithEcu": {
+    "placeholders": {
+      "block": { "type": "String" },
+      "ecu": { "type": "String" },
+      "nrc": { "type": "String" }
+    }
+  },
+  "mode08ReasonNegative": "Negative response on block {block} (NRC {nrc})",
+  "@mode08ReasonNegative": {
+    "placeholders": {
+      "block": { "type": "String" },
+      "nrc": { "type": "String" }
+    }
+  },
+  "mode08ReasonMalformedWithEcu": "Malformed response on block {block} from {ecu}: {details}",
+  "@mode08ReasonMalformedWithEcu": {
+    "placeholders": {
+      "block": { "type": "String" },
+      "ecu": { "type": "String" },
+      "details": { "type": "String" }
+    }
+  },
+  "mode08ReasonMalformed": "Malformed response on block {block}: {details}",
+  "@mode08ReasonMalformed": {
+    "placeholders": {
+      "block": { "type": "String" },
+      "details": { "type": "String" }
+    }
+  },
+  "mode08ReasonTimeout": "Query timed out for block {block}",
+  "@mode08ReasonTimeout": {
+    "placeholders": {
+      "block": { "type": "String" }
+    }
+  },
+  "mode08ReasonBudgetExceeded": "Discovery budget reached before all blocks queried",
+  "mode08ReasonSessionDisconnected": "Session disconnected or superseded during discovery",
+  "mode08ReasonUnqueriedAnnounced": "Unqueried blocks announced by ECUs: {blocks}",
+  "@mode08ReasonUnqueriedAnnounced": {
+    "placeholders": {
+      "blocks": { "type": "String" }
+    }
+  },
+  "mode08ReasonRequiresCanBus": "Mode 08 capability discovery requires a resolved OBD-II CAN bus",
+  "mode08ReasonUnexpectedExecution": "Unexpected execution response for supported TID query"
 }
 

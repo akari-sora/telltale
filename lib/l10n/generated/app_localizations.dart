@@ -7221,7 +7221,7 @@ abstract class AppLocalizations {
   /// No description provided for @serviceRecipesDiscoveryPartialWarning.
   ///
   /// In en, this message translates to:
-  /// **'Discovery partially completed ({reason}). Uncompleted blocks: {blocks}. Note: Not found does not mean unsupported (未查到不代表不支援).'**
+  /// **'Discovery partially completed ({reason}). Uncompleted blocks: {blocks}. Note: Not found does not mean unsupported.'**
   String serviceRecipesDiscoveryPartialWarning(String reason, String blocks);
 
   /// No description provided for @serviceRecipesCatalogSection.
@@ -7313,6 +7313,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Inspect workshop service recipes and discover supported Mode 08 tests'**
   String get settingsServiceRecipesDesc;
+
+  /// No description provided for @mode08ReasonUnheaderedLimitation.
+  ///
+  /// In en, this message translates to:
+  /// **'Source attribution and coverage unconfirmed: unheadered responses cannot establish cross-block ECU identity'**
+  String get mode08ReasonUnheaderedLimitation;
+
+  /// No description provided for @mode08ReasonNoResponseWithEcu.
+  ///
+  /// In en, this message translates to:
+  /// **'No response on block {block} from {ecu}: {marker}'**
+  String mode08ReasonNoResponseWithEcu(String block, String ecu, String marker);
+
+  /// No description provided for @mode08ReasonNoResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'No response on block {block}: {marker}'**
+  String mode08ReasonNoResponse(String block, String marker);
+
+  /// No description provided for @mode08ReasonNegativeWithEcu.
+  ///
+  /// In en, this message translates to:
+  /// **'Negative response on block {block} from {ecu} (NRC {nrc})'**
+  String mode08ReasonNegativeWithEcu(String block, String ecu, String nrc);
+
+  /// No description provided for @mode08ReasonNegative.
+  ///
+  /// In en, this message translates to:
+  /// **'Negative response on block {block} (NRC {nrc})'**
+  String mode08ReasonNegative(String block, String nrc);
+
+  /// No description provided for @mode08ReasonMalformedWithEcu.
+  ///
+  /// In en, this message translates to:
+  /// **'Malformed response on block {block} from {ecu}: {details}'**
+  String mode08ReasonMalformedWithEcu(String block, String ecu, String details);
+
+  /// No description provided for @mode08ReasonMalformed.
+  ///
+  /// In en, this message translates to:
+  /// **'Malformed response on block {block}: {details}'**
+  String mode08ReasonMalformed(String block, String details);
+
+  /// No description provided for @mode08ReasonTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Query timed out for block {block}'**
+  String mode08ReasonTimeout(String block);
+
+  /// No description provided for @mode08ReasonBudgetExceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Discovery budget reached before all blocks queried'**
+  String get mode08ReasonBudgetExceeded;
+
+  /// No description provided for @mode08ReasonSessionDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Session disconnected or superseded during discovery'**
+  String get mode08ReasonSessionDisconnected;
+
+  /// No description provided for @mode08ReasonUnqueriedAnnounced.
+  ///
+  /// In en, this message translates to:
+  /// **'Unqueried blocks announced by ECUs: {blocks}'**
+  String mode08ReasonUnqueriedAnnounced(String blocks);
+
+  /// No description provided for @mode08ReasonRequiresCanBus.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode 08 capability discovery requires a resolved OBD-II CAN bus'**
+  String get mode08ReasonRequiresCanBus;
+
+  /// No description provided for @mode08ReasonUnexpectedExecution.
+  ///
+  /// In en, this message translates to:
+  /// **'Unexpected execution response for supported TID query'**
+  String get mode08ReasonUnexpectedExecution;
 }
 
 class _AppLocalizationsDelegate

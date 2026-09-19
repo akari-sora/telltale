@@ -4600,7 +4600,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String serviceRecipesDiscoveryPartialWarning(String reason, String blocks) {
-    return 'Discovery partially completed ($reason). Uncompleted blocks: $blocks. Note: Not found does not mean unsupported (未查到不代表不支援).';
+    return 'Discovery partially completed ($reason). Uncompleted blocks: $blocks. Note: Not found does not mean unsupported.';
   }
 
   @override
@@ -4658,4 +4658,72 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsServiceRecipesDesc =>
       'Inspect workshop service recipes and discover supported Mode 08 tests';
+
+  @override
+  String get mode08ReasonUnheaderedLimitation =>
+      'Source attribution and coverage unconfirmed: unheadered responses cannot establish cross-block ECU identity';
+
+  @override
+  String mode08ReasonNoResponseWithEcu(
+    String block,
+    String ecu,
+    String marker,
+  ) {
+    return 'No response on block $block from $ecu: $marker';
+  }
+
+  @override
+  String mode08ReasonNoResponse(String block, String marker) {
+    return 'No response on block $block: $marker';
+  }
+
+  @override
+  String mode08ReasonNegativeWithEcu(String block, String ecu, String nrc) {
+    return 'Negative response on block $block from $ecu (NRC $nrc)';
+  }
+
+  @override
+  String mode08ReasonNegative(String block, String nrc) {
+    return 'Negative response on block $block (NRC $nrc)';
+  }
+
+  @override
+  String mode08ReasonMalformedWithEcu(
+    String block,
+    String ecu,
+    String details,
+  ) {
+    return 'Malformed response on block $block from $ecu: $details';
+  }
+
+  @override
+  String mode08ReasonMalformed(String block, String details) {
+    return 'Malformed response on block $block: $details';
+  }
+
+  @override
+  String mode08ReasonTimeout(String block) {
+    return 'Query timed out for block $block';
+  }
+
+  @override
+  String get mode08ReasonBudgetExceeded =>
+      'Discovery budget reached before all blocks queried';
+
+  @override
+  String get mode08ReasonSessionDisconnected =>
+      'Session disconnected or superseded during discovery';
+
+  @override
+  String mode08ReasonUnqueriedAnnounced(String blocks) {
+    return 'Unqueried blocks announced by ECUs: $blocks';
+  }
+
+  @override
+  String get mode08ReasonRequiresCanBus =>
+      'Mode 08 capability discovery requires a resolved OBD-II CAN bus';
+
+  @override
+  String get mode08ReasonUnexpectedExecution =>
+      'Unexpected execution response for supported TID query';
 }

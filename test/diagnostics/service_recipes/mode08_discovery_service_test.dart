@@ -12,10 +12,10 @@ import 'package:torque_obd/obd/transport/obd_transport.dart';
 import '../../support/fake_elm327.dart';
 
 Map<String, List<int>> _physicsReplies() => {
-      '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x13],
-      '0105': [0x41, 0x05, 0x7B],
-      '010C': [0x41, 0x0C, 0x1A, 0xF8],
-    };
+  '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x13],
+  '0105': [0x41, 0x05, 0x7B],
+  '010C': [0x41, 0x0C, 0x1A, 0xF8],
+};
 
 Future<Elm327Client> _connect(
   ObdTransport transport, {
@@ -29,7 +29,73 @@ Future<Elm327Client> _connect(
 
 void main() {
   group('Mode08DiscoveryService', () {
-    test('discovers supported TIDs on single block (0800 -> 48 00 80 00 00 00)', () async {
+    test(
+      'discovers supported TIDs on single block (0800 -> 48 00 80 00 00 00)',
+      () async {
+        final fake = FakeElm327(
+          protocol: BusProtocol.can11,
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: _physicsReplies(),
+              literalResponses: {
+                '0800': ['48 00 80 00 00 00'],
+              },
+            ),
+          ],
+        );
+        final client = await _connect(fake);
+
+        final result = await Mode08DiscoveryService.discoverSupportedTids(
+          client: client,
+        );
+
+        expect(result.isSupported, isTrue);
+        expect(result.supportStatus, equals(EcuSupportStatus.supported));
+        expect(result.supportedTids, equals({0x01}));
+        expect(result.containsTid(0x01), isTrue);
+        expect(result.containsTid(0x02), isFalse);
+        expect(result.queriedBlocks, equals([0x00]));
+        expect(result.failureReason, isNull);
+      },
+    );
+
+    test(
+      'chains multiple blocks when hasNextBlock is true (0800 -> 0820)',
+      () async {
+        final fake = FakeElm327(
+          protocol: BusProtocol.can11,
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: _physicsReplies(),
+              literalResponses: {
+                // Bit 31 (0x01) and Bit 0 (0x20, hasNextBlock)
+                '0800': ['48 00 80 00 00 01'],
+                // Bit 30 (0x22)
+                '0820': ['48 20 40 00 00 00'],
+              },
+            ),
+          ],
+        );
+        final client = await _connect(fake);
+
+        final result = await Mode08DiscoveryService.discoverSupportedTids(
+          client: client,
+        );
+
+        expect(result.isSupported, isTrue);
+        expect(result.supportStatus, equals(EcuSupportStatus.supported));
+        expect(result.supportedTids, equals({0x01, 0x20, 0x22}));
+        expect(result.queriedBlocks, equals([0x00, 0x20]));
+      },
+    );
+
+    test('chains multiple blocks with legal CAN headers completing with full attribution', () async {
       final fake = FakeElm327(
         protocol: BusProtocol.can11,
         ecus: [
@@ -39,40 +105,8 @@ void main() {
             responseId: '7E8',
             responses: _physicsReplies(),
             literalResponses: {
-              '0800': ['48 00 80 00 00 00'],
-            },
-          ),
-        ],
-      );
-      final client = await _connect(fake);
-
-      final result = await Mode08DiscoveryService.discoverSupportedTids(
-        client: client,
-      );
-
-      expect(result.isSupported, isTrue);
-      expect(result.supportStatus, equals(EcuSupportStatus.supported));
-      expect(result.supportedTids, equals({0x01}));
-      expect(result.containsTid(0x01), isTrue);
-      expect(result.containsTid(0x02), isFalse);
-      expect(result.queriedBlocks, equals([0x00]));
-      expect(result.failureReason, isNull);
-    });
-
-    test('chains multiple blocks when hasNextBlock is true (0800 -> 0820)', () async {
-      final fake = FakeElm327(
-        protocol: BusProtocol.can11,
-        ecus: [
-          FakeEcu(
-            name: 'ECM',
-            requestId: '7E0',
-            responseId: '7E8',
-            responses: _physicsReplies(),
-            literalResponses: {
-              // Bit 31 (0x01) and Bit 0 (0x20, hasNextBlock)
-              '0800': ['48 00 80 00 00 01'],
-              // Bit 30 (0x22)
-              '0820': ['48 20 40 00 00 00'],
+              '0800': ['7E8 06 48 00 80 00 00 01'],
+              '0820': ['7E8 06 48 20 40 00 00 00'],
             },
           ),
         ],
@@ -87,7 +121,60 @@ void main() {
       expect(result.supportStatus, equals(EcuSupportStatus.supported));
       expect(result.supportedTids, equals({0x01, 0x20, 0x22}));
       expect(result.queriedBlocks, equals([0x00, 0x20]));
+      expect(
+        result.isComplete,
+        isTrue,
+        reason: 'Headered discovery has no fake partial',
+      );
+      expect(result.hasAnonymous, isFalse);
+      expect(result.ecuResults.containsKey('7E8'), isTrue);
+      expect(result.incompletionReason, equals(Mode08IncompletionReason.none));
+      expect(fake.headersOn, isFalse, reason: 'ATH0 restored in finally');
     });
+
+    test(
+      'degrades gracefully to anonymous read when adapter refuses ATH1',
+      () async {
+        final fake = FakeElm327(
+          protocol: BusProtocol.can11,
+          faults: const AdapterFaults(refuseHeaders: true),
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: _physicsReplies(),
+              literalResponses: {
+                '0800': ['48 00 80 00 00 01'],
+                '0820': ['48 20 40 00 00 00'],
+              },
+            ),
+          ],
+        );
+        final client = await _connect(fake);
+
+        final result = await Mode08DiscoveryService.discoverSupportedTids(
+          client: client,
+        );
+
+        expect(result.isSupported, isTrue);
+        expect(result.supportStatus, equals(EcuSupportStatus.supported));
+        expect(result.supportedTids, equals({0x01, 0x20, 0x22}));
+        expect(result.queriedBlocks, equals([0x00, 0x20]));
+        expect(
+          result.isComplete,
+          isFalse,
+          reason:
+              'Anonymous cross-block cannot guarantee single ECU attribution',
+        );
+        expect(result.hasAnonymous, isTrue);
+        expect(
+          result.incompletionReason,
+          equals(Mode08IncompletionReason.unheaderedCrossBlockLimitation),
+        );
+        expect(result.failureReason, contains('來源歸因'));
+      },
+    );
 
     test('classifies NRC 0x12 as affirmatively unsupported', () async {
       final fake = FakeElm327(
@@ -117,33 +204,36 @@ void main() {
       expect(result.failureReason, contains('NRC 0x12'));
     });
 
-    test('classifies NRC 0x22 as unknown support (conditionsNotCorrect)', () async {
-      final fake = FakeElm327(
-        protocol: BusProtocol.can11,
-        ecus: [
-          FakeEcu(
-            name: 'ECM',
-            requestId: '7E0',
-            responseId: '7E8',
-            responses: _physicsReplies(),
-            literalResponses: {
-              '0800': ['7F 08 22'],
-            },
-          ),
-        ],
-      );
-      final client = await _connect(fake);
+    test(
+      'classifies NRC 0x22 as unknown support (conditionsNotCorrect)',
+      () async {
+        final fake = FakeElm327(
+          protocol: BusProtocol.can11,
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: _physicsReplies(),
+              literalResponses: {
+                '0800': ['7F 08 22'],
+              },
+            ),
+          ],
+        );
+        final client = await _connect(fake);
 
-      final result = await Mode08DiscoveryService.discoverSupportedTids(
-        client: client,
-      );
+        final result = await Mode08DiscoveryService.discoverSupportedTids(
+          client: client,
+        );
 
-      expect(result.isSupported, isFalse);
-      // Environmental refusal means routine may exist: must remain unknown
-      expect(result.supportStatus, equals(EcuSupportStatus.unknown));
-      expect(result.supportedTids, isEmpty);
-      expect(result.nrc, equals(0x22));
-    });
+        expect(result.isSupported, isFalse);
+        // Environmental refusal means routine may exist: must remain unknown
+        expect(result.supportStatus, equals(EcuSupportStatus.unknown));
+        expect(result.supportedTids, isEmpty);
+        expect(result.nrc, equals(0x22));
+      },
+    );
 
     test('refuses immediately without wire commands on non-CAN bus', () async {
       final fake = FakeElm327(
@@ -165,11 +255,15 @@ void main() {
 
       expect(result.isSupported, isFalse);
       expect(result.supportStatus, equals(EcuSupportStatus.unknown));
-      expect(result.failureReason, contains('requires a resolved OBD-II CAN bus'));
+      expect(
+        result.failureReason,
+        contains('requires a resolved OBD-II CAN bus'),
+      );
       // No 08 queries sent to transport
       expect(
         client.transcript.entries.any(
-          (e) => e.direction == TranscriptDirection.out &&
+          (e) =>
+              e.direction == TranscriptDirection.out &&
               String.fromCharCodes(e.bytes).startsWith('08'),
         ),
         isFalse,
@@ -192,7 +286,10 @@ void main() {
           ),
         ],
       );
-      final client = await _connect(fake, commandTimeout: const Duration(milliseconds: 50));
+      final client = await _connect(
+        fake,
+        commandTimeout: const Duration(milliseconds: 50),
+      );
 
       final result = await Mode08DiscoveryService.discoverSupportedTids(
         client: client,
@@ -304,7 +401,10 @@ void main() {
           ),
         ],
       );
-      final client = await _connect(fake, commandTimeout: const Duration(milliseconds: 50));
+      final client = await _connect(
+        fake,
+        commandTimeout: const Duration(milliseconds: 50),
+      );
 
       final result = await Mode08DiscoveryService.discoverSupportedTids(
         client: client,
