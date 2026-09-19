@@ -144,7 +144,7 @@ class BundledPlanTest(unittest.TestCase):
         self.assertEqual(len(data["tasks"]), 29)
         self.assertEqual(data["policy"], "USABILITY-R2")
         ws08 = next(task for task in data["tasks"] if task["id"] == "WS-08")
-        self.assertEqual(ws08["depends_on"], [9])
+        self.assertEqual(ws08["depends_on"], [5])
         ws20 = next(task for task in data["tasks"] if task["id"] == "WS-20")
         self.assertTrue(ws20["hardware_or_license_blockers"])
         self.assertEqual(ws20["run_commands"], [])
@@ -247,6 +247,29 @@ class GraphAndSchemaTest(unittest.TestCase):
     def test_missing_dependency_fails(self) -> None:
         errors = self._errors([_minimal_task("WS-03", 11, depends_on=[9])])
         self.assertTrue(any("missing dependency" in error for error in errors))
+
+    def test_unknown_repository_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "tool" / "workshop" / "plan.json"
+            plan_path.parent.mkdir(parents=True)
+            data = _plan([_minimal_task("WS-01", 9)])
+            data["repository"] = "someone/telltale"
+            plan_path.write_text(json.dumps(data), encoding="utf-8")
+            errors, _ = validate_plan.validate_plan(data, plan_path=plan_path)
+            self.assertTrue(any("repository must be" in error for error in errors))
+
+    def test_gitlab_repository_and_urls_validate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "tool" / "workshop" / "plan.json"
+            plan_path.parent.mkdir(parents=True)
+            task = _minimal_task("WS-01", 5)
+            task["issue_url"] = "https://gitlab.com/aa22396584/telltale/-/issues/5"
+            data = _plan([task])
+            data["repository"] = "aa22396584/telltale"
+            plan_path.write_text(json.dumps(data), encoding="utf-8")
+            errors, ready = validate_plan.validate_plan(data, plan_path=plan_path)
+            self.assertEqual(errors, [])
+            self.assertEqual(ready, ["WS-01"])
 
     def test_self_cycle_fails(self) -> None:
         errors = self._errors([_minimal_task("WS-01", 9, depends_on=[9])])
