@@ -1,7 +1,6 @@
-# On-demand gate for Grok box project runner (tags: grok-box, ondemand, telltale).
-# Image is local on the Grok box (NDK 28.2 baked); pull_policy=if-not-present.
-stages:
-  - gate
+# Main retains the on-demand Grok runner. Same-project MRs have a portable gate
+# so merging is not the first occasion the new source is tested.
+stages: [gate]
 
 default:
   interruptible: true
@@ -12,85 +11,47 @@ variables:
   ANDROID_HOME: "/opt/android-sdk-linux"
   ANDROID_SDK_ROOT: "/opt/android-sdk-linux"
 
-full-gate:
+.gate-common:
   stage: gate
-  tags:
-    - grok-box
-    - ondemand
-    - telltale
-  image: localhost/telltale-ci-flutter:3.47.0
-  timeout: 3h
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
+  timeout: 1h
   cache:
     key: pub-3.47.0
-    paths:
-      - .pub-cache/
+    paths: [.pub-cache/]
   before_script:
-    # release_notes_contract_test uses chmod 000; root can still read those files.
-    # project516/flutter image already has ubuntu:1000 — do not useradd -u 1000.
-    - |
-      set -euo pipefail
-      if [ "$(id -u)" = "0" ]; then
-        if id -u ubuntu >/dev/null 2>&1; then
-          NONROOT=ubuntu
-        elif id -u flutter >/dev/null 2>&1; then
-          NONROOT=flutter
-        else
-          useradd -m -s /bin/bash flutter
-          NONROOT=flutter
-        fi
-        if [ -x /sdks/flutter/bin/flutter ]; then
-          FLUTTER_HOME=/sdks/flutter
-        elif [ -x /opt/flutter/bin/flutter ]; then
-          FLUTTER_HOME=/opt/flutter
-        elif [ -x /flutter/bin/flutter ]; then
-          FLUTTER_HOME=/flutter
-        else
-          FLUTTER_BIN=$(command -v flutter)
-          FLUTTER_HOME=$(dirname "$(dirname "$FLUTTER_BIN")")
-        fi
-        ANDROID_SDK="${ANDROID_HOME:-/opt/android-sdk-linux}"
-        echo "NONROOT=$NONROOT FLUTTER_HOME=$FLUTTER_HOME ANDROID_SDK=$ANDROID_SDK"
-        # Ensure Flutter 3.47 NDK is present (baked into localhost image; install if missing).
-        if [ ! -d "$ANDROID_SDK/ndk/28.2.13676358" ]; then
-          export PATH="$ANDROID_SDK/cmdline-tools/latest/bin:$PATH"
-          mkdir -p "$ANDROID_SDK/licenses"
-          yes | sdkmanager --licenses >/tmp/sdk-lic.log 2>&1 || true
-          sdkmanager --install "ndk;28.2.13676358"
-        fi
-        chown -R "$NONROOT:$NONROOT" "$CI_PROJECT_DIR" "$ANDROID_SDK"
-        chown -R "$NONROOT:$NONROOT" "$FLUTTER_HOME" 2>/dev/null || chmod -R a+rX "$FLUTTER_HOME"
-        printf '%s\n' '#!/bin/bash' 'set -euo pipefail' \
-          "export PATH=\"$FLUTTER_HOME/bin:\$PATH\"" \
-          "export PUB_CACHE=\"$CI_PROJECT_DIR/.pub-cache\"" \
-          "export GRADLE_OPTS=\"${GRADLE_OPTS}\"" \
-          "export ANDROID_HOME=\"$ANDROID_SDK\"" \
-          "export ANDROID_SDK_ROOT=\"$ANDROID_SDK\"" \
-          "cd \"$CI_PROJECT_DIR\"" \
-          'exec "$@"' > /usr/local/bin/as-nonroot
-        chmod 755 /usr/local/bin/as-nonroot
-        printf '%s\n' "$NONROOT" > /tmp/ci-nonroot-user
-      fi
+    - bash tool/ci/prepare_gate.sh
   script:
     - |
-      set -euo pipefail
-      run() {
-        if [ "$(id -u)" = "0" ]; then
-          NONROOT=$(cat /tmp/ci-nonroot-user)
-          runuser -u "$NONROOT" -- /usr/local/bin/as-nonroot "$@"
-        else
-          "$@"
-        fi
-      }
-      run flutter --version
-      run flutter config --no-analytics
-      run flutter pub get
-      run flutter analyze
-      run flutter test
-      run flutter build apk --debug --flavor field
+      set -Eeuo pipefail
+      if [ "$(id -u)" = 0 ]; then
+        runuser -u "$(cat /tmp/ci-nonroot-user)" -- /usr/local/bin/as-nonroot bash tool/ci/full_gate.sh
+      else
+        bash tool/ci/full_gate.sh
+      fi
   artifacts:
-    when: on_success
-    expire_in: 7 days
+    when: always
+    expire_in: 14 days
     paths:
+      - ci-artifacts/
       - build/app/outputs/flutter-apk/*.apk
+
+full-gate:
+  extends: .gate-common
+  tags: [grok-box, ondemand, telltale]
+  image: localhost/telltale-ci-flutter:3.47.0
+  rules:
+    - if: '$CI_GATE_RUNNER == "hosted"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# Public, digest-pinned image; never try pulling the Grok host's localhost image.
+# Fork MRs cannot use the trusted project's runner/credentials via these rules.
+full-gate-mr:
+  extends: .gate-common
+  tags: [saas-linux-small-amd64]
+  image: docker.io/plugfox/flutter:3.47.0-android@sha256:9cc3fb4d2c742c21d8bb6ab16eef657810b27ac78429920c6cd644dc8e158e22
+  variables:
+    ANDROID_HOME: /opt/android
+    ANDROID_SDK_ROOT: /opt/android
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_PROJECT_ID == "86385809" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID'
+    - if: '$CI_GATE_RUNNER == "hosted" && $CI_PROJECT_ID == "86385809" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_BRANCH'

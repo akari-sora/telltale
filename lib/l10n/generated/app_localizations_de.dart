@@ -4685,7 +4685,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String serviceRecipesDiscoveryPartialWarning(String reason, String blocks) {
-    return 'Erkennung unvollständig ($reason). Nicht abgeschlossene Blöcke: $blocks. Hinweis: Nicht gefunden bedeutet nicht nicht unterstützt (未查到不代表不支援).';
+    return 'Erkennung unvollständig ($reason). Nicht abgeschlossene Blöcke: $blocks. Hinweis: Nicht gefunden bedeutet nicht nicht unterstützt.';
   }
 
   @override
@@ -4743,4 +4743,72 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get settingsServiceRecipesDesc =>
       'Werkstatt-Service-Rezepte prüfen und unterstützte Mode 08 Tests sicher erkennen';
+
+  @override
+  String get mode08ReasonUnheaderedLimitation =>
+      'Quellzuordnung und Abdeckung unbestätigt: Antworten ohne Header können keine blockübergreifende ECU-Identität herstellen';
+
+  @override
+  String mode08ReasonNoResponseWithEcu(
+    String block,
+    String ecu,
+    String marker,
+  ) {
+    return 'Keine Antwort für Block $block von $ecu: $marker';
+  }
+
+  @override
+  String mode08ReasonNoResponse(String block, String marker) {
+    return 'Keine Antwort für Block $block: $marker';
+  }
+
+  @override
+  String mode08ReasonNegativeWithEcu(String block, String ecu, String nrc) {
+    return 'Negative Antwort für Block $block von $ecu (NRC $nrc)';
+  }
+
+  @override
+  String mode08ReasonNegative(String block, String nrc) {
+    return 'Negative Antwort für Block $block (NRC $nrc)';
+  }
+
+  @override
+  String mode08ReasonMalformedWithEcu(
+    String block,
+    String ecu,
+    String details,
+  ) {
+    return 'Fehlerhafte Antwort für Block $block von $ecu: $details';
+  }
+
+  @override
+  String mode08ReasonMalformed(String block, String details) {
+    return 'Fehlerhafte Antwort für Block $block: $details';
+  }
+
+  @override
+  String mode08ReasonTimeout(String block) {
+    return 'Zeitüberschreitung bei Abfrage von Block $block';
+  }
+
+  @override
+  String get mode08ReasonBudgetExceeded =>
+      'Erkennungszeitbudget erschöpft, bevor alle Blöcke abgefragt wurden';
+
+  @override
+  String get mode08ReasonSessionDisconnected =>
+      'Sitzung während der Erkennung getrennt oder ersetzt';
+
+  @override
+  String mode08ReasonUnqueriedAnnounced(String blocks) {
+    return 'Von Steuergeräten angekündigte, nicht abgefragte Blöcke: $blocks';
+  }
+
+  @override
+  String get mode08ReasonRequiresCanBus =>
+      'Mode 08-Funktionserkennung erfordert einen aufgelösten OBD-II CAN-Bus';
+
+  @override
+  String get mode08ReasonUnexpectedExecution =>
+      'Unerwartete Ausführungsantwort auf Abfrage unterstützter TIDs';
 }

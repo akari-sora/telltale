@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../diagnostics/service_recipes/candidate_matrix.dart';
+import '../../../diagnostics/service_recipes/mode08_codec.dart';
 import '../../../diagnostics/service_recipes/mode08_discovery_service.dart';
 import '../../../diagnostics/service_recipes/qualification_tier.dart';
 import '../../../l10n/generated/app_localizations.dart';
@@ -226,22 +227,10 @@ class _Mode08DiscoveryPanel extends StatelessWidget {
             _buildCompletedResult(context, state.result!),
           ] else if (state.isFailed) ...[
             const SizedBox(height: Spacing.md),
-            _buildStatusContainer(
-              context: context,
-              color: palette.danger,
-              icon: Icons.error_outline,
-              message: l10n.serviceRecipesDiscoveryUnknown(
-                state.message ?? 'Unknown error',
-              ),
-            ),
+            _buildFailedResult(context, state),
           ] else if (state.isRefused) ...[
             const SizedBox(height: Spacing.md),
-            _buildStatusContainer(
-              context: context,
-              color: palette.warning,
-              icon: Icons.block_outlined,
-              message: state.message ?? 'Discovery refused',
-            ),
+            _buildRefusedResult(context, state),
           ],
         ],
       ),
@@ -287,7 +276,7 @@ class _Mode08DiscoveryPanel extends StatelessWidget {
                   Expanded(
                     child: Text(
                       l10n.serviceRecipesDiscoveryPartialWarning(
-                        result.failureReason ?? 'Partial',
+                        resolveMode08IncompletionText(l10n, result),
                         uncompletedFormatted,
                       ),
                       style: context.texts.bodySmall?.copyWith(
@@ -344,14 +333,93 @@ class _Mode08DiscoveryPanel extends StatelessWidget {
           ),
         ],
       );
-    } else {
+    } else if (result.supportStatus == EcuSupportStatus.unsupported) {
+      final detail = result.incompletionReason != Mode08IncompletionReason.none
+          ? ' (${resolveMode08IncompletionText(l10n, result)})'
+          : '';
       return _buildStatusContainer(
         context: context,
         color: palette.warning,
         icon: Icons.info_outline,
-        message: l10n.serviceRecipesDiscoveryUnsupported,
+        message: '${l10n.serviceRecipesDiscoveryUnsupported}$detail',
+      );
+    } else {
+      final message = l10n.serviceRecipesDiscoveryUnknown(
+        result.incompletionReason != Mode08IncompletionReason.none
+            ? resolveMode08IncompletionText(l10n, result)
+            : (result.failureReason ?? 'Inconclusive'),
+      );
+      return _buildStatusContainer(
+        context: context,
+        color: palette.warning,
+        icon: Icons.info_outline,
+        message: message,
       );
     }
+  }
+
+  Widget _buildFailedResult(
+    BuildContext context,
+    Mode08DiscoveryState state,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    final palette = context.palette;
+    final result = state.result;
+
+    if (result != null) {
+      if (result.supportStatus == EcuSupportStatus.unsupported) {
+        final detail = result.incompletionReason != Mode08IncompletionReason.none
+            ? ' (${resolveMode08IncompletionText(l10n, result)})'
+            : '';
+        return _buildStatusContainer(
+          context: context,
+          color: palette.warning,
+          icon: Icons.info_outline,
+          message: '${l10n.serviceRecipesDiscoveryUnsupported}$detail',
+        );
+      }
+      return _buildStatusContainer(
+        context: context,
+        color: palette.danger,
+        icon: Icons.error_outline,
+        message: l10n.serviceRecipesDiscoveryUnknown(
+          resolveMode08IncompletionText(l10n, result),
+        ),
+      );
+    }
+
+    return _buildStatusContainer(
+      context: context,
+      color: palette.danger,
+      icon: Icons.error_outline,
+      message: l10n.serviceRecipesDiscoveryUnknown(
+        state.message ?? 'Unknown error',
+      ),
+    );
+  }
+
+  Widget _buildRefusedResult(
+    BuildContext context,
+    Mode08DiscoveryState state,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    final palette = context.palette;
+    final result = state.result;
+
+    final String message;
+    if (result != null &&
+        result.incompletionReason != Mode08IncompletionReason.none) {
+      message = resolveMode08IncompletionText(l10n, result);
+    } else {
+      message = state.message ?? 'Discovery refused';
+    }
+
+    return _buildStatusContainer(
+      context: context,
+      color: palette.warning,
+      icon: Icons.block_outlined,
+      message: message,
+    );
   }
 
   Widget _buildStatusContainer({
@@ -527,3 +595,95 @@ class _Badge extends StatelessWidget {
     );
   }
 }
+
+/// Dynamically resolves structured [Mode08IncompletionReason] and parameters into localized text.
+String resolveMode08IncompletionText(
+  AppLocalizations l10n,
+  Mode08DiscoveryResult result,
+) {
+  final blockStr = result.failedBlock != null
+      ? '0x${result.failedBlock!.toRadixString(16).padLeft(2, '0').toUpperCase()}'
+      : (result.unqueriedBlocks.isNotEmpty
+          ? '0x${result.unqueriedBlocks.first.toRadixString(16).padLeft(2, '0').toUpperCase()}'
+          : 'N/A');
+  final nrcStr = result.nrc != null
+      ? '0x${result.nrc!.toRadixString(16).padLeft(2, '0').toUpperCase()}'
+      : 'N/A';
+  final ecuStr = result.ecu;
+  final markerStr = result.rawMarker ?? 'NO DATA';
+
+  switch (result.incompletionReason) {
+    case Mode08IncompletionReason.unheaderedCrossBlockLimitation:
+      return l10n.mode08ReasonUnheaderedLimitation;
+    case Mode08IncompletionReason.noResponse:
+      return ecuStr != null
+          ? l10n.mode08ReasonNoResponseWithEcu(blockStr, ecuStr, markerStr)
+          : l10n.mode08ReasonNoResponse(blockStr, markerStr);
+    case Mode08IncompletionReason.negativeResponse:
+      return ecuStr != null
+          ? l10n.mode08ReasonNegativeWithEcu(blockStr, ecuStr, nrcStr)
+          : l10n.mode08ReasonNegative(blockStr, nrcStr);
+    case Mode08IncompletionReason.malformedResponse:
+      final reasonDesc = result.malformedReason != null
+          ? _resolveMalformedReasonDescription(l10n, result.malformedReason!)
+          : null;
+      final details = reasonDesc != null
+          ? '$reasonDesc ($markerStr)'
+          : markerStr;
+      return ecuStr != null
+          ? l10n.mode08ReasonMalformedWithEcu(blockStr, ecuStr, details)
+          : l10n.mode08ReasonMalformed(blockStr, details);
+    case Mode08IncompletionReason.timeout:
+      return l10n.mode08ReasonTimeout(blockStr);
+    case Mode08IncompletionReason.budgetExceeded:
+      return l10n.mode08ReasonBudgetExceeded;
+    case Mode08IncompletionReason.sessionDisconnected:
+      return l10n.mode08ReasonSessionDisconnected;
+    case Mode08IncompletionReason.unqueriedAnnouncedBlocks:
+      final blocksStr = result.unqueriedBlocks
+          .map((b) => '0x${b.toRadixString(16).padLeft(2, '0').toUpperCase()}')
+          .join(', ');
+      return l10n.mode08ReasonUnqueriedAnnounced(blocksStr.isEmpty ? blockStr : blocksStr);
+    case Mode08IncompletionReason.requiresCanBus:
+      return l10n.mode08ReasonRequiresCanBus;
+    case Mode08IncompletionReason.unexpectedExecutionResponse:
+      return l10n.mode08ReasonUnexpectedExecution;
+    case Mode08IncompletionReason.none:
+      return result.failureReason ?? 'Incomplete';
+  }
+}
+
+String _resolveMalformedReasonDescription(
+  AppLocalizations l10n,
+  Mode08MalformedReason reason,
+) {
+  final isZh = l10n.localeName.startsWith('zh');
+  final isDe = l10n.localeName.startsWith('de');
+  return switch (reason) {
+    Mode08MalformedReason.truncated => isZh
+        ? '回應長度不足'
+        : (isDe ? 'Antwort unvollständig' : 'Truncated response'),
+    Mode08MalformedReason.invalidHex => isZh
+        ? '十六進位格式無效'
+        : (isDe ? 'Ungültiges Hex-Format' : 'Invalid hex'),
+    Mode08MalformedReason.invalidSid => isZh
+        ? '服務識別碼不相符'
+        : (isDe ? 'Ungültige Service-ID' : 'Invalid service ID'),
+    Mode08MalformedReason.wrongBaseTidEcho => isZh
+        ? '基準 TID 回應不符'
+        : (isDe ? 'Falsches Basis-TID-Echo' : 'Wrong base TID echo'),
+    Mode08MalformedReason.wrongTestIdEcho => isZh
+        ? '測試 ID 回應不符'
+        : (isDe ? 'Falsches Test-ID-Echo' : 'Wrong test ID echo'),
+    Mode08MalformedReason.invalidBitmaskLength => isZh
+        ? '位元遮罩長度無效'
+        : (isDe ? 'Ungültige Bitmasken-Länge' : 'Invalid bitmask length'),
+    Mode08MalformedReason.wrongResponseLength => isZh
+        ? '回應資料長度不符'
+        : (isDe ? 'Falsche Antwortlänge' : 'Wrong response length'),
+    Mode08MalformedReason.invalidNegativeResponse => isZh
+        ? '負回應格式無效'
+        : (isDe ? 'Ungültige negative Antwort' : 'Invalid negative response'),
+  };
+}
+

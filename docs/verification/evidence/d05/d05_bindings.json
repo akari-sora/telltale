@@ -1,0 +1,50 @@
+[
+  {
+    "stage": "baseline_live",
+    "pause_epoch": 0,
+    "description": "Baseline live vehicle telemetry polling on Dashboard",
+    "screenshot": "d05_01_baseline_live.png",
+    "sha256": "79c8e51feea3666cb8578240d005eb74c77fb2b9d960aea8af35dbdb2b91e972",
+    "timestamp": "2026-09-18T21:02:46Z"
+  },
+  {
+    "stage": "resume1_probe",
+    "pause_epoch": 1,
+    "description": "Resume 1 link revalidation probe period (ATRV dispatch, gauges guarded)",
+    "screenshot": "d05_02_resume1_probe.png",
+    "sha256": "0e270baea38dd25c46ff760d274e634635e4140593a3bdfd73b971e4b8595969",
+    "timestamp": "2026-09-18T21:02:50Z"
+  },
+  {
+    "stage": "resume1_active",
+    "pause_epoch": 1,
+    "description": "Resume 1 polling resumed after successful ATRV probe",
+    "screenshot": "d05_03_resume1_active.png",
+    "sha256": "3f9736eabc1db9672576a267c711b53c99377c85c215fa42a99f8442f9c4935c",
+    "timestamp": "2026-09-18T21:02:52Z"
+  },
+  {
+    "stage": "resume2_unlock",
+    "pause_epoch": 2,
+    "description": "Resume 2 screen wakeup and unlock probe phase",
+    "screenshot": "d05_04_resume2_unlock.png",
+    "sha256": "8be7d30ce940967750f82855c5a6e3d12d54894514ea5aef9616e638ea5b2a4e",
+    "timestamp": "2026-09-18T21:02:54Z"
+  },
+  {
+    "stage": "resume2_active",
+    "pause_epoch": 2,
+    "description": "Resume 2 live polling active after unlock ATRV probe",
+    "screenshot": "d05_05_resume2_active.png",
+    "sha256": "c7405b83bf7d2ffb22cc227e1a002bbbd021820310c5dac4514673a36cf8c88d",
+    "timestamp": "2026-09-18T21:02:57Z"
+  },
+  {
+    "stage": "resume3_final",
+    "pause_epoch": 3,
+    "description": "Resume 3 final state, triple lifecycle cycle complete and stable",
+    "screenshot": "d05_06_resume3_final.png",
+    "sha256": "0a72468935ccd7a2a052963e2d8cf8ce2dfa3626be569647a09765e71a68e181",
+    "timestamp": "2026-09-18T21:03:00Z"
+  }
+]

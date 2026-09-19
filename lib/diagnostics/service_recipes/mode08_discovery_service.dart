@@ -17,6 +17,21 @@ import '../../obd/transport/obd_transport.dart';
 import 'mode08_codec.dart';
 import 'qualification_tier.dart';
 
+/// Stable machine-readable classification for why Mode 08 discovery was incomplete or inconclusive.
+enum Mode08IncompletionReason {
+  none,
+  sessionDisconnected,
+  budgetExceeded,
+  timeout,
+  noResponse,
+  malformedResponse,
+  negativeResponse,
+  unqueriedAnnouncedBlocks,
+  unheaderedCrossBlockLimitation,
+  requiresCanBus,
+  unexpectedExecutionResponse,
+}
+
 /// Immutable result of a non-actuating Mode 08 supported TIDs discovery query.
 final class Mode08DiscoveryResult {
   const Mode08DiscoveryResult({
@@ -30,6 +45,11 @@ final class Mode08DiscoveryResult {
     this.ecuResults = const {},
     this.perEcuBlockResults = const {},
     this.failureReason,
+    this.incompletionReason = Mode08IncompletionReason.none,
+    this.failedBlock,
+    this.ecu,
+    this.rawMarker,
+    this.malformedReason,
     this.nrc,
     this.hasAnonymous = false,
   });
@@ -38,6 +58,11 @@ final class Mode08DiscoveryResult {
   factory Mode08DiscoveryResult.failure({
     required EcuSupportStatus supportStatus,
     required String reason,
+    Mode08IncompletionReason incompletionReason = Mode08IncompletionReason.none,
+    int? failedBlock,
+    String? ecu,
+    String? rawMarker,
+    Mode08MalformedReason? malformedReason,
     int? nrc,
     DateTime? discoveredAt,
     List<int> queriedBlocks = const [],
@@ -55,6 +80,11 @@ final class Mode08DiscoveryResult {
         discoveredAt: discoveredAt ?? DateTime.now().toUtc(),
         isComplete: false,
         failureReason: reason,
+        incompletionReason: incompletionReason,
+        failedBlock: failedBlock,
+        ecu: ecu,
+        rawMarker: rawMarker,
+        malformedReason: malformedReason,
         nrc: nrc,
         ecuResults: ecuResults,
         perEcuBlockResults: perEcuBlockResults,
@@ -91,6 +121,21 @@ final class Mode08DiscoveryResult {
   /// Diagnostic failure or refusal reason if discovery was unsuccessful.
   final String? failureReason;
 
+  /// Stable classification for why discovery was incomplete or unverified.
+  final Mode08IncompletionReason incompletionReason;
+
+  /// The block ID where the issue occurred (if applicable, e.g. 0x00, 0x20).
+  final int? failedBlock;
+
+  /// The responding ECU node identifier involved (e.g. '7E8').
+  final String? ecu;
+
+  /// Raw diagnostic marker preserved for diagnostic inspection (e.g. 'NO DATA', '7E8', '0x22', 'EMPTY').
+  final String? rawMarker;
+
+  /// Typed malformed reason if outcome was malformed.
+  final Mode08MalformedReason? malformedReason;
+
   /// Raw negative response code (NRC) if returned by the ECU.
   final int? nrc;
 
@@ -125,6 +170,7 @@ abstract final class Mode08DiscoveryService {
       return Mode08DiscoveryResult.failure(
         supportStatus: EcuSupportStatus.unknown,
         reason: 'Mode 08 capability discovery requires a resolved OBD-II CAN bus',
+        incompletionReason: Mode08IncompletionReason.requiresCanBus,
         discoveredAt: now,
       );
     }
@@ -137,6 +183,12 @@ abstract final class Mode08DiscoveryService {
     final ecuExpectedNextBlocks = <String, int>{};
     bool isComplete = true;
     String? overallFailureReason;
+    Mode08IncompletionReason primaryIncompletionReason = Mode08IncompletionReason.none;
+    int? primaryFailedBlock;
+    String? primaryEcu;
+    String? primaryRawMarker;
+    Mode08MalformedReason? primaryMalformedReason;
+    int? primaryNrc;
     int currentBaseTid = 0x00;
     bool hadAnonymousResponses = false;
 
@@ -155,6 +207,12 @@ abstract final class Mode08DiscoveryService {
             isComplete: false,
             unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
             failureReason: 'Session disconnected or superseded during discovery',
+            incompletionReason: Mode08IncompletionReason.sessionDisconnected,
+            failedBlock: currentBaseTid,
+            ecu: primaryEcu,
+            rawMarker: primaryRawMarker,
+            malformedReason: primaryMalformedReason,
+            nrc: primaryNrc,
             ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
             perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
             hasAnonymous: hadAnonymousResponses,
@@ -163,6 +221,12 @@ abstract final class Mode08DiscoveryService {
         return Mode08DiscoveryResult.failure(
           supportStatus: EcuSupportStatus.unknown,
           reason: 'Session disconnected or superseded during discovery',
+          incompletionReason: Mode08IncompletionReason.sessionDisconnected,
+          failedBlock: currentBaseTid,
+          ecu: primaryEcu,
+          rawMarker: primaryRawMarker,
+          malformedReason: primaryMalformedReason,
+          nrc: primaryNrc,
           discoveredAt: now,
           queriedBlocks: List.unmodifiable(queriedBlocks),
           unqueriedBlocks: [currentBaseTid],
@@ -185,6 +249,12 @@ abstract final class Mode08DiscoveryService {
             isComplete: false,
             unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
             failureReason: 'Discovery budget reached before all blocks queried',
+            incompletionReason: Mode08IncompletionReason.budgetExceeded,
+            failedBlock: currentBaseTid,
+            ecu: primaryEcu,
+            rawMarker: primaryRawMarker,
+            malformedReason: primaryMalformedReason,
+            nrc: primaryNrc,
             ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
             perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
             hasAnonymous: hadAnonymousResponses,
@@ -193,6 +263,12 @@ abstract final class Mode08DiscoveryService {
         return Mode08DiscoveryResult.failure(
           supportStatus: EcuSupportStatus.unknown,
           reason: 'Discovery budget exceeded',
+          incompletionReason: Mode08IncompletionReason.budgetExceeded,
+          failedBlock: currentBaseTid,
+          ecu: primaryEcu,
+          rawMarker: primaryRawMarker,
+          malformedReason: primaryMalformedReason,
+          nrc: primaryNrc,
           discoveredAt: now,
           unqueriedBlocks: [currentBaseTid],
           ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
@@ -208,6 +284,7 @@ abstract final class Mode08DiscoveryService {
           queryCommand,
           header: header,
           restoreHeader: true,
+          responseHeaders: true,
           timeout: timeout,
           budget: remainingBudget,
           deadline: deadline,
@@ -225,6 +302,12 @@ abstract final class Mode08DiscoveryService {
             isComplete: false,
             unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
             failureReason: 'Query timed out for block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()}',
+            incompletionReason: Mode08IncompletionReason.timeout,
+            failedBlock: currentBaseTid,
+            ecu: primaryEcu,
+            rawMarker: primaryRawMarker,
+            malformedReason: primaryMalformedReason,
+            nrc: primaryNrc,
             ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
             perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
             hasAnonymous: hadAnonymousResponses,
@@ -233,6 +316,12 @@ abstract final class Mode08DiscoveryService {
         return Mode08DiscoveryResult.failure(
           supportStatus: EcuSupportStatus.unknown,
           reason: 'Mode 08 query timed out',
+          incompletionReason: Mode08IncompletionReason.timeout,
+          failedBlock: currentBaseTid,
+          ecu: primaryEcu,
+          rawMarker: primaryRawMarker,
+          malformedReason: primaryMalformedReason,
+          nrc: primaryNrc,
           discoveredAt: now,
           unqueriedBlocks: [currentBaseTid],
           ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
@@ -251,6 +340,12 @@ abstract final class Mode08DiscoveryService {
             isComplete: false,
             unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
             failureReason: 'Transport failed during block query: $e',
+            incompletionReason: Mode08IncompletionReason.sessionDisconnected,
+            failedBlock: currentBaseTid,
+            ecu: primaryEcu,
+            rawMarker: primaryRawMarker,
+            malformedReason: primaryMalformedReason,
+            nrc: primaryNrc,
             ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
             perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
             hasAnonymous: hadAnonymousResponses,
@@ -259,6 +354,12 @@ abstract final class Mode08DiscoveryService {
         return Mode08DiscoveryResult.failure(
           supportStatus: EcuSupportStatus.unknown,
           reason: 'Mode 08 transport failed: $e',
+          incompletionReason: Mode08IncompletionReason.sessionDisconnected,
+          failedBlock: currentBaseTid,
+          ecu: primaryEcu,
+          rawMarker: primaryRawMarker,
+          malformedReason: primaryMalformedReason,
+          nrc: primaryNrc,
           discoveredAt: now,
           unqueriedBlocks: [currentBaseTid],
           ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
@@ -298,6 +399,12 @@ abstract final class Mode08DiscoveryService {
           if (!blockEcuResults.containsKey(expectedEcu)) {
             isComplete = false;
             uncompletedBlocks.add(currentBaseTid);
+            if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+              primaryIncompletionReason = Mode08IncompletionReason.noResponse;
+              primaryFailedBlock = currentBaseTid;
+              primaryEcu = expectedEcu;
+              primaryRawMarker = 'NO DATA';
+            }
             overallFailureReason ??=
                 'ECU $expectedEcu missing on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()}';
             perEcuBlockResults.putIfAbsent(expectedEcu, () => {})[currentBaseTid] =
@@ -324,29 +431,63 @@ abstract final class Mode08DiscoveryService {
           isComplete = false;
           uncompletedBlocks.add(currentBaseTid);
           if (ecuRes is Mode08NoResponse) {
+            if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+              primaryIncompletionReason = Mode08IncompletionReason.noResponse;
+              primaryFailedBlock = currentBaseTid;
+              primaryRawMarker = ecuRes.reason;
+            }
             overallFailureReason ??=
                 'Unattributed response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()}: ${ecuRes.reason}';
           } else if (ecuRes is Mode08MalformedResponse) {
+            if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+              primaryIncompletionReason = Mode08IncompletionReason.malformedResponse;
+              primaryFailedBlock = currentBaseTid;
+              primaryMalformedReason = ecuRes.reason;
+              primaryRawMarker = ecuRes.rawResponse;
+            }
             overallFailureReason ??=
                 'Unattributed damaged response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()}: ${ecuRes.reason}';
           } else {
+            if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+              primaryIncompletionReason = Mode08IncompletionReason.malformedResponse;
+              primaryFailedBlock = currentBaseTid;
+            }
             overallFailureReason ??=
                 'Unattributed response or transaction damage on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()}';
           }
         } else if (ecuRes is Mode08MalformedResponse) {
           isComplete = false;
           uncompletedBlocks.add(currentBaseTid);
+          if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+            primaryIncompletionReason = Mode08IncompletionReason.malformedResponse;
+            primaryFailedBlock = currentBaseTid;
+            primaryEcu = entry.key;
+            primaryMalformedReason = ecuRes.reason;
+            primaryRawMarker = ecuRes.rawResponse;
+          }
           overallFailureReason ??=
               'Malformed response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()} from ${entry.key}: ${ecuRes.reason}';
         } else if (ecuRes is Mode08NoResponse) {
           isComplete = false;
           uncompletedBlocks.add(currentBaseTid);
+          if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+            primaryIncompletionReason = Mode08IncompletionReason.noResponse;
+            primaryFailedBlock = currentBaseTid;
+            primaryEcu = entry.key;
+            primaryRawMarker = ecuRes.reason;
+          }
           overallFailureReason ??=
               'No response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()} from ${entry.key}: ${ecuRes.reason}';
         } else if (ecuRes is Mode08NegativeResponse) {
           if (!ecuRes.isUnsupported) {
             isComplete = false;
             uncompletedBlocks.add(currentBaseTid);
+            if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+              primaryIncompletionReason = Mode08IncompletionReason.negativeResponse;
+              primaryFailedBlock = currentBaseTid;
+              primaryEcu = entry.key;
+              primaryNrc = ecuRes.nrc;
+            }
             overallFailureReason ??=
                 'Negative response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()} from ${entry.key} (NRC 0x${ecuRes.nrc.toRadixString(16).padLeft(2, '0').toUpperCase()})';
           }
@@ -357,17 +498,33 @@ abstract final class Mode08DiscoveryService {
         if (anon is Mode08MalformedResponse) {
           isComplete = false;
           uncompletedBlocks.add(currentBaseTid);
+          if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+            primaryIncompletionReason = Mode08IncompletionReason.malformedResponse;
+            primaryFailedBlock = currentBaseTid;
+            primaryMalformedReason = anon.reason;
+            primaryRawMarker = anon.rawResponse;
+          }
           overallFailureReason ??=
               'Malformed anonymous response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()}: ${anon.reason}';
         } else if (anon is Mode08NoResponse) {
           isComplete = false;
           uncompletedBlocks.add(currentBaseTid);
+          if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+            primaryIncompletionReason = Mode08IncompletionReason.noResponse;
+            primaryFailedBlock = currentBaseTid;
+            primaryRawMarker = anon.reason;
+          }
           overallFailureReason ??=
               'No response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()}: ${anon.reason}';
         } else if (anon is Mode08NegativeResponse) {
           if (!anon.isUnsupported) {
             isComplete = false;
             uncompletedBlocks.add(currentBaseTid);
+            if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+              primaryIncompletionReason = Mode08IncompletionReason.negativeResponse;
+              primaryFailedBlock = currentBaseTid;
+              primaryNrc = anon.nrc;
+            }
             overallFailureReason ??=
                 'Negative response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()} (NRC 0x${anon.nrc.toRadixString(16).padLeft(2, '0').toUpperCase()})';
           }
@@ -395,12 +552,20 @@ abstract final class Mode08DiscoveryService {
             if (ecuExpectedNextBlocks.isNotEmpty) {
               isComplete = false;
               uncompletedBlocks.addAll(ecuExpectedNextBlocks.values);
+              if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+                primaryIncompletionReason = Mode08IncompletionReason.unqueriedAnnouncedBlocks;
+                primaryFailedBlock = ecuExpectedNextBlocks.values.first;
+              }
               overallFailureReason ??=
                   'Unqueried blocks announced by ECUs: ${ecuExpectedNextBlocks.values.map((b) => '0x${b.toRadixString(16).padLeft(2, '0').toUpperCase()}').join(', ')}';
             }
             if (hadAnonymousResponses && queriedBlocks.length > 1) {
               isComplete = false;
               uncompletedBlocks.addAll(queriedBlocks.where((b) => b > 0));
+              if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+                primaryIncompletionReason = Mode08IncompletionReason.unheaderedCrossBlockLimitation;
+                primaryFailedBlock = queriedBlocks.firstWhere((b) => b > 0, orElse: () => currentBaseTid);
+              }
               overallFailureReason ??=
                   '來源歸因與覆蓋完整度未確認（無標頭回應無法建立跨區塊 ECU 身分）';
             }
@@ -413,6 +578,12 @@ abstract final class Mode08DiscoveryService {
               isComplete: isComplete,
               unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
               failureReason: isComplete ? null : overallFailureReason,
+              incompletionReason: isComplete ? Mode08IncompletionReason.none : primaryIncompletionReason,
+              failedBlock: isComplete ? null : primaryFailedBlock,
+              ecu: isComplete ? null : primaryEcu,
+              rawMarker: isComplete ? null : primaryRawMarker,
+              malformedReason: isComplete ? null : primaryMalformedReason,
+              nrc: isComplete ? null : primaryNrc,
               ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
               perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
               hasAnonymous: hadAnonymousResponses,
@@ -426,6 +597,11 @@ abstract final class Mode08DiscoveryService {
             if (hadAnonymousResponses && queriedBlocks.length > 1) {
               uncompletedBlocks.addAll(queriedBlocks.where((b) => b > 0));
             }
+            if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+              primaryIncompletionReason = Mode08IncompletionReason.negativeResponse;
+              primaryFailedBlock = currentBaseTid;
+              primaryNrc = negative.nrc;
+            }
             overallFailureReason ??=
                 'Negative response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()} (NRC 0x${negative.nrc.toRadixString(16).padLeft(2, '0').toUpperCase()})';
             return Mode08DiscoveryResult(
@@ -437,7 +613,12 @@ abstract final class Mode08DiscoveryService {
               isComplete: false,
               unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
               failureReason: overallFailureReason,
-              nrc: negative.nrc,
+              incompletionReason: primaryIncompletionReason,
+              failedBlock: primaryFailedBlock,
+              ecu: primaryEcu,
+              rawMarker: primaryRawMarker,
+              malformedReason: primaryMalformedReason,
+              nrc: primaryNrc ?? negative.nrc,
               ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
               perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
               hasAnonymous: hadAnonymousResponses,
@@ -446,6 +627,11 @@ abstract final class Mode08DiscoveryService {
           return Mode08DiscoveryResult.failure(
             supportStatus: negative.supportStatus,
             reason: 'ECU returned negative response: NRC 0x${negative.nrc.toRadixString(16).padLeft(2, '0').toUpperCase()}',
+            incompletionReason: Mode08IncompletionReason.negativeResponse,
+            failedBlock: currentBaseTid,
+            ecu: primaryEcu,
+            rawMarker: primaryRawMarker,
+            malformedReason: primaryMalformedReason,
             nrc: negative.nrc,
             discoveredAt: now,
             queriedBlocks: List.unmodifiable(queriedBlocks),
@@ -462,6 +648,11 @@ abstract final class Mode08DiscoveryService {
             if (hadAnonymousResponses && queriedBlocks.length > 1) {
               uncompletedBlocks.addAll(queriedBlocks.where((b) => b > 0));
             }
+            if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+              primaryIncompletionReason = Mode08IncompletionReason.noResponse;
+              primaryFailedBlock = currentBaseTid;
+              primaryRawMarker = noResponse.reason;
+            }
             overallFailureReason ??=
                 'No response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()}: ${noResponse.reason}';
             return Mode08DiscoveryResult(
@@ -473,6 +664,12 @@ abstract final class Mode08DiscoveryService {
               isComplete: false,
               unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
               failureReason: overallFailureReason,
+              incompletionReason: primaryIncompletionReason,
+              failedBlock: primaryFailedBlock,
+              ecu: primaryEcu,
+              rawMarker: primaryRawMarker ?? noResponse.reason,
+              malformedReason: primaryMalformedReason,
+              nrc: primaryNrc,
               ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
               perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
               hasAnonymous: hadAnonymousResponses,
@@ -481,6 +678,12 @@ abstract final class Mode08DiscoveryService {
           return Mode08DiscoveryResult.failure(
             supportStatus: noResponse.supportStatus,
             reason: 'No response from ECU for Mode 08: ${noResponse.reason}',
+            incompletionReason: Mode08IncompletionReason.noResponse,
+            failedBlock: currentBaseTid,
+            ecu: primaryEcu,
+            rawMarker: primaryRawMarker ?? noResponse.reason,
+            malformedReason: primaryMalformedReason,
+            nrc: primaryNrc,
             discoveredAt: now,
             queriedBlocks: List.unmodifiable(queriedBlocks),
             unqueriedBlocks: [currentBaseTid],
@@ -496,6 +699,12 @@ abstract final class Mode08DiscoveryService {
             if (hadAnonymousResponses && queriedBlocks.length > 1) {
               uncompletedBlocks.addAll(queriedBlocks.where((b) => b > 0));
             }
+            if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+              primaryIncompletionReason = Mode08IncompletionReason.malformedResponse;
+              primaryFailedBlock = currentBaseTid;
+              primaryMalformedReason = malformed.reason;
+              primaryRawMarker = malformed.rawResponse;
+            }
             overallFailureReason ??=
                 'Malformed response on block 0x${currentBaseTid.toRadixString(16).padLeft(2, '0').toUpperCase()}: ${malformed.reason}';
             return Mode08DiscoveryResult(
@@ -507,6 +716,12 @@ abstract final class Mode08DiscoveryService {
               isComplete: false,
               unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
               failureReason: overallFailureReason,
+              incompletionReason: primaryIncompletionReason,
+              failedBlock: primaryFailedBlock,
+              ecu: primaryEcu,
+              rawMarker: primaryRawMarker ?? malformed.rawResponse,
+              malformedReason: primaryMalformedReason ?? malformed.reason,
+              nrc: primaryNrc,
               ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
               perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
               hasAnonymous: hadAnonymousResponses,
@@ -515,6 +730,11 @@ abstract final class Mode08DiscoveryService {
           return Mode08DiscoveryResult.failure(
             supportStatus: EcuSupportStatus.unknown,
             reason: 'Malformed Mode 08 response: ${malformed.reason}',
+            incompletionReason: Mode08IncompletionReason.malformedResponse,
+            failedBlock: currentBaseTid,
+            ecu: primaryEcu,
+            malformedReason: primaryMalformedReason ?? malformed.reason,
+            rawMarker: primaryRawMarker ?? malformed.rawResponse,
             discoveredAt: now,
             queriedBlocks: List.unmodifiable(queriedBlocks),
             unqueriedBlocks: [currentBaseTid],
@@ -527,6 +747,8 @@ abstract final class Mode08DiscoveryService {
           return Mode08DiscoveryResult.failure(
             supportStatus: EcuSupportStatus.unknown,
             reason: 'Unexpected execution response for supported TID query',
+            incompletionReason: Mode08IncompletionReason.unexpectedExecutionResponse,
+            failedBlock: currentBaseTid,
             discoveredAt: now,
             queriedBlocks: List.unmodifiable(queriedBlocks),
             unqueriedBlocks: [currentBaseTid],
@@ -540,6 +762,10 @@ abstract final class Mode08DiscoveryService {
     if (ecuExpectedNextBlocks.isNotEmpty) {
       isComplete = false;
       uncompletedBlocks.addAll(ecuExpectedNextBlocks.values);
+      if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+        primaryIncompletionReason = Mode08IncompletionReason.unqueriedAnnouncedBlocks;
+        primaryFailedBlock = ecuExpectedNextBlocks.values.first;
+      }
       overallFailureReason ??=
           'Unqueried blocks announced by ECUs: ${ecuExpectedNextBlocks.values.map((b) => '0x${b.toRadixString(16).padLeft(2, '0').toUpperCase()}').join(', ')}';
     }
@@ -547,6 +773,10 @@ abstract final class Mode08DiscoveryService {
     if (hadAnonymousResponses && queriedBlocks.length > 1) {
       isComplete = false;
       uncompletedBlocks.addAll(queriedBlocks.where((b) => b > 0));
+      if (primaryIncompletionReason == Mode08IncompletionReason.none) {
+        primaryIncompletionReason = Mode08IncompletionReason.unheaderedCrossBlockLimitation;
+        primaryFailedBlock = queriedBlocks.firstWhere((b) => b > 0, orElse: () => currentBaseTid);
+      }
       overallFailureReason ??=
           '來源歸因與覆蓋完整度未確認（無標頭回應無法建立跨區塊 ECU 身分）';
     }
@@ -562,6 +792,12 @@ abstract final class Mode08DiscoveryService {
       isComplete: isComplete,
       unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
       failureReason: isComplete ? null : overallFailureReason,
+      incompletionReason: isComplete ? Mode08IncompletionReason.none : primaryIncompletionReason,
+      failedBlock: isComplete ? null : primaryFailedBlock,
+      ecu: isComplete ? null : primaryEcu,
+      rawMarker: isComplete ? null : primaryRawMarker,
+      malformedReason: isComplete ? null : primaryMalformedReason,
+      nrc: isComplete ? null : primaryNrc,
       ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
       perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
       hasAnonymous: hadAnonymousResponses,
