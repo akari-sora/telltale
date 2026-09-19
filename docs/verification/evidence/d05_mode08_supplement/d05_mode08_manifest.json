@@ -1,0 +1,14 @@
+{
+  "package": "gate2_d05_mode08_supplement",
+  "version": "1.0.0",
+  "generated_at": "2026-09-19T09:54:14.920236Z",
+  "candidate_apk_sha256": "acc80f75b599d7f85e5c11416ec6c2e92f774f6b9e1699584414ca35abbade9e",
+  "replay_fixtures_sha256": "e0a10d417983d02db39a9b0088e15fb6a947b542370f0fddd2b77c7bd02fc136",
+  "contract": "Mode 08 In-Flight Query Hold and Stale Completion Rejection",
+  "runs_executed": 3,
+  "files": [
+    "d05_mode08_inflight_traffic.jsonl",
+    "d05_mode08_lifecycle_events.log",
+    "d05_mode08_bindings.json"
+  ]
+}

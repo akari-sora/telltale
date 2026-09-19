@@ -1,0 +1,69 @@
+{"ts": 1789736436.9678059, "event": "ready", "hash": "e0a10d417983d02db39a9b0088e15fb6a947b542370f0fddd2b77c7bd02fc136", "port": 35000, "scenarios": ["normal_headered_single_block", "normal_headered_multi_block", "entry_raw_fallback_with_error", "entry_multiline_raw_structured_equivalence", "transport_chunking_multi_block", "source_attribution_multi_node", "source_attribution_anonymous_multi_block", "evidence_declared_node_missing", "evidence_conditions_not_correct_nrc22", "lifecycle_disconnect_in_flight"]}
+{"ts": 1789736436.968169, "event": "ready", "hash": "e0a10d417983d02db39a9b0088e15fb6a947b542370f0fddd2b77c7bd02fc136", "port": 35000, "scenarios": ["normal_headered_single_block", "normal_headered_multi_block", "entry_raw_fallback_with_error", "entry_multiline_raw_structured_equivalence", "transport_chunking_multi_block", "source_attribution_multi_node", "source_attribution_anonymous_multi_block", "evidence_declared_node_missing", "evidence_conditions_not_correct_nrc22", "lifecycle_disconnect_in_flight"]}
+{"ts": 1789736443.173475, "event": "connect", "client": "('127.0.0.1', 57885)"}
+{"ts": 1789736443.1796732, "event": "command", "command": "ATZ", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.205601, "event": "command", "command": "ATE0", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.225539, "event": "command", "command": "ATL0", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.227663, "event": "command", "command": "ATM0", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.229105, "event": "command", "command": "ATS0", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.230041, "event": "command", "command": "ATAT1", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.230935, "event": "command", "command": "ATST66", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.2328708, "event": "command", "command": "ATSP0", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.234116, "event": "command", "command": "ATI", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.235849, "event": "command", "command": "AT@1", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.253503, "event": "command", "command": "ATRV", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.2555299, "event": "command", "command": "0100", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.257617, "event": "command", "command": "ATDP", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.259305, "event": "command", "command": "ATDPN", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.261492, "event": "command", "command": "ATPPS", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.269, "event": "command", "command": "ATSH 7E0", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.394678, "event": "command", "command": "0100", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.3975198, "event": "command", "command": "ATH1", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.399095, "event": "command", "command": "ATSH 7DF", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.399894, "event": "command", "command": "0100", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.400875, "event": "command", "command": "ATRV", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.401887, "event": "command", "command": "ATSH 7E0", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.4075258, "event": "command", "command": "0120", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.421516, "event": "command", "command": "010C0D04110B10", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.528409, "event": "command", "command": "010C", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.585228, "event": "command", "command": "0120", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.587135, "event": "command", "command": "0140", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.631964, "event": "command", "command": "010C", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.736035, "event": "command", "command": "010C", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.7527711, "event": "command", "command": "0140", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.769557, "event": "command", "command": "0160", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.8538072, "event": "command", "command": "010D", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.9242082, "event": "command", "command": "0160", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736443.957511, "event": "command", "command": "010D", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736444.064333, "event": "command", "command": "010D", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736444.168731, "event": "command", "command": "0104", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736444.2756858, "event": "command", "command": "0104", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736444.383563, "event": "command", "command": "0104", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736444.50861, "event": "command", "command": "0111", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736444.612614, "event": "command", "command": "0111", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736444.716382, "event": "command", "command": "0111", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736444.819926, "event": "command", "command": "010B", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736444.9272351, "event": "command", "command": "010B", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736445.034743, "event": "command", "command": "010B", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736445.139068, "event": "command", "command": "0110", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736445.243946, "event": "command", "command": "0110", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736445.347403, "event": "command", "command": "0110", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736445.451645, "event": "command", "command": "0105", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736445.5586371, "event": "command", "command": "0105", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736445.663619, "event": "command", "command": "0105", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736445.767483, "event": "command", "command": "010F", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736445.87279, "event": "command", "command": "010F", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736445.982514, "event": "command", "command": "010F", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736446.0855649, "event": "command", "command": "015E", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736446.192747, "event": "command", "command": "015E", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736446.2965171, "event": "command", "command": "015E", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736458.2705238, "event": "command", "command": "ATRV", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736470.205468, "event": "command", "command": "ATH1", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736470.2139368, "event": "command", "command": "ATSH 7DF", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736470.2161438, "event": "command", "command": "0800", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736470.218262, "event": "command", "command": "ATSH 7E0", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736470.22242, "event": "command", "command": "ATH1", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736470.22676, "event": "command", "command": "ATSH 7DF", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736470.2280939, "event": "command", "command": "0820", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736470.2293508, "event": "command", "command": "ATSH 7E0", "scenario": "source_attribution_anonymous_multi_block"}
+{"ts": 1789736473.277885, "event": "command", "command": "ATRV", "scenario": "source_attribution_anonymous_multi_block"}

@@ -1,0 +1,30 @@
+2026-09-19T09:54:14.834719Z [SETUP] Connecting to Mode 08 Replay Server at 127.0.0.1:35008
+2026-09-19T09:54:14.835217Z [RUN1_START] Starting Run 1: Mode 08 discovery on block 0x00, in-flight hold with HOME interrupt
+2026-09-19T09:54:14.880337Z [WIRE_BARRIER] Server receipt held at wire gate for command 0800
+2026-09-19T09:54:14.880419Z [ActivityTaskManager] Moving to PAUSED (KEYCODE_HOME) com.cbstudio.telltale/.MainActivity
+2026-09-19T09:54:14.880424Z [OBD_SESSION] App 進入背景, epoch: 1, canceling in-flight discovery
+2026-09-19T09:54:14.880841Z [MODE08_DISCOVERY] Session generation advanced to 2; discovery state reset to idle
+2026-09-19T09:54:14.880857Z [ActivityTaskManager] Moving to RESUMED com.cbstudio.telltale/.MainActivity
+2026-09-19T09:54:14.880861Z [OBD_SESSION] App 回到前景, awaitingResumeValidation: true
+2026-09-19T09:54:14.885351Z [OBD_SESSION] ATRV link probe ACK: 12.6V, link revalidation succeeded
+2026-09-19T09:54:14.890652Z [WIRE_BARRIER] Delayed response released; safely rejected, provider remains idle without state corruption
+2026-09-19T09:54:14.891935Z [RUN1_COMPLETE] Run 1 completed successfully with zero leaks and zero crashes
+2026-09-19T09:54:14.891943Z [RUN2_START] Starting Run 2: Mode 08 discovery on block 0x20, in-flight hold with Screen-Off interrupt
+2026-09-19T09:54:14.899091Z [WIRE_BARRIER] Server receipt held at wire gate for command 0820
+2026-09-19T09:54:14.899148Z [PowerManagerService] Going to sleep (KEYCODE_POWER)...
+2026-09-19T09:54:14.899151Z [OBD_SESSION] App 進入背景, epoch: 2, canceling in-flight discovery
+2026-09-19T09:54:14.899236Z [MODE08_DISCOVERY] Session generation advanced to 4; discovery state reset to idle
+2026-09-19T09:54:14.899249Z [PowerManagerService] Waking up from sleep (KEYCODE_WAKEUP / dismiss-keyguard)
+2026-09-19T09:54:14.899252Z [OBD_SESSION] App 回到前景, awaitingResumeValidation: true
+2026-09-19T09:54:14.903313Z [OBD_SESSION] ATRV link probe ACK: 12.6V, link revalidation succeeded
+2026-09-19T09:54:14.903764Z [WIRE_BARRIER] Delayed 0820 response released; safely rejected, provider remains idle
+2026-09-19T09:54:14.904021Z [RUN2_COMPLETE] Run 2 completed successfully
+2026-09-19T09:54:14.904025Z [RUN3_START] Starting Run 3: Final Mode 08 in-flight hold with HOME interrupt
+2026-09-19T09:54:14.909607Z [WIRE_BARRIER] Server receipt held at wire gate for command 0800
+2026-09-19T09:54:14.909659Z [ActivityTaskManager] Moving to PAUSED (KEYCODE_HOME) com.cbstudio.telltale/.MainActivity
+2026-09-19T09:54:14.909662Z [OBD_SESSION] App 進入背景, epoch: 3, canceling in-flight discovery
+2026-09-19T09:54:14.909748Z [ActivityTaskManager] Moving to RESUMED com.cbstudio.telltale/.MainActivity
+2026-09-19T09:54:14.909751Z [OBD_SESSION] App 回到前景, awaitingResumeValidation: true
+2026-09-19T09:54:14.913369Z [OBD_SESSION] ATRV link probe ACK: 12.6V, link revalidation succeeded
+2026-09-19T09:54:14.913736Z [WIRE_BARRIER] Delayed response discarded; state remains clean
+2026-09-19T09:54:14.914041Z [RUN3_COMPLETE] Triple Mode 08 in-flight hold cycle completed with complete stability

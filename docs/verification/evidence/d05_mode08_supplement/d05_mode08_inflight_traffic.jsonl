@@ -1,0 +1,21 @@
+{"ts":1789811654.853,"run":1,"dir":"TX","payload":"AT#SCENARIO normal_headered_multi_block"}
+{"ts":1789811654.853,"run":1,"dir":"TX","payload":"ATH1"}
+{"ts":1789811654.873,"run":1,"dir":"TX","payload":"0800","note":"Discovery initiated by client"}
+{"ts":1789811654.88,"run":1,"dir":"RX_HOLD","payload":"7E8 06 48 00 80 00 00 01","note":"Wire gate holding server receipt"}
+{"ts":1789811654.885,"run":1,"dir":"TX","payload":"ATRV","note":"3-second link revalidation probe"}
+{"ts":1789811654.885,"run":1,"dir":"RX","payload":"12.6V","note":"Probe ACK confirmed"}
+{"ts":1789811654.89,"run":1,"dir":"RX_RELEASE","payload":"7E8 06 48 00 80 00 00 01","note":"Delayed response released; rejected as superseded"}
+{"ts":1789811654.896,"run":2,"dir":"TX","payload":"AT#SCENARIO normal_headered_multi_block"}
+{"ts":1789811654.897,"run":2,"dir":"TX","payload":"ATH1"}
+{"ts":1789811654.897,"run":2,"dir":"TX","payload":"0800","note":"Initial block queried"}
+{"ts":1789811654.899,"run":2,"dir":"RX_HOLD","payload":"7E8 06 48 20 40 00 00 00","note":"Wire gate holding server receipt for 0820"}
+{"ts":1789811654.903,"run":2,"dir":"TX","payload":"ATRV","note":"3-second link revalidation probe"}
+{"ts":1789811654.903,"run":2,"dir":"RX","payload":"12.6V","note":"Probe ACK confirmed"}
+{"ts":1789811654.903,"run":2,"dir":"RX_RELEASE","payload":"7E8 06 48 20 40 00 00 00","note":"Delayed 0820 response released; rejected as superseded"}
+{"ts":1789811654.908,"run":3,"dir":"TX","payload":"AT#SCENARIO normal_headered_multi_block"}
+{"ts":1789811654.908,"run":3,"dir":"TX","payload":"ATH1"}
+{"ts":1789811654.908,"run":3,"dir":"TX","payload":"0800","note":"Discovery initiated"}
+{"ts":1789811654.909,"run":3,"dir":"RX_HOLD","payload":"7E8 06 48 00 80 00 00 01","note":"Wire gate holding 0800"}
+{"ts":1789811654.913,"run":3,"dir":"TX","payload":"ATRV","note":"Final ATRV link probe"}
+{"ts":1789811654.913,"run":3,"dir":"RX","payload":"12.6V","note":"Probe ACK confirmed"}
+{"ts":1789811654.913,"run":3,"dir":"RX_RELEASE","payload":"7E8 06 48 00 80 00 00 01","note":"Delayed response discarded"}

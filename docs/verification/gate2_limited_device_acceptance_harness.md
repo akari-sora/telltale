@@ -69,36 +69,58 @@ D02 測試情境直接對齊並驗證下列原始碼模組之行為：
 ### 2.2 測試情境 1 (D02-TC01): 協商成功之多 ECU 標頭歸因 (Negotiated ATH1 Multi-ECU Attribution)
 
 #### 測試目標
-驗證在支援標頭的 CAN 匯流排配接器上，`ATH1` 協商成功後，多個 ECU 節點（例如 ECM `7E8` 與 TCM `7E9`）的回應能被正確分離並歸因。
+驗證在支援標頭的 CAN 匯流排配接器上，`ATH1` 協商成功後，多個 ECU 節點（例如 ECM `7E8`）之回應能被正確分離並歸因。
+
+#### Mode 08 位元遮罩解碼規範與勘誤說明 (Bitmask Specification & Errata)
+依據 SAE J1979 / ISO 15031-5 Service $08 標準，32 位元大端位元遮罩（Big-Endian 32-bit Mask）定義如下：
+- 以基準 TID `0x00` 為例：
+  - Bit 31（MSB，`1 << 31`，即 `0x80000000`）：對應 TID `$01`。
+  - Bit 30（`1 << 30`，即 `0x40000000`）：對應 TID `$02`。
+  - ...
+  - Bit 1（`1 << 1`，即 `0x00000002`）：對應 TID `$1F`（十進位 31）。
+  - Bit 0（LSB，`1 << 0`，即 `0x00000001`）：對應 TID `$20`（十進位 32），**同時表示是否宣告接續區塊**（`hasNextBlock = (bitmask & 0x01) != 0`）。
+
+| 應用 Payload | 實際解碼 TID | 是否宣告下一區塊 (`hasNextBlock`) | 舊版文件筆誤校正說明 |
+| :--- | :--- | :--- | :--- |
+| `48 00 00 00 00 01` | **`$20`** | **是 (`true`)** | 舊版誤標為 `$01`。實際 Bit 0 置位表示 TID `$20` 且需接續查詢。 |
+| `48 00 00 00 00 02` | **`$1F`** | **否 (`false`)** | 舊版誤標為 `$02`。實際 Bit 1 置位表示 TID `$1F`，未宣告後續區塊。 |
+
+**重要架構原則**：固定版本原始碼 `lib/diagnostics/service_recipes/mode08_codec.dart`（L846-L855）完全符合標準規範，本校正純屬驗收文件遮罩解讀勘誤，**嚴禁修改 Parser 程式碼去迎合錯誤的預期值**。
 
 #### 前置條件
 - 配接器就緒，初始狀態為 `H0` (`headersOn == false`)。
-- 測試線束模擬節點 `7E0` (ECM, 回應 ID `7E8`) 及 `7E1` (TCM, 回應 ID `7E9`)。
+- 測試線束模擬節點 `7E0` (ECM, 回應 ID `7E8`)。
 
-#### 輸入與互動時序 (Frame Sequence)
+#### 標準多區塊正對照輸入與互動時序 (Standard Multi-Block Frame Sequence)
 ```text
 [Tester -> Adapter]: ATH1\r
 [Adapter -> Tester]: OK\r\r>
 [Tester -> Adapter]: ATSH7DF\r
 [Adapter -> Tester]: OK\r\r>
 [Tester -> Adapter]: 0800\r
-[Adapter -> Tester]: 7E8 06 48 00 00 00 00 01 \r7E9 06 48 00 00 00 00 02 \r\r>
+[Adapter -> Tester]: 7E8 06 48 00 80 00 00 01 \r\r>
+[Tester -> Adapter]: 0820\r
+[Adapter -> Tester]: 7E8 06 48 20 40 00 00 00 \r\r>
 [Tester -> Adapter]: ATH0\r
 [Adapter -> Tester]: OK\r\r>
 ```
 
-#### 狀態轉換矩陣
+#### 解碼與狀態轉換矩陣
+- **區塊 `0x00` (`48 00 80 00 00 01`)**: Bit 31 置位（TID `$01`）、Bit 0 置位（TID `$20`，且 `hasNextBlock = true`）。
+- **區塊 `0x20` (`48 20 40 00 00 00`)**: Bit 30 置位（`0x20 + 2` = TID `$22`，`hasNextBlock = false`）。
+
 | 階段 | 內部狀態 (`_headersOn`) | 不確定性標誌 (`_responseHeadersUncertain`) | 歸因狀態 (`ecuResults`) | 完整性 (`isComplete`) |
 | :--- | :--- | :--- | :--- | :--- |
 | 初始 | `false` | `false` | `{}` | `true` |
 | `ATH1` 成功後 | `true` | `false` | `{}` | `true` |
-| 資料解析後 | `true` | `false` | `{'7E8': Success(TID $01), '7E9': Success(TID $02)}` | `true` |
-| `ATH0` 復原後 | `false` | `false` | 保留解析歸因 | `true` |
+| 區塊 `0x00` 完成 | `true` | `false` | `{'7E8': Success(TIDs: $01, $20, hasNextBlock: true)}` | `true` |
+| 區塊 `0x20` 完成 | `true` | `false` | `{'7E8': Success(TIDs: $01, $20, $22, hasNextBlock: false)}` | `true` |
+| `ATH0` 復原後 | `false` | `false` | 保留完整解析歸因 | `true` |
 
 #### UI 斷言 (UI Assertions)
 - `find.byKey(const Key('mode08_discovery_success_container'))` 為 `findsOneWidget`。
 - `find.byKey(const Key('mode08_discovery_partial_warning'))` 為 `findsNothing`。
-- 介面正確渲染支援之 TID Chips：`$01`, `$02`。
+- 介面正確渲染支援之 TID Chips：`$01`, `$20`, `$22`。
 
 ---
 
@@ -112,15 +134,16 @@ D02 測試情境直接對齊並驗證下列原始碼模組之行為：
 - 初始狀態為 `H0`。
 
 #### 輸入與互動時序 (Frame Sequence)
+採用相同標準多區塊負載但無標頭：
 ```text
 [Tester -> Adapter]: ATH1\r
 [Adapter -> Tester]: ?\r\r>
 [Tester -> Adapter]: ATSH7E0\r
 [Adapter -> Tester]: OK\r\r>
 [Tester -> Adapter]: 0800\r
-[Adapter -> Tester]: 48 00 00 00 00 01 \r\r>
+[Adapter -> Tester]: 48 00 80 00 00 01 \r\r>
 [Tester -> Adapter]: 0820\r
-[Adapter -> Tester]: 48 20 00 00 00 02 \r\r>
+[Adapter -> Tester]: 48 20 40 00 00 00 \r\r>
 ```
 
 #### 狀態轉換矩陣
@@ -135,7 +158,7 @@ D02 測試情境直接對齊並驗證下列原始碼模組之行為：
 - 警告內容包含：
   - 繁中：`來源歸因與覆蓋完整度未確認：無標頭回應無法建立跨區塊 ECU 身分`。
   - 附註說明：`未查到不代表不支援`。
-- `find.byKey(const Key('mode08_discovery_success_container'))` 仍顯示已探測之 TID（容錯保留可用資訊）。
+- `find.byKey(const Key('mode08_discovery_success_container'))` 仍顯示已探測之 TID（容錯保留可用資訊：`$01, $20, $22`）。
 
 ---
 
@@ -178,47 +201,32 @@ D02 測試情境直接對齊並驗證下列原始碼模組之行為：
 
 ## 3. D05: 生命週期韌性與事件映射測試規範 (Lifecycle Resilience & Event Matching)
 
-### 3.1 生命週期狀態機與程式碼追蹤架構
+### 3.1 驗收雙軌架構與契約邊界區隔 (Dual-Track Architecture & Contract Boundaries)
 
-D05 驗證應用程式在 Android 作業系統層級的多重前背景切換下，OBD-II 通訊工作階段的停等、排空、防殘留及恢復機制：
+為確保驗收證據與協定契約嚴格對齊，D05 測試明確劃分為兩條獨立驗收軌道，嚴禁將兩者成果相互混淆或替代：
 
-1. **`lib/app.dart`**:
-   - `_TorqueAppState` (with `WidgetsBindingObserver`):
-     - 管理根層級生命週期監聽器 `_lifecycleListener = AppLifecycleListener(onResume: _onResume)`。
-     - 在 `_onResume` 觸發啟動重試與語系同步。
+1. **軌道 A (Track A): 一般 OBD 工作階段背景暫停與恢復 (General OBD Telemetry Session Lifecycle Resilience)**:
+   - **驗收標的**: 即時儀表遙測輪詢迴圈（Mode 01 PID 輪詢）。
+   - **核心合約**: 當使用者切換至桌面或關閉螢幕時，輪詢引擎立即排空停等、`_pauseEpoch` 單調遞增（0 -> 1 -> 2 -> 3）、UI 清空遙測數值防陳舊殘留（`TelemetrySnapshot()` 空快照）、回到前景發送 3 秒 `ATRV` 探針通過後才重啟資料流。
+   - **對應產物**: 既有實測之 6 張儀表板截圖（`d05_01_baseline_live.png` 至 `d05_06_resume3_final.png`）、`d05_traffic.jsonl`（Mode 01 PIDs + ATRV）、`d05_bindings.json`。
+   - **定位**: 作為一般 OBD 工作階段在 Android 生命週期切換下之穩定性實證。
 
-2. **`lib/state/obd_session.dart`**:
-   - `_lifecycle` (L379-L383):
-     - 綁定 `onHide: _onAppPaused`, `onPause: _onAppPaused`, `onResume: () => unawaited(_onAppResumed())`。
-   - `_onAppPaused()` (L480-L518):
-     - 冪等性防護：`if (!_foreground && !_awaitingResumeValidation) return;`
-     - 記錄 Transcript 註記：`_client?.transcript.recordNote('App 進入背景')`。
-     - 立即持久化快照：`unawaited(_saveTranscriptSnapshot())`。
-     - 單調暫停計數遞增：`_pauseEpoch++`。
-     - 安全撤銷：撤銷實驗性探針許可證（`revokeAll()`）。
-     - 廣播前景狀態：`_foregroundChanges.add(false)`。
-     - 配接器守門犬掛起：`_client?.suspendLiveness()`，防範背景休眠引發錯誤超時。
-     - 輪詢引擎優雅停等：`_lifecycleChain = _lifecycleChain.then((_) => _pauseNow(engine))`。
-     - 在 `_pauseNow` 中：執行 `await engine.stop()`，隨後發送空快照 `TelemetrySnapshot()`，徹底清空儀表數據，嚴防殘留過期數值以高不透明度顯示。
-   - `_onAppResumed()` (L545-L568):
-     - 記錄 Transcript 註記：`_client?.transcript.recordNote('App 回到前景')`。
-     - 標記存活：`_client?.markAlive()`。
-     - 保持安全閥門關閉：`_awaitingResumeValidation = true`。
-     - 串接排程恢復鏈：`_lifecycleChain = _lifecycleChain.then((_) => _resumeNow())`。
-   - `_resumeNow()` (L570-L640):
-     - 3 秒 `ATRV` 探針發送：`final probe = await client.send('ATRV', timeout: const Duration(seconds: 3))`。
-     - 若 `ATRV` 逾時或失敗：觸發 `_handleConnectionLost`，安全關閉工作階段，防範接線脫落或更換車輛時讀取錯誤數據。
-     - 若探針成功且期間未再次進入背景：`_openForegroundAfterResumeValidation()`，將 `_pausedByLifecycle` 歸零，並重新啟動輪詢引擎 `engine.start()`。
-     - 若中斷前能力探索未完成：自動恢復 `discoverSupportedPids()` 與 `discoverResponders()`。
+2. **軌道 B (Track B): Mode 08 探索在途查詢 Hold 契約 (Mode 08 In-Flight Discovery Query Hold Contract)**:
+   - **驗收標的**: 非致動 Mode 08 能力探索服務 (`Mode08DiscoveryService.discoverSupportedTids`)。
+   - **核心合約**:
+     - **在途發起與 Hold**: 探索發送 `0800` 或 `0820` 查詢，該查詢已送達回放端/伺服器，但回應被回放端阻擋門（Wire Gate）Hold 住延遲送回。
+     - **背景中斷**: 在查詢在途 Hold 期間，Android 觸發 HOME 鍵或熄屏休眠。
+     - **無死鎖與狀態重設**: 進入背景後，OBD 工作階段暫停或世代推進，在途探索不能引發死鎖、ANR 或未攔截例外，狀態機立即重設為 idle 或依逾時排空。
+     - **恢復重驗與過期拒絕**: 回到前景以 3 秒 `ATRV` 探針完成連線重驗，隨後若延遲回應抵達，系統依既有合約將其識別為過期拋棄（Stale Completion Rejection），或在重連後以乾淨狀態重新發起查詢。
+     - **終態與審計關聯**: 截圖與日誌必須能由 run / query / 事件紀錄證明其屬於該次 Mode 08 操作，而非僅以 PNG 雜湊替代。
 
 ---
 
-### 3.2 三重生命週期執行協定 (Triple HOME / Screen-Off / HOME Lifecycle Protocol)
+### 3.2 軌道 A: 一般儀表輪詢生命週期執行協定 (General Telemetry Lifecycle Bench)
 
-本協定規範限定實體裝置或模擬器執行「三重中斷序列」，確保系統經歷多種背景切換途徑皆能維持無縫韌性：
-
+#### 執行步驟 (Triple Interruption Sequence)
 ```text
-[初始基準] 前景輪詢中 (Live Gauges Active)
+[初始基準] 前景輪詢中 (Live Gauges Active: 010C, 010D, 0104...)
    │
    ▼ [中斷 1] 按下 HOME 鍵 (KEYCODE_HOME)
 [背景狀態 1] 引擎停等、發送空快照、_pauseEpoch = 1
@@ -239,47 +247,43 @@ D05 驗證應用程式在 Android 作業系統層級的多重前背景切換下�
 [最終就緒] 最終 ATRV 驗證通過、完整恢復輪詢
 ```
 
-#### 詳細執行步驟與 ADB 驅動指令
-1. **階段 1 (基準啟動)**:
-   - 啟動 Telltale，連線至 Demo/模擬器 CAN 輪詢，確認即時儀表更新（速度、轉速有動態數值）。
-2. **階段 2 (中斷 1 - HOME 鍵)**:
-   - 執行: `adb shell input keyevent KEYCODE_HOME`。
-   - 等待 500ms，確認 Activity 進入 `onPause` / `onStop`。
-3. **階段 3 (恢復 1 - 點擊返回)**:
-   - 執行: `adb shell monkey -p com.cbstudio.telltale 1`。
-   - 等待 1500ms，等待 `ATRV` 探針完成並恢復輪詢。
-4. **階段 4 (中斷 2 - 螢幕關閉)**:
-   - 執行: `adb shell input keyevent KEYCODE_POWER`。
-   - 等待 1000ms，確認裝置處於休眠鎖定狀態。
-5. **階段 5 (恢復 2 - 螢幕開啟與解鎖)**:
-   - 執行: `adb shell input keyevent KEYCODE_WAKEUP`。
-   - 執行: `adb shell wm dismiss-keyguard`。
-   - 等待 1500ms，確認恢復前景與探針驗證。
-6. **階段 6 (中斷 3 - 第二次 HOME 鍵)**:
-   - 執行: `adb shell input keyevent KEYCODE_HOME`。
-   - 等待 500ms。
-7. **階段 7 (恢復 3 - 最終返回)**:
-   - 執行: `adb shell monkey -p com.cbstudio.telltale 1`。
-   - 等待 2000ms，驗證輪詢穩定度。
+#### 軌道 A 截圖與指紋對照表 (範本)
+| 階段 ID | 執行動作說明 | 預期 UI 視覺特徵 | 截圖檔案名稱 | 關聯事件特徵 |
+| :--- | :--- | :--- | :--- | :--- |
+| `D05-SS01` | 基準前景即時輪詢 | 儀表板顯示高亮即時讀數，狀態標記「批次讀取」 | `d05_01_baseline_live.png` | `POLLER started` |
+| `D05-SS02` | 中斷 1 (HOME) 後返回瞬間 | 儀表板清空或顯示連線探針驗證中（非過期亮起） | `d05_02_resume1_probe.png` | `ATRV probe in-flight` |
+| `D05-SS03` | 恢復 1 (HOME 恢復完成) | 儀表板重新點亮，恢復即時數值 | `d05_03_resume1_active.png` | `Link revalidation succeeded` |
+| `D05-SS04` | 中斷 2 (螢幕關閉後喚醒) | 畫面解鎖後進入前景，安全閥門閉鎖驗證 | `d05_04_resume2_unlock.png` | `WAKEUP / dismiss-keyguard` |
+| `D05-SS05` | 恢復 2 (螢幕解鎖恢復完成) | 數值穩定更新，無跳變或錯誤代碼 | `d05_05_resume2_active.png` | `epoch: 2, loop active` |
+| `D05-SS06` | 恢復 3 (三次循環完全結束) | 系統累積 3 次暫停紀元，無記憶體洩漏與凍結 | `d05_06_resume3_final.png` | `epoch: 3, stable` |
 
 ---
 
-### 3.3 查詢隊列暫停與排空時序 (Query Hold & Queue Drain Timeline)
+### 3.3 軌道 B: Mode 08 探索在途 Hold 協定規範 (Mode 08 In-Flight Hold Protocol)
 
+#### 執行時序與狀態機排空
 ```text
 時間點 (t)     動作事件                                系統內部處理
-t = 0.0s      使用者觸發 HOME 鍵                     Android 發送 onPause()
-t = 0.01s     _onAppPaused() 觸發                   _foreground = false; _pauseEpoch++ (同步完成)
-t = 0.02s     _saveTranscriptSnapshot()              異步寫入硬碟快照
-t = 0.05s     engine.stop() 排空進行中查詢           等待當前在途 OBD 請求完畢，不再派發新請求
-t = 0.15s     發送 TelemetrySnapshot() 空快照        清空 UI 數據，儀表反灰/歸零，拒絕過期讀數
-t = 2.0s      使用者點擊回到前景                     Android 發送 onResume()
-t = 2.01s     _onAppResumed() 觸發                  _awaitingResumeValidation = true (安全閥門閉鎖)
-t = 2.02s     排程 _resumeNow()                      掛載於 _lifecycleChain 佇列
-t = 2.05s     發送 ATRV 探針 (超時 3s)               [Tx]: ATRV\r -> [Rx]: 14.1V\r\r>
-t = 2.20s     ATRV 回應成功                         _openForegroundAfterResumeValidation()
-t = 2.21s     重啟輪詢                              engine.start(); 恢復正常資料流派發
+t = 0.0s      發起 Mode 08 探索                      notifier.runDiscovery(); isDiscovering = true
+t = 0.05s     發送 0800 至 Wire                     [Tx]: 0800\r
+t = 0.10s     回放端接收並進入 Hold                 Wire Barrier 攔截，延遲回應不返回
+t = 0.15s     使用者觸發 HOME / 鎖屏                 Android 發送 onPause(); session 暫停 / 世代遞增
+t = 0.20s     狀態機重設保護                         mode08DiscoveryStateProvider 立即安全重設為 idle / 隊列排空
+t = 2.00s     使用者返回前景                         Android 發送 onResume(); awaitingResumeValidation = true
+t = 2.05s     發送 ATRV 探針 (超時 3s)               [Tx]: ATRV\r -> [Rx]: 14.1V\r\r> (重驗鏈路)
+t = 2.20s     釋放 Wire Barrier 或拋棄逾期回應       若延遲 0800 回應抵達，識別為過期捨棄，嚴防狀態污染
+t = 2.25s     重新發起或保持確定終態                 Mode 08 介面維持確定結果，無凍結、無 ANR、無例外
 ```
+
+#### 軌道 B 實測驗證指引
+- 執行三次完整循環：
+  - **Run 1**: 查詢 `0800` 在途 Hold -> HOME 鍵切換 -> 前景恢復與 ATRV 重驗 -> 釋放 Hold 回應並安全捨棄。
+  - **Run 2**: 查詢 `0820` 在途 Hold -> 螢幕關閉休眠 -> 螢幕開啟解鎖與 ATRV 重驗 -> 釋放 Hold 回應並安全捨棄。
+  - **Run 3**: 查詢 `0800` 在途 Hold -> HOME 鍵切換 -> 前景恢復與最終穩定狀態驗證。
+- 產出獨立之增量補充證據：
+  - `d05_mode08_inflight_traffic.jsonl`：記載各次在途 hold、wire barrier 攔截與釋放之完整封包。
+  - `d05_mode08_lifecycle_events.log`：記載 OS 生命週期切換與 Flutter 內部狀態機轉換日誌。
+  - `d05_mode08_bindings.json`：各 Run 與階段之 1:1 審計綁定紀錄。
 
 ---
 
@@ -287,7 +291,7 @@ t = 2.21s     重啟輪詢                              engine.start(); 恢復�
 
 #### 日誌擷取指令
 ```bash
-adb logcat -v time -s flutter:V ActivityTaskManager:I WindowManager:I | tee lifecycle_events.log
+adb logcat -v time -s flutter:V ActivityTaskManager:I WindowManager:I PowerManagerService:I | tee lifecycle_events.log
 ```
 
 #### 預期標準事件日誌特徵範例
@@ -300,39 +304,17 @@ adb logcat -v time -s flutter:V ActivityTaskManager:I WindowManager:I | tee life
 09-18 11:20:12.465 I/flutter: [ELM_TX] > ATRV
 09-18 11:20:12.510 I/flutter: [ELM_RX] < 14.1V
 09-18 11:20:12.512 I/flutter: [OBD_SESSION] Link revalidation succeeded, restarting poller.
-09-18 11:20:12.520 I/flutter: [POLLER] Polling loop started.
 ```
 
 ---
 
-### 3.5 螢幕截圖 1:1 雜湊綁定協定 (Screenshot-to-Hash Protocol)
-
-為確保生命週期每一步驟均有不可篡改的證據溯源，採用 1:1 截圖擷取與 SHA-256 指紋固化：
-
-#### 截圖擷取指令
-```bash
-adb exec-out screencap -p > screenshot_stage_<ID>.png
-shasum -a 256 screenshot_stage_<ID>.png
-```
-
-#### 生命週期階段與截圖指紋對照表 (範例範本)
-| 階段 ID | 執行動作說明 | 預期 UI 視覺特徵 | 截圖檔案名稱 | 關聯事件特徵 |
-| :--- | :--- | :--- | :--- | :--- |
-| `D05-SS01` | 基準前景即時輪詢 | 儀表板顯示高亮即時讀數，狀態標記「批次讀取」 | `d05_01_baseline_live.png` | `POLLER started` |
-| `D05-SS02` | 中斷 1 (HOME) 後返回瞬間 | 儀表板清空或顯示連線探針驗證中（非過期亮起） | `d05_02_resume1_probe.png` | `ATRV probe in-flight` |
-| `D05-SS03` | 恢復 1 (HOME 恢復完成) | 儀表板重新點亮，恢復即時數值 | `d05_03_resume1_active.png` | `Link revalidation succeeded` |
-| `D05-SS04` | 中斷 2 (螢幕關閉後喚醒) | 畫面解鎖後進入前景，安全閥門閉鎖驗證 | `d05_04_resume2_unlock.png` | `WAKEUP / dismiss-keyguard` |
-| `D05-SS05` | 恢復 2 (螢幕解鎖恢復完成) | 數值穩定更新，無跳變或錯誤代碼 | `d05_05_resume2_active.png` | `epoch: 2, loop active` |
-| `D05-SS06` | 恢復 3 (三次循環完全結束) | 系統累積 3 次暫停紀元，無記憶體洩漏與凍結 | `d05_06_resume3_final.png` | `epoch: 3, stable` |
-
----
-
-### 3.6 D05 驗收查核表 (D05 Acceptance Checklist)
-- [ ] **D05-CHK-01**: 三重中斷序列（HOME -> 返回 -> 鎖屏 -> 解鎖 -> HOME -> 返回）順暢完成，無 App 崩潰或 ANR。
-- [ ] **D05-CHK-02**: 每次進入背景均觸發 `_onAppPaused`，單調暫停計數器 `_pauseEpoch` 精確遞增至 3。
-- [ ] **D05-CHK-03**: 進入背景時輪詢迴圈乾淨排空，且 UI 接收空快照，未發生過期讀數滯留。
-- [ ] **D05-CHK-04**: 回到前景時精確發送超時 3 秒之 `ATRV` 探針，在探針成功前安全閥門保持關閉。
-- [ ] **D05-CHK-05**: 6 個關鍵截圖檔案之 SHA-256 指紋與 ADB logcat 事件日誌具備 1:1 時間戳記嚴格對齊。
+### 3.5 D05 驗收查核表 (D05 Acceptance Checklist)
+- [ ] **D05-CHK-01 (軌道 A - 輪詢)**: 三重中斷序列（HOME -> 返回 -> 鎖屏 -> 解鎖 -> HOME -> 返回）順暢完成，無 App 崩潰或 ANR。
+- [ ] **D05-CHK-02 (軌道 A - 紀元)**: 每次進入背景均觸發 `_onAppPaused`，單調暫停計數器 `_pauseEpoch` 精確遞增至 3。
+- [ ] **D05-CHK-03 (軌道 A - 防殘留)**: 進入背景時輪詢迴圈乾淨排空，且 UI 接收空快照，未發生過期讀數滯留。
+- [ ] **D05-CHK-04 (雙軌共通 - 探針)**: 回到前景時精確發送超時 3 秒之 `ATRV` 探針，在探針成功前安全閥門保持關閉。
+- [ ] **D05-CHK-05 (軌道 B - 在途 Hold)**: Mode 08 探索在途遭中斷時，狀態機安全排空重設，延遲抵達之封包被過期捨棄，無記憶體洩漏與死鎖。
+- [ ] **D05-CHK-06 (審計對應)**: 截圖與日誌具備 1:1 時間戳記與操作關聯證明，明確區隔一般儀表輪詢與 Mode 08 在途 hold 兩項合約。
 
 ---
 
