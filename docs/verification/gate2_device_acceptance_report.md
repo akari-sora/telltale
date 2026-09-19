@@ -6,7 +6,7 @@
 - **關聯議題**: GitLab Issue #104 (Note 3858619704 / Note 3857735494)
 - **基準版本 (Commit HEAD)**: `1ad08253e86ec6a6aef2b706cd0b6729372da3b3`
 - **Git Tree SHA**: `23fef0783e9cb6ca783de677ecc3196bebb498d8`
-- **文件交付版本 (Docs Commit)**: `0bedd3b3a31589aead16bad4526c14f49887962f`
+- **文件交付版本 (Docs Commit)**: `candidate/boost-gate2-candidate-20260917` (Commit `2da601377bfd97f943bc2720ba0a0ab23fd67f12`)
 - **分支名稱**: `candidate/boost-gate2-candidate-20260917`
 - **候選 APK SHA-256**: `acc80f75b599d7f85e5c11416ec6c2e92f774f6b9e1699584414ca35abbade9e`
 - **候選 APK 大小**: `173856260` bytes (~165.8 MiB)
@@ -264,7 +264,7 @@ D08 實測透過 Android 系統語言設定切換（`en` 與 `zh-Hant`），在�
 | **R1** | 候選 APK 隔離存放與文件脫敏發布 | `build/.../app-field-debug.apk`<br>`git commit 0bedd3b` | `export/candidate_apks/app-field-debug-acc80f75b599.apk`<br>`docs/verification/gate2_test_provenance_package.md` | `acc80f75b599d7f85e5c11416ec6c2e92f774f6b9e1699584414ca35abbade9e` | **PASS** |
 | **R2** | D02-1 ATH1 協商成功多區塊 7E8 歸因無警告 | `elm327_client.dart` L1587-1643<br>`mode08_discovery_service.dart` | `docs/verification/evidence/d02_1/d02_1_success.png`<br>`docs/verification/evidence/d02_1/d02_1_traffic.jsonl` | `1a77f34f0c0f4118c584298944a120df0b41a738d01340120cdc6cae6c4d765f`<br>`f031d26359eef22d665171fdcc21e42bb81c7c7c1eb2b5379251d7da2ce49f85` | **PASS** |
 | **R2** | D02-2 ATH1 拒絕後備保留設定揭示限制不崩潰 | `elm327_client.dart` L2011-2034<br>`service_recipes_screen.dart` | `docs/verification/evidence/d02_2/d02_2_refusal_fallback.png`<br>`docs/verification/evidence/d02_2/d02_2_traffic.jsonl` | `eb908d3f9ffb7383c6910d02285bdb425408446d4f43fdee54fbe82b98f41342`<br>`3448917ded6f1c4f8f9b43da24147b9ce6d3115ef55c8a922a505f53570711df` | **PASS** |
-| **R3** | D05-A 三重生命週期韌性、單調 epoch 0->1->2->3（一般儀表輪詢） | `d05_bindings.json`<br>`d05_lifecycle_events.log` | `docs/verification/evidence/d05/d05_bindings.json`<br>`docs/verification/evidence/d05/d05_lifecycle_events.log` | `1856` B (`576` B 雜湊待查)<br>`6275` B | **PASS** |
+| **R3** | D05-A 三重生命週期韌性、單調 epoch 0->1->2->3（一般儀表輪詢） | `d05_bindings.json`<br>`d05_lifecycle_events.log` | `docs/verification/evidence/d05/d05_bindings.json`<br>`docs/verification/evidence/d05/d05_lifecycle_events.log` | `bc0b9b794109fd5054bbc59e954773d84830c51485cd2c4a3cdc0e98043487ff`<br>`932838e129a476691498a2fd66f217f5dfd72bd6d7babf61b73c09f7fee9df8c` | **PASS** |
 | **R3** | D05-A 在途查詢排空、遙測清空與 ATRV 重驗（一般儀表輪詢） | `d05_traffic.jsonl`<br>6 張截圖 1:1 綁定 | `docs/verification/evidence/d05/d05_traffic.jsonl`<br>`docs/verification/evidence/d05/d05_01_baseline_live.png` 至 `06_final.png` | 詳見第 4.3 節 6 張截圖與日誌 1:1 雜湊清單 | **PASS** |
 | **R3** | D05-B Mode 08 探索在途 Hold 三重循環中斷排空與過期封包安全捨棄 | `d05_mode08_bindings.json`<br>`d05_mode08_inflight_traffic.jsonl` | `docs/verification/evidence/d05_mode08_supplement/`<br>`export/gate2_d05_mode08_supplement.zip` | `8515177ceeb4fc9c894577347eae082d305f14e9751162243afe18d7d6e2c19e` | **PASS** |
 | **R4** | D08 雙語 UI 語意對等 (Success, Partial, Unknown) | `d08_manifest.json`<br>6 張雙語對照截圖 | `docs/verification/evidence/d08/d08_01_success_en.png` 至 `06_unknown_zh_Hant.png` | `3fd285e...`, `e9911d7...`<br>`0cc468e...`, `7380307...`<br>`c25cc6b...`, `292aae0...` | **PASS** |
