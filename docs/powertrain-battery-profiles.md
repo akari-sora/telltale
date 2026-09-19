@@ -117,6 +117,10 @@ Where real response captures exist (the Hyundai/Kia profiles), the shipped
 contracts were additionally verified to decode those captures to physically
 plausible values before inclusion.
 
+Percent escapes remain valid in resource paths, but a hostname containing
+any percent sign, whether an encoded or malformed escape spelling, is rejected
+rather than decoded or replaced by a source-name fallback.
+
 ## Installation and the per-connection gate
 
 Installation is deliberately split from trust in the vehicle at the other end

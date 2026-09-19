@@ -1928,7 +1928,7 @@ abstract class AppLocalizations {
   /// An incomplete run whose partial evidence is kept. Must never read as a finished time.
   ///
   /// In en, this message translates to:
-  /// **'The speed signal stopped — this run was not completed; below is what was recorded before it went'**
+  /// **'This run was not completed; below is what was recorded before it stopped'**
   String get performanceStateAborted;
 
   /// No speed reading at all. Distinct from a reading that says the car is moving — the app cannot tell yet.
@@ -6275,6 +6275,12 @@ abstract class AppLocalizations {
   /// **'CAN receive filtering is not available on this ELM327 path.'**
   String get settingsManualCommandCanReceiveFilterUnavailable;
 
+  /// TransportIssue.headerRestoreFailed. The adapter answered ATSH with '?' during header restoration. Commands are refused until reconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'The adapter refused to restore the header (ATSH), so polling is stopped until you reconnect.'**
+  String get settingsManualCommandHeaderRestoreFailed;
+
   /// ManualCommandRefusalReason.emptyCommand. The box refuses before the adapter is involved at all, so it must not read as a failure of anything.
   ///
   /// In en, this message translates to:
@@ -7145,6 +7151,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Only {fields} will be applied. Motor kW, fuel consumption, range, CO2, VE, Cd, frontal area, Crr and transmission efficiency stay unresolved.'**
   String settingsCaWillApplyOnly(String fields);
+
+  /// No description provided for @serviceRecipesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Service Recipes & Active Diagnostics'**
+  String get serviceRecipesTitle;
+
+  /// No description provided for @serviceRecipesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard-referenced service recipes and non-actuating capability discovery'**
+  String get serviceRecipesSubtitle;
+
+  /// No description provided for @serviceRecipesSafetyBannerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Zero Live Candidates'**
+  String get serviceRecipesSafetyBannerTitle;
+
+  /// No description provided for @serviceRecipesSafetyBannerBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Live physical vehicle actuation is strictly prohibited (0 qualified vehicles). Available recipes are simulation fixtures only.'**
+  String get serviceRecipesSafetyBannerBody;
+
+  /// No description provided for @serviceRecipesDiscoverySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode 08 Non-Actuating Discovery'**
+  String get serviceRecipesDiscoverySection;
+
+  /// No description provided for @serviceRecipesDiscoveryDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Queries standard base Test IDs (\$00, \$20, ...) over CAN without actuating any component.'**
+  String get serviceRecipesDiscoveryDescription;
+
+  /// No description provided for @serviceRecipesDiscoveryButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Discover Mode 08 Supported TIDs'**
+  String get serviceRecipesDiscoveryButton;
+
+  /// No description provided for @serviceRecipesDiscovering.
+  ///
+  /// In en, this message translates to:
+  /// **'Querying supported TIDs...'**
+  String get serviceRecipesDiscovering;
+
+  /// No description provided for @serviceRecipesDiscoverySuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode 08 is supported by ECU. Supported TIDs: {tids}'**
+  String serviceRecipesDiscoverySuccess(String tids);
+
+  /// No description provided for @serviceRecipesDiscoveryUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode 08 is not supported by this ECU'**
+  String get serviceRecipesDiscoveryUnsupported;
+
+  /// No description provided for @serviceRecipesDiscoveryUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode 08 support is unknown: {reason}'**
+  String serviceRecipesDiscoveryUnknown(String reason);
+
+  /// No description provided for @serviceRecipesDiscoveryPartialWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Discovery partially completed ({reason}). Uncompleted blocks: {blocks}. Note: Not found does not mean unsupported (未查到不代表不支援).'**
+  String serviceRecipesDiscoveryPartialWarning(String reason, String blocks);
+
+  /// No description provided for @serviceRecipesCatalogSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Available Service Recipes'**
+  String get serviceRecipesCatalogSection;
+
+  /// No description provided for @serviceRecipesSimulationBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Simulation Ready'**
+  String get serviceRecipesSimulationBadge;
+
+  /// No description provided for @serviceRecipesLiveBlockedBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Live Blocked (0 Live Candidates)'**
+  String get serviceRecipesLiveBlockedBadge;
+
+  /// No description provided for @serviceRecipesStandard.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard: {standard}'**
+  String serviceRecipesStandard(String standard);
+
+  /// No description provided for @serviceRecipesEcuHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'ECU Header: {header}'**
+  String serviceRecipesEcuHeader(String header);
+
+  /// No description provided for @serviceRecipesHash.
+  ///
+  /// In en, this message translates to:
+  /// **'Canonical Hash: {hash}'**
+  String serviceRecipesHash(String hash);
+
+  /// No description provided for @serviceRecipesDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Service Recipe Details'**
+  String get serviceRecipesDetailTitle;
+
+  /// No description provided for @serviceRecipesPreconditions.
+  ///
+  /// In en, this message translates to:
+  /// **'Safety Preconditions'**
+  String get serviceRecipesPreconditions;
+
+  /// No description provided for @serviceRecipesRecovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery Command'**
+  String get serviceRecipesRecovery;
+
+  /// No description provided for @serviceRecipesClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get serviceRecipesClose;
+
+  /// No description provided for @serviceRecipesDiscoveryRequiresCan.
+  ///
+  /// In en, this message translates to:
+  /// **'Requires an active OBD-II CAN bus connection.'**
+  String get serviceRecipesDiscoveryRequiresCan;
+
+  /// No description provided for @serviceRecipesLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading service recipes: {error}'**
+  String serviceRecipesLoadError(String error);
+
+  /// No description provided for @serviceRecipesNoPreconditions.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get serviceRecipesNoPreconditions;
+
+  /// No description provided for @settingsServiceRecipesEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Service Recipes & Active Tests'**
+  String get settingsServiceRecipesEntry;
+
+  /// No description provided for @settingsServiceRecipesDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Inspect workshop service recipes and discover supported Mode 08 tests'**
+  String get settingsServiceRecipesDesc;
 }
 
 class _AppLocalizationsDelegate
