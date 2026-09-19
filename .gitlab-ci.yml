@@ -2,31 +2,39 @@ workflow:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "api"'
 stages: [inspect]
-variables:
-  GIT_DEPTH: "0"
-source-review-export:
+receipt-review:
   stage: inspect
   image: ubuntu:24.04
   tags: [saas-linux-small-amd64]
-  timeout: 10m
+  timeout: 5m
+  variables:
+    DEBIAN_FRONTEND: noninteractive
   script:
     - |
       set -Eeuo pipefail
       apt-get update -qq
-      apt-get install -y -qq --no-install-recommends git ca-certificates
-      git config --global --add safe.directory "$CI_PROJECT_DIR"
-      git fetch --no-tags origin main:refs/remotes/origin/main
-      mkdir source-review
-      git rev-parse refs/remotes/origin/main
-      set +e
-      git merge-tree --write-tree 25253474501f7460572de4cf77c666c0d8a2900a refs/remotes/origin/main > source-review/merge-tree.txt
-      rc=$?
-      set -e
-      cat source-review/merge-tree.txt
-      test "$rc" -le 1
-      git diff --stat 546b2aa70f90c14bb4045a6e922a5b3929445328 refs/remotes/origin/main
-      echo REVIEW_DIAGNOSTICS_END
+      apt-get install -y -qq --no-install-recommends curl ca-certificates
+      mkdir receipt-review
+      fetch() {
+        job="$1"; path="$2"; dest="$3"
+        curl --fail --silent --show-error --location --max-time 60 \
+          --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/$job/artifacts/$path" \
+          -o "receipt-review/$dest"
+      }
+      fetch 16604391702 ci-artifacts/mode08-required/guard/attempt.json mr-required-guard.json
+      fetch 16604391702 ci-artifacts/mode08-required/result.json mr-required-result.json
+      fetch 16604391702 ci-artifacts/apks.sha256 mr-apks.sha256
+      fetch 16604391702 ci-artifacts/source.stdout mr-source.txt
+      fetch 16604411708 android-probe/emulator.log android-emulator.log
+      printf '\n=== MR_REQUIRED_GUARD ===\n'; cat receipt-review/mr-required-guard.json
+      printf '\n=== MR_REQUIRED_RESULT ===\n'; cat receipt-review/mr-required-result.json
+      printf '\n=== MR_APK_HASH ===\n'; cat receipt-review/mr-apks.sha256
+      printf '\n=== MR_SOURCE ===\n'; cat receipt-review/mr-source.txt
+      printf '\n=== ANDROID_BOOT_DIAGNOSTIC ===\n'
+      grep -Ei 'error|warning|KVM|accel|fatal|boot|crash|failed' receipt-review/android-emulator.log | tail -n 60 || true
+      printf '\nREAD_ONLY_RECEIPTS_END\n'
   artifacts:
     when: always
-    expire_in: 2 days
-    paths: [source-review/]
+    expire_in: 7 days
+    paths: [receipt-review/]
