@@ -675,6 +675,14 @@ def settings_list_open(rows):
     return False
 
 
+def launcher_surface(rows):
+    """Job 16612709877 dumped the Android launcher (Apps list / Gallery)
+    after am start; Fully drawn came from stale logcat.
+    """
+    return (locate_text(rows, 'Apps list') is not None
+            or locate_text(rows, 'Gallery') is not None)
+
+
 def dashboard_surface(rows):
     """Gauge grid / 'No data — Unverified' without the Settings list.
 
@@ -1116,6 +1124,10 @@ async def find_text(text, exact=False, scroll=True):
     scroll_done = False
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
         rows = await dump('locate', screenshot=False, prepare=False)
+        if launcher_surface(rows):
+            event('launcher_during_lookup', text=text, attempt=attempt)
+            await launch_app()
+            continue
         if recipes:
             labels = recipe_test_labels(rows)
             event('recipe_test_labels', attempt=attempt, labels=labels,

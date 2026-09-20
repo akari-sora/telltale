@@ -1359,5 +1359,22 @@ class DashboardSurfaceRoadTest(unittest.TestCase):
         self.assertEqual(y, (295 + 399) // 2)
 
 
+
+class LauncherSurfaceTests(unittest.TestCase):
+    def test_apps_list_is_launcher_not_connect(self):
+        rows = [
+            {'text': 'Gallery', 'desc': 'Gallery', 'bounds': '[16,200][120,300]',
+             'enabled': 'true', 'clickable': 'true', 'clazz': 'android.widget.TextView'},
+            {'text': '', 'desc': 'Apps list', 'bounds': '[16,40][200,80]',
+             'enabled': 'true', 'clickable': 'true', 'clazz': 'android.widget.TextView'},
+        ]
+        self.assertTrue(CTRL.launcher_surface(rows))
+        self.assertFalse(CTRL.launcher_surface([
+            {'text': '', 'desc': 'Wi-Fi\nA TCP port', 'bounds': '[16,465][464,540]',
+             'enabled': 'true', 'clickable': 'true', 'clazz': 'android.widget.Button'},
+        ]))
+
+
 if __name__ == '__main__':
+
     unittest.main()
