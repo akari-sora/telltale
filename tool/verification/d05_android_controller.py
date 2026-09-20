@@ -1503,18 +1503,24 @@ async def case(rig, index, click_text):
     try:
         receipt = await asyncio.wait_for(asyncio.shield(rig.held), timeout=90)
         event('held_query_confirmed_before_os_command', receipt=receipt, action=action)
-        await adb('shell', 'input', 'keyevent', '223' if index == 2 else '3',
-                  timeout=20, check=False)
-        event('os_command_executed_during_hold', action=action, index=index)
+        key_task = asyncio.create_task(
+            adb('shell', 'input', 'keyevent', '223' if index == 2 else '3',
+                timeout=20, check=False)
+        )
+        # Release hold at 0.5s while keyevent is executing so app receives Mode 08
+        # response well within its 2.0s discovery timeout, avoiding connection lost.
+        await asyncio.sleep(0.5)
         rig.release.set()
         event('mode08_hold_released_for_resume', index=index, command=command)
+        await key_task
+        event('os_command_executed_during_hold', action=action, index=index)
         if index == 2:
             await wake_and_unlock()
         await launch_app(is_resume=True)
-        await actual_os_snapshot('after_resume')
         await wait_for_mode08_terminal_ui(timeout=30)
         terminal_rows = await dump('mode08_terminal')
         assert_genuine_mode08_terminal(terminal_rows)
+        await actual_os_snapshot('after_resume')
         event('case_observations_complete', index=index, acceptance='CONFIRMED_TERMINAL_UI')
         if index in (1, 2):
             try:

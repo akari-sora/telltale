@@ -1550,6 +1550,98 @@ class LaunchAppResumeTests(unittest.TestCase):
         self.assertIn('"event": "app_resumed_ready"', events)
 
 
-if __name__ == '__main__':
+class CaseHoldAndReleaseOrderTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.out = Path(self.tmp.name)
+        self.event_file = self.out / 'controller.jsonl'
 
+    def _patch_out(self):
+        return patch.multiple(CTRL, OUT=self.out, EVENT_FILE=self.event_file)
+
+    def test_case_releases_hold_timely_and_asserts_terminal(self):
+        events_recorded = []
+
+        class MockRig:
+            def __init__(self):
+                self.target = None
+                self.held = None
+                self.release = None
+                self.states = {}
+
+            def arm(self, command):
+                self.target = command
+                loop = asyncio.get_running_loop()
+                self.held = loop.create_future()
+                self.release = asyncio.Event()
+                self.held.set_result({'connection': 2, 'command': command})
+
+        rig = MockRig()
+        genuine_terminal_rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics', enabled='true', bounds='[0,0][480,100]'),
+            dict(text='', desc='MODE 08 NON-ACTUATING DISCOVERY', enabled='true', bounds='[0,100][480,200]'),
+            dict(text='Mode 08 is not supported by this ECU', desc='', enabled='true', bounds='[0,200][480,300]'),
+            dict(text='Discover Mode 08', desc='', enabled='true', clickable='true', bounds='[10,20][100,80]'),
+        ]
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            if 'keyevent' in args:
+                await asyncio.sleep(0.01)
+            return SimpleNamespace(returncode=0, stdout=b'', stderr=b'') if full else b''
+
+        async def fake_dump(label, screenshot=True, prepare=True):
+            return genuine_terminal_rows
+
+        async def fake_find_text(text, exact=False, scroll=True):
+            node = dict(text=text, desc='', bounds='[10,20][100,80]')
+            return (node, 50, 50), 0
+
+        async def fake_launch_app(is_resume=False):
+            pass
+
+        async def fake_actual_os_snapshot(label):
+            pass
+
+        async def fake_wait_for_mode08_terminal_ui(timeout=30):
+            return genuine_terminal_rows
+
+        async def instant_sleep(_delay):
+            pass
+
+        with self._patch_out(), \
+             patch.object(CTRL, 'adb', fake_adb), \
+             patch.object(CTRL, 'dump', fake_dump), \
+             patch.object(CTRL, 'find_text', fake_find_text), \
+             patch.object(CTRL, 'launch_app', fake_launch_app), \
+             patch.object(CTRL, 'wait_for_mode08_terminal_ui', fake_wait_for_mode08_terminal_ui), \
+             patch.object(CTRL, 'actual_os_snapshot', fake_actual_os_snapshot), \
+             patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.case(rig, 1, 'Discover Mode 08'))
+
+        lines = [json.loads(l) for l in self.event_file.read_text().splitlines() if l.strip()]
+        event_names = [e['event'] for e in lines]
+
+        # Verify hold released before or concurrently with OS command completion
+        self.assertIn('held_query_confirmed_before_os_command', event_names)
+        self.assertIn('mode08_hold_released_for_resume', event_names)
+        self.assertIn('os_command_executed_during_hold', event_names)
+        self.assertIn('case_observations_complete', event_names)
+
+        # Confirm release came right after held query confirmation
+        held_idx = event_names.index('held_query_confirmed_before_os_command')
+        rel_idx = event_names.index('mode08_hold_released_for_resume')
+        os_cmd_idx = event_names.index('os_command_executed_during_hold')
+        complete_idx = event_names.index('case_observations_complete')
+
+        self.assertLess(held_idx, rel_idx)
+        self.assertLess(rel_idx, os_cmd_idx)
+        self.assertLess(os_cmd_idx, complete_idx)
+
+        # Confirm acceptance marker
+        comp_event = [e for e in lines if e['event'] == 'case_observations_complete'][0]
+        self.assertEqual(comp_event['acceptance'], 'CONFIRMED_TERMINAL_UI')
+
+
+if __name__ == '__main__':
     unittest.main()
