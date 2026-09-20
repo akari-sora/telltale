@@ -1032,10 +1032,10 @@ async def fling_list(count=1, upward=False):
     # Job 16609955129 stayed on Export transcript for every locate dump:
     # 80ms gutter flings did not move the outer Settings list. PAGE_DOWN
     # targets the focused scrollable instead of the transcript Panel.
-    if not upward:
-        for _ in range(max(1, count // 2)):
-            await adb('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN',
-                      timeout=20, check=False)
+    key = 'KEYCODE_PAGE_UP' if upward else 'KEYCODE_PAGE_DOWN'
+    for _ in range(max(1, count // 2)):
+        await adb('shell', 'input', 'keyevent', key,
+                  timeout=20, check=False)
     y1, y2 = (LIST_FLING_Y2, LIST_FLING_Y1) if upward else (LIST_FLING_Y1, LIST_FLING_Y2)
     if count == 1:
         await adb('shell', 'input', 'swipe', LIST_FLING_X, y1,
@@ -1186,12 +1186,11 @@ async def find_text(text, exact=False, scroll=True):
             await tap_settings_tab(rows)
             continue
         if recipes:
-            # Job 16612438750: 11 scrollIntoView looks, settings_list true,
-            # labels still []. Job 16612287354 d05 PAGE_DOWN later revealed
-            # the tile at [16,199][464,303]. Page the list every look.
+            upward = past_recipes(rows)
             event('recipes_direct_nav', text=text, attempt=attempt,
-                  method='page_down')
-            await fling_list(FLINGS_PER_LOOK, upward=False)
+                  method='page_down',
+                  overshoot_recovery=upward)
+            await fling_list(FLINGS_PER_LOOK, upward=upward)
             await asyncio.sleep(0.2)
             continue
         event('scroll_until_text', text=text, attempt=attempt + 1,
@@ -1350,6 +1349,13 @@ async def case(rig, index, click_text):
     ACTIVE_RUN = f'd05_{index}_{time.time_ns()}'
     command = '0820' if index == 2 else '0800'
     action = 'SLEEP' if index == 2 else 'HOME'
+    rows = await dump('locate', screenshot=False, prepare=False)
+    if not locate_text(rows, click_text):
+        event('case_ensuring_recipes_surface', index=index, click_text=click_text)
+        await enter_dashboard()
+        await tap_text('Settings', exact=False, scroll=False)
+        await tap_text('Service Recipes')
+        await asyncio.sleep(0.5)
     await dump('before_discovery')
     found, attempt = await find_text(click_text, exact=False, scroll=True)
     row, x, y = found

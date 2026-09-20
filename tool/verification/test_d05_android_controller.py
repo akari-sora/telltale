@@ -1369,6 +1369,58 @@ class LauncherSurfaceTests(unittest.TestCase):
         ]))
 
 
+class OvershootRecoveryTests(unittest.TestCase):
+    def test_past_recipes_causes_upward_scroll_and_page_up(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        dumps = [
+            [
+                dict(text='', desc='Gauge style\nNot just a colour change.', enabled='true',
+                     clickable='false', bounds='[16,24][464,163]'),
+                dict(text='', desc='RECOMMENDED ADAPTER', enabled='true',
+                     clickable='false', bounds='[16,187][464,486]'),
+                dict(text='', desc='Dashboard\nTab 1 of 5', enabled='true',
+                     clickable='true', bounds='[0,684][96,752]'),
+                dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                     clickable='true', bounds='[384,684][480,752]'),
+            ],
+            [
+                dict(text='', desc='Service Recipes & Active Tests', enabled='true',
+                     clickable='true', bounds='[16,400][464,470]'),
+                dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                     clickable='true', bounds='[384,684][480,752]'),
+            ],
+        ]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True, prepare=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_TRIED=True,
+                            SCROLL_JAR_USABLE=True), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.tap_text('Service Recipes'))
+
+        events = (out / 'controller.jsonl').read_text()
+        self.assertIn('"overshoot_recovery": true', events)
+        page_up_calls = [c for c in calls if len(c) >= 4 and c[3] == 'KEYCODE_PAGE_UP']
+        self.assertTrue(len(page_up_calls) > 0)
+        swipes = [c for c in calls if c[:1] == ('shell',) and any(isinstance(part, str) and 'swipe' in part for part in c)]
+        self.assertTrue(len(swipes) > 0)
+
+
 if __name__ == '__main__':
 
     unittest.main()
