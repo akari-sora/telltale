@@ -51,7 +51,7 @@ class HierarchyParseTests(unittest.TestCase):
             CTRL.parse_ui_rows(b'')
 
     def test_xml_declaration_without_root_is_unusable(self):
-        with self.assertRaises(ET.ParseError):
+        with self.assertRaisesRegex(ValueError, 'truncated|no XML hierarchy'):
             CTRL.parse_ui_rows(XML_DECLARATION_ONLY)
 
     def test_empty_hierarchy_is_unusable(self):
@@ -61,6 +61,21 @@ class HierarchyParseTests(unittest.TestCase):
     def test_missing_xml_marker_is_unusable(self):
         with self.assertRaisesRegex(ValueError, 'no XML hierarchy'):
             CTRL.parse_ui_rows(b'not xml\n')
+
+    def test_trailing_uiautomator_tty_status_is_ignored(self):
+        payload = VALID_HIERARCHY + b'UI hierchary dumped to: /dev/tty\n'
+        rows = CTRL.parse_ui_rows(payload)
+        self.assertEqual(rows[0]['text'], 'Discover Mode 08')
+        self.assertEqual(CTRL.hierarchy_slice(payload), VALID_HIERARCHY.rstrip())
+
+    def test_second_document_after_hierarchy_is_ignored(self):
+        payload = VALID_HIERARCHY + b"<?xml version='1.0'?><hierarchy rotation='0'/>\n"
+        rows = CTRL.parse_ui_rows(payload)
+        self.assertEqual(rows[0]['text'], 'Discover Mode 08')
+
+    def test_truncated_hierarchy_is_unusable(self):
+        with self.assertRaisesRegex(ValueError, 'truncated'):
+            CTRL.parse_ui_rows(b"<?xml version='1.0'?><hierarchy rotation='0'><node text='x'")
 
 
 class ResumeDetectionTests(unittest.TestCase):
