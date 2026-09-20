@@ -1,98 +1,17 @@
 {
   "version": 1,
   "commands": [
-    {
-      "id": 1,
-      "op": "tap_text",
-      "text": "Wi-Fi"
-    },
-    {
-      "id": 2,
-      "op": "tap_text",
-      "text": "192.168.0.10",
-      "exact": true
-    },
-    {
-      "id": 3,
-      "op": "replace_numeric",
-      "text": "127.0.0.1"
-    },
-    {
-      "id": 4,
-      "op": "tap_text",
-      "text": "35000",
-      "exact": true
-    },
-    {
-      "id": 5,
-      "op": "replace_numeric",
-      "text": "35008"
-    },
-    {
-      "id": 6,
-      "op": "tap_text",
-      "text": "Connect"
-    },
-    {
-      "id": 7,
-      "op": "tap",
-      "x": 432,
-      "y": 718
-    },
-    {
-      "id": 8,
-      "op": "swipe",
-      "x1": 240,
-      "y1": 680,
-      "x2": 240,
-      "y2": 160
-    },
-    {
-      "id": 9,
-      "op": "swipe",
-      "x1": 240,
-      "y1": 680,
-      "x2": 240,
-      "y2": 160
-    },
-    {
-      "id": 10,
-      "op": "swipe",
-      "x1": 240,
-      "y1": 680,
-      "x2": 240,
-      "y2": 160
-    },
-    {
-      "id": 11,
-      "op": "dump"
-    },
-    {
-      "id": 12,
-      "op": "tap_text",
-      "text": "Service Recipes"
-    },
-    {
-      "id": 13,
-      "op": "d05",
-      "index": 1,
-      "button_text": "Discover Mode 08"
-    },
-    {
-      "id": 14,
-      "op": "d05",
-      "index": 2,
-      "button_text": "Discover Mode 08"
-    },
-    {
-      "id": 15,
-      "op": "d05",
-      "index": 3,
-      "button_text": "Discover Mode 08"
-    },
-    {
-      "id": 16,
-      "op": "finish"
-    }
+    {"id": 1, "op": "tap_text", "text": "Wi-Fi"},
+    {"id": 2, "op": "tap_text", "text": "192.168.0.10", "exact": true},
+    {"id": 3, "op": "replace_numeric", "text": "127.0.0.1"},
+    {"id": 4, "op": "tap_text", "text": "35000", "exact": true},
+    {"id": 5, "op": "replace_numeric", "text": "35008"},
+    {"id": 6, "op": "tap_text", "text": "Connect"},
+    {"id": 7, "op": "tap_text", "text": "Settings", "scroll": false},
+    {"id": 8, "op": "tap_text", "text": "Service Recipes"},
+    {"id": 9, "op": "d05", "index": 1, "button_text": "Discover Mode 08"},
+    {"id": 10, "op": "d05", "index": 2, "button_text": "Discover Mode 08"},
+    {"id": 11, "op": "d05", "index": 3, "button_text": "Discover Mode 08"},
+    {"id": 12, "op": "finish"}
   ]
 }
