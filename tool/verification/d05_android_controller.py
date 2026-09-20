@@ -1301,7 +1301,7 @@ class DeviceRig(ReplayServer):
             event('mode08_response_held', connection=writer.connection, command=compact)
             self.held.set_result(dict(connection=writer.connection, command=compact))
             try:
-                await asyncio.wait_for(self.release.wait(), timeout=15)
+                await asyncio.wait_for(self.release.wait(), timeout=120)
                 event('mode08_hold_released', connection=writer.connection, command=compact)
             except asyncio.TimeoutError:
                 event('mode08_hold_deadline', connection=writer.connection, command=compact)
@@ -1343,9 +1343,15 @@ async def case(rig, index, click_text):
     command = '0820' if index == 2 else '0800'
     action = 'SLEEP' if index == 2 else 'HOME'
     await dump('before_discovery')
-    await tap_text(click_text)
+    found, attempt = await find_text(click_text, exact=False, scroll=True)
+    row, x, y = found
+    label = node_primary_label(row)
+    if not label:
+        raise RuntimeError('Refusing to tap a node with empty text and content-desc')
+    event('selected_observed_ui_node', text=click_text, node=row, node_label=label,
+          scroll_attempts=attempt, scrolled=bool(attempt > 0))
     rig.arm(command)
-    click = asyncio.create_task(tap_text(click_text))
+    await adb('shell', 'input', 'tap', x, y)
     try:
         receipt = await asyncio.wait_for(asyncio.shield(rig.held), timeout=90)
         event('held_query_confirmed_before_os_command', receipt=receipt, action=action)
@@ -1357,7 +1363,6 @@ async def case(rig, index, click_text):
             await wake_and_unlock()
         await launch_app()
         rig.release.set()
-        await click
         await asyncio.sleep(2)
         await actual_os_snapshot('after_resume')
         await dump('mode08_terminal')
@@ -1372,10 +1377,8 @@ async def case(rig, index, click_text):
                       error=type(exc).__name__ + ': ' + str(exc))
     finally:
         rig.target = None
-        rig.release.set()
-        if not click.done():
-            click.cancel()
-        await asyncio.gather(click, return_exceptions=True)
+        if rig.release:
+            rig.release.set()
         ACTIVE_RUN = None
 
 
