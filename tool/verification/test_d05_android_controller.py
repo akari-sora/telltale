@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -439,6 +440,23 @@ class TapTextMatchTests(unittest.TestCase):
             'Open Service Recipes tile',
         )
 
+    def test_locate_recipes_prefers_titled_tile_over_empty_parent(self):
+        empty = dict(text='', desc='', enabled='true', clickable='true',
+                     bounds='[0,24][480,752]')
+        subtitle = dict(
+            text='',
+            desc='Inspect workshop service recipes and discover supported Mode 08 tests',
+            enabled='true', clickable='false', bounds='[16,430][464,470]',
+        )
+        tile = dict(text='', desc='Service Recipes & Active Tests', enabled='true',
+                    clickable='true', bounds='[16,400][464,470]')
+        found = CTRL.locate_recipes([empty, subtitle, tile])
+        self.assertEqual(found[0]['desc'], 'Service Recipes & Active Tests')
+        self.assertEqual(found[1:], (240, 435))
+        self.assertIsNone(CTRL.locate_recipes([empty]))
+        self.assertEqual(CTRL.node_primary_label(tile), 'Service Recipes & Active Tests')
+        self.assertEqual(CTRL.node_primary_label(empty), '')
+
     def _swipe_calls(self, calls):
         return [c for c in calls if c[:1] == ('shell',) and any(
             isinstance(part, str) and 'swipe' in part for part in c)]
@@ -571,7 +589,7 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertTrue(CTRL.settings_list_open(rows))
         self.assertFalse(CTRL.dashboard_surface(rows))
 
-    def test_recipes_keeps_paging_through_vehicle_profile_body(self):
+    def test_recipes_scrolls_into_view_from_vehicle_profile_body(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
@@ -585,7 +603,7 @@ class TapTextMatchTests(unittest.TestCase):
         ]
         recipes = [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
                         clickable='true', bounds='[16,400][464,470]')]
-        dumps = [connection, self._vehicle_profile_mid_rows(), recipes]
+        dumps = [connection, recipes]
         calls = []
 
         async def fake_dump(label='view', screenshot=True, prepare=True):
@@ -600,7 +618,8 @@ class TapTextMatchTests(unittest.TestCase):
             return None
 
         with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
-                            TAP_SCROLL_ATTEMPTS=4), \
+                            TAP_SCROLL_ATTEMPTS=4, SCROLL_JAR_TRIED=True,
+                            SCROLL_JAR_USABLE=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
@@ -608,14 +627,10 @@ class TapTextMatchTests(unittest.TestCase):
         events = (out / 'controller.jsonl').read_text()
         self.assertNotIn('settings_residency_lost', events)
         self.assertNotIn('settings_tab_retap', events)
-        self.assertEqual(self._page_calls(calls), [
-            ('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN'),
-            ('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN'),
-        ])
+        self.assertFalse(self._page_calls(calls))
         self.assertFalse(self._swipe_calls(calls))
+        self.assertEqual(len(self._runtest_calls(calls)), 1)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
-        self.assertEqual(taps[0], ('shell', 'input', 'tap', CTRL.LIST_FOCUS_X, 101))
-        self.assertTrue(all(c[3] == CTRL.LIST_FOCUS_X for c in taps[:-1]))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
 
     def _fuel_and_drivetrain_rows(self):
@@ -657,14 +672,14 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertFalse(CTRL.point_hits_interactive(CTRL.LIST_FOCUS_X, 450, fuel))
         self.assertFalse(CTRL.point_hits_interactive(CTRL.LIST_FOCUS_X, CTRL.LIST_FOCUS_Y, fuel))
 
-    def test_stuck_fuel_page_down_refocuses_and_nudges_to_recipes(self):
+    def test_fuel_viewport_scrolls_recipes_into_view_without_page_down(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
         fuel = self._fuel_and_drivetrain_rows()
         recipes = [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
                         clickable='true', bounds='[16,400][464,470]')]
-        dumps = [fuel, fuel, recipes]
+        dumps = [fuel, recipes]
         calls = []
 
         async def fake_dump(label='view', screenshot=True, prepare=True):
@@ -679,31 +694,24 @@ class TapTextMatchTests(unittest.TestCase):
             return None
 
         with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
-                            TAP_SCROLL_ATTEMPTS=4), \
+                            TAP_SCROLL_ATTEMPTS=4, SCROLL_JAR_TRIED=True,
+                            SCROLL_JAR_USABLE=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         events = (out / 'controller.jsonl').read_text()
-        self.assertIn('recipes_page_stuck', events)
-        self.assertIn('recipes_gutter_nudge', events)
+        self.assertNotIn('recipes_page_stuck', events)
+        self.assertNotIn('recipes_gutter_nudge', events)
         self.assertNotIn('settings_residency_lost', events)
         self.assertNotIn('recipes_burst_fling', events)
-        self.assertEqual(self._page_calls(calls), [
-            ('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN'),
-        ])
-        swipes = self._swipe_calls(calls)
-        self.assertEqual(len(swipes), 1)
-        self.assertEqual(swipes[0][:3], ('shell', 'input', 'swipe'))
-        self.assertEqual(swipes[0][3], CTRL.LIST_FOCUS_X)
-        self.assertEqual(swipes[0][5], CTRL.LIST_FOCUS_X)
-        self.assertEqual(swipes[0][7], CTRL.GUTTER_NUDGE_MS)
+        self.assertFalse(self._page_calls(calls))
+        self.assertFalse(self._swipe_calls(calls))
+        self.assertEqual(len(self._runtest_calls(calls)), 1)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
-        self.assertGreaterEqual(len(taps), 2)
-        self.assertTrue(all(c[3] == CTRL.LIST_FOCUS_X for c in taps[:-1]))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
 
-    def test_tap_text_pages_down_to_recipes_without_fling_or_jar(self):
+    def test_tap_text_scrolls_recipes_into_view_without_page_down(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
@@ -741,26 +749,31 @@ class TapTextMatchTests(unittest.TestCase):
             return None
 
         with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
-                            TAP_SCROLL_ATTEMPTS=3), \
+                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_TRIED=True,
+                            SCROLL_JAR_USABLE=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertEqual(order, ['dump', 'tap', 'page', 'dump', 'tap'])
+        self.assertEqual(order, ['dump', 'scroll', 'dump', 'tap'])
         self.assertFalse(self._swipe_calls(calls))
-        self.assertFalse(self._runtest_calls(calls))
-        self.assertEqual(self._page_calls(calls),
-                         [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN')])
+        self.assertFalse(self._page_calls(calls))
+        runtests = self._runtest_calls(calls)
+        self.assertEqual(len(runtests), 1)
+        self.assertEqual(runtests[0][:4],
+                         ('shell', 'uiautomator', 'runtest', CTRL.SCROLL_JAR_REMOTE))
+        self.assertIn('D05Scroll', runtests[0])
+        self.assertIn('Service Recipes', runtests[0])
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
-        self.assertEqual(taps[0], ('shell', 'input', 'tap', CTRL.LIST_FOCUS_X, 101))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('recipes_direct_nav', events)
-        self.assertIn('recipes_page_scroll', events)
-        self.assertIn('"method": "page_down"', events)
+        self.assertIn('uiautomator_scroll_into_view', events)
+        self.assertIn('"method": "uiautomator_scroll_into_view"', events)
         self.assertIn('"settings_list": true', events)
+        self.assertIn('"node_label": "Service Recipes & Active Tests"', events)
         self.assertNotIn('recipes_burst_fling', events)
-        self.assertNotIn('uiautomator_scroll_into_view', events)
+        self.assertNotIn('recipes_page_scroll', events)
 
     def test_recipes_retaps_settings_when_dashboard_is_showing(self):
         tmp = tempfile.TemporaryDirectory()
@@ -807,23 +820,25 @@ class TapTextMatchTests(unittest.TestCase):
             return None
 
         with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
-                            TAP_SCROLL_ATTEMPTS=3), \
+                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_TRIED=True,
+                            SCROLL_JAR_USABLE=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertEqual(order, ['dump', 'tap', 'dump', 'tap', 'page', 'dump', 'tap'])
+        self.assertEqual(order, ['dump', 'tap', 'dump', 'scroll', 'dump', 'tap'])
         self.assertFalse(self._swipe_calls(calls))
-        self.assertFalse(self._runtest_calls(calls))
+        self.assertFalse(self._page_calls(calls))
+        self.assertEqual(len(self._runtest_calls(calls)), 1)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
-        self.assertEqual(taps[1], ('shell', 'input', 'tap', CTRL.LIST_FOCUS_X, 101))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('settings_residency_lost', events)
         self.assertIn('recipes_direct_nav', events)
+        self.assertIn('uiautomator_scroll_into_view', events)
 
-    def test_recipes_pages_up_from_settings_bottom_without_retap(self):
+    def test_recipes_scrolls_into_view_from_settings_bottom_without_retap(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
@@ -846,24 +861,23 @@ class TapTextMatchTests(unittest.TestCase):
             return None
 
         with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
-                            TAP_SCROLL_ATTEMPTS=3), \
+                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_TRIED=True,
+                            SCROLL_JAR_USABLE=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         self.assertFalse(self._swipe_calls(calls))
-        self.assertFalse(self._runtest_calls(calls))
-        self.assertEqual(self._page_calls(calls),
-                         [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_UP')])
+        self.assertFalse(self._page_calls(calls))
+        self.assertEqual(len(self._runtest_calls(calls)), 1)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
-        self.assertEqual(taps[0], ('shell', 'input', 'tap', CTRL.LIST_FOCUS_X, 93))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
-        self.assertIn('"method": "page_up"', events)
+        self.assertIn('"method": "uiautomator_scroll_into_view"', events)
         self.assertNotIn('settings_residency_lost', events)
         self.assertNotIn('recipes_burst_fling', events)
 
-    def test_recipes_pages_up_from_language_overshoot(self):
+    def test_recipes_scrolls_into_view_from_language_overshoot(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
@@ -893,17 +907,17 @@ class TapTextMatchTests(unittest.TestCase):
             return None
 
         with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
-                            TAP_SCROLL_ATTEMPTS=3), \
+                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_TRIED=True,
+                            SCROLL_JAR_USABLE=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         self.assertFalse(self._swipe_calls(calls))
-        self.assertFalse(self._runtest_calls(calls))
-        self.assertEqual(self._page_calls(calls),
-                         [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_UP')])
+        self.assertFalse(self._page_calls(calls))
+        self.assertEqual(len(self._runtest_calls(calls)), 1)
 
-    def test_scroll_into_view_skips_runtest_when_jar_unusable(self):
+    def test_scroll_into_view_fails_closed_when_jar_unusable(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
@@ -917,11 +931,12 @@ class TapTextMatchTests(unittest.TestCase):
         with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
                             SCROLL_JAR_TRIED=True, SCROLL_JAR_USABLE=False), \
                 patch.object(CTRL, 'adb', fake_adb):
-            used = asyncio.run(CTRL.scroll_into_view('Service Recipes'))
-        self.assertFalse(used)
+            with self.assertRaises(CTRL.ScrollJarUnusable):
+                asyncio.run(CTRL.scroll_into_view('Service Recipes'))
         self.assertFalse(self._runtest_calls(calls))
         events = (out / 'controller.jsonl').read_text()
-        self.assertIn('scroll_jar_skipped', events)
+        self.assertIn('scroll_jar_unusable', events)
+        self.assertNotIn('scroll_jar_skipped', events)
 
     def test_recipes_reconnects_once_after_session_drop(self):
         tmp = tempfile.TemporaryDirectory()
@@ -957,7 +972,9 @@ class TapTextMatchTests(unittest.TestCase):
         async def instant_sleep(_delay):
             return None
 
-        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_TRIED=True,
+                            SCROLL_JAR_USABLE=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
@@ -996,7 +1013,7 @@ class TapTextMatchTests(unittest.TestCase):
         recipes = [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
                         clickable='true', bounds='[16,400][464,470]')]
         # dump dropped → enter_dashboard (dump tabs) → Settings find (dump
-        # tabs) → tap Settings → dump CONNECTION → PAGE_DOWN → dump recipes
+        # tabs) → tap Settings → dump CONNECTION → scrollIntoView → dump recipes
         dumps = [dropped, tabs, tabs, connection, recipes]
         calls = []
 
@@ -1011,23 +1028,23 @@ class TapTextMatchTests(unittest.TestCase):
         async def instant_sleep(_delay):
             return None
 
-        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_TRIED=True,
+                            SCROLL_JAR_USABLE=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('recipes_session_dropped', events)
-        self.assertIn('"method": "page_down"', events)
+        self.assertIn('"method": "uiautomator_scroll_into_view"', events)
         self.assertNotIn('recipes_burst_fling', events)
         self.assertNotIn('settings_residency_lost', events)
         self.assertFalse(self._swipe_calls(calls))
-        self.assertFalse(self._runtest_calls(calls))
-        self.assertEqual(self._page_calls(calls),
-                         [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN')])
+        self.assertFalse(self._page_calls(calls))
+        self.assertEqual(len(self._runtest_calls(calls)), 1)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
-        self.assertEqual(taps[1], ('shell', 'input', 'tap', CTRL.LIST_FOCUS_X, 101))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
 
     def test_non_recipe_text_still_dumps_before_flinging(self):
@@ -1180,6 +1197,74 @@ class TapTextMatchTests(unittest.TestCase):
                 patch.object(CTRL, 'adb', fake_adb):
             asyncio.run(CTRL.tap_text('Connect now'))
         self.assertFalse(calls)
+
+
+class ScrollJarCompileTests(unittest.TestCase):
+    def test_device_dex_jar_is_not_java_stubs(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        dex = Path(tmp.name) / 'uiautomator.jar'
+        with zipfile.ZipFile(dex, 'w') as archive:
+            archive.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\n')
+            archive.writestr('classes.dex', b'dex\n035\x00')
+        self.assertFalse(CTRL._jar_has_class_files(dex))
+        classes = Path(tmp.name) / 'stubs.jar'
+        with zipfile.ZipFile(classes, 'w') as archive:
+            archive.writestr(
+                'com/android/uiautomator/core/UiSelector.class',
+                b'\xca\xfe\xba\xbe',
+            )
+        self.assertTrue(CTRL._jar_has_class_files(classes))
+
+    def test_android_jar_uses_opt_sdk_without_env(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / 'android-sdk-linux'
+        jar = root / 'platforms' / 'android-29' / 'android.jar'
+        jar.parent.mkdir(parents=True)
+        jar.write_bytes(b'pk')
+        with patch.object(CTRL, '_sdk_roots', return_value=[root]):
+            self.assertEqual(CTRL._android_jar(), jar)
+            self.assertIsNone(CTRL._host_uiautomator_jar())
+
+    def test_host_uiautomator_ignores_dex_and_accepts_class_jar(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / 'sdk'
+        dex = root / 'platforms' / 'android-29' / 'uiautomator.jar'
+        dex.parent.mkdir(parents=True)
+        with zipfile.ZipFile(dex, 'w') as archive:
+            archive.writestr('classes.dex', b'dex\n035\x00')
+        stubs = root / 'platforms' / 'android-23' / 'uiautomator.jar'
+        stubs.parent.mkdir(parents=True)
+        with zipfile.ZipFile(stubs, 'w') as archive:
+            archive.writestr('com/android/uiautomator/core/UiScrollable.class',
+                             b'\xca\xfe\xba\xbe')
+        with patch.object(CTRL, '_sdk_roots', return_value=[root]):
+            self.assertEqual(CTRL._host_uiautomator_jar(), stubs)
+
+    def test_compile_stubs_are_present(self):
+        sources = sorted(CTRL.SCROLL_STUBS_DIR.rglob('*.java'))
+        names = [str(path.relative_to(CTRL.SCROLL_STUBS_DIR)) for path in sources]
+        self.assertIn('com/android/uiautomator/core/UiScrollable.java', names)
+        self.assertIn('com/android/uiautomator/testrunner/UiAutomatorTestCase.java', names)
+
+    def test_ensure_scroll_jar_fails_closed_when_tools_missing(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            SCROLL_JAR_TRIED=False, SCROLL_JAR_USABLE=False), \
+                patch.object(CTRL, '_javac', return_value=None), \
+                patch.object(CTRL, '_android_jar', return_value=None), \
+                patch.object(CTRL, '_dexer', return_value=None):
+            with self.assertRaises(CTRL.ScrollJarUnusable):
+                asyncio.run(CTRL.ensure_scroll_jar())
+        events = (out / 'controller.jsonl').read_text()
+        self.assertIn('scroll_jar_unusable', events)
+        self.assertIn('missing_javac', events)
+        self.assertNotIn('scroll_jar_skipped', events)
+        self.assertNotIn('scroll_jar_compile_skipped', events)
 
 
 class Mode01KeepaliveTests(unittest.TestCase):

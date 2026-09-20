@@ -21,11 +21,18 @@ public class D05Scroll extends UiAutomatorTestCase {
         try {
             UiScrollable list = new UiScrollable(new UiSelector().scrollable(true));
             list.setAsVerticalList();
-            list.setMaxSearchSwipes(8);
-            if (!list.scrollIntoView(new UiSelector().descriptionContains(needle))) {
-                list.scrollIntoView(new UiSelector().textContains(needle));
+            list.setMaxSearchSwipes(24);
+            boolean shown = false;
+            try {
+                shown = list.scrollIntoView(new UiSelector().descriptionContains(needle));
+            } catch (UiObjectNotFoundException ignored) {
             }
-        } catch (UiObjectNotFoundException ignored) {
+            if (!shown) {
+                try {
+                    list.scrollIntoView(new UiSelector().textContains(needle));
+                } catch (UiObjectNotFoundException ignored) {
+                }
+            }
         } catch (Throwable ignored) {
         }
     }
