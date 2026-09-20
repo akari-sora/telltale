@@ -1290,8 +1290,10 @@ class DeviceRig(ReplayServer):
     async def process_command(self, raw_cmd, state, writer):
         compact = raw_cmd.replace(' ', '').upper()
         self.states[writer.connection] = state
-        event('tcp_request_received', connection=writer.connection, command=compact,
-              headers=state.headers)
+        keepalive = mode01_keepalive_line(compact, headers=state.headers, spaces=state.spaces)
+        if keepalive is None:
+            event('tcp_request_received', connection=writer.connection, command=compact,
+                  headers=state.headers)
         if self.target == compact:
             self.target = None
             event('mode08_response_held', connection=writer.connection, command=compact)
@@ -1303,9 +1305,7 @@ class DeviceRig(ReplayServer):
                 event('mode08_hold_deadline', connection=writer.connection, command=compact)
                 writer.close()
                 return True
-        keepalive = mode01_keepalive_line(compact, headers=state.headers, spaces=state.spaces)
         if keepalive is not None:
-            event('tcp_keepalive_reply', connection=writer.connection, command=compact)
             await ReplayServer._send_reply(self, writer, state, keepalive, echo=raw_cmd)
             return False
         return await super().process_command(raw_cmd, state, writer)
@@ -1359,12 +1359,14 @@ async def case(rig, index, click_text):
         await actual_os_snapshot('after_resume')
         await dump('mode08_terminal')
         event('case_observations_complete', index=index, acceptance='PENDING_INDEPENDENT_REVIEW')
-        # Job 16612553780 completed case 1 then HOME+relaunch left Discover
-        # off-screen; cases 2/3 timed out. Re-open recipes before the next case.
         if index in (1, 2):
-            await enter_dashboard()
-            await tap_text('Settings', exact=False, scroll=False)
-            await tap_text('Service Recipes')
+            try:
+                await enter_dashboard()
+                await tap_text('Settings', exact=False, scroll=False)
+                await tap_text('Service Recipes')
+            except Exception as exc:
+                event('recipes_reentry_failed', index=index,
+                      error=type(exc).__name__ + ': ' + str(exc))
     finally:
         rig.target = None
         rig.release.set()
@@ -1404,7 +1406,7 @@ async def main():
     seen = set()
     failed = []
     cases = []
-    deadline = time.monotonic()+900
+    deadline = time.monotonic()+1700
     idle_deadline = time.monotonic()+600
     finished = False
     try:
@@ -1480,9 +1482,13 @@ async def main():
             await asyncio.sleep(5)
     finally:
         if rig.release: rig.release.set()
+        for writer in list(rig.clients.values()):
+            writer.close()
         listener.close()
-        await listener.wait_closed()
-        for writer in list(rig.clients.values()): writer.close()
+        try:
+            await asyncio.wait_for(listener.wait_closed(), timeout=5)
+        except asyncio.TimeoutError:
+            event('listener_close_timeout')
         await adb('reverse','--remove','tcp:35008',check=False)
         if logcat.poll() is None:
             logcat.terminate()

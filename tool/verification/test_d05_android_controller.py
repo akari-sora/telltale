@@ -1326,9 +1326,8 @@ class Mode01KeepaliveTests(unittest.TestCase):
             self.assertEqual(state.step_index, 1)
             self.assertTrue(any(b'48 00 80 00 00 01' in chunk for chunk in writer.output))
         events = (out / 'controller.jsonl').read_text()
-        keepalive = [json.loads(line) for line in events.splitlines()
-                     if '"tcp_keepalive_reply"' in line]
-        self.assertEqual([row.get('command') for row in keepalive], ['015E'])
+        self.assertNotIn('tcp_keepalive_reply', events)
+        self.assertNotIn('"command": "015E"', events)
 
 
 
