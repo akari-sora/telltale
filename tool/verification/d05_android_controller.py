@@ -21,7 +21,6 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path.cwd()
 OUT = ROOT / 'd05-device'
-OUT.mkdir(exist_ok=True)
 sys.path.insert(0, str(ROOT / 'tool/obd_test_rig'))
 from mode08_replay_reference import ReplayServer
 SERIAL = 'emulator-5580'
@@ -35,11 +34,16 @@ CONTROL_URL = ('https://gitlab.com/api/v4/projects/86385809/repository/files/' +
 EVENT_FILE = OUT / 'controller.jsonl'
 SEQ = 0
 ACTIVE_RUN = None
+DUMP_READY_SECONDS = 90
+DUMP_RETRY_SLEEP = 2
+REMOTE_DUMP = '/sdcard/d05_window.xml'
+RESUMED_MARKERS = ('topResumedActivity', 'mFocusedApp=', 'mResumedActivity', 'ResumedActivity')
 
 
 def event(kind: str, **values):
     global SEQ
     SEQ += 1
+    OUT.mkdir(exist_ok=True)
     data = dict(seq=SEQ, host_epoch_ns=time.time_ns(), host_monotonic_ns=time.monotonic_ns(),
                 event=kind, run_id=ACTIVE_RUN, **values)
     with EVENT_FILE.open('a') as stream:
@@ -48,7 +52,7 @@ def event(kind: str, **values):
     return data
 
 
-async def adb(*args, timeout=40, check=True):
+async def adb(*args, timeout=40, check=True, full=False):
     command = ['adb', '-s', SERIAL, *[str(a) for a in args]]
     started = event('adb_start', argv=command)
     def run():
@@ -59,7 +63,7 @@ async def adb(*args, timeout=40, check=True):
           stderr=result.stderr.decode(errors='replace')[:1000])
     if check and result.returncode:
         raise RuntimeError('ADB command failed: ' + ' '.join(map(str, args)))
-    return result.stdout
+    return result if full else result.stdout
 
 
 def unique_name(label):
@@ -68,18 +72,96 @@ def unique_name(label):
     return f'{SEQ:05d}_{label}'
 
 
-async def dump(label='view', screenshot=True):
-    name = unique_name(label)
-    await adb('shell', 'uiautomator', 'dump', '--compressed', '/sdcard/d05_window.xml', timeout=45)
-    xml = await adb('exec-out', 'cat', '/sdcard/d05_window.xml')
-    (OUT / (name + '.xml')).write_bytes(xml)
+def hierarchy_slice(xml):
+    if not xml:
+        raise ValueError('UI dump file was empty')
     start = xml.find(b'<?xml')
     if start < 0:
         start = xml.find(b'<hierarchy')
-    root = ET.fromstring(xml[start:])
-    rows = [dict(text=n.get('text'), desc=n.get('content-desc'), bounds=n.get('bounds'),
+    if start < 0:
+        raise ValueError('UI dump contained no XML hierarchy')
+    return xml[start:]
+
+
+def parse_ui_rows(xml):
+    root = ET.fromstring(hierarchy_slice(xml))
+    if next(root.iter('node'), None) is None:
+        raise ValueError('UI dump hierarchy had no nodes')
+    return [dict(text=n.get('text'), desc=n.get('content-desc'), bounds=n.get('bounds'),
                  enabled=n.get('enabled'), clickable=n.get('clickable'), clazz=n.get('class'))
             for n in root.iter('node') if n.get('text') or n.get('content-desc') or n.get('class') == 'android.widget.EditText']
+
+
+def activity_is_resumed(dumpsys_text, package=PACKAGE):
+    for line in dumpsys_text.splitlines():
+        if package not in line or 'MainActivity' not in line:
+            continue
+        if any(marker in line for marker in RESUMED_MARKERS):
+            return True
+    return False
+
+
+async def wake_and_unlock():
+    await adb('shell', 'input', 'keyevent', '224', timeout=8, check=False)
+    await adb('shell', 'wm', 'dismiss-keyguard', timeout=8, check=False)
+
+
+async def wait_for_resumed_activity(timeout=45):
+    deadline = time.monotonic() + timeout
+    next_wake = 0.0
+    last = ''
+    while time.monotonic() < deadline:
+        dumped = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=20, check=False)
+        last = dumped.decode(errors='replace')
+        if activity_is_resumed(last):
+            event('app_window_resumed', package=PACKAGE)
+            return
+        now = time.monotonic()
+        if now >= next_wake:
+            await wake_and_unlock()
+            next_wake = now + 5
+        await asyncio.sleep(0.5)
+    event('app_window_not_resumed', package=PACKAGE, dumpsys_tail=last[-1500:])
+    raise RuntimeError('MainActivity did not reach a resumed window')
+
+
+async def launch_app():
+    await wake_and_unlock()
+    await adb('shell', 'am', 'start', '-n', PACKAGE + '/.MainActivity', timeout=60)
+    await wait_for_resumed_activity()
+
+
+async def dump(label='view', screenshot=True):
+    name = unique_name(label)
+    deadline = time.monotonic() + DUMP_READY_SECONDS
+    last_error = None
+    attempt = 0
+    xml = b''
+    while True:
+        attempt += 1
+        await adb('shell', 'rm', '-f', REMOTE_DUMP, check=False)
+        dumped = await adb('shell', 'uiautomator', 'dump', '--compressed', REMOTE_DUMP,
+                           timeout=45, check=False, full=True)
+        stderr = dumped.stderr.decode(errors='replace')
+        xml = await adb('exec-out', 'cat', REMOTE_DUMP, check=False)
+        try:
+            rows = parse_ui_rows(xml)
+            break
+        except (ET.ParseError, ValueError) as exc:
+            last_error = exc
+            OUT.mkdir(exist_ok=True)
+            (OUT / f'{name}_unusable_{attempt}.xml').write_bytes(xml)
+            event('ui_dump_unusable', attempt=attempt, error=type(exc).__name__ + ': ' + str(exc),
+                  dump_returncode=dumped.returncode, dump_stderr=stderr[:300], xml_len=len(xml))
+            if time.monotonic() >= deadline:
+                (OUT / (name + '.xml')).write_bytes(xml)
+                raise RuntimeError(
+                    f'UI hierarchy dump stayed empty after {attempt} attempts: {last_error}'
+                ) from last_error
+            await wake_and_unlock()
+            await asyncio.sleep(DUMP_RETRY_SLEEP)
+    OUT.mkdir(exist_ok=True)
+    (OUT / (name + '.xml')).write_bytes(xml)
     print('DEVICE_UI ' + json.dumps(rows, ensure_ascii=False), flush=True)
     if screenshot:
         image = await adb('exec-out', 'screencap', '-p', timeout=45)
@@ -221,7 +303,7 @@ async def case(rig, index, click_text):
         if index == 2:
             await adb('shell','input','keyevent','224',timeout=8)
             await adb('shell','wm','dismiss-keyguard',timeout=8,check=False)
-        await adb('shell','am','start','-n',PACKAGE+'/.MainActivity',timeout=10)
+        await launch_app()
         rig.release.set()
         await click
         await asyncio.sleep(2)
@@ -270,8 +352,7 @@ async def main():
     idle_deadline = time.monotonic()+600
     finished = False
     try:
-        await adb('shell','am','start','-n',PACKAGE+'/.MainActivity',timeout=60)
-        await asyncio.sleep(8)
+        await launch_app()
         await dump('initial')
         print('ANDROID_CONTROLLER_READY',flush=True)
         while time.monotonic() < deadline and time.monotonic() < idle_deadline:
@@ -312,9 +393,7 @@ async def main():
                         await adb('shell','input','keyevent','123',*(['67']*24))
                         await adb('shell','input','text',text)
                     elif op == 'launch':
-                        await adb('shell','input','keyevent','224')
-                        await adb('shell','wm','dismiss-keyguard',check=False)
-                        await adb('shell','am','start','-n',PACKAGE+'/.MainActivity')
+                        await launch_app()
                     elif op == 'd05':
                         if item['index'] in cases: raise ValueError('Run index already completed')
                         await case(rig,item['index'],item.get('button_text','Discover Mode 08'))
