@@ -430,7 +430,7 @@ async def find_text(text, exact=False, scroll=True):
             break
         if scroll:
             event('scroll_until_text', text=text, attempt=attempt + 1)
-            await adb('shell', 'input', 'swipe', 240, 680, 240, 160, 400,
+            await adb('shell', 'input', 'swipe', 240, 520, 240, 160, 400,
                       timeout=15, check=False)
             await asyncio.sleep(0.4)
         else:

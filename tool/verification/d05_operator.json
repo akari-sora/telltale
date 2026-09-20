@@ -41,7 +41,8 @@
     {
       "id": 8,
       "op": "tap_text",
-      "text": "Settings"
+      "text": "Settings",
+      "scroll": false
     },
     {
       "id": 9,
