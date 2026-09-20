@@ -96,9 +96,14 @@ DRAWN_POLL_SLEEP = 2
 REMOTE_DUMP = '/sdcard/d05_window.xml'
 SCROLL_JAR_REMOTE = '/data/local/tmp/d05_scroll.jar'
 SCROLL_JAVA = Path(__file__).resolve().parent / 'd05_scroll.java'
+SCROLL_STUBS_DIR = Path(__file__).resolve().parent / 'd05_scroll_stubs'
 SCROLL_NEEDLE_OK = re.compile(r'^[A-Za-z0-9 &._-]{1,80}$')
 SCROLL_JAR_TRIED = False
 SCROLL_JAR_USABLE = False
+SDK_ROOT_FALLBACKS = (
+    '/opt/android-sdk-linux',
+    '/opt/android-sdk',
+)
 # Dashboard Mode 01 polls observed in job 16609802535. Never 08xx.
 # Unknown 01 PIDs get a one-byte zero so NO DATA cannot yank the session
 # during Settings → Recipes (job 16610137504).
@@ -446,6 +451,15 @@ def node_labels(row):
     return [row.get('text') or '', row.get('desc') or '']
 
 
+def node_primary_label(row):
+    """First non-empty line of text or content-desc. Flutter leaves text empty."""
+    for value in node_labels(row):
+        first = value.split('\n', 1)[0].strip()
+        if first:
+            return first
+    return ''
+
+
 def node_matches(row, text, exact=False):
     """Match visible text or content-desc.
 
@@ -691,18 +705,20 @@ def past_recipes(rows):
 
 
 def locate_recipes(rows):
-    """Tile title, localized variants, or a first line that names the row."""
-    for needle in RECIPES_NEEDLES:
-        found = locate_text(rows, needle)
-        if found:
-            return found
-    matching = []
+    """Prefer the Settings tile title with real visible bounds.
+
+    Flutter semantics put 'Service Recipes & Active Tests' on content-desc and
+    leave text empty. Do not tap a parent with empty text and empty desc even
+    if it covers the tile (job 16610137504 / 16610702070).
+    """
+    titled = []
+    fallback = []
+    needles = tuple(needle.lower() for needle in RECIPES_NEEDLES)
     for row in rows:
         if row.get('enabled') != 'true':
             continue
-        labels = node_labels(row)
-        first = ' '.join(value.split('\n', 1)[0].lower() for value in labels)
-        if not ('recipe' in first or 'active test' in first or 'service-rezepte' in first):
+        label = node_primary_label(row)
+        if not label:
             continue
         try:
             x1, y1, x2, y2 = bounds(row)
@@ -710,21 +726,84 @@ def locate_recipes(rows):
             continue
         area = (x2 - x1) * (y2 - y1)
         clickable = 0 if row.get('clickable') == 'true' else 1
-        matching.append((clickable, area, row, (x1 + x2) // 2, (y1 + y2) // 2))
+        item = (clickable, area, row, (x1 + x2) // 2, (y1 + y2) // 2)
+        low = label.lower()
+        if any(low == needle or low.startswith(needle) for needle in needles):
+            titled.append(item)
+        elif 'recipe' in low or 'active test' in low or 'service-rezepte' in low:
+            fallback.append(item)
+    matching = titled or fallback
     if not matching:
         return None
     _, _, row, x, y = min(matching)
     return row, x, y
 
 
+def _sdk_roots():
+    roots = []
+    seen = set()
+    for raw in (
+        os.environ.get('ANDROID_HOME'),
+        os.environ.get('ANDROID_SDK_ROOT'),
+        *SDK_ROOT_FALLBACKS,
+        str(Path.home() / 'Android' / 'Sdk'),
+    ):
+        if not raw:
+            continue
+        path = Path(raw)
+        try:
+            key = str(path.resolve()) if path.exists() else str(path)
+        except OSError:
+            key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        roots.append(path)
+    return roots
+
+
+def _jar_has_class_files(path):
+    """True when the jar has javac .class files, not a device DEX wrapper.
+
+    Job 16610137504 pulled /system/framework/uiautomator.jar (classes.dex only).
+    javac then failed with package com.android.uiautomator.core does not exist.
+    """
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return any(name.endswith('.class') for name in archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
 def _android_jar():
-    home = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT') or ''
-    platforms = Path(home) / 'platforms'
-    preferred = platforms / 'android-29' / 'android.jar'
-    if preferred.is_file():
-        return preferred
-    jars = sorted(platforms.glob('android-*/android.jar')) if platforms.is_dir() else []
+    jars = []
+    for root in _sdk_roots():
+        platforms = root / 'platforms'
+        preferred = platforms / 'android-29' / 'android.jar'
+        if preferred.is_file():
+            return preferred
+        if platforms.is_dir():
+            jars.extend(sorted(platforms.glob('android-*/android.jar')))
     return jars[-1] if jars else None
+
+
+def _host_uiautomator_jar():
+    """SDK stub jar with Java classes. Device DEX is never a compile classpath."""
+    found = []
+    for root in _sdk_roots():
+        platforms = root / 'platforms'
+        preferred = platforms / 'android-23' / 'uiautomator.jar'
+        if preferred.is_file():
+            found.append(preferred)
+        if platforms.is_dir():
+            found.extend(sorted(platforms.glob('android-*/uiautomator.jar')))
+        tools = root / 'tools' / 'lib' / 'uiautomator.jar'
+        if tools.is_file():
+            found.append(tools)
+    for jar in found:
+        if _jar_has_class_files(jar):
+            return jar
+    return None
 
 
 def _javac():
@@ -740,9 +819,10 @@ def _javac():
 
 
 def _dexer():
-    home = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT') or ''
-    build_tools = Path(home) / 'build-tools'
-    if build_tools.is_dir():
+    for root in _sdk_roots():
+        build_tools = root / 'build-tools'
+        if not build_tools.is_dir():
+            continue
         d8s = sorted(build_tools.glob('*/d8'))
         if d8s:
             return 'd8', str(d8s[-1])
@@ -758,42 +838,89 @@ def _dexer():
     return None
 
 
-async def ensure_scroll_jar():
-    """Optional UiAutomator helper. Device uiautomator.jar is DEX, not stubs.
+def _materialize_uiautomator_stubs(dest):
+    sources = sorted(SCROLL_STUBS_DIR.rglob('*.java'))
+    if not sources:
+        raise RuntimeError('D05 uiautomator compile stubs are missing')
+    written = []
+    for src in sources:
+        rel = src.relative_to(SCROLL_STUBS_DIR)
+        target = dest / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(src.read_text(encoding='utf-8'), encoding='utf-8')
+        written.append(target)
+    return written
 
-    Job 16610280973: javac against /system/framework/uiautomator.jar cannot
-    see com.android.uiautomator.core, then runtest on the missing jar was a
-    no-op and the burst-fling fallback left Settings. Never mark a failed
-    build usable; recipes paging does not call this.
+
+class ScrollJarUnusable(RuntimeError):
+    """Compile/push failed. Fail closed — do not PAGE_DOWN until the job times out."""
+
+
+def _raise_scroll_jar_unusable(**values):
+    event('scroll_jar_unusable', **values)
+    reason = values.get('reason') or values.get('error') or 'unavailable'
+    raise ScrollJarUnusable(
+        'D05 scroll jar is not usable (' + str(reason) +
+        '); refusing to skip into PAGE_DOWN/timeout'
+    )
+
+
+async def ensure_scroll_jar():
+    """Build D05Scroll against host android.jar + Java uiautomator stubs.
+
+    Jobs 16610137504 / 16610280973: javac -cp device DEX uiautomator.jar cannot
+    see com.android.uiautomator.core. Host platforms/android-29 has android.jar
+    but not uiautomator.jar (removed after API 23). Compile-only stubs satisfy
+    javac; runtime classes come from the emulator. Missing javac / android.jar
+    / dexer fails with scroll_jar_unusable instead of a silent skip.
     """
     global SCROLL_JAR_TRIED, SCROLL_JAR_USABLE
     if SCROLL_JAR_TRIED:
-        return SCROLL_JAR_USABLE
+        if not SCROLL_JAR_USABLE:
+            _raise_scroll_jar_unusable(reason='not_usable')
+        return True
     SCROLL_JAR_TRIED = True
     SCROLL_JAR_USABLE = False
     try:
         work = OUT / 'scroll-build'
         work.mkdir(parents=True, exist_ok=True)
-        uia = work / 'uiautomator.jar'
-        await adb('pull', '/system/framework/uiautomator.jar', str(uia),
-                  timeout=20, check=False)
         android_jar = _android_jar()
         javac = _javac()
         dexer = _dexer()
-        if not (SCROLL_JAVA.is_file() and javac and android_jar and dexer
-                and uia.is_file() and uia.stat().st_size > 0):
-            event('scroll_jar_compile_skipped', javac=bool(javac),
-                  android_jar=str(android_jar) if android_jar else '',
-                  uiautomator_bytes=uia.stat().st_size if uia.is_file() else 0,
-                  dexer=dexer[0] if dexer else '')
-            return False
+        host_uia = _host_uiautomator_jar()
+        if not SCROLL_JAVA.is_file():
+            _raise_scroll_jar_unusable(reason='missing_source',
+                                       path=str(SCROLL_JAVA))
+        if not javac:
+            _raise_scroll_jar_unusable(reason='missing_javac')
+        if not android_jar:
+            _raise_scroll_jar_unusable(
+                reason='missing_android_jar',
+                sdk_roots=[str(root) for root in _sdk_roots()],
+            )
+        if not dexer:
+            _raise_scroll_jar_unusable(reason='missing_dexer',
+                                       android_jar=str(android_jar))
         source = work / 'D05Scroll.java'
         source.write_text(SCROLL_JAVA.read_text(encoding='utf-8'))
+        classpath = [str(android_jar)]
+        extra_sources = []
+        stub_kind = 'host_uiautomator_jar'
+        if host_uia:
+            classpath.append(str(host_uia))
+            event('scroll_jar_host_uiautomator', path=str(host_uia))
+        else:
+            stub_kind = 'compile_stubs'
+            extra_sources = _materialize_uiautomator_stubs(work / 'stubs')
+            event('scroll_jar_using_compile_stubs',
+                  files=[str(path.relative_to(work / 'stubs')) for path in extra_sources])
+        cp = ':'.join(classpath)
         javac_cmds = (
-            [javac, '--release', '8', '-cp', str(android_jar) + ':' + str(uia),
-             '-d', str(work), str(source)],
+            [javac, '--release', '8', '-cp', cp, '-d', str(work),
+             str(source), *[str(path) for path in extra_sources]],
             [javac, '-source', '8', '-target', '8', '-bootclasspath', str(android_jar),
-             '-cp', str(uia), '-d', str(work), str(source)],
+             '-cp', cp, '-d', str(work), str(source),
+             *[str(path) for path in extra_sources]],
         )
         compiled = None
         classfile = work / 'D05Scroll.class'
@@ -804,9 +931,12 @@ async def ensure_scroll_jar():
             if compiled.returncode == 0 and classfile.is_file():
                 break
         if compiled is None or compiled.returncode or not classfile.is_file():
-            event('scroll_jar_javac_failed',
-                  stderr=(compiled.stderr.decode(errors='replace')[:1500] if compiled else ''))
-            return False
+            _raise_scroll_jar_unusable(
+                reason='javac_failed',
+                android_jar=str(android_jar),
+                uiautomator=str(host_uia) if host_uia else stub_kind,
+                stderr=(compiled.stderr.decode(errors='replace')[:1500] if compiled else ''),
+            )
         kind, tool = dexer
         jar_out = work / 'd05_scroll.jar'
         if kind == 'dx':
@@ -827,32 +957,43 @@ async def ensure_scroll_jar():
                     with zipfile.ZipFile(jar_out, 'w') as archive:
                         archive.write(dex, 'classes.dex')
         if not jar_out.is_file():
-            event('scroll_jar_dex_failed',
-                  stderr=dexed.stderr.decode(errors='replace')[:1500])
-            return False
-        await adb('push', str(jar_out), SCROLL_JAR_REMOTE, timeout=20, check=False)
-        event('scroll_jar_ready', remote=SCROLL_JAR_REMOTE,
+            _raise_scroll_jar_unusable(
+                reason='dex_failed',
+                stderr=dexed.stderr.decode(errors='replace')[:1500],
+            )
+        pushed = await adb('push', str(jar_out), SCROLL_JAR_REMOTE,
+                           timeout=20, check=False, full=True)
+        if getattr(pushed, 'returncode', 1):
+            _raise_scroll_jar_unusable(
+                reason='push_failed',
+                returncode=getattr(pushed, 'returncode', None),
+                stderr=(getattr(pushed, 'stderr', b'') or b'').decode(errors='replace')[:500],
+            )
+        event('scroll_jar_ready', remote=SCROLL_JAR_REMOTE, stubs=stub_kind,
+              android_jar=str(android_jar),
               sha256=hashlib.sha256(jar_out.read_bytes()).hexdigest())
         SCROLL_JAR_USABLE = True
         return True
-    except Exception as exc:
-        event('scroll_jar_compile_failed', error=type(exc).__name__ + ': ' + str(exc))
+    except ScrollJarUnusable:
         SCROLL_JAR_USABLE = False
-        return False
+        raise
+    except Exception as exc:
+        SCROLL_JAR_USABLE = False
+        _raise_scroll_jar_unusable(reason='compile_failed',
+                                   error=type(exc).__name__ + ': ' + str(exc))
 
 
 async def scroll_into_view(needle):
-    """UiAutomator scrollIntoView only when the jar actually compiled.
+    """UiAutomator scrollIntoView. Fail closed if the jar did not compile.
 
-    Device DEX cannot satisfy javac (job 16610280973). Never runtest a
-    missing jar — that was a no-op that then burst-flung to Gauge style.
+    Device DEX cannot satisfy javac (job 16610280973). A silent skip plus
+    PAGE_DOWN then timed out job 16610702070. Never runtest a missing jar.
     """
     if not isinstance(needle, str) or not SCROLL_NEEDLE_OK.fullmatch(needle):
         raise ValueError('Invalid scroll needle')
     await ensure_scroll_jar()
     if not SCROLL_JAR_USABLE:
-        event('scroll_jar_skipped', needle=needle, reason='not_usable')
-        return False
+        _raise_scroll_jar_unusable(reason='not_usable', needle=needle)
     event('uiautomator_scroll_into_view', needle=needle)
     await adb('shell', 'uiautomator', 'runtest', SCROLL_JAR_REMOTE, '-c', 'D05Scroll',
               '-e', 'needle', needle, timeout=60, check=False)
@@ -959,26 +1100,19 @@ async def find_text(text, exact=False, scroll=True):
     only scrolled the disconnect picker.
 
     Service Recipes sits below CONNECTION, the huge VEHICLE PROFILE, FUEL
-    AND DRIVETRAIN, and DIAGNOSTICS. Job 16610280973: after reconnect the
-    list was open at CONNECTION, device uiautomator.jar failed javac, the
-    runtest no-op plus burst-8 landed on Gauge style, and retapping the
-    already-selected Settings tab did not jump to the top. Job 16610428447:
-    one PAGE_DOWN hid the headers and left mid-VEHICLE-PROFILE body; the
-    classifier called that Dashboard and retapped Settings in a loop.
-    Job 16610532958: PAGE_DOWN reached FUEL AND DRIVETRAIN then stalled —
-    chips stole the key. Fingerprint the viewport; on a no-op page,
-    re-focus the gutter and send one short swipe, never burst-8.
-    Page one KEYCODE at a time while the Settings tab is up and the dump
-    is not the unverified gauge strip; PAGE_UP when past the tile; never
-    runtest a broken jar. Mode 01 keepalive keeps the session through the
-    pages. Locate dumps skip prepare_window (job 16609695855).
+    AND DRIVETRAIN, and DIAGNOSTICS. Jobs 16610280973 / 16610702070: PAGE_DOWN
+    and gutter nudge never reached the tile before ELM drop / job timeout.
+    Device DEX uiautomator.jar cannot feed javac — compile against host
+    android.jar plus Java stubs, then scrollIntoView once residency holds.
+    Do not PAGE_DOWN or fling the Settings list for this query. Mode 01
+    keepalive keeps the session through the dumps. Locate dumps skip
+    prepare_window (job 16609695855).
     """
     if not isinstance(text, str) or not 0 < len(text) <= 100:
         raise ValueError('Invalid UI text')
     recipes = scroll and is_recipes_query(text)
     recovered = 0
-    list_focused = False
-    prev_fp = None
+    scroll_done = False
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
         rows = await dump('locate', screenshot=False, prepare=False)
         if recipes:
@@ -1003,13 +1137,13 @@ async def find_text(text, exact=False, scroll=True):
                     f'UI text not visible: {text!r} (session dropped during Settings scroll)'
                 )
             recovered += 1
-            list_focused = False
-            prev_fp = None
+            scroll_done = False
             event('recipes_session_dropped', attempt=attempt, recovery=recovered)
             await enter_dashboard()
             found_tab, _ = await find_text('Settings', scroll=False)
             row, x, y = found_tab
             event('selected_observed_ui_node', text='Settings', node=row,
+                  node_label=node_primary_label(row),
                   scroll_attempts=0, scrolled=False)
             await adb('shell', 'input', 'tap', x, y)
             await asyncio.sleep(0.5)
@@ -1017,35 +1151,25 @@ async def find_text(text, exact=False, scroll=True):
         if recipes and dashboard_surface(rows):
             event('settings_residency_lost', attempt=attempt,
                   dashboard=True)
-            list_focused = False
-            prev_fp = None
+            scroll_done = False
             await tap_settings_tab(rows)
             continue
         if recipes and locate_text(rows, 'Settings') is None and not settings_list_open(rows):
             event('settings_residency_lost', attempt=attempt,
                   dashboard=False)
-            list_focused = False
-            prev_fp = None
+            scroll_done = False
             await tap_settings_tab(rows)
             continue
         if recipes:
-            upward = bool(past_recipes(rows) and not still_above_recipes(rows))
-            fp = dump_fingerprint(rows)
-            if prev_fp is not None and fp == prev_fp:
-                event('recipes_page_stuck', attempt=attempt,
-                      method='gutter_nudge')
-                await focus_settings_list(rows)
-                list_focused = True
-                await gutter_nudge(upward=upward)
-                await asyncio.sleep(0.15)
+            if not scroll_done:
+                event('recipes_direct_nav', text=text, attempt=attempt,
+                      method='uiautomator_scroll_into_view')
+                await scroll_into_view('Service Recipes')
+                scroll_done = True
+                await asyncio.sleep(0.2)
                 continue
-            prev_fp = fp
-            await focus_settings_list(rows)
-            list_focused = True
-            event('recipes_direct_nav', text=text, attempt=attempt,
-                  method='page_down' if not upward else 'page_up')
-            await page_settings_list(upward=upward)
-            await asyncio.sleep(0.15)
+            event('wait_until_text', text=text, attempt=attempt + 1)
+            await asyncio.sleep(0.8)
             continue
         event('scroll_until_text', text=text, attempt=attempt + 1,
               upward=False)
@@ -1070,6 +1194,7 @@ async def enter_dashboard():
         if now:
             row, x, y = now
             event('selected_observed_ui_node', text='Connect now', node=row,
+                  node_label=node_primary_label(row),
                   scroll_attempts=attempt, scrolled=False)
             await adb('shell', 'input', 'tap', x, y)
             await asyncio.sleep(0.8)
@@ -1090,15 +1215,21 @@ async def tap_text(text, exact=False, scroll=True):
         found = locate_text(rows, text, exact)
         if found:
             row, x, y = found
+            label = node_primary_label(row)
+            if not label:
+                raise RuntimeError('Refusing to tap a node with empty text and content-desc')
             event('selected_observed_ui_node', text=text, node=row,
-                  scroll_attempts=0, scrolled=False)
+                  node_label=label, scroll_attempts=0, scrolled=False)
             await adb('shell', 'input', 'tap', x, y)
             return
         found, attempt = await find_text(text, exact, scroll=False)
     else:
         found, attempt = await find_text(text, exact, scroll)
     row, x, y = found
-    event('selected_observed_ui_node', text=text, node=row,
+    label = node_primary_label(row)
+    if not label:
+        raise RuntimeError('Refusing to tap a node with empty text and content-desc')
+    event('selected_observed_ui_node', text=text, node=row, node_label=label,
           scroll_attempts=attempt, scrolled=bool(scroll) and text != 'Connect now')
     await adb('shell', 'input', 'tap', x, y)
     if text == 'Settings':
@@ -1241,6 +1372,7 @@ async def main():
         raise RuntimeError('Wrong fixed APK')
     if (await adb('get-state')).decode().strip() != 'device':
         raise RuntimeError('Disposable emulator not ready')
+    await ensure_scroll_jar()
     rig = DeviceRig()
     listener = await asyncio.start_server(rig.handle_client, '127.0.0.1', 35008)
     await adb('reverse','tcp:35008','tcp:35008')
