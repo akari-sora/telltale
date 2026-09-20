@@ -37,19 +37,21 @@ ACTIVE_RUN = None
 DUMP_READY_SECONDS = 180
 DUMP_RETRY_SLEEP = 3
 TAP_SCROLL_ATTEMPTS = 8
-# Left of vehicle-profile SeekBar thumbs (~146–241). A 400ms swipe at x=240
-# dragged sliders instead of the ListView (job 16609695855, UI 907 still in
-# FUEL AND DRIVETRAIN after 6 attempts). Fast fling, above the tab bar (y=684).
-# Tip b1a9193 also moved to x=40; keep the 80ms triple fling, not one 350ms drag.
-LIST_FLING_X = 40
-LIST_FLING_Y1 = 620
-LIST_FLING_Y2 = 90
+# Right of the Dashboard tab ([0,684][96,752]) and left of vehicle-profile
+# SeekBar thumbs (~146–241). Job 16609955129 chained 14 swipes at x=40
+# (inside the Dashboard tab's x-range) with no gap; the merged gesture left
+# Settings and the next dump was empty gauges. y stays above the tab bar
+# (684) and the recorder strip.
+LIST_FLING_X = 120
+LIST_FLING_Y1 = 560
+LIST_FLING_Y2 = 140
 LIST_FLING_MS = 80
-FLINGS_PER_LOOK = 10
-# Job 16609802535: 6 gutter flings reached DIAGNOSTIC TRANSCRIPT (UI 914);
-# the next locate dump was already Choose a connection (UI 929). Burst past
-# Adapter / FieldEvent / Export / Manual before that uiautomator pause.
-RECIPES_BURST_FLINGS = 14
+LIST_FLING_GAP_S = 0.08
+FLINGS_PER_LOOK = 6
+# Job 16609802535: 6 gutter flings reached DIAGNOSTIC TRANSCRIPT (UI 914).
+# Burst the remaining Adapter / FieldEvent / Export / Manual panels only
+# after CONNECTION (or the Settings title) is on screen.
+RECIPES_BURST_FLINGS = 8
 RECIPES_NEEDLES = (
     'Service Recipes',
     'Active Tests',
@@ -467,6 +469,42 @@ def session_dropped(rows):
             locate_text(rows, 'Settings') is None)
 
 
+def settings_list_open(rows):
+    """Settings *list*, not merely the Settings\\nTab 5 of 5 destination.
+
+    Job 16609955129 dumped Dashboard gauges after the burst while that tab
+    was still in the tree. CONNECTION / the non-tab Settings title are the
+    residency signal.
+    """
+    for row in rows:
+        for value in node_labels(row):
+            first = value.split('\n', 1)[0].strip()
+            low = first.lower()
+            if low == 'settings' and 'tab' not in value.lower():
+                return True
+            if low in ('connection', 'disconnect'):
+                return True
+            if any(token in low for token in (
+                'vehicle profile', 'fuel and drivetrain', 'diagnostic transcript',
+                'service recipes', 'experimental', 'appearance',
+                'what the adapter says', 'manual command',
+            )):
+                return True
+    return False
+
+
+def dashboard_surface(rows):
+    """Gauge grid / 'No data — Unverified' without the Settings list."""
+    if settings_list_open(rows) or session_dropped(rows):
+        return False
+    for line in first_line_values(rows):
+        low = line.lower()
+        if 'no data' in low or 'unverified' in low:
+            return True
+    return (locate_text(rows, 'Dashboard') is not None and
+            locate_text(rows, 'Settings') is not None)
+
+
 def still_above_recipes(rows):
     tokens = (
         'vehicle profile', 'fuel and drivetrain', 'diagnostic transcript',
@@ -515,8 +553,8 @@ def locate_recipes(rows):
 async def fling_list(count=1, upward=False):
     """Fling the Settings ListView without hitting sliders or the tab bar.
 
-    count>1 is one adb shell of chained swipes so Mode 01 NO DATA does not
-    get a dump-length pause between each 80ms fling (job 16609802535).
+    count>1 is one adb shell. A short sleep between swipes keeps them from
+    merging into a down-stroke onto the Dashboard tab (job 16609955129).
     """
     if count < 1:
         return
@@ -533,8 +571,20 @@ async def fling_list(count=1, upward=False):
                   LIST_FLING_X, y2, LIST_FLING_MS, timeout=15, check=False)
         return
     swipe = f'input swipe {LIST_FLING_X} {y1} {LIST_FLING_X} {y2} {LIST_FLING_MS}'
-    await adb('shell', ';'.join([swipe] * count), timeout=max(20, count + 10),
-              check=False)
+    gap = f'sleep {LIST_FLING_GAP_S}'
+    await adb('shell', f'; {gap}; '.join([swipe] * count),
+              timeout=max(20, count + 10), check=False)
+
+
+async def tap_settings_tab(rows):
+    """Re-select Settings. Caller already dumped; do not fling."""
+    found = locate_text(rows, 'Settings')
+    if not found:
+        raise RuntimeError('Settings tab not visible while restoring residency')
+    row, x, y = found
+    event('settings_tab_retap', node=row, reason='list_not_open')
+    await adb('shell', 'input', 'tap', x, y)
+    await asyncio.sleep(0.5)
 
 
 async def find_text(text, exact=False, scroll=True):
@@ -546,25 +596,25 @@ async def find_text(text, exact=False, scroll=True):
     only scrolled the disconnect picker.
 
     Service Recipes sits below CONNECTION, the huge VEHICLE PROFILE, FUEL
-    AND DRIVETRAIN, and DIAGNOSTICS. Job 16609802535 reached DIAGNOSTIC
-    TRANSCRIPT on look 3 then the next dump was the dropped picker — so
-    recipes burst-fling *before* the first locate dump, then at most a
-    few looks. Locate dumps skip prepare_window so Mode 01 NO DATA does
-    not drop ELM during the scroll (job 16609695855).
+    AND DRIVETRAIN, and DIAGNOSTICS. Job 16609955129 burst 14 gutter flings
+    before confirming the Settings list and landed on Dashboard gauges —
+    so recipes dump first, burst only while CONNECTION (or the Settings
+    title) is visible, and re-tap Settings instead of flinging gauges.
+    Locate dumps skip prepare_window so Mode 01 NO DATA does not drop ELM
+    during the scroll (job 16609695855).
     """
     if not isinstance(text, str) or not 0 < len(text) <= 100:
         raise ValueError('Invalid UI text')
     recipes = scroll and is_recipes_query(text)
     recovered = False
-    if recipes:
-        event('recipes_burst_fling', count=RECIPES_BURST_FLINGS)
-        await fling_list(RECIPES_BURST_FLINGS)
-        await asyncio.sleep(0.15)
+    burst_done = False
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
         rows = await dump('locate', screenshot=False, prepare=False)
         if recipes:
             labels = recipe_test_labels(rows)
-            event('recipe_test_labels', attempt=attempt, labels=labels)
+            event('recipe_test_labels', attempt=attempt, labels=labels,
+                  settings_list=settings_list_open(rows),
+                  dashboard_surface=dashboard_surface(rows))
             found = locate_recipes(rows)
         else:
             found = locate_text(rows, text, exact)
@@ -582,6 +632,7 @@ async def find_text(text, exact=False, scroll=True):
                     f'UI text not visible: {text!r} (session dropped during Settings scroll)'
                 )
             recovered = True
+            burst_done = False
             event('recipes_session_dropped', attempt=attempt)
             await enter_dashboard()
             found_tab, _ = await find_text('Settings', scroll=False)
@@ -589,14 +640,24 @@ async def find_text(text, exact=False, scroll=True):
             event('selected_observed_ui_node', text='Settings', node=row,
                   scroll_attempts=0, scrolled=False)
             await adb('shell', 'input', 'tap', x, y)
-            await asyncio.sleep(0.25)
-            event('recipes_burst_fling', count=RECIPES_BURST_FLINGS, after='reconnect')
-            await fling_list(RECIPES_BURST_FLINGS)
-            await asyncio.sleep(0.15)
+            await asyncio.sleep(0.5)
+            continue
+        if recipes and (dashboard_surface(rows) or not settings_list_open(rows)):
+            event('settings_residency_lost', attempt=attempt,
+                  dashboard=dashboard_surface(rows))
+            burst_done = False
+            await tap_settings_tab(rows)
             continue
         upward = bool(recipes and past_recipes(rows) and not still_above_recipes(rows))
-        event('scroll_until_text', text=text, attempt=attempt + 1, upward=upward)
-        await fling_list(FLINGS_PER_LOOK, upward=upward)
+        if recipes and not upward and not burst_done:
+            event('recipes_burst_fling', count=RECIPES_BURST_FLINGS,
+                  attempt=attempt + 1)
+            await fling_list(RECIPES_BURST_FLINGS)
+            burst_done = True
+        else:
+            event('scroll_until_text', text=text, attempt=attempt + 1,
+                  upward=upward)
+            await fling_list(FLINGS_PER_LOOK, upward=upward)
         await asyncio.sleep(0.15)
     raise RuntimeError(f'UI text not visible: {text!r}')
 
@@ -648,6 +709,9 @@ async def tap_text(text, exact=False, scroll=True):
     event('selected_observed_ui_node', text=text, node=row,
           scroll_attempts=attempt, scrolled=bool(scroll) and text != 'Connect now')
     await adb('shell', 'input', 'tap', x, y)
+    if text == 'Settings':
+        # Let go_router paint CONNECTION before op8 bursts (job 16609955129).
+        await asyncio.sleep(0.5)
 
 
 class ObservedWriter:
