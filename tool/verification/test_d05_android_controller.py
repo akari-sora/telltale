@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import os
+import subprocess
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -86,6 +87,7 @@ class DumpRetryTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.out = Path(self.tmp.name)
         self.calls = []
+        CTRL.WAKE_KEYEVENT_DISABLED = False
 
     def _run(self, coro):
         return asyncio.run(coro)
@@ -112,8 +114,9 @@ class DumpRetryTests(unittest.TestCase):
                 dumps = [c for c in self.calls if c[:2] == ('shell', 'uiautomator')]
                 stdout = responses[0][0] if len(dumps) == 1 else responses[1][0]
                 return stdout
-            if args[:2] == ('shell', 'input') or args[:2] == ('shell', 'wm'):
-                return b''
+            if args[:2] in (('shell', 'input'), ('shell', 'wm'), ('shell', 'svc')):
+                result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+                return result if full else b''
             raise AssertionError('unexpected adb args: ' + repr(args))
 
         async def instant_sleep(_delay):
@@ -153,8 +156,10 @@ class DumpRetryTests(unittest.TestCase):
         async def fake_adb(*args, timeout=40, check=True, full=False):
             self.calls.append(args)
             if args[:3] == ('shell', 'dumpsys', 'activity'):
-                return dumpsys.pop(0)
-            return b''
+                data = dumpsys.pop(0)
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
 
         async def instant_sleep(_delay):
             return None
@@ -164,6 +169,79 @@ class DumpRetryTests(unittest.TestCase):
             self._run(CTRL.launch_app())
         self.assertTrue(any(c[:4] == ('shell', 'am', 'start', '-n') for c in self.calls))
         self.assertEqual(len([c for c in self.calls if c[:3] == ('shell', 'dumpsys', 'activity')]), 2)
+
+
+class WakeTimeoutTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.out = Path(self.tmp.name)
+        self.calls = []
+        CTRL.WAKE_KEYEVENT_DISABLED = False
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def _patch_out(self):
+        return patch.multiple(CTRL, OUT=self.out, EVENT_FILE=self.out / 'controller.jsonl')
+
+    def test_check_false_swallows_timeout_expired(self):
+        def boom(*_args, **_kwargs):
+            raise subprocess.TimeoutExpired(cmd=['adb', 'shell', 'input', 'keyevent', '224'], timeout=8)
+
+        with self._patch_out(), patch.object(CTRL.subprocess, 'run', boom):
+            result = self._run(CTRL.adb('shell', 'input', 'keyevent', '224', timeout=8, check=False))
+        self.assertEqual(result, b'')
+
+    def test_check_false_full_marks_timeout_returncode(self):
+        def boom(*_args, **_kwargs):
+            raise subprocess.TimeoutExpired(cmd=['adb'], timeout=8)
+
+        with self._patch_out(), patch.object(CTRL.subprocess, 'run', boom):
+            result = self._run(CTRL.adb('shell', 'input', 'keyevent', '224', timeout=8, check=False, full=True))
+        self.assertEqual(result.returncode, -1)
+
+    def test_check_true_still_raises_timeout_expired(self):
+        def boom(*_args, **_kwargs):
+            raise subprocess.TimeoutExpired(cmd=['adb', 'shell', 'input', 'keyevent', '224'], timeout=8)
+
+        with self._patch_out(), patch.object(CTRL.subprocess, 'run', boom):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                self._run(CTRL.adb('shell', 'input', 'keyevent', '224', timeout=8, check=True))
+
+    def test_wake_uses_power_and_dismisses_keyguard_after_keyevent_timeout(self):
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            self.calls.append(args)
+            if args[:3] == ('shell', 'input', 'keyevent'):
+                result = SimpleNamespace(returncode=-1, stdout=b'', stderr=b'')
+            else:
+                result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else result.stdout
+
+        with self._patch_out(), patch.object(CTRL, 'adb', fake_adb):
+            self._run(CTRL.wake_and_unlock())
+            self._run(CTRL.wake_and_unlock())
+        self.assertTrue(any(c[:4] == ('shell', 'svc', 'power', 'stayon') for c in self.calls))
+        self.assertTrue(any(c[:3] == ('shell', 'wm', 'dismiss-keyguard') for c in self.calls))
+        self.assertEqual(len([c for c in self.calls if c[:3] == ('shell', 'input', 'keyevent')]), 1)
+        self.assertTrue(CTRL.WAKE_KEYEVENT_DISABLED)
+
+    def test_launch_app_starts_activity_after_wake_timeout(self):
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            self.calls.append(args)
+            if args[:3] == ('shell', 'dumpsys', 'activity'):
+                data = b'  topResumedActivity=ActivityRecord{def u0 com.cbstudio.telltale/.MainActivity t2}\n'
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
+            if args[:3] == ('shell', 'input', 'keyevent'):
+                result = SimpleNamespace(returncode=-1, stdout=b'', stderr=b'')
+                return result if full else b''
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        with self._patch_out(), patch.object(CTRL, 'adb', fake_adb):
+            self._run(CTRL.launch_app())
+        self.assertTrue(any(c[:4] == ('shell', 'am', 'start', '-n') for c in self.calls))
+        self.assertTrue(any(c[:3] == ('shell', 'wm', 'dismiss-keyguard') for c in self.calls))
 
 
 if __name__ == '__main__':
