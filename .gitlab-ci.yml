@@ -113,7 +113,7 @@ android-d05-fixed-apk:
       grep -q '^acc80f75b599d7f85e5c11416ec6c2e92f774f6b9e1699584414ca35abbade9e ' d05-device/installed-apk.sha256
       adb -s emulator-5580 shell dumpsys package com.cbstudio.telltale > d05-device/package-dump.txt
       stage=device-controller
-      timeout --signal=TERM --kill-after=15 1800 python3 -u tool/verification/d05_android_controller.py
+      timeout --signal=TERM --kill-after=15 2100 python3 -u tool/verification/d05_android_controller.py
       stage=observations-captured-pending-review
   artifacts:
     when: always

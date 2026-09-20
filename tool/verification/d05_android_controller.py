@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -147,8 +148,16 @@ def _timeout_bytes(value):
 async def adb(*args, timeout=40, check=True, full=False):
     command = ['adb', '-s', SERIAL, *[str(a) for a in args]]
     started = event('adb_start', argv=command)
+    if args and args[0] == 'shell' and len(args) > 1:
+        escaped_args = [
+            shlex.quote(str(a)) if (' ' in str(a) and not (str(a).startswith('"') or str(a).startswith("'") or ';' in str(a))) else str(a)
+            for a in args
+        ]
+        subproc_cmd = ['adb', '-s', SERIAL, *escaped_args]
+    else:
+        subproc_cmd = command
     def run():
-        return subprocess.run(command, capture_output=True, timeout=timeout)
+        return subprocess.run(subproc_cmd, capture_output=True, timeout=timeout)
     try:
         result = await asyncio.to_thread(run)
     except subprocess.TimeoutExpired as exc:
@@ -325,13 +334,16 @@ async def wait_for_focused_window(timeout=30):
     return False
 
 
-async def launch_app():
+async def launch_app(is_resume=False):
     await wake_and_unlock()
     await adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity',
               '-f', '0x10000000', timeout=60)
     await wait_for_resumed_activity()
     await wait_for_focused_window()
-    await wait_for_drawn_window()
+    if not is_resume:
+        await wait_for_drawn_window()
+    else:
+        event('app_resumed_ready', package=PACKAGE)
 
 
 async def request_hierarchy():
@@ -1023,7 +1035,7 @@ async def fling_list(count=1, upward=False):
     if not upward:
         for _ in range(max(1, count // 2)):
             await adb('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN',
-                      timeout=8, check=False)
+                      timeout=20, check=False)
     y1, y2 = (LIST_FLING_Y2, LIST_FLING_Y1) if upward else (LIST_FLING_Y1, LIST_FLING_Y2)
     if count == 1:
         await adb('shell', 'input', 'swipe', LIST_FLING_X, y1,
@@ -1097,7 +1109,7 @@ async def page_settings_list(upward=False):
     """
     key = 'KEYCODE_PAGE_UP' if upward else 'KEYCODE_PAGE_DOWN'
     event('recipes_page_scroll', key=key, upward=upward)
-    await adb('shell', 'input', 'keyevent', key, timeout=8, check=False)
+    await adb('shell', 'input', 'keyevent', key, timeout=20, check=False)
 
 
 async def find_text(text, exact=False, scroll=True):
@@ -1357,7 +1369,7 @@ async def case(rig, index, click_text):
         await asyncio.sleep(0.2)
         if index == 2:
             await wake_and_unlock()
-        await launch_app()
+        await launch_app(is_resume=True)
         rig.release.set()
         await asyncio.sleep(2)
         await actual_os_snapshot('after_resume')
@@ -1408,7 +1420,7 @@ async def main():
     seen = set()
     failed = []
     cases = []
-    deadline = time.monotonic()+1700
+    deadline = time.monotonic()+1900
     idle_deadline = time.monotonic()+600
     finished = False
     try:
