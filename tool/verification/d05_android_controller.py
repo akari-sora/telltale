@@ -37,6 +37,15 @@ ACTIVE_RUN = None
 DUMP_READY_SECONDS = 180
 DUMP_RETRY_SLEEP = 3
 TAP_SCROLL_ATTEMPTS = 16
+# Left of vehicle-profile SeekBar thumbs (~146–241). A 400ms swipe at x=240
+# dragged sliders instead of the ListView (job 16609695855, UI 907 still in
+# FUEL AND DRIVETRAIN after 6 attempts). Fast fling, above the tab bar (y=684).
+# Tip b1a9193 also moved to x=40; keep the 80ms triple fling, not one 350ms drag.
+LIST_FLING_X = 40
+LIST_FLING_Y1 = 620
+LIST_FLING_Y2 = 90
+LIST_FLING_MS = 80
+FLINGS_PER_LOOK = 3
 DRAWN_WAIT_SECONDS = 180
 DRAWN_POLL_SLEEP = 2
 REMOTE_DUMP = '/sdcard/d05_window.xml'
@@ -309,7 +318,7 @@ async def capture_dump_failure_evidence(label, xml):
     }
 
 
-async def dump(label='view', screenshot=True):
+async def dump(label='view', screenshot=True, prepare=True):
     name = unique_name(label)
     deadline = time.monotonic() + DUMP_READY_SECONDS
     last_error = None
@@ -320,7 +329,8 @@ async def dump(label='view', screenshot=True):
     returncode = 0
     while True:
         attempt += 1
-        await prepare_window()
+        if prepare:
+            await prepare_window()
         xml, stderr, returncode, source = await request_hierarchy()
         try:
             rows = parse_ui_rows(xml)
@@ -417,6 +427,12 @@ def dashboard_ready(rows):
             locate_text(rows, 'Dashboard') is not None)
 
 
+async def fling_list():
+    """Fling the Settings ListView without hitting sliders or the tab bar."""
+    await adb('shell', 'input', 'swipe', LIST_FLING_X, LIST_FLING_Y1,
+              LIST_FLING_X, LIST_FLING_Y2, LIST_FLING_MS, timeout=15, check=False)
+
+
 async def find_text(text, exact=False, scroll=True):
     """Dump until text or content-desc matches. Scroll only for list rows.
 
@@ -424,11 +440,15 @@ async def find_text(text, exact=False, scroll=True):
     still on Connect (or the session already dropped). Swiping that screen
     cannot create the tab — job 16609394827 proved the three chore swipes
     only scrolled the disconnect picker.
+
+    Service Recipes sits below CONNECTION, the huge VEHICLE PROFILE, FUEL
+    AND DRIVETRAIN, and DIAGNOSTICS. Locate dumps skip prepare_window so
+    Mode 01 NO DATA does not drop ELM during the scroll (job 16609695855).
     """
     if not isinstance(text, str) or not 0 < len(text) <= 100:
         raise ValueError('Invalid UI text')
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
-        rows = await dump('locate', screenshot=False)
+        rows = await dump('locate', screenshot=False, prepare=False)
         found = locate_text(rows, text, exact)
         if found:
             return found, attempt
@@ -436,9 +456,9 @@ async def find_text(text, exact=False, scroll=True):
             break
         if scroll:
             event('scroll_until_text', text=text, attempt=attempt + 1)
-            await adb('shell', 'input', 'swipe', 40, 500, 40, 80, 350,
-                      timeout=15, check=False)
-            await asyncio.sleep(0.4)
+            for _ in range(FLINGS_PER_LOOK):
+                await fling_list()
+            await asyncio.sleep(0.15)
         else:
             event('wait_until_text', text=text, attempt=attempt + 1)
             await asyncio.sleep(0.8)
@@ -694,6 +714,11 @@ async def main():
                     if op not in ('dump','d05','finish'):
                         if op == 'tap_text' and item.get('text') == 'Connect':
                             await enter_dashboard()
+                        elif op == 'tap_text' and item.get('text') == 'Settings':
+                            # Locate already dumped the tab. Another 10s
+                            # after_action dump lets Mode 01 NO DATA drop ELM
+                            # before Service Recipes is on screen.
+                            pass
                         else:
                             await asyncio.sleep(1)
                             await dump('after_action')

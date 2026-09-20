@@ -416,7 +416,7 @@ class TapTextMatchTests(unittest.TestCase):
         ]
         calls = []
 
-        async def fake_dump(label='view', screenshot=True):
+        async def fake_dump(label='view', screenshot=True, prepare=True):
             return dumps.pop(0)
 
         async def fake_adb(*args, timeout=40, check=True, full=False):
@@ -433,8 +433,8 @@ class TapTextMatchTests(unittest.TestCase):
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         swipes = [c for c in calls if c[:3] == ('shell', 'input', 'swipe')]
-        self.assertTrue(swipes)
-        self.assertEqual(swipes[0][3:7], (40, 500, 40, 80))
+        self.assertEqual(len(swipes), 3)
+        self.assertEqual(swipes[0][3:8], (40, 620, 40, 90, 80))
         self.assertTrue(any(c[:3] == ('shell', 'input', 'tap') for c in calls))
 
     def test_settings_tab_waits_without_swiping_connect(self):
@@ -456,7 +456,7 @@ class TapTextMatchTests(unittest.TestCase):
         dumps = [connect, dashboard]
         calls = []
 
-        async def fake_dump(label='view', screenshot=True):
+        async def fake_dump(label='view', screenshot=True, prepare=True):
             return dumps.pop(0)
 
         async def fake_adb(*args, timeout=40, check=True, full=False):
@@ -506,7 +506,7 @@ class TapTextMatchTests(unittest.TestCase):
         dumps = [home, dashboard]
         calls = []
 
-        async def fake_dump(label='view', screenshot=True):
+        async def fake_dump(label='view', screenshot=True, prepare=True):
             return dumps.pop(0)
 
         async def fake_adb(*args, timeout=40, check=True, full=False):
@@ -536,7 +536,7 @@ class TapTextMatchTests(unittest.TestCase):
         ]
         calls = []
 
-        async def fake_dump(label='view', screenshot=True):
+        async def fake_dump(label='view', screenshot=True, prepare=True):
             return dashboard
 
         async def fake_adb(*args, timeout=40, check=True, full=False):
