@@ -1346,6 +1346,12 @@ async def case(rig, index, click_text):
         await actual_os_snapshot('after_resume')
         await dump('mode08_terminal')
         event('case_observations_complete', index=index, acceptance='PENDING_INDEPENDENT_REVIEW')
+        # Job 16612553780 completed case 1 then HOME+relaunch left Discover
+        # off-screen; cases 2/3 timed out. Re-open recipes before the next case.
+        if index in (1, 2):
+            await enter_dashboard()
+            await tap_text('Settings', exact=False, scroll=False)
+            await tap_text('Service Recipes')
     finally:
         rig.target = None
         rig.release.set()
