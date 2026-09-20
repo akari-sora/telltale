@@ -1,53 +1,43 @@
-# All gates on the Grok on-demand project Runner (no SaaS for full-gate*).
-# Localhost Flutter+NDK image only exists on that host (pull_policy=if-not-present).
-stages: [gate]
-
-default:
-  interruptible: true
-
-variables:
-  PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
-  GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false"
-  ANDROID_HOME: "/opt/android-sdk-linux"
-  ANDROID_SDK_ROOT: "/opt/android-sdk-linux"
-
-.gate-common:
-  stage: gate
-  timeout: 1h
-  tags: [grok-box, ondemand, telltale]
+# Temporary executor preflight branch only, not a replacement for main CI.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+stages: [inspect]
+android-d05-executor-preflight:
+  stage: inspect
   image: localhost/telltale-ci-flutter:3.47.0
-  cache:
-    key: pub-3.47.0
-    paths: [.pub-cache/]
-  before_script:
-    - bash tool/ci/prepare_gate.sh
+  tags: [grok-box, ondemand, telltale]
+  timeout: 5m
   script:
     - |
       set -Eeuo pipefail
-      if [ "$(id -u)" = 0 ]; then
-        runuser -u "$(cat /tmp/ci-nonroot-user)" -- /usr/local/bin/as-nonroot bash tool/ci/full_gate.sh
-      else
-        bash tool/ci/full_gate.sh
-      fi
+      mkdir -p d05-executor-preflight
+      python3 - <<'PY'
+      import json, os, platform, shutil
+      from pathlib import Path
+      sdk = Path(os.environ.get('ANDROID_SDK_ROOT', '/opt/android-sdk-linux'))
+      data = {
+          'kind': 'read_only_executor_inventory',
+          'android_executed': False,
+          'apk_installed': False,
+          'platform': platform.system(),
+          'machine': platform.machine(),
+          'cpu_count': os.cpu_count(),
+          'kvm_exists': Path('/dev/kvm').exists(),
+          'kvm_read_write': os.access('/dev/kvm', os.R_OK | os.W_OK),
+          'tools': {name: shutil.which(name) for name in ('python3','flutter','adb','emulator','sdkmanager')},
+          'sdk_emulator_exists': (sdk/'emulator'/'emulator').is_file(),
+          'sdk_platform_tools_exists': (sdk/'platform-tools'/'adb').is_file(),
+          'system_images': sorted(str(p.relative_to(sdk)) for p in (sdk/'system-images').glob('*/*/*/package.xml')),
+          'pipeline_id': os.environ.get('CI_PIPELINE_ID'),
+          'job_id': os.environ.get('CI_JOB_ID'),
+          'commit': os.environ.get('CI_COMMIT_SHA'),
+      }
+      Path('d05-executor-preflight/result.json').write_text(json.dumps(data, indent=2)+'\n')
+      print(json.dumps(data, indent=2))
+      PY
+      echo 'EXECUTOR_INVENTORY_ONLY_NOT_DEVICE_PASS'
   artifacts:
     when: always
-    expire_in: 14 days
-    paths:
-      - ci-artifacts/
-      - build/app/outputs/flutter-apk/*.apk
-
-full-gate:
-  extends: .gate-common
-  rules:
-    - if: '$CI_GATE_RUNNER == "hosted"'
-      when: never
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-# Same-project MRs also use the Grok runner (queued behind on-demand wake).
-# Fork MRs still cannot use this project's runner via these rules.
-full-gate-mr:
-  extends: .gate-common
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_PROJECT_ID == "86385809" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID'
-    - if: '$CI_GATE_RUNNER == "hosted" && $CI_PROJECT_ID == "86385809" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_BRANCH'
-      when: never
+    expire_in: 7 days
+    paths: [d05-executor-preflight/]
