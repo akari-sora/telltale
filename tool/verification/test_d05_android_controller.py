@@ -385,5 +385,95 @@ class PrepareWindowTests(unittest.TestCase):
         self.assertFalse(any(c[:3] == ('shell', 'input', 'swipe') for c in self.calls))
 
 
+class TapTextMatchTests(unittest.TestCase):
+    def test_settings_tab_matches_and_disclosure_does_not(self):
+        tab = dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                   clickable='true', bounds='[384,684][480,752]')
+        disclosure = dict(text='', desc='Full disclosure in Settings', enabled='true',
+                          clickable='true', bounds='[16,672][217,720]')
+        self.assertTrue(CTRL.node_matches(tab, 'Settings'))
+        self.assertFalse(CTRL.node_matches(disclosure, 'Settings'))
+        found = CTRL.locate_text([disclosure, tab], 'Settings')
+        self.assertEqual(found[0]['desc'], 'Settings\nTab 5 of 5')
+
+    def test_service_recipes_and_discover_use_first_line_prefix(self):
+        recipes = dict(text='', desc='Service Recipes & Active Tests', enabled='true',
+                       clickable='true', bounds='[16,400][464,470]')
+        discover = dict(text='', desc='Discover Mode 08 Supported TIDs', enabled='true',
+                        clickable='true', bounds='[16,200][464,250]')
+        self.assertTrue(CTRL.node_matches(recipes, 'Service Recipes'))
+        self.assertTrue(CTRL.node_matches(discover, 'Discover Mode 08'))
+
+    def test_tap_text_scrolls_until_the_row_appears(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        dumps = [
+            [dict(text='', desc='Wi-Fi\nA TCP port', enabled='true', clickable='true',
+                  bounds='[16,398][464,473]')],
+            [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
+                  clickable='true', bounds='[16,400][464,470]')],
+        ]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.tap_text('Service Recipes'))
+        self.assertTrue(any(c[:3] == ('shell', 'input', 'swipe') for c in calls))
+        self.assertTrue(any(c[:3] == ('shell', 'input', 'tap') for c in calls))
+
+    def test_settings_tab_waits_without_swiping_connect(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        connect = [
+            dict(text='', desc='The adapter stopped responding and the connection has been dropped.',
+                 enabled='true', clickable='false', bounds='[65,45][447,87]'),
+            dict(text='', desc='Full disclosure in Settings', enabled='true',
+                 clickable='true', bounds='[16,672][217,720]'),
+            dict(text='', desc='Wi-Fi\nA TCP port, usually 192.168.0.10:35000',
+                 enabled='true', clickable='true', bounds='[16,634][464,709]'),
+        ]
+        dashboard = connect + [
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+        ]
+        dumps = [connect, dashboard]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.tap_text('Settings', scroll=False))
+        self.assertFalse(any(c[:3] == ('shell', 'input', 'swipe') for c in calls))
+        taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
+        self.assertEqual(taps, [('shell', 'input', 'tap', 432, 718)])
+
+
 if __name__ == '__main__':
     unittest.main()

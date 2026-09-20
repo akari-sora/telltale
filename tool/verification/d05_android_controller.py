@@ -36,6 +36,7 @@ SEQ = 0
 ACTIVE_RUN = None
 DUMP_READY_SECONDS = 180
 DUMP_RETRY_SLEEP = 3
+TAP_SCROLL_ATTEMPTS = 6
 DRAWN_WAIT_SECONDS = 180
 DRAWN_POLL_SLEEP = 2
 REMOTE_DUMP = '/sdcard/d05_window.xml'
@@ -367,26 +368,83 @@ def bounds(row):
     return x1, y1, x2, y2
 
 
-async def tap_text(text, exact=False):
-    if not isinstance(text, str) or not 0 < len(text) <= 100:
-        raise ValueError('Invalid UI text')
-    rows = await dump('locate', screenshot=False)
+def node_labels(row):
+    return [row.get('text') or '', row.get('desc') or '']
+
+
+def node_matches(row, text, exact=False):
+    """Match visible text or content-desc.
+
+    Flutter semantics put the title on the first line and extra context after
+    a newline (Settings\\nTab 5 of 5). Substring-anywhere also hits Connect's
+    'Full disclosure in Settings', so non-exact matches require the first line
+    to equal or start with the query.
+    """
+    if row.get('enabled') != 'true':
+        return False
+    labels = node_labels(row)
+    if exact:
+        return any(value == text for value in labels)
+    needle = text.lower()
+    for value in labels:
+        first = value.split('\n', 1)[0].lower()
+        if first == needle or first.startswith(needle):
+            return True
+    return False
+
+
+def locate_text(rows, text, exact=False):
     matching = []
     for row in rows:
-        values = [row['text'] or '', row['desc'] or '']
-        if row['enabled'] != 'true':
+        if not node_matches(row, text, exact):
             continue
-        if any(value == text if exact else text.lower() in value.lower() for value in values):
-            try:
-                x1,y1,x2,y2 = bounds(row)
-                matching.append(((x2-x1)*(y2-y1), row, (x1+x2)//2, (y1+y2)//2))
-            except ValueError:
-                continue
+        try:
+            x1, y1, x2, y2 = bounds(row)
+        except ValueError:
+            continue
+        area = (x2 - x1) * (y2 - y1)
+        clickable = 0 if row.get('clickable') == 'true' else 1
+        matching.append((clickable, area, row, (x1 + x2) // 2, (y1 + y2) // 2))
     if not matching:
-        raise RuntimeError(f'UI text not visible: {text!r}')
-    _, row, x, y = min(matching, key=lambda x:x[0])
-    event('selected_observed_ui_node', text=text, node=row)
-    await adb('shell','input','tap',x,y)
+        return None
+    _, _, row, x, y = min(matching)
+    return row, x, y
+
+
+async def find_text(text, exact=False, scroll=True):
+    """Dump until text or content-desc matches. Scroll only for list rows.
+
+    Bottom-nav Settings is never below the fold. If it is missing we are
+    still on Connect (or the session already dropped). Swiping that screen
+    cannot create the tab — job 16609394827 proved the three chore swipes
+    only scrolled the disconnect picker.
+    """
+    if not isinstance(text, str) or not 0 < len(text) <= 100:
+        raise ValueError('Invalid UI text')
+    for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
+        rows = await dump('locate', screenshot=False)
+        found = locate_text(rows, text, exact)
+        if found:
+            return found, attempt
+        if attempt >= TAP_SCROLL_ATTEMPTS:
+            break
+        if scroll:
+            event('scroll_until_text', text=text, attempt=attempt + 1)
+            await adb('shell', 'input', 'swipe', 240, 680, 240, 160, 400,
+                      timeout=15, check=False)
+            await asyncio.sleep(0.4)
+        else:
+            event('wait_until_text', text=text, attempt=attempt + 1)
+            await asyncio.sleep(0.8)
+    raise RuntimeError(f'UI text not visible: {text!r}')
+
+
+async def tap_text(text, exact=False, scroll=True):
+    found, attempt = await find_text(text, exact, scroll)
+    row, x, y = found
+    event('selected_observed_ui_node', text=text, node=row,
+          scroll_attempts=attempt, scrolled=bool(scroll))
+    await adb('shell', 'input', 'tap', x, y)
 
 
 class ObservedWriter:
@@ -556,7 +614,9 @@ async def main():
                     if op == 'dump':
                         await dump('manual_view')
                     elif op == 'tap_text':
-                        await tap_text(item['text'], bool(item.get('exact',False)))
+                        scroll = item.get('scroll', True)
+                        await tap_text(item['text'], bool(item.get('exact', False)),
+                                       scroll=scroll is not False)
                     elif op == 'tap':
                         x,y = int(item['x']),int(item['y'])
                         if not (0<=x<480 and 0<=y<800): raise ValueError('Coordinate bounds')
@@ -586,7 +646,10 @@ async def main():
                         raise ValueError('Unsupported UI operation')
                     if op not in ('dump','d05','finish'):
                         if op == 'tap_text' and item.get('text') == 'Connect':
-                            await asyncio.sleep(25)
+                            # Dashboard tabs arrive after handshake. Do not
+                            # sit 25s on Dashboard: Mode 01 NO DATA can drop
+                            # the session. Wait (no swipe) for the Settings tab.
+                            await find_text('Settings', scroll=False)
                         else:
                             await asyncio.sleep(1)
                             await dump('after_action')
