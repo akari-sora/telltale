@@ -210,7 +210,8 @@ def parse_ui_rows(xml):
     if next(root.iter('node'), None) is None:
         raise ValueError('UI dump hierarchy had no nodes')
     return [dict(text=n.get('text'), desc=n.get('content-desc'), bounds=n.get('bounds'),
-                 enabled=n.get('enabled'), clickable=n.get('clickable'), clazz=n.get('class'))
+                 enabled=n.get('enabled'), clickable=n.get('clickable'), clazz=n.get('class'),
+                 resource_id=n.get('resource-id'))
             for n in root.iter('node') if n.get('text') or n.get('content-desc') or n.get('class') == 'android.widget.EditText']
 
 
@@ -335,12 +336,13 @@ async def wait_for_focused_window(timeout=30):
 
 
 async def launch_app(is_resume=False):
-    await wake_and_unlock()
+    if not is_resume:
+        await wake_and_unlock()
     await adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity',
               '-f', '0x10000000', timeout=60)
     await wait_for_resumed_activity()
-    await wait_for_focused_window()
     if not is_resume:
+        await wait_for_focused_window()
         await wait_for_drawn_window()
     else:
         event('app_resumed_ready', package=PACKAGE)
@@ -589,6 +591,138 @@ def session_dropped(rows):
         return locate_text(rows, 'Settings') is None or locate_text(rows, 'Dashboard') is None
     return any('stopped responding' in line.lower() or 'has been dropped' in line.lower()
                for line in first_line_values(rows))
+
+
+CONNECT_PAGE_REJECT_MARKERS = (
+    'Choose a connection',
+    'Connect now',
+    'Last adapter used',
+    'ELM327 initialisation',
+)
+
+MODE08_SURFACE_MARKERS = (
+    'Service Recipes & Active Diagnostics',
+    'Service Recipes',
+    'MODE 08 NON-ACTUATING DISCOVERY',
+    '車行診斷配方',
+    'Service-Rezepte',
+)
+
+MODE08_OUTCOME_MARKERS = (
+    'mode 08 is supported by ecu',
+    'supported tids:',
+    'ecu 支援 mode 08',
+    '支援 tid：',
+    '支援 tid:',
+    'mode 08 is not supported',
+    '此 ecu 不支援 mode 08',
+    'mode 08 support is unknown',
+    'mode 08 支援狀態未知',
+    'mode 08 query timed out',
+    'session disconnected or superseded',
+)
+
+DISCOVERING_SPINNER_MARKERS = (
+    'discovering mode 08',
+    '探索中',
+)
+
+
+def assert_genuine_mode08_terminal(rows):
+    """Assert that the UI rows represent a genuine Mode 08 terminal state.
+
+    Fail-closed negative check:
+    - If content-desc or text contains Connect screen markers ('Choose a connection',
+      'Connect now', 'Last adapter used', 'ELM327 initialisation'), raise RuntimeError.
+    - If session_dropped(rows) is True, raise RuntimeError.
+
+    Positive check:
+    - Must contain Service Recipes / Mode 08 discovery surface markers.
+    - Must contain Mode 08 discovery outcome (supported TIDs, unsupported, or valid cancellation/unknown).
+    """
+    if not rows:
+        raise RuntimeError("Terminal UI hierarchy is empty")
+
+    # 1. Fail-closed negative check
+    for row in rows:
+        text = ((row.get('text') or '') + ' ' + (row.get('desc') or '')).strip()
+        for bad in CONNECT_PAGE_REJECT_MARKERS:
+            if bad.lower() in text.lower():
+                raise RuntimeError(f"Terminal UI dropped back to Connect screen: {bad!r}")
+        res_id = row.get('resource_id') or ''
+        if res_id.startswith('connection-layer-'):
+            raise RuntimeError(f"Terminal UI dropped back to Connect screen: resource-id {res_id!r}")
+        if 'apps list' in text.lower() or 'gallery' in text.lower():
+            raise RuntimeError("Terminal UI dropped to Android launcher")
+
+    if session_dropped(rows):
+        raise RuntimeError("Terminal UI dropped back to Connect screen")
+
+    # 2. Positive check: Surface presence
+    has_surface = False
+    for row in rows:
+        text = ((row.get('text') or '') + ' ' + (row.get('desc') or '')).strip()
+        if any(marker.lower() in text.lower() for marker in MODE08_SURFACE_MARKERS):
+            has_surface = True
+            break
+    if not has_surface:
+        raise RuntimeError("Terminal UI is not on Service Recipes screen")
+
+    # 3. Positive check: Mode 08 outcome
+    has_outcome = False
+    for row in rows:
+        text = ((row.get('text') or '') + ' ' + (row.get('desc') or '')).strip()
+        if any(marker.lower() in text.lower() for marker in MODE08_OUTCOME_MARKERS):
+            has_outcome = True
+            break
+        if re.search(r'TID\s*\$[0-9A-Fa-f]{2}', text):
+            has_outcome = True
+            break
+
+    if not has_outcome:
+        raise RuntimeError("Terminal UI does not contain genuine Mode 08 outcome")
+
+    return True
+
+
+async def poll_current_ui_rows():
+    xml, _, _, _ = await request_hierarchy()
+    try:
+        return parse_ui_rows(xml)
+    except Exception:
+        return []
+
+
+async def wait_for_mode08_terminal_ui(timeout=30):
+    """Wait for discovering state to settle, then assert genuine Mode 08 terminal UI."""
+    deadline = time.monotonic() + timeout
+    last_err = None
+    while time.monotonic() < deadline:
+        rows = await poll_current_ui_rows()
+        if rows:
+            for row in rows:
+                text = ((row.get('text') or '') + ' ' + (row.get('desc') or '')).strip()
+                for bad in CONNECT_PAGE_REJECT_MARKERS:
+                    if bad.lower() in text.lower():
+                        raise RuntimeError(f"Terminal UI dropped back to Connect screen: {bad!r}")
+
+            is_discovering = any(
+                any(marker in ((r.get('text') or '') + ' ' + (r.get('desc') or '')).lower()
+                    for marker in DISCOVERING_SPINNER_MARKERS)
+                for r in rows
+            )
+            if not is_discovering:
+                try:
+                    assert_genuine_mode08_terminal(rows)
+                    event('mode08_terminal_ui_confirmed', row_count=len(rows))
+                    return rows
+                except RuntimeError as err:
+                    last_err = err
+        await asyncio.sleep(0.8)
+
+    if last_err:
+        raise last_err
+    raise RuntimeError(f"Mode 08 terminal UI did not settle within {timeout}s")
 
 
 def visible_seekbars(rows):
@@ -1371,21 +1505,25 @@ async def case(rig, index, click_text):
         event('held_query_confirmed_before_os_command', receipt=receipt, action=action)
         await adb('shell', 'input', 'keyevent', '223' if index == 2 else '3',
                   timeout=20, check=False)
-        # Pacing only; actual Android state/logcat are the evidence.
-        await asyncio.sleep(0.2)
+        event('os_command_executed_during_hold', action=action, index=index)
+        rig.release.set()
+        event('mode08_hold_released_for_resume', index=index, command=command)
         if index == 2:
             await wake_and_unlock()
         await launch_app(is_resume=True)
-        rig.release.set()
-        await asyncio.sleep(2)
         await actual_os_snapshot('after_resume')
-        await dump('mode08_terminal')
-        event('case_observations_complete', index=index, acceptance='PENDING_INDEPENDENT_REVIEW')
+        await wait_for_mode08_terminal_ui(timeout=30)
+        terminal_rows = await dump('mode08_terminal')
+        assert_genuine_mode08_terminal(terminal_rows)
+        event('case_observations_complete', index=index, acceptance='CONFIRMED_TERMINAL_UI')
         if index in (1, 2):
             try:
-                await enter_dashboard()
-                await tap_text('Settings', exact=False, scroll=False)
-                await tap_text('Service Recipes')
+                rows = await poll_current_ui_rows()
+                if not locate_text(rows, click_text):
+                    event('recipes_surface_recovery_needed', index=index)
+                    await enter_dashboard()
+                    await tap_text('Settings', exact=False, scroll=False)
+                    await tap_text('Service Recipes')
             except Exception as exc:
                 event('recipes_reentry_failed', index=index,
                       error=type(exc).__name__ + ': ' + str(exc))

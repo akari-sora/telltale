@@ -1421,6 +1421,135 @@ class OvershootRecoveryTests(unittest.TestCase):
         self.assertTrue(len(swipes) > 0)
 
 
+class Mode08TerminalAssertionTests(unittest.TestCase):
+    def test_rejects_empty_rows(self):
+        with self.assertRaisesRegex(RuntimeError, 'empty'):
+            CTRL.assert_genuine_mode08_terminal([])
+
+    def test_rejects_connect_now(self):
+        rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics'),
+            dict(text='', desc='Connect now'),
+        ]
+        with self.assertRaisesRegex(RuntimeError, 'dropped back to Connect screen'):
+            CTRL.assert_genuine_mode08_terminal(rows)
+
+    def test_rejects_choose_a_connection(self):
+        rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics'),
+            dict(text='', desc='Choose a connection'),
+        ]
+        with self.assertRaisesRegex(RuntimeError, 'dropped back to Connect screen'):
+            CTRL.assert_genuine_mode08_terminal(rows)
+
+    def test_rejects_last_adapter_used(self):
+        rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics'),
+            dict(text='', desc='Last adapter used'),
+        ]
+        with self.assertRaisesRegex(RuntimeError, 'dropped back to Connect screen'):
+            CTRL.assert_genuine_mode08_terminal(rows)
+
+    def test_rejects_connection_layer_resource_id(self):
+        rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics'),
+            dict(text='', desc='Wi-Fi', resource_id='connection-layer-transport-wifi'),
+        ]
+        with self.assertRaisesRegex(RuntimeError, 'dropped back to Connect screen'):
+            CTRL.assert_genuine_mode08_terminal(rows)
+
+    def test_rejects_session_dropped(self):
+        rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics'),
+            dict(text='The adapter stopped responding', desc=''),
+        ]
+        with self.assertRaisesRegex(RuntimeError, 'dropped back to Connect screen'):
+            CTRL.assert_genuine_mode08_terminal(rows)
+
+    def test_rejects_when_not_on_service_recipes_surface(self):
+        rows = [
+            dict(text='', desc='Dashboard\nTab 1 of 5'),
+            dict(text='Mode 08 is supported by ECU. Supported TIDs: $01, $20', desc=''),
+        ]
+        with self.assertRaisesRegex(RuntimeError, 'not on Service Recipes screen'):
+            CTRL.assert_genuine_mode08_terminal(rows)
+
+    def test_rejects_when_outcome_is_missing(self):
+        rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics'),
+            dict(text='', desc='MODE 08 NON-ACTUATING DISCOVERY'),
+            dict(text='', desc='Discover Mode 08 Supported TIDs'),
+        ]
+        with self.assertRaisesRegex(RuntimeError, 'does not contain genuine Mode 08 outcome'):
+            CTRL.assert_genuine_mode08_terminal(rows)
+
+    def test_accepts_supported_tids_outcome(self):
+        rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics'),
+            dict(text='', desc='MODE 08 NON-ACTUATING DISCOVERY'),
+            dict(text='Mode 08 is supported by ECU. Supported TIDs: $01, $20', desc=''),
+            dict(text='', desc='TID $01'),
+            dict(text='', desc='TID $20'),
+        ]
+        self.assertTrue(CTRL.assert_genuine_mode08_terminal(rows))
+
+    def test_accepts_unsupported_outcome(self):
+        rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics'),
+            dict(text='', desc='MODE 08 NON-ACTUATING DISCOVERY'),
+            dict(text='Mode 08 is not supported by this ECU', desc=''),
+        ]
+        self.assertTrue(CTRL.assert_genuine_mode08_terminal(rows))
+
+    def test_accepts_unknown_or_timeout_outcome(self):
+        rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics'),
+            dict(text='', desc='MODE 08 NON-ACTUATING DISCOVERY'),
+            dict(text='Mode 08 support is unknown: Mode 08 query timed out', desc=''),
+        ]
+        self.assertTrue(CTRL.assert_genuine_mode08_terminal(rows))
+
+
+class LaunchAppResumeTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.out = Path(self.tmp.name)
+        self.calls = []
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def _patch_out(self):
+        return patch.multiple(CTRL, OUT=self.out, EVENT_FILE=self.out / 'controller.jsonl')
+
+    def test_launch_app_resume_skips_focus_wait_and_completes_promptly(self):
+        dumpsys = [
+            b'  topResumedActivity=ActivityRecord{def u0 com.cbstudio.telltale/.MainActivity t2}\n',
+        ]
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            self.calls.append(args)
+            if args[:3] == ('shell', 'dumpsys', 'activity'):
+                data = dumpsys.pop(0)
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with self._patch_out(), patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            self._run(CTRL.launch_app(is_resume=True))
+
+        self.assertTrue(any(c[:3] == ('shell', 'am', 'start') for c in self.calls))
+        self.assertEqual(len([c for c in self.calls if c[:3] == ('shell', 'dumpsys', 'activity')]), 1)
+        self.assertFalse(any(c[:3] == ('shell', 'dumpsys', 'window') for c in self.calls))
+        events = (self.out / 'controller.jsonl').read_text()
+        self.assertIn('"event": "app_resumed_ready"', events)
+
+
 if __name__ == '__main__':
 
     unittest.main()
