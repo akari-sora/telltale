@@ -38,7 +38,7 @@ SEQ = 0
 ACTIVE_RUN = None
 DUMP_READY_SECONDS = 180
 DUMP_RETRY_SLEEP = 3
-TAP_SCROLL_ATTEMPTS = 8
+TAP_SCROLL_ATTEMPTS = 12
 # Right of the Dashboard tab ([0,684][96,752]) and left of vehicle-profile
 # SeekBar thumbs (~146–241). Job 16609955129 chained 14 swipes at x=40
 # (inside the Dashboard tab's x-range) with no gap; the merged gesture left
@@ -50,10 +50,7 @@ LIST_FLING_Y2 = 140
 LIST_FLING_MS = 80
 LIST_FLING_GAP_S = 0.08
 FLINGS_PER_LOOK = 6
-# Job 16609802535: 6 gutter flings reached DIAGNOSTIC TRANSCRIPT (UI 914).
-# Burst the remaining Adapter / FieldEvent / Export / Manual panels only
-# after CONNECTION (or the Settings title) is on screen.
-RECIPES_BURST_FLINGS = 8
+LIST_FOCUS_Y = 360
 RECIPES_NEEDLES = (
     'Service Recipes',
     'Active Tests',
@@ -61,13 +58,28 @@ RECIPES_NEEDLES = (
     '車行診斷配方',
 )
 RECIPES_RECOVERIES = 2
+# Job 16610280973 dumped Settings *bottom* (Gauge style / Recommended
+# adapter / licences) after the burst. Those rows are still the Settings
+# list — Cluster/Minimal/Track there are style previews, not Dashboard.
+SETTINGS_LIST_MARKERS = (
+    'vehicle profile', 'fuel and drivetrain', 'diagnostic transcript',
+    'service recipes', 'experimental', 'appearance',
+    'what the adapter says', 'manual command',
+    'gauge style', 'recommended adapter',
+    'open source', 'licence', 'license',
+)
+PAST_RECIPES_MARKERS = (
+    'experimental', 'appearance', 'open-source', 'open source',
+    'recommended', 'language /', 'gauge style', 'licence', 'license',
+)
 DRAWN_WAIT_SECONDS = 180
 DRAWN_POLL_SLEEP = 2
 REMOTE_DUMP = '/sdcard/d05_window.xml'
 SCROLL_JAR_REMOTE = '/data/local/tmp/d05_scroll.jar'
 SCROLL_JAVA = Path(__file__).resolve().parent / 'd05_scroll.java'
 SCROLL_NEEDLE_OK = re.compile(r'^[A-Za-z0-9 &._-]{1,80}$')
-SCROLL_JAR_READY = False
+SCROLL_JAR_TRIED = False
+SCROLL_JAR_USABLE = False
 # Dashboard Mode 01 polls observed in job 16609802535. Never 08xx.
 # Unknown 01 PIDs get a one-byte zero so NO DATA cannot yank the session
 # during Settings → Recipes (job 16610137504).
@@ -539,7 +551,10 @@ def settings_list_open(rows):
 
     Job 16609955129 dumped Dashboard gauges after the burst while that tab
     was still in the tree. CONNECTION / the non-tab Settings title are the
-    residency signal.
+    residency signal. Job 16610280973 then sat on Gauge style / licences
+    (Settings bottom) and dashboard_surface treated both tabs as Dashboard.
+    Those markers are still the list — retapping the already-selected
+    Settings tab does not scroll back to CONNECTION.
     """
     for row in rows:
         for value in node_labels(row):
@@ -549,17 +564,18 @@ def settings_list_open(rows):
                 return True
             if low in ('connection', 'disconnect'):
                 return True
-            if any(token in low for token in (
-                'vehicle profile', 'fuel and drivetrain', 'diagnostic transcript',
-                'service recipes', 'experimental', 'appearance',
-                'what the adapter says', 'manual command',
-            )):
+            if any(token in low for token in SETTINGS_LIST_MARKERS):
                 return True
     return False
 
 
 def dashboard_surface(rows):
-    """Gauge grid / 'No data — Unverified' without the Settings list."""
+    """Gauge grid / 'No data — Unverified' without the Settings list.
+
+    Both tabs alone are not Dashboard: Settings bottom keeps Dashboard +
+    Settings tabs (job 16610280973 ui_op8_fail). Only the unverified gauge
+    strip, or tabs with no list markers, count.
+    """
     if settings_list_open(rows) or session_dropped(rows):
         return False
     for line in first_line_values(rows):
@@ -580,11 +596,10 @@ def still_above_recipes(rows):
 
 
 def past_recipes(rows):
-    """Overshot the tile into Experimental / Language / Appearance."""
+    """Overshot the tile into Experimental / Gauge style / licences."""
     if locate_text(rows, 'Settings') is None:
         return False
-    tokens = ('experimental', 'appearance', 'open-source', 'recommended', 'language /')
-    return any(any(token in line.lower() for token in tokens)
+    return any(any(token in line.lower() for token in PAST_RECIPES_MARKERS)
                for line in first_line_values(rows))
 
 
@@ -657,10 +672,18 @@ def _dexer():
 
 
 async def ensure_scroll_jar():
-    """Build and push the one-shot UiAutomator scrollIntoView helper."""
-    global SCROLL_JAR_READY
-    if SCROLL_JAR_READY:
-        return
+    """Optional UiAutomator helper. Device uiautomator.jar is DEX, not stubs.
+
+    Job 16610280973: javac against /system/framework/uiautomator.jar cannot
+    see com.android.uiautomator.core, then runtest on the missing jar was a
+    no-op and the burst-fling fallback left Settings. Never mark a failed
+    build usable; recipes paging does not call this.
+    """
+    global SCROLL_JAR_TRIED, SCROLL_JAR_USABLE
+    if SCROLL_JAR_TRIED:
+        return SCROLL_JAR_USABLE
+    SCROLL_JAR_TRIED = True
+    SCROLL_JAR_USABLE = False
     try:
         work = OUT / 'scroll-build'
         work.mkdir(parents=True, exist_ok=True)
@@ -676,8 +699,7 @@ async def ensure_scroll_jar():
                   android_jar=str(android_jar) if android_jar else '',
                   uiautomator_bytes=uia.stat().st_size if uia.is_file() else 0,
                   dexer=dexer[0] if dexer else '')
-            SCROLL_JAR_READY = True
-            return
+            return False
         source = work / 'D05Scroll.java'
         source.write_text(SCROLL_JAVA.read_text(encoding='utf-8'))
         javac_cmds = (
@@ -697,8 +719,7 @@ async def ensure_scroll_jar():
         if compiled is None or compiled.returncode or not classfile.is_file():
             event('scroll_jar_javac_failed',
                   stderr=(compiled.stderr.decode(errors='replace')[:1500] if compiled else ''))
-            SCROLL_JAR_READY = True
-            return
+            return False
         kind, tool = dexer
         jar_out = work / 'd05_scroll.jar'
         if kind == 'dx':
@@ -721,28 +742,34 @@ async def ensure_scroll_jar():
         if not jar_out.is_file():
             event('scroll_jar_dex_failed',
                   stderr=dexed.stderr.decode(errors='replace')[:1500])
-            SCROLL_JAR_READY = True
-            return
+            return False
         await adb('push', str(jar_out), SCROLL_JAR_REMOTE, timeout=20, check=False)
         event('scroll_jar_ready', remote=SCROLL_JAR_REMOTE,
               sha256=hashlib.sha256(jar_out.read_bytes()).hexdigest())
+        SCROLL_JAR_USABLE = True
+        return True
     except Exception as exc:
         event('scroll_jar_compile_failed', error=type(exc).__name__ + ': ' + str(exc))
-    SCROLL_JAR_READY = True
+        SCROLL_JAR_USABLE = False
+        return False
 
 
 async def scroll_into_view(needle):
-    """UiAutomator scrollIntoView for a Flutter content-desc prefix.
+    """UiAutomator scrollIntoView only when the jar actually compiled.
 
-    Job 16610137504 selected Service Recipes this way. Gutter flings plus
-    locate dumps are the fallback when the jar cannot be built.
+    Device DEX cannot satisfy javac (job 16610280973). Never runtest a
+    missing jar — that was a no-op that then burst-flung to Gauge style.
     """
     if not isinstance(needle, str) or not SCROLL_NEEDLE_OK.fullmatch(needle):
         raise ValueError('Invalid scroll needle')
-    event('uiautomator_scroll_into_view', needle=needle)
     await ensure_scroll_jar()
+    if not SCROLL_JAR_USABLE:
+        event('scroll_jar_skipped', needle=needle, reason='not_usable')
+        return False
+    event('uiautomator_scroll_into_view', needle=needle)
     await adb('shell', 'uiautomator', 'runtest', SCROLL_JAR_REMOTE, '-c', 'D05Scroll',
               '-e', 'needle', needle, timeout=60, check=False)
+    return True
 
 
 async def fling_list(count=1, upward=False):
@@ -782,6 +809,40 @@ async def tap_settings_tab(rows):
     await asyncio.sleep(0.5)
 
 
+async def focus_settings_list(rows):
+    """Give PAGE_DOWN a Settings-list target, not the tab bar.
+
+    x stays in the left gutter so SeekBar thumbs are not dragged.
+    """
+    for needle in ('CONNECTION', 'Gauge style', 'Vehicle profile',
+                   'DIAGNOSTIC', 'Recommended adapter'):
+        found = locate_text(rows, needle)
+        if not found:
+            continue
+        row, _x, y = found
+        if y >= 650:
+            continue
+        event('settings_list_focus', text=needle, node=row, x=LIST_FLING_X, y=y)
+        await adb('shell', 'input', 'tap', LIST_FLING_X, y)
+        await asyncio.sleep(0.12)
+        return
+    event('settings_list_focus', text='', x=LIST_FLING_X, y=LIST_FOCUS_Y)
+    await adb('shell', 'input', 'tap', LIST_FLING_X, LIST_FOCUS_Y)
+    await asyncio.sleep(0.12)
+
+
+async def page_settings_list(upward=False):
+    """One page on the focused Settings list. Never swipe or fling.
+
+    Job 16610280973: eight gutter flings overshot Service Recipes to Gauge
+    style. PAGE_DOWN/UP stay on the focused scrollable; the caller dumps
+    and checks settings_list_open after each step.
+    """
+    key = 'KEYCODE_PAGE_UP' if upward else 'KEYCODE_PAGE_DOWN'
+    event('recipes_page_scroll', key=key, upward=upward)
+    await adb('shell', 'input', 'keyevent', key, timeout=8, check=False)
+
+
 async def find_text(text, exact=False, scroll=True):
     """Dump until text or content-desc matches. Scroll only for list rows.
 
@@ -791,20 +852,20 @@ async def find_text(text, exact=False, scroll=True):
     only scrolled the disconnect picker.
 
     Service Recipes sits below CONNECTION, the huge VEHICLE PROFILE, FUEL
-    AND DRIVETRAIN, and DIAGNOSTICS. Job 16609955129 burst before the list
-    was confirmed and landed on Dashboard gauges — dump first, re-tap
-    Settings if gauges show. Job 16610137504 reached the tile with
-    UiAutomator scrollIntoView, then reference_disconnect yanked Connect;
-    prefer that scroll once residency holds, keep Mode 01 alive, and
-    reconnect+reenter before failing op8. Locate dumps skip prepare_window
+    AND DRIVETRAIN, and DIAGNOSTICS. Job 16610280973: after reconnect the
+    list was open at CONNECTION, device uiautomator.jar failed javac, the
+    runtest no-op plus burst-8 landed on Gauge style, and retapping the
+    already-selected Settings tab did not jump to the top. Page one
+    KEYCODE at a time while settings_list_open holds; PAGE_UP when past
+    the tile; never fling; never runtest a broken jar. Mode 01 keepalive
+    keeps the session through the pages. Locate dumps skip prepare_window
     (job 16609695855).
     """
     if not isinstance(text, str) or not 0 < len(text) <= 100:
         raise ValueError('Invalid UI text')
     recipes = scroll and is_recipes_query(text)
     recovered = 0
-    scroll_done = False
-    burst_done = False
+    list_focused = False
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
         rows = await dump('locate', screenshot=False, prepare=False)
         if recipes:
@@ -829,8 +890,7 @@ async def find_text(text, exact=False, scroll=True):
                     f'UI text not visible: {text!r} (session dropped during Settings scroll)'
                 )
             recovered += 1
-            scroll_done = False
-            burst_done = False
+            list_focused = False
             event('recipes_session_dropped', attempt=attempt, recovery=recovered)
             await enter_dashboard()
             found_tab, _ = await find_text('Settings', scroll=False)
@@ -843,27 +903,22 @@ async def find_text(text, exact=False, scroll=True):
         if recipes and (dashboard_surface(rows) or not settings_list_open(rows)):
             event('settings_residency_lost', attempt=attempt,
                   dashboard=dashboard_surface(rows))
-            scroll_done = False
-            burst_done = False
+            list_focused = False
             await tap_settings_tab(rows)
             continue
-        if recipes and not scroll_done:
+        if recipes:
+            upward = bool(past_recipes(rows) and not still_above_recipes(rows))
+            if not list_focused:
+                await focus_settings_list(rows)
+                list_focused = True
             event('recipes_direct_nav', text=text, attempt=attempt,
-                  method='uiautomator_scroll_into_view')
-            await scroll_into_view('Service Recipes')
-            scroll_done = True
-            await asyncio.sleep(0.2)
+                  method='page_down' if not upward else 'page_up')
+            await page_settings_list(upward=upward)
+            await asyncio.sleep(0.15)
             continue
-        upward = bool(recipes and past_recipes(rows) and not still_above_recipes(rows))
-        if recipes and not upward and not burst_done:
-            event('recipes_burst_fling', count=RECIPES_BURST_FLINGS,
-                  attempt=attempt + 1)
-            await fling_list(RECIPES_BURST_FLINGS)
-            burst_done = True
-        else:
-            event('scroll_until_text', text=text, attempt=attempt + 1,
-                  upward=upward)
-            await fling_list(FLINGS_PER_LOOK, upward=upward)
+        event('scroll_until_text', text=text, attempt=attempt + 1,
+              upward=False)
+        await fling_list(FLINGS_PER_LOOK, upward=False)
         await asyncio.sleep(0.15)
     raise RuntimeError(f'UI text not visible: {text!r}')
 
@@ -916,7 +971,7 @@ async def tap_text(text, exact=False, scroll=True):
           scroll_attempts=attempt, scrolled=bool(scroll) and text != 'Connect now')
     await adb('shell', 'input', 'tap', x, y)
     if text == 'Settings':
-        # Let go_router paint CONNECTION before op8 bursts (job 16609955129).
+        # Let go_router paint CONNECTION before op8 pages (job 16609955129).
         await asyncio.sleep(0.5)
 
 
@@ -1055,7 +1110,6 @@ async def main():
         raise RuntimeError('Wrong fixed APK')
     if (await adb('get-state')).decode().strip() != 'device':
         raise RuntimeError('Disposable emulator not ready')
-    await ensure_scroll_jar()
     rig = DeviceRig()
     listener = await asyncio.start_server(rig.handle_client, '127.0.0.1', 35008)
     await adb('reverse','tcp:35008','tcp:35008')

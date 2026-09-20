@@ -443,6 +443,31 @@ class TapTextMatchTests(unittest.TestCase):
         return [c for c in calls if c[:1] == ('shell',) and any(
             isinstance(part, str) and 'swipe' in part for part in c)]
 
+    def _page_calls(self, calls):
+        return [c for c in calls if len(c) >= 4 and c[:3] == ('shell', 'input', 'keyevent')]
+
+    def _runtest_calls(self, calls):
+        return [c for c in calls if len(c) >= 3 and c[1] == 'uiautomator' and 'runtest' in c]
+
+    def _settings_bottom_rows(self):
+        """Job 16610280973 ui_op8_fail — Settings bottom, not Dashboard."""
+        return [
+            dict(text='', desc='Gauge style\nNot just a colour change — each one has a different degree.',
+                 enabled='true', clickable='false', bounds='[16,24][464,163]'),
+            dict(text='', desc='Cluster', enabled='true', clickable='true',
+                 bounds='[33,24][165,102]'),
+            dict(text='', desc='2740 rpm, RPM', enabled='true', clickable='false',
+                 bounds='[43,24][155,74]'),
+            dict(text='', desc='RECOMMENDED ADAPTER\nCARLZS LAB CL-OBDII-M25B',
+                 enabled='true', clickable='false', bounds='[16,187][464,486]'),
+            dict(text='', desc='Open source and data licences', enabled='true',
+                 clickable='true', bounds='[16,502][464,550]'),
+            dict(text='', desc='Dashboard\nTab 1 of 5', enabled='true',
+                 clickable='true', bounds='[0,684][96,752]'),
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+        ]
+
     def test_settings_list_open_rejects_dashboard_gauges_and_home(self):
         title = dict(text='', desc='Settings', enabled='true',
                      clickable='false', bounds='[16,36][464,63]')
@@ -477,7 +502,15 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertTrue(CTRL.session_dropped(dropped_sheet))
         self.assertFalse(CTRL.session_dropped(gauges))
 
-    def test_tap_text_confirms_settings_then_scrolls_recipes_into_view(self):
+    def test_settings_bottom_is_list_not_dashboard(self):
+        bottom = self._settings_bottom_rows()
+        self.assertTrue(CTRL.settings_list_open(bottom))
+        self.assertFalse(CTRL.dashboard_surface(bottom))
+        self.assertTrue(CTRL.past_recipes(bottom))
+        self.assertFalse(CTRL.session_dropped(bottom))
+        self.assertFalse(CTRL.still_above_recipes(bottom))
+
+    def test_tap_text_pages_down_to_recipes_without_fling_or_jar(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
@@ -502,10 +535,12 @@ class TapTextMatchTests(unittest.TestCase):
 
         async def fake_adb(*args, timeout=40, check=True, full=False):
             calls.append(args)
-            if len(args) >= 2 and args[1] == 'uiautomator':
-                order.append('scroll')
             if args[:3] == ('shell', 'input', 'tap'):
                 order.append('tap')
+            elif args[:3] == ('shell', 'input', 'keyevent'):
+                order.append('page')
+            elif len(args) >= 2 and args[1] == 'uiautomator':
+                order.append('scroll')
             result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
             return result if full else b''
 
@@ -513,22 +548,26 @@ class TapTextMatchTests(unittest.TestCase):
             return None
 
         with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
-                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_READY=True), \
+                            TAP_SCROLL_ATTEMPTS=3), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertEqual(order, ['dump', 'scroll', 'dump', 'tap'])
+        self.assertEqual(order, ['dump', 'tap', 'page', 'dump', 'tap'])
         self.assertFalse(self._swipe_calls(calls))
-        runtests = [c for c in calls if len(c) >= 3 and c[1] == 'uiautomator' and 'runtest' in c]
-        self.assertEqual(len(runtests), 1)
-        self.assertEqual(runtests[0][:4], ('shell', 'uiautomator', 'runtest', CTRL.SCROLL_JAR_REMOTE))
-        self.assertIn('D05Scroll', runtests[0])
-        self.assertIn('Service Recipes', runtests[0])
+        self.assertFalse(self._runtest_calls(calls))
+        self.assertEqual(self._page_calls(calls),
+                         [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN')])
+        taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
+        self.assertEqual(taps[0], ('shell', 'input', 'tap', CTRL.LIST_FLING_X, 101))
+        self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('recipes_direct_nav', events)
-        self.assertIn('uiautomator_scroll_into_view', events)
+        self.assertIn('recipes_page_scroll', events)
+        self.assertIn('"method": "page_down"', events)
         self.assertIn('"settings_list": true', events)
+        self.assertNotIn('recipes_burst_fling', events)
+        self.assertNotIn('uiautomator_scroll_into_view', events)
 
     def test_recipes_retaps_settings_when_dashboard_is_showing(self):
         tmp = tempfile.TemporaryDirectory()
@@ -564,6 +603,8 @@ class TapTextMatchTests(unittest.TestCase):
             calls.append(args)
             if args[:3] == ('shell', 'input', 'tap'):
                 order.append('tap')
+            elif args[:3] == ('shell', 'input', 'keyevent'):
+                order.append('page')
             elif len(args) >= 2 and args[1] == 'uiautomator':
                 order.append('scroll')
             result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
@@ -573,21 +614,63 @@ class TapTextMatchTests(unittest.TestCase):
             return None
 
         with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
-                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_READY=True), \
+                            TAP_SCROLL_ATTEMPTS=3), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertEqual(order, ['dump', 'tap', 'dump', 'scroll', 'dump', 'tap'])
+        self.assertEqual(order, ['dump', 'tap', 'dump', 'tap', 'page', 'dump', 'tap'])
         self.assertFalse(self._swipe_calls(calls))
+        self.assertFalse(self._runtest_calls(calls))
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
+        self.assertEqual(taps[1], ('shell', 'input', 'tap', CTRL.LIST_FLING_X, 101))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('settings_residency_lost', events)
         self.assertIn('recipes_direct_nav', events)
 
-    def test_recipes_scroll_into_view_from_language_overshoot(self):
+    def test_recipes_pages_up_from_settings_bottom_without_retap(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        dumps = [
+            self._settings_bottom_rows(),
+            [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
+                  clickable='true', bounds='[16,400][464,470]')],
+        ]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True, prepare=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            TAP_SCROLL_ATTEMPTS=3), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.tap_text('Service Recipes'))
+        self.assertFalse(self._swipe_calls(calls))
+        self.assertFalse(self._runtest_calls(calls))
+        self.assertEqual(self._page_calls(calls),
+                         [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_UP')])
+        taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
+        self.assertEqual(taps[0], ('shell', 'input', 'tap', CTRL.LIST_FLING_X, 93))
+        self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
+        events = (out / 'controller.jsonl').read_text()
+        self.assertIn('"method": "page_up"', events)
+        self.assertNotIn('settings_residency_lost', events)
+        self.assertNotIn('recipes_burst_fling', events)
+
+    def test_recipes_pages_up_from_language_overshoot(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
@@ -617,14 +700,35 @@ class TapTextMatchTests(unittest.TestCase):
             return None
 
         with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
-                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_READY=True), \
+                            TAP_SCROLL_ATTEMPTS=3), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         self.assertFalse(self._swipe_calls(calls))
-        runtests = [c for c in calls if len(c) >= 3 and c[1] == 'uiautomator' and 'runtest' in c]
-        self.assertEqual(len(runtests), 1)
+        self.assertFalse(self._runtest_calls(calls))
+        self.assertEqual(self._page_calls(calls),
+                         [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_UP')])
+
+    def test_scroll_into_view_skips_runtest_when_jar_unusable(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        calls = []
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            SCROLL_JAR_TRIED=True, SCROLL_JAR_USABLE=False), \
+                patch.object(CTRL, 'adb', fake_adb):
+            used = asyncio.run(CTRL.scroll_into_view('Service Recipes'))
+        self.assertFalse(used)
+        self.assertFalse(self._runtest_calls(calls))
+        events = (out / 'controller.jsonl').read_text()
+        self.assertIn('scroll_jar_skipped', events)
 
     def test_recipes_reconnects_once_after_session_drop(self):
         tmp = tempfile.TemporaryDirectory()
@@ -668,8 +772,69 @@ class TapTextMatchTests(unittest.TestCase):
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('recipes_session_dropped', events)
         self.assertNotIn('recipes_burst_fling', events)
+        self.assertFalse(self._runtest_calls(calls))
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
+        self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
+
+    def test_recipes_pages_after_reconnect_from_connection(self):
+        """Formal op8 path: reconnect + Settings lands on CONNECTION."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        dropped = [
+            dict(text='', desc='Choose a connection', enabled='true',
+                 clickable='false', bounds='[16,128][190,151]'),
+            dict(text='', desc='Connect now', enabled='true',
+                 clickable='true', bounds='[33,302][369,350]'),
+        ]
+        tabs = [
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+            dict(text='', desc='Dashboard\nTab 1 of 5', enabled='true',
+                 clickable='true', bounds='[0,684][96,752]'),
+        ]
+        connection = [
+            dict(text='', desc='CONNECTION', enabled='true',
+                 clickable='false', bounds='[16,87][464,116]'),
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+        ]
+        recipes = [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
+                        clickable='true', bounds='[16,400][464,470]')]
+        # dump dropped → enter_dashboard (dump tabs) → Settings find (dump
+        # tabs) → tap Settings → dump CONNECTION → PAGE_DOWN → dump recipes
+        dumps = [dropped, tabs, tabs, connection, recipes]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True, prepare=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.tap_text('Service Recipes'))
+        events = (out / 'controller.jsonl').read_text()
+        self.assertIn('recipes_session_dropped', events)
+        self.assertIn('"method": "page_down"', events)
+        self.assertNotIn('recipes_burst_fling', events)
+        self.assertNotIn('settings_residency_lost', events)
+        self.assertFalse(self._swipe_calls(calls))
+        self.assertFalse(self._runtest_calls(calls))
+        self.assertEqual(self._page_calls(calls),
+                         [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN')])
+        taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
+        self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
+        self.assertEqual(taps[1], ('shell', 'input', 'tap', CTRL.LIST_FLING_X, 101))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
 
     def test_non_recipe_text_still_dumps_before_flinging(self):
