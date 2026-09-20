@@ -40,6 +40,7 @@ android-d05-fixed-apk:
       apt-get update -qq
       apt-get install -y -qq --no-install-recommends python3 curl unzip libpulse0 libnss3 libx11-6 libxcb1 libxcomposite1 libxcursor1 libxi6 libxtst6 libxrandr2 libasound2t64 libxdamage1 libxfixes3 libegl1 libglu1-mesa libxkbcommon0 libxkbcommon-x11-0
       python3 -m py_compile tool/verification/d05_android_controller.py
+      python3 tool/verification/test_d05_android_controller.py
       printf 'KVM: '; ls -l /dev/kvm 2>/dev/null || true
       free -m; df -h .
       emulator -version > d05-device/emulator-version.txt 2>&1
