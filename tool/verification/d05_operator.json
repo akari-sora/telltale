@@ -1,1 +1,7 @@
-{"version":1,"commands":[]}
+{
+  "version": 1,
+  "commands": [
+    {"id": 1, "op": "tap_text", "text": "Wi-Fi"},
+    {"id": 2, "op": "dump"}
+  ]
+}
