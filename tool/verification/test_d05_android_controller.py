@@ -80,6 +80,14 @@ class ResumeDetectionTests(unittest.TestCase):
         text = '    Hist  #0: ActivityRecord{abc u0 com.cbstudio.telltale/.MainActivity t3}'
         self.assertFalse(CTRL.activity_is_resumed(text))
 
+    def test_current_focus_counts(self):
+        text = '  mCurrentFocus=Window{abc u0 com.cbstudio.telltale/com.cbstudio.telltale.MainActivity}'
+        self.assertTrue(CTRL.window_is_focused(text))
+
+    def test_keyguard_focus_does_not_count(self):
+        text = '  mCurrentFocus=Window{abc u0 StatusBar}'
+        self.assertFalse(CTRL.window_is_focused(text))
+
 
 class DumpRetryTests(unittest.TestCase):
     def setUp(self):
@@ -98,23 +106,20 @@ class DumpRetryTests(unittest.TestCase):
 
     def test_dump_retries_after_null_root_then_accepts_hierarchy(self):
         responses = [
-            (b'', NULL_ROOT_STDERR, 0),
-            (VALID_HIERARCHY, 'UI hierchary dumped to: /sdcard/d05_window.xml\n', 0),
+            (NULL_ROOT_STDERR.encode(), NULL_ROOT_STDERR, 0),
+            (VALID_HIERARCHY, '', 0),
         ]
 
         async def fake_adb(*args, timeout=40, check=True, full=False):
             self.calls.append(args)
-            if args[:3] == ('shell', 'rm', '-f'):
-                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'') if full else b''
-            if args[:2] == ('shell', 'uiautomator'):
-                stdout, stderr, code = responses[0] if len([c for c in self.calls if c[:2] == ('shell', 'uiautomator')]) == 1 else responses[1]
+            if args[:3] == ('exec-out', 'uiautomator', 'dump'):
+                count = len([c for c in self.calls if c[:3] == ('exec-out', 'uiautomator', 'dump')])
+                stdout, stderr, code = responses[0] if count == 1 else responses[1]
                 result = SimpleNamespace(returncode=code, stdout=stdout, stderr=stderr.encode())
                 return result if full else stdout
-            if args[:3] == ('exec-out', 'cat', CTRL.REMOTE_DUMP):
-                dumps = [c for c in self.calls if c[:2] == ('shell', 'uiautomator')]
-                stdout = responses[0][0] if len(dumps) == 1 else responses[1][0]
-                return stdout
-            if args[:2] in (('shell', 'input'), ('shell', 'wm'), ('shell', 'svc')):
+            if args[:3] == ('shell', 'input', 'keyevent'):
+                raise AssertionError('dump retry must not spend budget on keyevent')
+            if args[:2] in (('shell', 'input'), ('shell', 'wm'), ('shell', 'svc'), ('shell', 'settings')):
                 result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
                 return result if full else b''
             raise AssertionError('unexpected adb args: ' + repr(args))
@@ -127,15 +132,19 @@ class DumpRetryTests(unittest.TestCase):
             rows = self._run(CTRL.dump('initial', screenshot=False))
         self.assertEqual(rows[0]['text'], 'Discover Mode 08')
         self.assertTrue(any(path.name.endswith('_unusable_1.xml') for path in self.out.glob('*_unusable_1.xml')))
-        self.assertGreaterEqual(len([c for c in self.calls if c[:2] == ('shell', 'uiautomator')]), 2)
+        self.assertGreaterEqual(len([c for c in self.calls if c[:3] == ('exec-out', 'uiautomator', 'dump')]), 2)
 
     def test_dump_fails_closed_when_hierarchy_never_arrives(self):
         async def fake_adb(*args, timeout=40, check=True, full=False):
-            if args[:2] == ('shell', 'uiautomator'):
-                result = SimpleNamespace(returncode=0, stdout=b'', stderr=NULL_ROOT_STDERR.encode())
-                return result if full else b''
-            if args[:2] == ('exec-out', 'cat'):
-                return XML_DECLARATION_ONLY
+            if args[:3] == ('exec-out', 'uiautomator', 'dump'):
+                result = SimpleNamespace(returncode=0, stdout=NULL_ROOT_STDERR.encode(), stderr=NULL_ROOT_STDERR.encode())
+                return result if full else NULL_ROOT_STDERR.encode()
+            if args[:2] == ('shell', 'dumpsys'):
+                data = b'  mCurrentFocus=Window{abc u0 StatusBar}\n  mWakefulness=Awake\n'
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
+            if args[:1] == ('logcat',):
+                data = b'E AndroidRuntime: FATAL EXCEPTION: main\n'
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'') if full else b''
 
         async def instant_sleep(_delay):
@@ -144,8 +153,10 @@ class DumpRetryTests(unittest.TestCase):
         with self._patch_out(), patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL, 'DUMP_READY_SECONDS', 0), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
-            with self.assertRaisesRegex(RuntimeError, 'stayed empty'):
+            with self.assertRaisesRegex(RuntimeError, 'stayed empty.*crashes='):
                 self._run(CTRL.dump('initial', screenshot=False))
+        self.assertTrue(any(path.name.endswith('_logcat.txt') for path in self.out.glob('*')))
+        self.assertTrue(any('_raw.bin' in path.name for path in self.out.glob('*')))
 
     def test_launch_app_waits_until_main_activity_resumes(self):
         dumpsys = [
@@ -158,6 +169,9 @@ class DumpRetryTests(unittest.TestCase):
             if args[:3] == ('shell', 'dumpsys', 'activity'):
                 data = dumpsys.pop(0)
                 return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
+            if args[:3] == ('shell', 'dumpsys', 'window'):
+                data = b'  mCurrentFocus=Window{abc u0 com.cbstudio.telltale/com.cbstudio.telltale.MainActivity}\n'
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
             result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
             return result if full else b''
 
@@ -167,8 +181,11 @@ class DumpRetryTests(unittest.TestCase):
         with self._patch_out(), patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             self._run(CTRL.launch_app())
-        self.assertTrue(any(c[:4] == ('shell', 'am', 'start', '-n') for c in self.calls))
+        self.assertTrue(any(c[:3] == ('shell', 'am', 'start') for c in self.calls))
+        self.assertTrue(any('-W' in c for c in self.calls if c[:3] == ('shell', 'am', 'start')))
         self.assertEqual(len([c for c in self.calls if c[:3] == ('shell', 'dumpsys', 'activity')]), 2)
+        self.assertTrue(any(c[:4] == ('shell', 'settings', 'put', 'secure') for c in self.calls))
+        self.assertTrue(any(c[:3] == ('shell', 'input', 'swipe') for c in self.calls))
 
 
 class WakeTimeoutTests(unittest.TestCase):
@@ -232,6 +249,9 @@ class WakeTimeoutTests(unittest.TestCase):
             if args[:3] == ('shell', 'dumpsys', 'activity'):
                 data = b'  topResumedActivity=ActivityRecord{def u0 com.cbstudio.telltale/.MainActivity t2}\n'
                 return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
+            if args[:3] == ('shell', 'dumpsys', 'window'):
+                data = b'  mCurrentFocus=Window{abc u0 com.cbstudio.telltale/com.cbstudio.telltale.MainActivity}\n'
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
             if args[:3] == ('shell', 'input', 'keyevent'):
                 result = SimpleNamespace(returncode=-1, stdout=b'', stderr=b'')
                 return result if full else b''
@@ -240,8 +260,9 @@ class WakeTimeoutTests(unittest.TestCase):
 
         with self._patch_out(), patch.object(CTRL, 'adb', fake_adb):
             self._run(CTRL.launch_app())
-        self.assertTrue(any(c[:4] == ('shell', 'am', 'start', '-n') for c in self.calls))
+        self.assertTrue(any(c[:3] == ('shell', 'am', 'start') for c in self.calls))
         self.assertTrue(any(c[:3] == ('shell', 'wm', 'dismiss-keyguard') for c in self.calls))
+        self.assertTrue(any(c[:3] == ('shell', 'input', 'swipe') for c in self.calls))
 
 
 if __name__ == '__main__':

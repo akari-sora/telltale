@@ -100,6 +100,9 @@ android-d05-fixed-apk:
       adb -s emulator-5580 shell settings put global transition_animation_scale 0
       adb -s emulator-5580 shell settings put global animator_duration_scale 0
       adb -s emulator-5580 shell settings put system screen_off_timeout 600000
+      adb -s emulator-5580 shell settings put secure lockscreen.disabled 1
+      adb -s emulator-5580 shell svc power stayon true
+      adb -s emulator-5580 shell wm dismiss-keyguard || true
       timeout 180 adb -s emulator-5580 install --no-streaming candidate.apk | tee d05-device/install.txt
       adb -s emulator-5580 shell pm path com.cbstudio.telltale > d05-device/package-path.txt
       installed=$(tr -d '\r' < d05-device/package-path.txt | sed -n 's/^package://p' | head -n 1)

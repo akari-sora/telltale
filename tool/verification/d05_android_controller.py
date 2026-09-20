@@ -34,10 +34,11 @@ CONTROL_URL = ('https://gitlab.com/api/v4/projects/86385809/repository/files/' +
 EVENT_FILE = OUT / 'controller.jsonl'
 SEQ = 0
 ACTIVE_RUN = None
-DUMP_READY_SECONDS = 90
-DUMP_RETRY_SLEEP = 2
+DUMP_READY_SECONDS = 180
+DUMP_RETRY_SLEEP = 3
 REMOTE_DUMP = '/sdcard/d05_window.xml'
 RESUMED_MARKERS = ('topResumedActivity', 'mFocusedApp=', 'mResumedActivity', 'ResumedActivity')
+FOCUS_MARKERS = ('mCurrentFocus', 'mFocusedApp=')
 WAKE_SOFT_TIMEOUT = 20
 WAKE_KEYEVENT_DISABLED = False
 
@@ -122,17 +123,52 @@ def activity_is_resumed(dumpsys_text, package=PACKAGE):
     return False
 
 
+def window_is_focused(dumpsys_text, package=PACKAGE):
+    for line in dumpsys_text.splitlines():
+        if package not in line or 'MainActivity' not in line:
+            continue
+        if any(marker in line for marker in FOCUS_MARKERS):
+            return True
+    return False
+
+
+def interesting_state_lines(text, markers):
+    rows = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if any(marker in stripped for marker in markers):
+            rows.append(stripped)
+    return rows
+
+
+def crash_lines(text):
+    rows = []
+    for line in text.splitlines():
+        if any(token in line for token in ('FATAL EXCEPTION', 'AndroidRuntime', 'Process: ' + PACKAGE)):
+            rows.append(line.strip())
+    return rows[:12]
+
+
+async def prepare_window():
+    """Make the display interactive without depending on a hung keyevent 224."""
+    await adb('shell', 'settings', 'put', 'secure', 'lockscreen.disabled', '1',
+              timeout=15, check=False)
+    await adb('shell', 'svc', 'power', 'stayon', 'true', timeout=WAKE_SOFT_TIMEOUT, check=False)
+    await adb('shell', 'wm', 'dismiss-keyguard', timeout=WAKE_SOFT_TIMEOUT, check=False)
+    # Swipe up the fixed 480x800 lock screen. Soft-fail if input is stuck.
+    await adb('shell', 'input', 'swipe', '240', '700', '240', '200', '250',
+              timeout=15, check=False)
+
+
 async def wake_and_unlock():
     global WAKE_KEYEVENT_DISABLED
-    # Power stay-on does not use the input dispatcher, which can hang on keyevent 224.
-    await adb('shell', 'svc', 'power', 'stayon', 'true', timeout=WAKE_SOFT_TIMEOUT, check=False)
+    await prepare_window()
     if not WAKE_KEYEVENT_DISABLED:
         result = await adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP',
                            timeout=WAKE_SOFT_TIMEOUT, check=False, full=True)
         if result.returncode == -1:
             WAKE_KEYEVENT_DISABLED = True
             event('wake_keyevent_skipped', reason='timeout')
-    await adb('shell', 'wm', 'dismiss-keyguard', timeout=WAKE_SOFT_TIMEOUT, check=False)
 
 
 async def wait_for_resumed_activity(timeout=45):
@@ -147,17 +183,87 @@ async def wait_for_resumed_activity(timeout=45):
             return
         now = time.monotonic()
         if now >= next_wake:
-            await wake_and_unlock()
+            await prepare_window()
             next_wake = now + 5
         await asyncio.sleep(0.5)
     event('app_window_not_resumed', package=PACKAGE, dumpsys_tail=last[-1500:])
     raise RuntimeError('MainActivity did not reach a resumed window')
 
 
+async def wait_for_focused_window(timeout=30):
+    deadline = time.monotonic() + timeout
+    last = ''
+    while time.monotonic() < deadline:
+        dumped = await adb('shell', 'dumpsys', 'window', 'windows', timeout=20, check=False)
+        last = dumped.decode(errors='replace')
+        if window_is_focused(last):
+            event('app_window_focused', package=PACKAGE)
+            return True
+        await prepare_window()
+        await asyncio.sleep(0.5)
+    event('app_window_not_focused', package=PACKAGE, dumpsys_tail=last[-1500:])
+    return False
+
+
 async def launch_app():
     await wake_and_unlock()
-    await adb('shell', 'am', 'start', '-n', PACKAGE + '/.MainActivity', timeout=60)
+    await adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity',
+              '-f', '0x10000000', timeout=60)
     await wait_for_resumed_activity()
+    await wait_for_focused_window()
+
+
+async def request_hierarchy():
+    dumped = await adb('exec-out', 'uiautomator', 'dump', '/dev/tty', timeout=45, check=False, full=True)
+    xml = dumped.stdout or b''
+    stderr = dumped.stderr.decode(errors='replace')
+    source = 'exec-out-tty'
+    has_xml = b'<hierarchy' in xml or b'<?xml' in xml
+    saw_null_root = b'null root node' in xml or 'null root node' in stderr
+    if has_xml or xml or saw_null_root:
+        return xml, stderr, dumped.returncode, source
+    await adb('shell', 'rm', '-f', REMOTE_DUMP, check=False)
+    file_dump = await adb('shell', 'uiautomator', 'dump', REMOTE_DUMP, timeout=45, check=False, full=True)
+    xml = await adb('exec-out', 'cat', REMOTE_DUMP, check=False)
+    extra = file_dump.stderr.decode(errors='replace')
+    if extra:
+        stderr = (stderr + '\n' + extra).strip()
+    return xml, stderr, file_dump.returncode, 'sdcard'
+
+
+async def capture_dump_failure_evidence(label, xml):
+    name = unique_name(label + '_diag')
+    OUT.mkdir(exist_ok=True)
+    (OUT / (name + '_raw.bin')).write_bytes(xml)
+    blobs = {}
+    for service, args in (
+        ('activity', ('shell', 'dumpsys', 'activity', 'activities')),
+        ('window', ('shell', 'dumpsys', 'window', 'windows')),
+        ('power', ('shell', 'dumpsys', 'power')),
+    ):
+        data = await adb(*args, timeout=20, check=False)
+        blobs[service] = data.decode(errors='replace')
+        path = OUT / f'{name}_{service}.txt'
+        path.write_bytes(data)
+        event('dump_failure_state', service=service, file=path.name, sha256=hashlib.sha256(data).hexdigest())
+    logcat = await adb('logcat', '-d', '-t', '160', timeout=20, check=False)
+    blobs['logcat'] = logcat.decode(errors='replace')
+    (OUT / f'{name}_logcat.txt').write_bytes(logcat)
+    event('dump_failure_logcat', file=name + '_logcat.txt', sha256=hashlib.sha256(logcat).hexdigest(),
+          fatal=any(token in blobs['logcat'] for token in ('FATAL EXCEPTION', 'AndroidRuntime')))
+    resume = interesting_state_lines(blobs['activity'], RESUMED_MARKERS + ('mCurrentFocus',))
+    focus = interesting_state_lines(blobs['window'], FOCUS_MARKERS)
+    power = interesting_state_lines(blobs['power'], ('mWakefulness', 'mHoldingDisplaySuspendBlocker'))
+    crashes = crash_lines(blobs['logcat'])
+    return {
+        'raw_sha256': hashlib.sha256(xml).hexdigest(),
+        'raw_len': len(xml),
+        'raw_head_hex': xml[:64].hex(),
+        'resumed': resume[:8],
+        'focused': focus[:8],
+        'power': power[:8],
+        'crashes': crashes,
+    }
 
 
 async def dump(label='view', screenshot=True):
@@ -166,13 +272,13 @@ async def dump(label='view', screenshot=True):
     last_error = None
     attempt = 0
     xml = b''
+    stderr = ''
+    source = ''
+    returncode = 0
     while True:
         attempt += 1
-        await adb('shell', 'rm', '-f', REMOTE_DUMP, check=False)
-        dumped = await adb('shell', 'uiautomator', 'dump', '--compressed', REMOTE_DUMP,
-                           timeout=45, check=False, full=True)
-        stderr = dumped.stderr.decode(errors='replace')
-        xml = await adb('exec-out', 'cat', REMOTE_DUMP, check=False)
+        await prepare_window()
+        xml, stderr, returncode, source = await request_hierarchy()
         try:
             rows = parse_ui_rows(xml)
             break
@@ -181,13 +287,18 @@ async def dump(label='view', screenshot=True):
             OUT.mkdir(exist_ok=True)
             (OUT / f'{name}_unusable_{attempt}.xml').write_bytes(xml)
             event('ui_dump_unusable', attempt=attempt, error=type(exc).__name__ + ': ' + str(exc),
-                  dump_returncode=dumped.returncode, dump_stderr=stderr[:300], xml_len=len(xml))
+                  dump_returncode=returncode, dump_stderr=stderr[:300], xml_len=len(xml),
+                  dump_source=source)
             if time.monotonic() >= deadline:
                 (OUT / (name + '.xml')).write_bytes(xml)
+                diagnosis = await capture_dump_failure_evidence(label, xml)
+                event('ui_dump_exhausted', attempts=attempt, diagnosis=diagnosis)
                 raise RuntimeError(
-                    f'UI hierarchy dump stayed empty after {attempt} attempts: {last_error}'
+                    f'UI hierarchy dump stayed empty after {attempt} attempts: {last_error}; '
+                    f'source={source} xml_len={len(xml)} raw_head_hex={diagnosis["raw_head_hex"]} '
+                    f'resumed={diagnosis["resumed"]} focused={diagnosis["focused"]} '
+                    f'power={diagnosis["power"]} crashes={diagnosis["crashes"]}'
                 ) from last_error
-            await wake_and_unlock()
             await asyncio.sleep(DUMP_RETRY_SLEEP)
     OUT.mkdir(exist_ok=True)
     (OUT / (name + '.xml')).write_bytes(xml)
