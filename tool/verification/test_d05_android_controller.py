@@ -134,6 +134,9 @@ class DumpRetryTests(unittest.TestCase):
                 return result if full else stdout
             if args[:3] == ('shell', 'input', 'keyevent'):
                 raise AssertionError('dump retry must not spend budget on keyevent')
+            if args[:3] == ('shell', 'dumpsys', 'window'):
+                data = b'  mCurrentFocus=Window{abc u0 com.cbstudio.telltale/com.cbstudio.telltale.MainActivity}\n'
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
             if args[:2] in (('shell', 'input'), ('shell', 'wm'), ('shell', 'svc'), ('shell', 'settings')):
                 result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
                 return result if full else b''
@@ -206,7 +209,7 @@ class DumpRetryTests(unittest.TestCase):
         self.assertTrue(any('-W' in c for c in self.calls if c[:3] == ('shell', 'am', 'start')))
         self.assertEqual(len([c for c in self.calls if c[:3] == ('shell', 'dumpsys', 'activity')]), 2)
         self.assertTrue(any(c[:4] == ('shell', 'settings', 'put', 'secure') for c in self.calls))
-        self.assertTrue(any(c[:3] == ('shell', 'input', 'swipe') for c in self.calls))
+        self.assertTrue(any(c[:3] == ('shell', 'dumpsys', 'window') for c in self.calls))
 
 
 class WakeTimeoutTests(unittest.TestCase):
@@ -286,7 +289,7 @@ class WakeTimeoutTests(unittest.TestCase):
             self._run(CTRL.launch_app())
         self.assertTrue(any(c[:3] == ('shell', 'am', 'start') for c in self.calls))
         self.assertTrue(any(c[:3] == ('shell', 'wm', 'dismiss-keyguard') for c in self.calls))
-        self.assertTrue(any(c[:3] == ('shell', 'input', 'swipe') for c in self.calls))
+        self.assertTrue(any(c[:3] == ('shell', 'dumpsys', 'window') for c in self.calls))
         self.assertTrue(any(c[:1] == ('logcat',) for c in self.calls))
 
 
@@ -337,6 +340,33 @@ class DrawnWindowTests(unittest.TestCase):
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep), \
                 patch.object(CTRL, 'DRAWN_WAIT_SECONDS', 0):
             self._run(CTRL.wait_for_drawn_window(timeout=0))
+
+
+
+class PrepareWindowTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.out = Path(self.tmp.name)
+        self.calls = []
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def test_skips_lockscreen_swipe_when_app_already_focused(self):
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            self.calls.append(args)
+            if args[:3] == ('shell', 'dumpsys', 'window'):
+                data = b'  mCurrentFocus=Window{abc u0 com.cbstudio.telltale/com.cbstudio.telltale.MainActivity}\n'
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        with patch.multiple(CTRL, OUT=self.out, EVENT_FILE=self.out / 'controller.jsonl'), \
+                patch.object(CTRL, 'adb', fake_adb):
+            self._run(CTRL.prepare_window())
+        self.assertFalse(any(c[:3] == ('shell', 'input', 'swipe') for c in self.calls))
+        self.assertTrue(any(c[:3] == ('shell', 'dumpsys', 'window') for c in self.calls))
 
 
 if __name__ == '__main__':
