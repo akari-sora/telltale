@@ -646,9 +646,13 @@ async def main():
                         raise ValueError('Unsupported UI operation')
                     if op not in ('dump','d05','finish'):
                         if op == 'tap_text' and item.get('text') == 'Connect':
-                            # Dashboard tabs arrive after handshake. Do not
-                            # sit 25s on Dashboard: Mode 01 NO DATA can drop
-                            # the session. Wait (no swipe) for the Settings tab.
+                            # Handshake 14/14 stays on Connect with "Connect now"
+                            # (job 16609487034). Settings tab is not there yet.
+                            found, attempt = await find_text('Connect now', exact=False, scroll=False)
+                            row, x, y = found
+                            event('selected_observed_ui_node', text='Connect now', node=row,
+                                  scroll_attempts=attempt, scrolled=False)
+                            await adb('shell', 'input', 'tap', x, y)
                             await find_text('Settings', scroll=False)
                         else:
                             await asyncio.sleep(1)
