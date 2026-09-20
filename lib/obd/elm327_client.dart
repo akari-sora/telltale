@@ -23,8 +23,6 @@ import 'transport/obd_transport.dart';
 import 'programmable_parameters.dart';
 import 'transcript.dart';
 
-export 'elm_composite_transaction.dart';
-
 /// Status the adapter can report in place of data.
 ///
 /// The full set from the ELM327 datasheet's "Error and Alert Messages", not the
