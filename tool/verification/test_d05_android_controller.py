@@ -122,6 +122,9 @@ class DumpRetryTests(unittest.TestCase):
             if args[:2] in (('shell', 'input'), ('shell', 'wm'), ('shell', 'svc'), ('shell', 'settings')):
                 result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
                 return result if full else b''
+            if args[:1] == ('logcat',):
+                data = b'ActivityTaskManager: Fully drawn com.cbstudio.telltale/.MainActivity: +1s\n'
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
             raise AssertionError('unexpected adb args: ' + repr(args))
 
         async def instant_sleep(_delay):
@@ -171,6 +174,9 @@ class DumpRetryTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
             if args[:3] == ('shell', 'dumpsys', 'window'):
                 data = b'  mCurrentFocus=Window{abc u0 com.cbstudio.telltale/com.cbstudio.telltale.MainActivity}\n'
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
+            if args[:1] == ('logcat',):
+                data = b'ActivityTaskManager: Fully drawn com.cbstudio.telltale/.MainActivity: +1s\n'
                 return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
             result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
             return result if full else b''
@@ -255,6 +261,9 @@ class WakeTimeoutTests(unittest.TestCase):
             if args[:3] == ('shell', 'input', 'keyevent'):
                 result = SimpleNamespace(returncode=-1, stdout=b'', stderr=b'')
                 return result if full else b''
+            if args[:1] == ('logcat',):
+                data = b'ActivityTaskManager: Fully drawn com.cbstudio.telltale/.MainActivity: +1s\n'
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
             result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
             return result if full else b''
 
@@ -263,6 +272,56 @@ class WakeTimeoutTests(unittest.TestCase):
         self.assertTrue(any(c[:3] == ('shell', 'am', 'start') for c in self.calls))
         self.assertTrue(any(c[:3] == ('shell', 'wm', 'dismiss-keyguard') for c in self.calls))
         self.assertTrue(any(c[:3] == ('shell', 'input', 'swipe') for c in self.calls))
+        self.assertTrue(any(c[:1] == ('logcat',) for c in self.calls))
+
+
+class DrawnWindowTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.out = Path(self.tmp.name)
+        self.calls = []
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def _patch_out(self):
+        return patch.multiple(CTRL, OUT=self.out, EVENT_FILE=self.out / 'controller.jsonl',
+                              DRAWN_POLL_SLEEP=0)
+
+    def test_wait_returns_on_fully_drawn_log(self):
+        logs = [
+            b'FlutterRenderer: Width is zero. 0,0\n',
+            b'ActivityTaskManager: Fully drawn com.cbstudio.telltale/.MainActivity: +1m44s\n',
+        ]
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            self.calls.append(args)
+            if args[:1] == ('logcat',):
+                data = logs.pop(0)
+                return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
+            raise AssertionError('unexpected adb args: ' + repr(args))
+
+        async def instant_sleep(_delay):
+            return None
+
+        with self._patch_out(), patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            self._run(CTRL.wait_for_drawn_window(timeout=20))
+        self.assertEqual(len([c for c in self.calls if c[:1] == ('logcat',)]), 2)
+
+    def test_wait_does_not_raise_when_fully_drawn_never_arrives(self):
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            data = b'FlutterRenderer: Width is zero. 0,0\n'
+            return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
+
+        async def instant_sleep(_delay):
+            return None
+
+        with self._patch_out(), patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep), \
+                patch.object(CTRL, 'DRAWN_WAIT_SECONDS', 0):
+            self._run(CTRL.wait_for_drawn_window(timeout=0))
 
 
 if __name__ == '__main__':

@@ -36,6 +36,8 @@ SEQ = 0
 ACTIVE_RUN = None
 DUMP_READY_SECONDS = 180
 DUMP_RETRY_SLEEP = 3
+DRAWN_WAIT_SECONDS = 180
+DRAWN_POLL_SLEEP = 2
 REMOTE_DUMP = '/sdcard/d05_window.xml'
 RESUMED_MARKERS = ('topResumedActivity', 'mFocusedApp=', 'mResumedActivity', 'ResumedActivity')
 FOCUS_MARKERS = ('mCurrentFocus', 'mFocusedApp=')
@@ -171,6 +173,26 @@ async def wake_and_unlock():
             event('wake_keyevent_skipped', reason='timeout')
 
 
+async def wait_for_drawn_window(timeout=None):
+    """Activity resume is not a first frame. Job 16608891761 dumped while
+    Flutter was still extracting kernel_blob.bin and reporting Width is zero;
+    Fully drawn arrived at +104s. Wait for that mark, then still try dump.
+    """
+    timeout = DRAWN_WAIT_SECONDS if timeout is None else timeout
+    deadline = time.monotonic() + timeout
+    last = ''
+    while True:
+        logs = await adb('logcat', '-d', '-t', '120', timeout=15, check=False)
+        last = logs.decode(errors='replace') if isinstance(logs, (bytes, bytearray)) else str(logs)
+        if f'Fully drawn {PACKAGE}' in last:
+            event('app_fully_drawn', package=PACKAGE)
+            return
+        if time.monotonic() >= deadline:
+            event('app_not_fully_drawn', logcat_tail=last[-1500:])
+            return
+        await asyncio.sleep(DRAWN_POLL_SLEEP)
+
+
 async def wait_for_resumed_activity(timeout=45):
     deadline = time.monotonic() + timeout
     next_wake = 0.0
@@ -211,6 +233,7 @@ async def launch_app():
               '-f', '0x10000000', timeout=60)
     await wait_for_resumed_activity()
     await wait_for_focused_window()
+    await wait_for_drawn_window()
 
 
 async def request_hierarchy():
