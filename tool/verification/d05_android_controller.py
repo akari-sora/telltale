@@ -520,6 +520,13 @@ async def fling_list(count=1, upward=False):
     """
     if count < 1:
         return
+    # Job 16609955129 stayed on Export transcript for every locate dump:
+    # 80ms gutter flings did not move the outer Settings list. PAGE_DOWN
+    # targets the focused scrollable instead of the transcript Panel.
+    if not upward:
+        for _ in range(max(1, count // 2)):
+            await adb('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN',
+                      timeout=8, check=False)
     y1, y2 = (LIST_FLING_Y2, LIST_FLING_Y1) if upward else (LIST_FLING_Y1, LIST_FLING_Y2)
     if count == 1:
         await adb('shell', 'input', 'swipe', LIST_FLING_X, y1,
