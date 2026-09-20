@@ -411,6 +411,12 @@ def locate_text(rows, text, exact=False):
     return row, x, y
 
 
+def dashboard_ready(rows):
+    """Bottom tabs mean handshake left the last-adapter / Connect home."""
+    return (locate_text(rows, 'Settings') is not None or
+            locate_text(rows, 'Dashboard') is not None)
+
+
 async def find_text(text, exact=False, scroll=True):
     """Dump until text or content-desc matches. Scroll only for list rows.
 
@@ -439,11 +445,52 @@ async def find_text(text, exact=False, scroll=True):
     raise RuntimeError(f'UI text not visible: {text!r}')
 
 
+async def enter_dashboard():
+    """Form Connect finishes 14/14 on the last-adapter card (Connect now).
+
+    Job 16609550520 waited for Settings there and timed out. Tap Connect now
+    if present; never swipe. Ready signal is Settings\\nTab 5 of 5 or
+    Dashboard\\nTab 1 of 5.
+    """
+    for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
+        rows = await dump('locate', screenshot=False)
+        if dashboard_ready(rows):
+            event('dashboard_tabs_ready', attempt=attempt)
+            return
+        now = locate_text(rows, 'Connect now')
+        if now:
+            row, x, y = now
+            event('selected_observed_ui_node', text='Connect now', node=row,
+                  scroll_attempts=attempt, scrolled=False)
+            await adb('shell', 'input', 'tap', x, y)
+            await asyncio.sleep(0.8)
+            continue
+        if attempt >= TAP_SCROLL_ATTEMPTS:
+            break
+        event('wait_until_dashboard', attempt=attempt + 1)
+        await asyncio.sleep(0.8)
+    raise RuntimeError('Dashboard Settings tab not visible after Connect')
+
+
 async def tap_text(text, exact=False, scroll=True):
-    found, attempt = await find_text(text, exact, scroll)
+    if text == 'Connect now':
+        rows = await dump('locate', screenshot=False)
+        if dashboard_ready(rows):
+            event('connect_now_skipped', reason='dashboard_tabs_ready')
+            return
+        found = locate_text(rows, text, exact)
+        if found:
+            row, x, y = found
+            event('selected_observed_ui_node', text=text, node=row,
+                  scroll_attempts=0, scrolled=False)
+            await adb('shell', 'input', 'tap', x, y)
+            return
+        found, attempt = await find_text(text, exact, scroll=False)
+    else:
+        found, attempt = await find_text(text, exact, scroll)
     row, x, y = found
     event('selected_observed_ui_node', text=text, node=row,
-          scroll_attempts=attempt, scrolled=bool(scroll))
+          scroll_attempts=attempt, scrolled=bool(scroll) and text != 'Connect now')
     await adb('shell', 'input', 'tap', x, y)
 
 
@@ -646,14 +693,7 @@ async def main():
                         raise ValueError('Unsupported UI operation')
                     if op not in ('dump','d05','finish'):
                         if op == 'tap_text' and item.get('text') == 'Connect':
-                            # Handshake 14/14 stays on Connect with "Connect now"
-                            # (job 16609487034). Settings tab is not there yet.
-                            found, attempt = await find_text('Connect now', exact=False, scroll=False)
-                            row, x, y = found
-                            event('selected_observed_ui_node', text='Connect now', node=row,
-                                  scroll_attempts=attempt, scrolled=False)
-                            await adb('shell', 'input', 'tap', x, y)
-                            await find_text('Settings', scroll=False)
+                            await enter_dashboard()
                         else:
                             await asyncio.sleep(1)
                             await dump('after_action')
