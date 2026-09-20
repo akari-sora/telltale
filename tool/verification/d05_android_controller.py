@@ -36,7 +36,7 @@ SEQ = 0
 ACTIVE_RUN = None
 DUMP_READY_SECONDS = 180
 DUMP_RETRY_SLEEP = 3
-TAP_SCROLL_ATTEMPTS = 6
+TAP_SCROLL_ATTEMPTS = 16
 DRAWN_WAIT_SECONDS = 180
 DRAWN_POLL_SLEEP = 2
 REMOTE_DUMP = '/sdcard/d05_window.xml'
@@ -436,7 +436,7 @@ async def find_text(text, exact=False, scroll=True):
             break
         if scroll:
             event('scroll_until_text', text=text, attempt=attempt + 1)
-            await adb('shell', 'input', 'swipe', 240, 520, 240, 160, 400,
+            await adb('shell', 'input', 'swipe', 40, 500, 40, 80, 350,
                       timeout=15, check=False)
             await asyncio.sleep(0.4)
         else:

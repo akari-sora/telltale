@@ -434,7 +434,7 @@ class TapTextMatchTests(unittest.TestCase):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         swipes = [c for c in calls if c[:3] == ('shell', 'input', 'swipe')]
         self.assertTrue(swipes)
-        self.assertEqual(swipes[0][3:7], (240, 520, 240, 160))
+        self.assertEqual(swipes[0][3:7], (40, 500, 40, 80))
         self.assertTrue(any(c[:3] == ('shell', 'input', 'tap') for c in calls))
 
     def test_settings_tab_waits_without_swiping_connect(self):
