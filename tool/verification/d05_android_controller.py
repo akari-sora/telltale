@@ -36,7 +36,7 @@ SEQ = 0
 ACTIVE_RUN = None
 DUMP_READY_SECONDS = 180
 DUMP_RETRY_SLEEP = 3
-TAP_SCROLL_ATTEMPTS = 16
+TAP_SCROLL_ATTEMPTS = 8
 # Left of vehicle-profile SeekBar thumbs (~146–241). A 400ms swipe at x=240
 # dragged sliders instead of the ListView (job 16609695855, UI 907 still in
 # FUEL AND DRIVETRAIN after 6 attempts). Fast fling, above the tab bar (y=684).
@@ -45,7 +45,7 @@ LIST_FLING_X = 40
 LIST_FLING_Y1 = 620
 LIST_FLING_Y2 = 90
 LIST_FLING_MS = 80
-FLINGS_PER_LOOK = 3
+FLINGS_PER_LOOK = 10
 DRAWN_WAIT_SECONDS = 180
 DRAWN_POLL_SLEEP = 2
 REMOTE_DUMP = '/sdcard/d05_window.xml'
