@@ -1162,11 +1162,12 @@ async def find_text(text, exact=False, scroll=True):
             await tap_settings_tab(rows)
             continue
         if recipes:
-            # Job 16612287354: one scrollIntoView then 12 idle waits on the
-            # Settings list; the tile appeared later during d05 dumps at
-            # [16,199][464,303]. Keep scrolling every look.
+            # Job 16612438750: 11 scrollIntoView looks, settings_list true,
+            # labels still []. Job 16612287354 d05 PAGE_DOWN later revealed
+            # the tile at [16,199][464,303]. Page the list every look.
             event('recipes_direct_nav', text=text, attempt=attempt,
-                  method='uiautomator_scroll_into_view')
+                  method='page_down+scroll_into_view')
+            await fling_list(FLINGS_PER_LOOK, upward=False)
             await scroll_into_view('Service Recipes')
             await asyncio.sleep(0.3)
             continue
