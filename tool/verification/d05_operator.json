@@ -1,17 +1,74 @@
 {
   "version": 1,
   "commands": [
-    {"id": 1, "op": "tap_text", "text": "Wi-Fi"},
-    {"id": 2, "op": "tap_text", "text": "192.168.0.10", "exact": true},
-    {"id": 3, "op": "replace_numeric", "text": "127.0.0.1"},
-    {"id": 4, "op": "tap_text", "text": "35000", "exact": true},
-    {"id": 5, "op": "replace_numeric", "text": "35008"},
-    {"id": 6, "op": "tap_text", "text": "Connect"},
-    {"id": 7, "op": "tap_text", "text": "Settings", "scroll": false},
-    {"id": 8, "op": "tap_text", "text": "Service Recipes"},
-    {"id": 9, "op": "d05", "index": 1, "button_text": "Discover Mode 08"},
-    {"id": 10, "op": "d05", "index": 2, "button_text": "Discover Mode 08"},
-    {"id": 11, "op": "d05", "index": 3, "button_text": "Discover Mode 08"},
-    {"id": 12, "op": "finish"}
+    {
+      "id": 1,
+      "op": "tap_text",
+      "text": "Wi-Fi"
+    },
+    {
+      "id": 2,
+      "op": "tap_text",
+      "text": "192.168.0.10",
+      "exact": true
+    },
+    {
+      "id": 3,
+      "op": "replace_numeric",
+      "text": "127.0.0.1"
+    },
+    {
+      "id": 4,
+      "op": "tap_text",
+      "text": "35000",
+      "exact": true
+    },
+    {
+      "id": 5,
+      "op": "replace_numeric",
+      "text": "35008"
+    },
+    {
+      "id": 6,
+      "op": "tap_text",
+      "text": "Connect"
+    },
+    {
+      "id": 7,
+      "op": "tap_text",
+      "text": "Connect now"
+    },
+    {
+      "id": 8,
+      "op": "tap_text",
+      "text": "Settings"
+    },
+    {
+      "id": 9,
+      "op": "tap_text",
+      "text": "Service Recipes"
+    },
+    {
+      "id": 10,
+      "op": "d05",
+      "index": 1,
+      "button_text": "Discover Mode 08"
+    },
+    {
+      "id": 11,
+      "op": "d05",
+      "index": 2,
+      "button_text": "Discover Mode 08"
+    },
+    {
+      "id": 12,
+      "op": "d05",
+      "index": 3,
+      "button_text": "Discover Mode 08"
+    },
+    {
+      "id": 13,
+      "op": "finish"
+    }
   ]
 }
