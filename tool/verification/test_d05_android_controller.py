@@ -433,7 +433,7 @@ class TapTextMatchTests(unittest.TestCase):
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         swipes = [c for c in calls if c[:3] == ('shell', 'input', 'swipe')]
-        self.assertEqual(len(swipes), 3)
+        self.assertEqual(len(swipes), CTRL.FLINGS_PER_LOOK)
         self.assertEqual(swipes[0][3:8], (40, 620, 40, 90, 80))
         self.assertTrue(any(c[:3] == ('shell', 'input', 'tap') for c in calls))
 
