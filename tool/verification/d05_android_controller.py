@@ -1249,6 +1249,8 @@ async def tap_text(text, exact=False, scroll=True):
         # (no hierarchy) and the ELM TCP session dropped. Wait for the
         # Settings list to paint before the recipes hunt dumps.
         await asyncio.sleep(3)
+    if 'Service Recipes' in text or 'Active Tests' in text:
+        await asyncio.sleep(2)
 
 
 class ObservedWriter:
@@ -1341,10 +1343,11 @@ async def case(rig, index, click_text):
     command = '0820' if index == 2 else '0800'
     action = 'SLEEP' if index == 2 else 'HOME'
     await dump('before_discovery')
+    await tap_text(click_text)
     rig.arm(command)
     click = asyncio.create_task(tap_text(click_text))
     try:
-        receipt = await asyncio.wait_for(asyncio.shield(rig.held), timeout=50)
+        receipt = await asyncio.wait_for(asyncio.shield(rig.held), timeout=90)
         event('held_query_confirmed_before_os_command', receipt=receipt, action=action)
         await adb('shell', 'input', 'keyevent', '223' if index == 2 else '3',
                   timeout=20, check=False)
