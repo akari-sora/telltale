@@ -38,6 +38,8 @@ DUMP_READY_SECONDS = 90
 DUMP_RETRY_SLEEP = 2
 REMOTE_DUMP = '/sdcard/d05_window.xml'
 RESUMED_MARKERS = ('topResumedActivity', 'mFocusedApp=', 'mResumedActivity', 'ResumedActivity')
+WAKE_SOFT_TIMEOUT = 20
+WAKE_KEYEVENT_DISABLED = False
 
 
 def event(kind: str, **values):
@@ -52,12 +54,31 @@ def event(kind: str, **values):
     return data
 
 
+def _timeout_bytes(value):
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value)
+    if isinstance(value, str):
+        return value.encode()
+    return b''
+
+
 async def adb(*args, timeout=40, check=True, full=False):
     command = ['adb', '-s', SERIAL, *[str(a) for a in args]]
     started = event('adb_start', argv=command)
     def run():
         return subprocess.run(command, capture_output=True, timeout=timeout)
-    result = await asyncio.to_thread(run)
+    try:
+        result = await asyncio.to_thread(run)
+    except subprocess.TimeoutExpired as exc:
+        stdout = _timeout_bytes(exc.stdout)
+        stderr = _timeout_bytes(exc.stderr)
+        event('adb_timeout', start_seq=started['seq'], timeout_seconds=timeout,
+              stdout=stdout.decode(errors='replace')[:2000] if args[0] != 'exec-out' else '<binary-or-raw>',
+              stderr=stderr.decode(errors='replace')[:1000])
+        if check:
+            raise
+        result = subprocess.CompletedProcess(command, -1, stdout=stdout, stderr=stderr)
+        return result if full else result.stdout
     event('adb_exit', start_seq=started['seq'], returncode=result.returncode,
           stdout=result.stdout.decode(errors='replace')[:2000] if args[0] != 'exec-out' else '<binary-or-raw>',
           stderr=result.stderr.decode(errors='replace')[:1000])
@@ -102,8 +123,16 @@ def activity_is_resumed(dumpsys_text, package=PACKAGE):
 
 
 async def wake_and_unlock():
-    await adb('shell', 'input', 'keyevent', '224', timeout=8, check=False)
-    await adb('shell', 'wm', 'dismiss-keyguard', timeout=8, check=False)
+    global WAKE_KEYEVENT_DISABLED
+    # Power stay-on does not use the input dispatcher, which can hang on keyevent 224.
+    await adb('shell', 'svc', 'power', 'stayon', 'true', timeout=WAKE_SOFT_TIMEOUT, check=False)
+    if not WAKE_KEYEVENT_DISABLED:
+        result = await adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP',
+                           timeout=WAKE_SOFT_TIMEOUT, check=False, full=True)
+        if result.returncode == -1:
+            WAKE_KEYEVENT_DISABLED = True
+            event('wake_keyevent_skipped', reason='timeout')
+    await adb('shell', 'wm', 'dismiss-keyguard', timeout=WAKE_SOFT_TIMEOUT, check=False)
 
 
 async def wait_for_resumed_activity(timeout=45):
@@ -301,8 +330,7 @@ async def case(rig, index, click_text):
         # Pacing only; actual Android state/logcat are the evidence.
         await asyncio.sleep(0.2)
         if index == 2:
-            await adb('shell','input','keyevent','224',timeout=8)
-            await adb('shell','wm','dismiss-keyguard',timeout=8,check=False)
+            await wake_and_unlock()
         await launch_app()
         rig.release.set()
         await click
