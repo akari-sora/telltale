@@ -161,18 +161,22 @@ def crash_lines(text):
     return rows[:12]
 
 
-async def prepare_window():
-    """Make the display interactive without depending on a hung keyevent 224."""
+async def prepare_window(*, unlock_swipe=False):
+    """Keep the display awake. Lock-screen swipe is opt-in: dump-time swipe
+    dropped the live ELM TCP session after handshake (job 16609394827).
+    """
     await adb('shell', 'settings', 'put', 'secure', 'lockscreen.disabled', '1',
               timeout=15, check=False)
     await adb('shell', 'svc', 'power', 'stayon', 'true', timeout=WAKE_SOFT_TIMEOUT, check=False)
     await adb('shell', 'wm', 'dismiss-keyguard', timeout=WAKE_SOFT_TIMEOUT, check=False)
+    if not unlock_swipe:
+        event('prepare_window_skip_swipe', reason='dump_path')
+        return
     dumped = await adb('shell', 'dumpsys', 'window', 'windows', timeout=20, check=False)
     text = dumped.decode(errors='replace') if isinstance(dumped, (bytes, bytearray)) else str(dumped)
     if window_is_focused(text):
         event('prepare_window_skip_swipe', reason='already_focused')
         return
-    # Swipe up the fixed 480x800 lock screen. Soft-fail if input is stuck.
     await adb('shell', 'input', 'swipe', '240', '700', '240', '200', '250',
               timeout=15, check=False)
 
@@ -581,9 +585,11 @@ async def main():
                     else:
                         raise ValueError('Unsupported UI operation')
                     if op not in ('dump','d05','finish'):
-                        delay = 25 if op == 'tap_text' and item.get('text') == 'Connect' else 1
-                        await asyncio.sleep(delay)
-                        await dump('after_action')
+                        if op == 'tap_text' and item.get('text') == 'Connect':
+                            await asyncio.sleep(25)
+                        else:
+                            await asyncio.sleep(1)
+                            await dump('after_action')
                 except Exception as exc:
                     failed.append(dict(id=item['id'],error=type(exc).__name__+': '+str(exc)))
                     event('operation_failed', operation_id=item['id'], error=failed[-1]['error'])

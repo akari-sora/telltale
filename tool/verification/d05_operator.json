@@ -35,8 +35,9 @@
     },
     {
       "id": 7,
-      "op": "tap_text",
-      "text": "Settings"
+      "op": "tap",
+      "x": 432,
+      "y": 718
     },
     {
       "id": 8,

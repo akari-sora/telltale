@@ -364,9 +364,25 @@ class PrepareWindowTests(unittest.TestCase):
 
         with patch.multiple(CTRL, OUT=self.out, EVENT_FILE=self.out / 'controller.jsonl'), \
                 patch.object(CTRL, 'adb', fake_adb):
-            self._run(CTRL.prepare_window())
+            self._run(CTRL.prepare_window(unlock_swipe=True))
         self.assertFalse(any(c[:3] == ('shell', 'input', 'swipe') for c in self.calls))
         self.assertTrue(any(c[:3] == ('shell', 'dumpsys', 'window') for c in self.calls))
+
+
+
+    def test_dump_does_not_lockscreen_swipe(self):
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            self.calls.append(args)
+            if args[:2] == ('exec-out', 'uiautomator') or args[:2] == ('shell', 'uiautomator'):
+                result = SimpleNamespace(returncode=0, stdout=VALID_HIERARCHY, stderr=b'')
+                return result if full else VALID_HIERARCHY
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        with patch.multiple(CTRL, OUT=self.out, EVENT_FILE=self.out / 'controller.jsonl'), \
+                patch.object(CTRL, 'adb', fake_adb):
+            self._run(CTRL.dump('initial', screenshot=False))
+        self.assertFalse(any(c[:3] == ('shell', 'input', 'swipe') for c in self.calls))
 
 
 if __name__ == '__main__':
