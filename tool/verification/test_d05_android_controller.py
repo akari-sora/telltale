@@ -403,14 +403,110 @@ class TapTextMatchTests(unittest.TestCase):
                         clickable='true', bounds='[16,200][464,250]')
         self.assertTrue(CTRL.node_matches(recipes, 'Service Recipes'))
         self.assertTrue(CTRL.node_matches(discover, 'Discover Mode 08'))
+        self.assertTrue(CTRL.is_recipes_query('Service Recipes'))
+        self.assertEqual(
+            CTRL.locate_recipes([recipes])[0]['desc'],
+            'Service Recipes & Active Tests',
+        )
 
-    def test_tap_text_scrolls_until_the_row_appears(self):
+    def test_locate_recipes_accepts_active_tests_first_line(self):
+        tile = dict(text='', desc='Active Tests\nWorkshop Mode 08', enabled='true',
+                    clickable='true', bounds='[16,400][464,470]')
+        found = CTRL.locate_recipes([tile])
+        self.assertEqual(found[0]['desc'], tile['desc'])
+
+    def test_recipe_test_labels_keeps_raw_recipe_and_test_descs(self):
+        rows = [
+            dict(text='', desc='DIAGNOSTIC TRANSCRIPT', enabled='true',
+                 clickable='false', bounds='[16,569][464,598]'),
+            dict(text='', desc='Telltale Mode 08 Replay Reference', enabled='true',
+                 clickable='false', bounds='[33,658][258,676]'),
+            dict(text='', desc='Inspect workshop service recipes and discover supported Mode 08 tests',
+                 enabled='true', clickable='false', bounds='[16,430][464,470]'),
+            dict(text='', desc='Open Service Recipes tile', enabled='true',
+                 clickable='true', bounds='[16,400][464,470]'),
+        ]
+        labels = CTRL.recipe_test_labels(rows)
+        self.assertIn(
+            'Inspect workshop service recipes and discover supported Mode 08 tests',
+            labels,
+        )
+        self.assertIn('Open Service Recipes tile', labels)
+        self.assertNotIn('DIAGNOSTIC TRANSCRIPT', labels)
+        self.assertEqual(
+            CTRL.locate_recipes(rows)[0]['desc'],
+            'Open Service Recipes tile',
+        )
+
+    def _swipe_calls(self, calls):
+        return [c for c in calls if c[:1] == ('shell',) and any(
+            isinstance(part, str) and 'swipe' in part for part in c)]
+
+    def test_tap_text_bursts_then_scrolls_until_recipes(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
         dumps = [
-            [dict(text='', desc='Wi-Fi\nA TCP port', enabled='true', clickable='true',
-                  bounds='[16,398][464,473]')],
+            [
+                dict(text='', desc='DIAGNOSTIC TRANSCRIPT', enabled='true',
+                     clickable='false', bounds='[16,569][464,598]'),
+                dict(text='', desc='Telltale Mode 08 test replay', enabled='true',
+                     clickable='false', bounds='[33,658][258,676]'),
+            ],
+            [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
+                  clickable='true', bounds='[16,400][464,470]')],
+        ]
+        calls = []
+        order = []
+
+        async def fake_dump(label='view', screenshot=True, prepare=True):
+            order.append('dump')
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            if args[:1] == ('shell',) and any(
+                    isinstance(part, str) and 'swipe' in part for part in args):
+                order.append('swipe')
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.tap_text('Service Recipes'))
+        self.assertEqual(order[:3], ['swipe', 'dump', 'swipe'])
+        swipes = self._swipe_calls(calls)
+        self.assertEqual(len(swipes), 2)
+        burst = swipes[0]
+        self.assertEqual(burst[0], 'shell')
+        self.assertIn('input swipe 40 620 40 90 80', burst[1])
+        self.assertEqual(burst[1].count('input swipe'), CTRL.RECIPES_BURST_FLINGS)
+        look = swipes[1]
+        self.assertEqual(look[1].count('input swipe'), CTRL.FLINGS_PER_LOOK)
+        self.assertTrue(any(c[:3] == ('shell', 'input', 'tap') for c in calls))
+        events = (out / 'controller.jsonl').read_text()
+        self.assertIn('recipe_test_labels', events)
+        self.assertIn('Telltale Mode 08 test replay', events)
+        self.assertIn('recipes_burst_fling', events)
+
+    def test_recipes_fling_up_after_overshooting_to_language(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        dumps = [
+            [
+                dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                     clickable='true', bounds='[384,684][480,752]'),
+                dict(text='', desc='Language / 語言', enabled='true',
+                     clickable='false', bounds='[16,200][464,230]'),
+                dict(text='', desc='Appearance', enabled='true',
+                     clickable='false', bounds='[16,300][464,330]'),
+            ],
             [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
                   clickable='true', bounds='[16,400][464,470]')],
         ]
@@ -432,10 +528,94 @@ class TapTextMatchTests(unittest.TestCase):
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        swipes = [c for c in calls if c[:3] == ('shell', 'input', 'swipe')]
-        self.assertEqual(len(swipes), CTRL.FLINGS_PER_LOOK)
-        self.assertEqual(swipes[0][3:8], (40, 620, 40, 90, 80))
-        self.assertTrue(any(c[:3] == ('shell', 'input', 'tap') for c in calls))
+        swipes = self._swipe_calls(calls)
+        self.assertEqual(len(swipes), 2)
+        self.assertIn('input swipe 40 90 40 620 80', swipes[1][1])
+        self.assertEqual(swipes[1][1].count('input swipe'), CTRL.FLINGS_PER_LOOK)
+
+    def test_recipes_reconnects_once_after_session_drop(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        dropped = [
+            dict(text='', desc='Choose a connection', enabled='true',
+                 clickable='false', bounds='[16,128][190,151]'),
+            dict(text='', desc='Connect now', enabled='true',
+                 clickable='true', bounds='[33,302][369,350]'),
+        ]
+        tabs = [
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+            dict(text='', desc='Dashboard\nTab 1 of 5', enabled='true',
+                 clickable='true', bounds='[0,684][96,752]'),
+        ]
+        recipes = [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
+                        clickable='true', bounds='[16,400][464,470]')]
+        # burst → dump dropped → enter_dashboard (dump tabs) → Settings
+        # find_text (dump tabs) → burst → dump recipes
+        dumps = [dropped, tabs, tabs, recipes]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True, prepare=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.tap_text('Service Recipes'))
+        events = (out / 'controller.jsonl').read_text()
+        self.assertIn('recipes_session_dropped', events)
+        self.assertIn('"after": "reconnect"', events)
+        taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
+        self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
+        self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
+
+    def test_non_recipe_text_still_dumps_before_flinging(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        dumps = [
+            [dict(text='', desc='Bluetooth LE', enabled='true', clickable='true',
+                  bounds='[16,24][464,96]')],
+            [dict(text='', desc='Wi-Fi\nA TCP port', enabled='true', clickable='true',
+                  bounds='[16,398][464,473]')],
+        ]
+        calls = []
+        order = []
+
+        async def fake_dump(label='view', screenshot=True, prepare=True):
+            order.append('dump')
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            if args[:1] == ('shell',) and any(
+                    isinstance(part, str) and 'swipe' in part for part in args):
+                order.append('swipe')
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.tap_text('Wi-Fi'))
+        self.assertEqual(order[:3], ['dump', 'swipe', 'dump'])
+        swipes = self._swipe_calls(calls)
+        self.assertEqual(len(swipes), 1)
+        self.assertEqual(swipes[0][1].count('input swipe'), CTRL.FLINGS_PER_LOOK)
 
     def test_settings_tab_waits_without_swiping_connect(self):
         tmp = tempfile.TemporaryDirectory()

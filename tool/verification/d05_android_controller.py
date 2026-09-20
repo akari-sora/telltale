@@ -46,6 +46,16 @@ LIST_FLING_Y1 = 620
 LIST_FLING_Y2 = 90
 LIST_FLING_MS = 80
 FLINGS_PER_LOOK = 10
+# Job 16609802535: 6 gutter flings reached DIAGNOSTIC TRANSCRIPT (UI 914);
+# the next locate dump was already Choose a connection (UI 929). Burst past
+# Adapter / FieldEvent / Export / Manual before that uiautomator pause.
+RECIPES_BURST_FLINGS = 14
+RECIPES_NEEDLES = (
+    'Service Recipes',
+    'Active Tests',
+    'Service-Rezepte',
+    '車行診斷配方',
+)
 DRAWN_WAIT_SECONDS = 180
 DRAWN_POLL_SLEEP = 2
 REMOTE_DUMP = '/sdcard/d05_window.xml'
@@ -427,10 +437,97 @@ def dashboard_ready(rows):
             locate_text(rows, 'Dashboard') is not None)
 
 
-async def fling_list():
-    """Fling the Settings ListView without hitting sliders or the tab bar."""
-    await adb('shell', 'input', 'swipe', LIST_FLING_X, LIST_FLING_Y1,
-              LIST_FLING_X, LIST_FLING_Y2, LIST_FLING_MS, timeout=15, check=False)
+def is_recipes_query(text):
+    lowered = (text or '').lower()
+    return lowered.startswith('service recipe') or lowered.startswith('active test')
+
+
+def first_line_values(rows):
+    lines = []
+    for row in rows:
+        for value in node_labels(row):
+            if value:
+                lines.append(value.split('\n', 1)[0])
+    return lines
+
+
+def recipe_test_labels(rows):
+    """Raw text/desc that mention Recipe or Test — matcher diagnostics."""
+    hits = []
+    for row in rows:
+        for value in node_labels(row):
+            low = value.lower()
+            if 'recipe' in low or 'test' in low:
+                hits.append(value[:240])
+    return hits
+
+
+def session_dropped(rows):
+    return (locate_text(rows, 'Choose a connection') is not None and
+            locate_text(rows, 'Settings') is None)
+
+
+def still_above_recipes(rows):
+    tokens = (
+        'vehicle profile', 'fuel and drivetrain', 'diagnostic transcript',
+        'what the adapter says', 'manual command',
+    )
+    return any(any(token in line.lower() for token in tokens)
+               for line in first_line_values(rows))
+
+
+def past_recipes(rows):
+    """Overshot the tile into Experimental / Language / Appearance."""
+    if locate_text(rows, 'Settings') is None:
+        return False
+    tokens = ('experimental', 'appearance', 'open-source', 'recommended', 'language /')
+    return any(any(token in line.lower() for token in tokens)
+               for line in first_line_values(rows))
+
+
+def locate_recipes(rows):
+    """Tile title, localized variants, or a first line that names the row."""
+    for needle in RECIPES_NEEDLES:
+        found = locate_text(rows, needle)
+        if found:
+            return found
+    matching = []
+    for row in rows:
+        if row.get('enabled') != 'true':
+            continue
+        labels = node_labels(row)
+        first = ' '.join(value.split('\n', 1)[0].lower() for value in labels)
+        if not ('recipe' in first or 'active test' in first or 'service-rezepte' in first):
+            continue
+        try:
+            x1, y1, x2, y2 = bounds(row)
+        except ValueError:
+            continue
+        area = (x2 - x1) * (y2 - y1)
+        clickable = 0 if row.get('clickable') == 'true' else 1
+        matching.append((clickable, area, row, (x1 + x2) // 2, (y1 + y2) // 2))
+    if not matching:
+        return None
+    _, _, row, x, y = min(matching)
+    return row, x, y
+
+
+async def fling_list(count=1, upward=False):
+    """Fling the Settings ListView without hitting sliders or the tab bar.
+
+    count>1 is one adb shell of chained swipes so Mode 01 NO DATA does not
+    get a dump-length pause between each 80ms fling (job 16609802535).
+    """
+    if count < 1:
+        return
+    y1, y2 = (LIST_FLING_Y2, LIST_FLING_Y1) if upward else (LIST_FLING_Y1, LIST_FLING_Y2)
+    if count == 1:
+        await adb('shell', 'input', 'swipe', LIST_FLING_X, y1,
+                  LIST_FLING_X, y2, LIST_FLING_MS, timeout=15, check=False)
+        return
+    swipe = f'input swipe {LIST_FLING_X} {y1} {LIST_FLING_X} {y2} {LIST_FLING_MS}'
+    await adb('shell', ';'.join([swipe] * count), timeout=max(20, count + 10),
+              check=False)
 
 
 async def find_text(text, exact=False, scroll=True):
@@ -442,26 +539,58 @@ async def find_text(text, exact=False, scroll=True):
     only scrolled the disconnect picker.
 
     Service Recipes sits below CONNECTION, the huge VEHICLE PROFILE, FUEL
-    AND DRIVETRAIN, and DIAGNOSTICS. Locate dumps skip prepare_window so
-    Mode 01 NO DATA does not drop ELM during the scroll (job 16609695855).
+    AND DRIVETRAIN, and DIAGNOSTICS. Job 16609802535 reached DIAGNOSTIC
+    TRANSCRIPT on look 3 then the next dump was the dropped picker — so
+    recipes burst-fling *before* the first locate dump, then at most a
+    few looks. Locate dumps skip prepare_window so Mode 01 NO DATA does
+    not drop ELM during the scroll (job 16609695855).
     """
     if not isinstance(text, str) or not 0 < len(text) <= 100:
         raise ValueError('Invalid UI text')
+    recipes = scroll and is_recipes_query(text)
+    recovered = False
+    if recipes:
+        event('recipes_burst_fling', count=RECIPES_BURST_FLINGS)
+        await fling_list(RECIPES_BURST_FLINGS)
+        await asyncio.sleep(0.15)
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
         rows = await dump('locate', screenshot=False, prepare=False)
-        found = locate_text(rows, text, exact)
+        if recipes:
+            labels = recipe_test_labels(rows)
+            event('recipe_test_labels', attempt=attempt, labels=labels)
+            found = locate_recipes(rows)
+        else:
+            found = locate_text(rows, text, exact)
         if found:
             return found, attempt
         if attempt >= TAP_SCROLL_ATTEMPTS:
             break
-        if scroll:
-            event('scroll_until_text', text=text, attempt=attempt + 1)
-            for _ in range(FLINGS_PER_LOOK):
-                await fling_list()
-            await asyncio.sleep(0.15)
-        else:
+        if not scroll:
             event('wait_until_text', text=text, attempt=attempt + 1)
             await asyncio.sleep(0.8)
+            continue
+        if recipes and session_dropped(rows):
+            if recovered:
+                raise RuntimeError(
+                    f'UI text not visible: {text!r} (session dropped during Settings scroll)'
+                )
+            recovered = True
+            event('recipes_session_dropped', attempt=attempt)
+            await enter_dashboard()
+            found_tab, _ = await find_text('Settings', scroll=False)
+            row, x, y = found_tab
+            event('selected_observed_ui_node', text='Settings', node=row,
+                  scroll_attempts=0, scrolled=False)
+            await adb('shell', 'input', 'tap', x, y)
+            await asyncio.sleep(0.25)
+            event('recipes_burst_fling', count=RECIPES_BURST_FLINGS, after='reconnect')
+            await fling_list(RECIPES_BURST_FLINGS)
+            await asyncio.sleep(0.15)
+            continue
+        upward = bool(recipes and past_recipes(rows) and not still_above_recipes(rows))
+        event('scroll_until_text', text=text, attempt=attempt + 1, upward=upward)
+        await fling_list(FLINGS_PER_LOOK, upward=upward)
+        await asyncio.sleep(0.15)
     raise RuntimeError(f'UI text not visible: {text!r}')
 
 
@@ -714,10 +843,11 @@ async def main():
                     if op not in ('dump','d05','finish'):
                         if op == 'tap_text' and item.get('text') == 'Connect':
                             await enter_dashboard()
-                        elif op == 'tap_text' and item.get('text') == 'Settings':
-                            # Locate already dumped the tab. Another 10s
-                            # after_action dump lets Mode 01 NO DATA drop ELM
-                            # before Service Recipes is on screen.
+                        elif op == 'tap_text' and item.get('text') in (
+                                'Settings', 'Service Recipes'):
+                            # Locate already dumped the tab / recipes tile.
+                            # Another 10s after_action dump lets Mode 01 NO
+                            # DATA drop ELM before Discover Mode 08 runs.
                             pass
                         else:
                             await asyncio.sleep(1)
