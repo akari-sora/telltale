@@ -104,7 +104,17 @@ def hierarchy_slice(xml):
         start = xml.find(b'<hierarchy')
     if start < 0:
         raise ValueError('UI dump contained no XML hierarchy')
-    return xml[start:]
+    end_tag = b'</hierarchy>'
+    end = xml.find(end_tag, start)
+    if end >= 0:
+        return xml[start:end + len(end_tag)]
+    hier = xml.find(b'<hierarchy', start)
+    if hier >= 0:
+        close = xml.find(b'/>', hier)
+        next_child = xml.find(b'<', hier + 1)
+        if close >= 0 and (next_child < 0 or close < next_child):
+            return xml[start:close + 2]
+    raise ValueError('UI dump hierarchy was truncated')
 
 
 def parse_ui_rows(xml):
