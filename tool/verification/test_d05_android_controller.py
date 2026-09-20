@@ -1331,5 +1331,33 @@ class Mode01KeepaliveTests(unittest.TestCase):
         self.assertEqual([row.get('command') for row in keepalive], ['015E'])
 
 
+
+class DashboardSurfaceRoadTest(unittest.TestCase):
+    def test_road_test_started_is_dashboard_not_settings(self):
+        rows = [
+            {'text': '', 'desc': 'Road test started', 'bounds': '[16,200][464,260]',
+             'enabled': 'true', 'clickable': 'false', 'clazz': 'android.widget.TextView'},
+            {'text': '', 'desc': 'Dashboard\nTab 1 of 5', 'bounds': '[0,684][96,752]',
+             'enabled': 'true', 'clickable': 'true', 'clazz': 'android.widget.Button'},
+            {'text': '', 'desc': 'Settings\nTab 5 of 5', 'bounds': '[384,684][480,752]',
+             'enabled': 'true', 'clickable': 'true', 'clazz': 'android.widget.Button'},
+        ]
+        self.assertTrue(CTRL.dashboard_surface(rows))
+        self.assertFalse(CTRL.settings_list_open(rows))
+
+    def test_recipes_tile_clickable_false_still_locates(self):
+        rows = [
+            {'text': '',
+             'desc': 'Service Recipes & Active Tests\nInspect workshop service recipes and discover supported Mode 08 tests',
+             'bounds': '[16,295][464,399]',
+             'enabled': 'true', 'clickable': 'false', 'clazz': 'android.widget.Button'},
+        ]
+        found = CTRL.locate_recipes(rows)
+        self.assertIsNotNone(found)
+        row, x, y = found
+        self.assertEqual(x, (16 + 464) // 2)
+        self.assertEqual(y, (295 + 399) // 2)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -559,7 +559,7 @@ def recipe_test_labels(rows):
     for row in rows:
         for value in node_labels(row):
             low = value.lower()
-            if 'recipe' in low or 'test' in low:
+            if 'recipe' in low or ('test' in low and 'road test' not in low):
                 hits.append(value[:240])
     return hits
 
@@ -686,7 +686,10 @@ def dashboard_surface(rows):
         return False
     for line in first_line_values(rows):
         low = line.lower()
-        if 'no data' in low or 'unverified' in low:
+        # Job 16610702070 looks 9-12 sat on Dashboard "Road test started"
+        # while hunting recipes; 'unverified' was absent so residency never
+        # retapped Settings. The recipes tile then appeared in a later dump.
+        if 'no data' in low or 'unverified' in low or 'road test' in low:
             return True
     return False
 
