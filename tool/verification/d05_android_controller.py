@@ -50,10 +50,13 @@ LIST_FLING_Y2 = 140
 LIST_FLING_MS = 80
 LIST_FLING_GAP_S = 0.08
 FLINGS_PER_LOOK = 6
-# ui_1843 SeekBar thumbs start around x=99. Focus left of that, above the
-# tab bar, so PAGE_DOWN does not drag mass/VE/Cd.
-LIST_FOCUS_X = 48
+# ui_1843 SeekBar thumbs start around x=99. Job 16610532958 Petrol /
+# drivetrain chips start at x=33. Focus left of both, above the tab bar.
+LIST_FOCUS_X = 20
 LIST_FOCUS_Y = 200
+GUTTER_NUDGE_Y1 = 500
+GUTTER_NUDGE_Y2 = 260
+GUTTER_NUDGE_MS = 80
 RECIPES_NEEDLES = (
     'Service Recipes',
     'Active Tests',
@@ -585,6 +588,53 @@ def point_hits_seekbar(x, y, rows):
     return False
 
 
+def _is_tab_row(row):
+    for value in node_labels(row):
+        first = value.split('\n', 1)[0].strip().lower()
+        if 'tab' in value.lower() and first in (
+            'dashboard', 'pid', 'fault codes', 'timing', 'settings',
+        ):
+            return True
+    return False
+
+
+def interactive_rects(rows):
+    """SeekBars and non-tab chips that steal PAGE_DOWN / focus taps."""
+    found = list(visible_seekbars(rows))
+    for row in rows:
+        if row.get('clickable') != 'true' or _is_tab_row(row):
+            continue
+        try:
+            x1, y1, x2, y2 = bounds(row)
+        except ValueError:
+            continue
+        if x2 <= x1 or y2 <= y1 or y1 >= 650:
+            continue
+        found.append((row, x1, y1, x2, y2))
+    return found
+
+
+def point_hits_interactive(x, y, rows):
+    for _row, x1, y1, x2, y2 in interactive_rects(rows):
+        if x1 <= x <= x2 and y1 <= y <= y2:
+            return True
+    return False
+
+
+def dump_fingerprint(rows):
+    """Stable identity of the Settings list viewport (labels + bounds)."""
+    parts = []
+    for row in rows:
+        if _is_tab_row(row):
+            continue
+        labels = [value for value in node_labels(row) if value]
+        if not labels:
+            continue
+        first = labels[0].split('\n', 1)[0].strip()[:80]
+        parts.append((first, row.get('bounds') or ''))
+    return tuple(parts)
+
+
 def settings_list_open(rows):
     """Settings *list*, not merely the Settings\\nTab 5 of 5 destination.
 
@@ -847,30 +897,45 @@ async def tap_settings_tab(rows):
 
 
 async def focus_settings_list(rows):
-    """Give PAGE_DOWN a Settings-list target, not SeekBars or the tab bar.
+    """Give PAGE_DOWN a Settings-list target, not chips, SeekBars, or tabs.
 
-    Job 16610428447 thumbs sit at x>=99. LIST_FOCUS_X stays left of that.
-    Never tap the catalog CTA or a SeekBar, or PAGE_DOWN mutates % values.
+    Job 16610532958: Petrol / drivetrain chips start at x=33 and consume
+    KEYCODE_PAGE_DOWN. LIST_FOCUS_X stays left of those chips and of
+    SeekBar thumbs (x>=99). Never tap the catalog CTA.
     """
     candidates = []
     for needle in ('CONNECTION', 'Gauge style', 'Vehicle profile',
-                   'DIAGNOSTIC', 'Recommended adapter'):
+                   'DIAGNOSTIC', 'Recommended adapter', 'FUEL AND DRIVETRAIN'):
         found = locate_text(rows, needle)
         if not found:
             continue
         row, _x, y = found
         candidates.append((needle, row, LIST_FOCUS_X, y))
-    for y in (LIST_FOCUS_Y, 120, 280, 360, 80):
+    for y in (LIST_FOCUS_Y, 120, 80, 300, 400, 160):
         candidates.append(('', None, LIST_FOCUS_X, y))
     for text, row, x, y in candidates:
         if y >= 650:
             continue
-        if point_hits_seekbar(x, y, rows):
+        if point_hits_interactive(x, y, rows):
             continue
         event('settings_list_focus', text=text, node=row, x=x, y=y)
         await adb('shell', 'input', 'tap', x, y)
         await asyncio.sleep(0.12)
         return
+
+
+async def gutter_nudge(upward=False):
+    """One short left-gutter swipe when PAGE_DOWN is a no-op.
+
+    Not a burst: job 16610280973's eight flings left Settings. x stays
+    left of chips and the Dashboard tab's tap target (y>=684).
+    """
+    y1, y2 = (GUTTER_NUDGE_Y2, GUTTER_NUDGE_Y1) if upward else (
+        GUTTER_NUDGE_Y1, GUTTER_NUDGE_Y2)
+    event('recipes_gutter_nudge', x=LIST_FOCUS_X, y1=y1, y2=y2,
+          ms=GUTTER_NUDGE_MS, upward=upward)
+    await adb('shell', 'input', 'swipe', LIST_FOCUS_X, y1, LIST_FOCUS_X, y2,
+              GUTTER_NUDGE_MS, timeout=15, check=False)
 
 
 async def page_settings_list(upward=False):
@@ -900,16 +965,20 @@ async def find_text(text, exact=False, scroll=True):
     already-selected Settings tab did not jump to the top. Job 16610428447:
     one PAGE_DOWN hid the headers and left mid-VEHICLE-PROFILE body; the
     classifier called that Dashboard and retapped Settings in a loop.
+    Job 16610532958: PAGE_DOWN reached FUEL AND DRIVETRAIN then stalled —
+    chips stole the key. Fingerprint the viewport; on a no-op page,
+    re-focus the gutter and send one short swipe, never burst-8.
     Page one KEYCODE at a time while the Settings tab is up and the dump
     is not the unverified gauge strip; PAGE_UP when past the tile; never
-    fling; never runtest a broken jar. Mode 01 keepalive keeps the session
-    through the pages. Locate dumps skip prepare_window (job 16609695855).
+    runtest a broken jar. Mode 01 keepalive keeps the session through the
+    pages. Locate dumps skip prepare_window (job 16609695855).
     """
     if not isinstance(text, str) or not 0 < len(text) <= 100:
         raise ValueError('Invalid UI text')
     recipes = scroll and is_recipes_query(text)
     recovered = 0
     list_focused = False
+    prev_fp = None
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
         rows = await dump('locate', screenshot=False, prepare=False)
         if recipes:
@@ -935,6 +1004,7 @@ async def find_text(text, exact=False, scroll=True):
                 )
             recovered += 1
             list_focused = False
+            prev_fp = None
             event('recipes_session_dropped', attempt=attempt, recovery=recovered)
             await enter_dashboard()
             found_tab, _ = await find_text('Settings', scroll=False)
@@ -948,19 +1018,30 @@ async def find_text(text, exact=False, scroll=True):
             event('settings_residency_lost', attempt=attempt,
                   dashboard=True)
             list_focused = False
+            prev_fp = None
             await tap_settings_tab(rows)
             continue
         if recipes and locate_text(rows, 'Settings') is None and not settings_list_open(rows):
             event('settings_residency_lost', attempt=attempt,
                   dashboard=False)
             list_focused = False
+            prev_fp = None
             await tap_settings_tab(rows)
             continue
         if recipes:
             upward = bool(past_recipes(rows) and not still_above_recipes(rows))
-            if not list_focused:
+            fp = dump_fingerprint(rows)
+            if prev_fp is not None and fp == prev_fp:
+                event('recipes_page_stuck', attempt=attempt,
+                      method='gutter_nudge')
                 await focus_settings_list(rows)
                 list_focused = True
+                await gutter_nudge(upward=upward)
+                await asyncio.sleep(0.15)
+                continue
+            prev_fp = fp
+            await focus_settings_list(rows)
+            list_focused = True
             event('recipes_direct_nav', text=text, attempt=attempt,
                   method='page_down' if not upward else 'page_up')
             await page_settings_list(upward=upward)
