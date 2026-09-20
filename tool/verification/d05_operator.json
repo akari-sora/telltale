@@ -62,10 +62,6 @@
       "button_text": "Discover Mode 08"
     },
     {
-      "id": 12,
-      "op": "finish"
-    },
-    {
       "id": 13,
       "op": "swipe",
       "x1": 240,
