@@ -629,7 +629,7 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertNotIn('settings_tab_retap', events)
         self.assertTrue(self._page_calls(calls))
         self.assertTrue(self._swipe_calls(calls))
-        self.assertEqual(len(self._runtest_calls(calls)), 1)
+        self.assertEqual(len(self._runtest_calls(calls)), 0)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
 
@@ -707,7 +707,7 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertNotIn('recipes_burst_fling', events)
         self.assertTrue(self._page_calls(calls))
         self.assertTrue(self._swipe_calls(calls))
-        self.assertEqual(len(self._runtest_calls(calls)), 1)
+        self.assertEqual(len(self._runtest_calls(calls)), 0)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
 
@@ -755,21 +755,16 @@ class TapTextMatchTests(unittest.TestCase):
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertEqual(order, ['dump', 'page', 'page', 'page', 'scroll', 'dump', 'tap'])
+        self.assertEqual(order, ['dump', 'page', 'page', 'page', 'dump', 'tap'])
         self.assertTrue(self._swipe_calls(calls))
         self.assertTrue(self._page_calls(calls))
-        runtests = self._runtest_calls(calls)
-        self.assertEqual(len(runtests), 1)
-        self.assertEqual(runtests[0][:4],
-                         ('shell', 'uiautomator', 'runtest', CTRL.SCROLL_JAR_REMOTE))
-        self.assertIn('D05Scroll', runtests[0])
-        self.assertIn('Service Recipes', runtests[0])
+        self.assertEqual(len(self._runtest_calls(calls)), 0)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('recipes_direct_nav', events)
-        self.assertIn('uiautomator_scroll_into_view', events)
-        self.assertIn('"method": "page_down+scroll_into_view"', events)
+        self.assertIn('page_down', events)
+        self.assertIn('"method": "page_down"', events)
         self.assertIn('"settings_list": true', events)
         self.assertIn('"node_label": "Service Recipes & Active Tests"', events)
         self.assertNotIn('recipes_burst_fling', events)
@@ -826,17 +821,17 @@ class TapTextMatchTests(unittest.TestCase):
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertEqual(order, ['dump', 'tap', 'dump', 'page', 'page', 'page', 'scroll', 'dump', 'tap'])
+        self.assertEqual(order, ['dump', 'tap', 'dump', 'page', 'page', 'page', 'dump', 'tap'])
         self.assertTrue(self._swipe_calls(calls))
         self.assertTrue(self._page_calls(calls))
-        self.assertEqual(len(self._runtest_calls(calls)), 1)
+        self.assertEqual(len(self._runtest_calls(calls)), 0)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('settings_residency_lost', events)
         self.assertIn('recipes_direct_nav', events)
-        self.assertIn('uiautomator_scroll_into_view', events)
+        self.assertIn('page_down', events)
 
     def test_recipes_scrolls_into_view_from_settings_bottom_without_retap(self):
         tmp = tempfile.TemporaryDirectory()
@@ -869,11 +864,11 @@ class TapTextMatchTests(unittest.TestCase):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         self.assertTrue(self._swipe_calls(calls))
         self.assertTrue(self._page_calls(calls))
-        self.assertEqual(len(self._runtest_calls(calls)), 1)
+        self.assertEqual(len(self._runtest_calls(calls)), 0)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
-        self.assertIn('"method": "page_down+scroll_into_view"', events)
+        self.assertIn('"method": "page_down"', events)
         self.assertNotIn('settings_residency_lost', events)
         self.assertNotIn('recipes_burst_fling', events)
 
@@ -915,7 +910,7 @@ class TapTextMatchTests(unittest.TestCase):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         self.assertTrue(self._swipe_calls(calls))
         self.assertTrue(self._page_calls(calls))
-        self.assertEqual(len(self._runtest_calls(calls)), 1)
+        self.assertEqual(len(self._runtest_calls(calls)), 0)
 
     def test_scroll_into_view_fails_closed_when_jar_unusable(self):
         tmp = tempfile.TemporaryDirectory()
@@ -1037,12 +1032,12 @@ class TapTextMatchTests(unittest.TestCase):
             asyncio.run(CTRL.tap_text('Service Recipes'))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('recipes_session_dropped', events)
-        self.assertIn('"method": "page_down+scroll_into_view"', events)
+        self.assertIn('"method": "page_down"', events)
         self.assertNotIn('recipes_burst_fling', events)
         self.assertNotIn('settings_residency_lost', events)
         self.assertTrue(self._swipe_calls(calls))
         self.assertTrue(self._page_calls(calls))
-        self.assertEqual(len(self._runtest_calls(calls)), 1)
+        self.assertEqual(len(self._runtest_calls(calls)), 0)
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))

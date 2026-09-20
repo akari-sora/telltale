@@ -1178,10 +1178,9 @@ async def find_text(text, exact=False, scroll=True):
             # labels still []. Job 16612287354 d05 PAGE_DOWN later revealed
             # the tile at [16,199][464,303]. Page the list every look.
             event('recipes_direct_nav', text=text, attempt=attempt,
-                  method='page_down+scroll_into_view')
+                  method='page_down')
             await fling_list(FLINGS_PER_LOOK, upward=False)
-            await scroll_into_view('Service Recipes')
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.2)
             continue
         event('scroll_until_text', text=text, attempt=attempt + 1,
               upward=False)
@@ -1257,12 +1256,9 @@ class ObservedWriter:
     def __init__(self, writer, connection):
         self.writer, self.connection = writer, connection
     def write(self, data):
-        event('tcp_write_attempt', connection=self.connection, payload_hex=data.hex(),
-              payload_ascii=data.decode('ascii', errors='backslashreplace'))
         return self.writer.write(data)
     async def drain(self):
         await self.writer.drain()
-        event('tcp_write_drained', connection=self.connection)
     def __getattr__(self, key):
         return getattr(self.writer, key)
 
