@@ -1234,8 +1234,10 @@ async def tap_text(text, exact=False, scroll=True):
           scroll_attempts=attempt, scrolled=bool(scroll) and text != 'Connect now')
     await adb('shell', 'input', 'tap', x, y)
     if text == 'Settings':
-        # Let go_router paint CONNECTION before op8 pages (job 16609955129).
-        await asyncio.sleep(0.5)
+        # Job 16612166781: 0.5s then uiautomator dump returned 58 bytes
+        # (no hierarchy) and the ELM TCP session dropped. Wait for the
+        # Settings list to paint before the recipes hunt dumps.
+        await asyncio.sleep(3)
 
 
 class ObservedWriter:
