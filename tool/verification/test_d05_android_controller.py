@@ -432,7 +432,9 @@ class TapTextMatchTests(unittest.TestCase):
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertTrue(any(c[:3] == ('shell', 'input', 'swipe') for c in calls))
+        swipes = [c for c in calls if c[:3] == ('shell', 'input', 'swipe')]
+        self.assertTrue(swipes)
+        self.assertEqual(swipes[0][3:7], (240, 520, 240, 160))
         self.assertTrue(any(c[:3] == ('shell', 'input', 'tap') for c in calls))
 
     def test_settings_tab_waits_without_swiping_connect(self):
@@ -473,6 +475,80 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertFalse(any(c[:3] == ('shell', 'input', 'swipe') for c in calls))
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps, [('shell', 'input', 'tap', 432, 718)])
+
+    def test_connect_exact_does_not_steal_connect_now(self):
+        form = dict(text='', desc='Connect', enabled='true',
+                    clickable='true', bounds='[16,600][464,650]')
+        now = dict(text='', desc='Connect now', enabled='true',
+                   clickable='true', bounds='[33,302][369,350]')
+        self.assertTrue(CTRL.node_matches(form, 'Connect', exact=True))
+        self.assertFalse(CTRL.node_matches(now, 'Connect', exact=True))
+        self.assertTrue(CTRL.node_matches(now, 'Connect now'))
+        found = CTRL.locate_text([now, form], 'Connect', exact=True)
+        self.assertEqual(found[0]['desc'], 'Connect')
+
+    def test_enter_dashboard_taps_connect_now_then_waits_for_tabs(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        home = [
+            dict(text='', desc='Choose a connection', enabled='true',
+                 clickable='false', bounds='[16,128][190,151]'),
+            dict(text='', desc='Connect now', enabled='true',
+                 clickable='true', bounds='[33,302][369,350]'),
+        ]
+        dashboard = [
+            dict(text='', desc='Dashboard\nTab 1 of 5', enabled='true',
+                 clickable='true', bounds='[0,684][96,752]'),
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+        ]
+        dumps = [home, dashboard]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.enter_dashboard())
+        self.assertFalse(any(c[:3] == ('shell', 'input', 'swipe') for c in calls))
+        self.assertEqual([c for c in calls if c[:3] == ('shell', 'input', 'tap')],
+                         [('shell', 'input', 'tap', 201, 326)])
+
+    def test_connect_now_is_noop_when_dashboard_tabs_are_already_up(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        dashboard = [
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+        ]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True):
+            return dashboard
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl'), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb):
+            asyncio.run(CTRL.tap_text('Connect now'))
+        self.assertFalse(calls)
 
 
 if __name__ == '__main__':
