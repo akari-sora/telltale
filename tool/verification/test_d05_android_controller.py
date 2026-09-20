@@ -510,6 +510,114 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertFalse(CTRL.session_dropped(bottom))
         self.assertFalse(CTRL.still_above_recipes(bottom))
 
+    def _vehicle_profile_mid_rows(self):
+        """Job 16610428447 ui_1843 — headers scrolled off, still Settings."""
+        return [
+            dict(text='', desc='Horsepower, torque and fuel use are estimated from these parameters; the closer they are to the actual vehicle, the more the estimates mean.\nA brand name or a VIN alone does not establish mass.',
+                 enabled='true', clickable='false', bounds='[16,24][464,684]',
+                 clazz='android.view.View'),
+            dict(text='', desc='Choose from the official catalog', enabled='true',
+                 clickable='true', bounds='[33,180][447,228]',
+                 clazz='android.widget.Button'),
+            dict(text='', desc='18%', enabled='true', clickable='true',
+                 bounds='[99,415][147,463]', clazz='android.widget.SeekBar'),
+            dict(text='', desc='31%', enabled='true', clickable='true',
+                 bounds='[147,492][195,540]', clazz='android.widget.SeekBar'),
+            dict(text='', desc='Dashboard\nTab 1 of 5', enabled='true',
+                 clickable='true', bounds='[0,684][96,752]',
+                 clazz='android.widget.Button'),
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]',
+                 clazz='android.widget.Button'),
+        ]
+
+    def test_vehicle_profile_mid_scroll_is_list_not_dashboard(self):
+        mid = self._vehicle_profile_mid_rows()
+        self.assertTrue(CTRL.settings_list_open(mid))
+        self.assertFalse(CTRL.dashboard_surface(mid))
+        self.assertTrue(CTRL.still_above_recipes(mid))
+        self.assertFalse(CTRL.past_recipes(mid))
+        self.assertFalse(CTRL.session_dropped(mid))
+        self.assertTrue(CTRL.visible_seekbars(mid))
+        self.assertFalse(CTRL.point_hits_seekbar(CTRL.LIST_FOCUS_X, CTRL.LIST_FOCUS_Y, mid))
+        self.assertTrue(CTRL.point_hits_seekbar(120, 430, mid))
+
+    def test_reconnect_dashboard_gauges_are_not_settings_list(self):
+        gauges = [
+            dict(text='', desc='Start recording', enabled='true',
+                 clickable='true', bounds='[33,397][447,445]'),
+            dict(text='', desc=('Records only the OBD signals you have enabled — no location, '
+                               'VIN, or account data. Trends show at most 4 signals; a recording '
+                               'keeps all 6 enabled signals and adds estimated horsepower and '
+                               'estimated fuel rate, which rest on the vehicle assumptions.'),
+                 enabled='true', clickable='false', bounds='[59,295][447,385]'),
+            dict(text='', desc='800 rpm (data is stale) — Unverified · Stale, RPM',
+                 enabled='true', clickable='false', bounds='[25,487][225,684]'),
+            dict(text='', desc='Dashboard\nTab 1 of 5', enabled='true',
+                 clickable='true', bounds='[0,684][96,752]'),
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+        ]
+        self.assertFalse(CTRL.settings_list_open(gauges))
+        self.assertTrue(CTRL.dashboard_surface(gauges))
+
+    def test_seekbars_with_settings_tab_count_as_list(self):
+        rows = [
+            dict(text='', desc='18%', enabled='true', clickable='true',
+                 bounds='[99,415][147,463]', clazz='android.widget.SeekBar'),
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+        ]
+        self.assertTrue(CTRL.settings_list_open(rows))
+        self.assertFalse(CTRL.dashboard_surface(rows))
+
+    def test_recipes_keeps_paging_through_vehicle_profile_body(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        connection = [
+            dict(text='', desc='CONNECTION', enabled='true',
+                 clickable='false', bounds='[16,87][464,116]'),
+            dict(text='', desc='VEHICLE PROFILE', enabled='true',
+                 clickable='false', bounds='[16,418][464,447]'),
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+        ]
+        recipes = [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
+                        clickable='true', bounds='[16,400][464,470]')]
+        dumps = [connection, self._vehicle_profile_mid_rows(), recipes]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True, prepare=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            TAP_SCROLL_ATTEMPTS=4), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.tap_text('Service Recipes'))
+        events = (out / 'controller.jsonl').read_text()
+        self.assertNotIn('settings_residency_lost', events)
+        self.assertNotIn('settings_tab_retap', events)
+        self.assertEqual(self._page_calls(calls), [
+            ('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN'),
+            ('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN'),
+        ])
+        self.assertFalse(self._swipe_calls(calls))
+        taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
+        self.assertEqual(taps[0], ('shell', 'input', 'tap', CTRL.LIST_FOCUS_X, 101))
+        self.assertTrue(all(c[3] == CTRL.LIST_FOCUS_X for c in taps[:-1]))
+        self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
+
     def test_tap_text_pages_down_to_recipes_without_fling_or_jar(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -559,7 +667,7 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertEqual(self._page_calls(calls),
                          [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN')])
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
-        self.assertEqual(taps[0], ('shell', 'input', 'tap', CTRL.LIST_FLING_X, 101))
+        self.assertEqual(taps[0], ('shell', 'input', 'tap', CTRL.LIST_FOCUS_X, 101))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('recipes_direct_nav', events)
@@ -624,7 +732,7 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertFalse(self._runtest_calls(calls))
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
-        self.assertEqual(taps[1], ('shell', 'input', 'tap', CTRL.LIST_FLING_X, 101))
+        self.assertEqual(taps[1], ('shell', 'input', 'tap', CTRL.LIST_FOCUS_X, 101))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('settings_residency_lost', events)
@@ -663,7 +771,7 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertEqual(self._page_calls(calls),
                          [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_UP')])
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
-        self.assertEqual(taps[0], ('shell', 'input', 'tap', CTRL.LIST_FLING_X, 93))
+        self.assertEqual(taps[0], ('shell', 'input', 'tap', CTRL.LIST_FOCUS_X, 93))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('"method": "page_up"', events)
@@ -834,7 +942,7 @@ class TapTextMatchTests(unittest.TestCase):
                          [('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN')])
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
-        self.assertEqual(taps[1], ('shell', 'input', 'tap', CTRL.LIST_FLING_X, 101))
+        self.assertEqual(taps[1], ('shell', 'input', 'tap', CTRL.LIST_FOCUS_X, 101))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
 
     def test_non_recipe_text_still_dumps_before_flinging(self):

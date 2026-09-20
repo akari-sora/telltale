@@ -50,7 +50,10 @@ LIST_FLING_Y2 = 140
 LIST_FLING_MS = 80
 LIST_FLING_GAP_S = 0.08
 FLINGS_PER_LOOK = 6
-LIST_FOCUS_Y = 360
+# ui_1843 SeekBar thumbs start around x=99. Focus left of that, above the
+# tab bar, so PAGE_DOWN does not drag mass/VE/Cd.
+LIST_FOCUS_X = 48
+LIST_FOCUS_Y = 200
 RECIPES_NEEDLES = (
     'Service Recipes',
     'Active Tests',
@@ -67,6 +70,19 @@ SETTINGS_LIST_MARKERS = (
     'what the adapter says', 'manual command',
     'gauge style', 'recommended adapter',
     'open source', 'licence', 'license',
+    # Job 16610428447: PAGE_DOWN hid CONNECTION / VEHICLE PROFILE headers.
+    # Mid-profile body + catalog CTA are still the Settings list. Do not
+    # use the bare word "horsepower" — Dashboard recording copy mentions it.
+    'horsepower, torque', 'official catalog',
+    'volumetric efficiency', 'drag coefficient', 'rolling resistance',
+    'air-fuel ratio', 'transmission efficiency', 'opening handshake',
+)
+ABOVE_RECIPES_MARKERS = (
+    'vehicle profile', 'fuel and drivetrain', 'diagnostic transcript',
+    'what the adapter says', 'manual command',
+    'horsepower, torque', 'official catalog',
+    'volumetric efficiency', 'air-fuel ratio', 'transmission efficiency',
+    'opening handshake',
 )
 PAST_RECIPES_MARKERS = (
     'experimental', 'appearance', 'open-source', 'open source',
@@ -546,6 +562,29 @@ def session_dropped(rows):
                for line in first_line_values(rows))
 
 
+def visible_seekbars(rows):
+    """On-screen SeekBar thumbs (ignore [0,0] off-screen Flutter leftovers)."""
+    found = []
+    for row in rows:
+        if row.get('clazz') != 'android.widget.SeekBar':
+            continue
+        try:
+            x1, y1, x2, y2 = bounds(row)
+        except ValueError:
+            continue
+        if x2 <= x1 or y2 <= y1:
+            continue
+        found.append((row, x1, y1, x2, y2))
+    return found
+
+
+def point_hits_seekbar(x, y, rows):
+    for _row, x1, y1, x2, y2 in visible_seekbars(rows):
+        if x1 <= x <= x2 and y1 <= y <= y2:
+            return True
+    return False
+
+
 def settings_list_open(rows):
     """Settings *list*, not merely the Settings\\nTab 5 of 5 destination.
 
@@ -553,8 +592,9 @@ def settings_list_open(rows):
     was still in the tree. CONNECTION / the non-tab Settings title are the
     residency signal. Job 16610280973 then sat on Gauge style / licences
     (Settings bottom) and dashboard_surface treated both tabs as Dashboard.
-    Those markers are still the list — retapping the already-selected
-    Settings tab does not scroll back to CONNECTION.
+    Job 16610428447: one PAGE_DOWN hid those headers and left Horsepower
+    body + catalog + SeekBars (ui_1843). That is still the list — retapping
+    the already-selected Settings tab does not scroll and stops paging.
     """
     for row in rows:
         for value in node_labels(row):
@@ -566,15 +606,17 @@ def settings_list_open(rows):
                 return True
             if any(token in low for token in SETTINGS_LIST_MARKERS):
                 return True
+    if locate_text(rows, 'Settings') is not None and visible_seekbars(rows):
+        return True
     return False
 
 
 def dashboard_surface(rows):
     """Gauge grid / 'No data — Unverified' without the Settings list.
 
-    Both tabs alone are not Dashboard: Settings bottom keeps Dashboard +
-    Settings tabs (job 16610280973 ui_op8_fail). Only the unverified gauge
-    strip, or tabs with no list markers, count.
+    Both tabs alone are not Dashboard: Settings mid-profile (job 16610428447
+    ui_1843) and Settings bottom keep Dashboard + Settings tabs. Only the
+    unverified / stale gauge strip counts.
     """
     if settings_list_open(rows) or session_dropped(rows):
         return False
@@ -582,16 +624,11 @@ def dashboard_surface(rows):
         low = line.lower()
         if 'no data' in low or 'unverified' in low:
             return True
-    return (locate_text(rows, 'Dashboard') is not None and
-            locate_text(rows, 'Settings') is not None)
+    return False
 
 
 def still_above_recipes(rows):
-    tokens = (
-        'vehicle profile', 'fuel and drivetrain', 'diagnostic transcript',
-        'what the adapter says', 'manual command',
-    )
-    return any(any(token in line.lower() for token in tokens)
+    return any(any(token in line.lower() for token in ABOVE_RECIPES_MARKERS)
                for line in first_line_values(rows))
 
 
@@ -810,25 +847,30 @@ async def tap_settings_tab(rows):
 
 
 async def focus_settings_list(rows):
-    """Give PAGE_DOWN a Settings-list target, not the tab bar.
+    """Give PAGE_DOWN a Settings-list target, not SeekBars or the tab bar.
 
-    x stays in the left gutter so SeekBar thumbs are not dragged.
+    Job 16610428447 thumbs sit at x>=99. LIST_FOCUS_X stays left of that.
+    Never tap the catalog CTA or a SeekBar, or PAGE_DOWN mutates % values.
     """
+    candidates = []
     for needle in ('CONNECTION', 'Gauge style', 'Vehicle profile',
                    'DIAGNOSTIC', 'Recommended adapter'):
         found = locate_text(rows, needle)
         if not found:
             continue
         row, _x, y = found
+        candidates.append((needle, row, LIST_FOCUS_X, y))
+    for y in (LIST_FOCUS_Y, 120, 280, 360, 80):
+        candidates.append(('', None, LIST_FOCUS_X, y))
+    for text, row, x, y in candidates:
         if y >= 650:
             continue
-        event('settings_list_focus', text=needle, node=row, x=LIST_FLING_X, y=y)
-        await adb('shell', 'input', 'tap', LIST_FLING_X, y)
+        if point_hits_seekbar(x, y, rows):
+            continue
+        event('settings_list_focus', text=text, node=row, x=x, y=y)
+        await adb('shell', 'input', 'tap', x, y)
         await asyncio.sleep(0.12)
         return
-    event('settings_list_focus', text='', x=LIST_FLING_X, y=LIST_FOCUS_Y)
-    await adb('shell', 'input', 'tap', LIST_FLING_X, LIST_FOCUS_Y)
-    await asyncio.sleep(0.12)
 
 
 async def page_settings_list(upward=False):
@@ -855,11 +897,13 @@ async def find_text(text, exact=False, scroll=True):
     AND DRIVETRAIN, and DIAGNOSTICS. Job 16610280973: after reconnect the
     list was open at CONNECTION, device uiautomator.jar failed javac, the
     runtest no-op plus burst-8 landed on Gauge style, and retapping the
-    already-selected Settings tab did not jump to the top. Page one
-    KEYCODE at a time while settings_list_open holds; PAGE_UP when past
-    the tile; never fling; never runtest a broken jar. Mode 01 keepalive
-    keeps the session through the pages. Locate dumps skip prepare_window
-    (job 16609695855).
+    already-selected Settings tab did not jump to the top. Job 16610428447:
+    one PAGE_DOWN hid the headers and left mid-VEHICLE-PROFILE body; the
+    classifier called that Dashboard and retapped Settings in a loop.
+    Page one KEYCODE at a time while the Settings tab is up and the dump
+    is not the unverified gauge strip; PAGE_UP when past the tile; never
+    fling; never runtest a broken jar. Mode 01 keepalive keeps the session
+    through the pages. Locate dumps skip prepare_window (job 16609695855).
     """
     if not isinstance(text, str) or not 0 < len(text) <= 100:
         raise ValueError('Invalid UI text')
@@ -900,9 +944,15 @@ async def find_text(text, exact=False, scroll=True):
             await adb('shell', 'input', 'tap', x, y)
             await asyncio.sleep(0.5)
             continue
-        if recipes and (dashboard_surface(rows) or not settings_list_open(rows)):
+        if recipes and dashboard_surface(rows):
             event('settings_residency_lost', attempt=attempt,
-                  dashboard=dashboard_surface(rows))
+                  dashboard=True)
+            list_focused = False
+            await tap_settings_tab(rows)
+            continue
+        if recipes and locate_text(rows, 'Settings') is None and not settings_list_open(rows):
+            event('settings_residency_lost', attempt=attempt,
+                  dashboard=False)
             list_focused = False
             await tap_settings_tab(rows)
             continue
