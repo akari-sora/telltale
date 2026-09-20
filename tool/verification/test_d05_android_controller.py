@@ -618,6 +618,91 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertTrue(all(c[3] == CTRL.LIST_FOCUS_X for c in taps[:-1]))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
 
+    def _fuel_and_drivetrain_rows(self):
+        """Job 16610532958 ui_1785 / ui_fail — PAGE_DOWN no-op surface."""
+        return [
+            dict(text='', desc='Horsepower, torque and fuel use are estimated from these parameters; the closer they are to the actual vehicle, the more the estimates mean.\nDisplacement\n2.0 L',
+                 enabled='true', clickable='false', bounds='[16,24][464,345]',
+                 clazz='android.view.View'),
+            dict(text='', desc='44%', enabled='true', clickable='true',
+                 bounds='[193,41][241,89]', clazz='android.widget.SeekBar'),
+            dict(text='', desc='FUEL AND DRIVETRAIN', enabled='true',
+                 clickable='false', bounds='[16,361][464,390]',
+                 clazz='android.view.View'),
+            dict(text='', desc='Fuel type\nAir-fuel ratio 14.7 · density 740 g/L\nDrivetrain',
+                 enabled='true', clickable='false', bounds='[16,390][464,684]',
+                 clazz='android.view.View'),
+            dict(text='', desc='Petrol', enabled='true', clickable='true',
+                 bounds='[33,428][104,476]', clazz='android.widget.Button'),
+            dict(text='', desc='Diesel', enabled='true', clickable='true',
+                 bounds='[112,428][183,476]', clazz='android.widget.Button'),
+            dict(text='', desc='Front-wheel drive', enabled='true', clickable='true',
+                 bounds='[33,535][175,583]', clazz='android.widget.Button'),
+            dict(text='', desc='Dashboard\nTab 1 of 5', enabled='true',
+                 clickable='true', bounds='[0,684][96,752]',
+                 clazz='android.widget.Button'),
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]',
+                 clazz='android.widget.Button'),
+        ]
+
+    def test_fuel_chips_do_not_steal_gutter_focus(self):
+        fuel = self._fuel_and_drivetrain_rows()
+        self.assertTrue(CTRL.settings_list_open(fuel))
+        self.assertFalse(CTRL.dashboard_surface(fuel))
+        self.assertTrue(CTRL.still_above_recipes(fuel))
+        self.assertEqual(CTRL.dump_fingerprint(fuel), CTRL.dump_fingerprint(fuel))
+        self.assertTrue(CTRL.point_hits_interactive(48, 450, fuel))
+        self.assertTrue(CTRL.point_hits_interactive(80, 450, fuel))
+        self.assertFalse(CTRL.point_hits_interactive(CTRL.LIST_FOCUS_X, 450, fuel))
+        self.assertFalse(CTRL.point_hits_interactive(CTRL.LIST_FOCUS_X, CTRL.LIST_FOCUS_Y, fuel))
+
+    def test_stuck_fuel_page_down_refocuses_and_nudges_to_recipes(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        fuel = self._fuel_and_drivetrain_rows()
+        recipes = [dict(text='', desc='Service Recipes & Active Tests', enabled='true',
+                        clickable='true', bounds='[16,400][464,470]')]
+        dumps = [fuel, fuel, recipes]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True, prepare=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            TAP_SCROLL_ATTEMPTS=4), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.tap_text('Service Recipes'))
+        events = (out / 'controller.jsonl').read_text()
+        self.assertIn('recipes_page_stuck', events)
+        self.assertIn('recipes_gutter_nudge', events)
+        self.assertNotIn('settings_residency_lost', events)
+        self.assertNotIn('recipes_burst_fling', events)
+        self.assertEqual(self._page_calls(calls), [
+            ('shell', 'input', 'keyevent', 'KEYCODE_PAGE_DOWN'),
+        ])
+        swipes = self._swipe_calls(calls)
+        self.assertEqual(len(swipes), 1)
+        self.assertEqual(swipes[0][:3], ('shell', 'input', 'swipe'))
+        self.assertEqual(swipes[0][3], CTRL.LIST_FOCUS_X)
+        self.assertEqual(swipes[0][5], CTRL.LIST_FOCUS_X)
+        self.assertEqual(swipes[0][7], CTRL.GUTTER_NUDGE_MS)
+        taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
+        self.assertGreaterEqual(len(taps), 2)
+        self.assertTrue(all(c[3] == CTRL.LIST_FOCUS_X for c in taps[:-1]))
+        self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
+
     def test_tap_text_pages_down_to_recipes_without_fling_or_jar(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
