@@ -905,15 +905,13 @@ async def ensure_scroll_jar():
         source.write_text(SCROLL_JAVA.read_text(encoding='utf-8'))
         classpath = [str(android_jar)]
         extra_sources = []
-        stub_kind = 'host_uiautomator_jar'
-        if host_uia:
-            classpath.append(str(host_uia))
-            event('scroll_jar_host_uiautomator', path=str(host_uia))
-        else:
-            stub_kind = 'compile_stubs'
-            extra_sources = _materialize_uiautomator_stubs(work / 'stubs')
-            event('scroll_jar_using_compile_stubs',
-                  files=[str(path.relative_to(work / 'stubs')) for path in extra_sources])
+        # Host platforms/android-23 uiautomator.jar pulls junit.framework.TestCase
+        # (job 16610975186 javac_failed). Compile-only stubs do not.
+        stub_kind = 'compile_stubs'
+        extra_sources = _materialize_uiautomator_stubs(work / 'stubs')
+        event('scroll_jar_using_compile_stubs',
+              files=[str(path.relative_to(work / 'stubs')) for path in extra_sources],
+              ignored_host_uiautomator=str(host_uia) if host_uia else None)
         cp = ':'.join(classpath)
         javac_cmds = (
             [javac, '--release', '8', '-cp', cp, '-d', str(work),
