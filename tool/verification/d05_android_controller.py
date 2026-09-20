@@ -1346,7 +1346,8 @@ async def case(rig, index, click_text):
     try:
         receipt = await asyncio.wait_for(asyncio.shield(rig.held), timeout=50)
         event('held_query_confirmed_before_os_command', receipt=receipt, action=action)
-        await adb('shell','input','keyevent','223' if index == 2 else '3', timeout=8)
+        await adb('shell', 'input', 'keyevent', '223' if index == 2 else '3',
+                  timeout=20, check=False)
         # Pacing only; actual Android state/logcat are the evidence.
         await asyncio.sleep(0.2)
         if index == 2:
