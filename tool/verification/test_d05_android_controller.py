@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import os
 import subprocess
 import tempfile
@@ -466,8 +467,17 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertTrue(CTRL.dashboard_surface(gauges))
         self.assertFalse(CTRL.settings_list_open(home))
         self.assertFalse(CTRL.dashboard_surface(home))
+        self.assertTrue(CTRL.session_dropped(home))
+        dropped_sheet = [
+            dict(text='', desc='The adapter stopped responding and the connection has been dropped.',
+                 enabled='true', clickable='false', bounds='[65,45][447,87]'),
+            dict(text='', desc='Full disclosure in Settings', enabled='true',
+                 clickable='true', bounds='[16,672][217,720]'),
+        ]
+        self.assertTrue(CTRL.session_dropped(dropped_sheet))
+        self.assertFalse(CTRL.session_dropped(gauges))
 
-    def test_tap_text_confirms_settings_then_bursts_to_recipes(self):
+    def test_tap_text_confirms_settings_then_scrolls_recipes_into_view(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
@@ -492,36 +502,35 @@ class TapTextMatchTests(unittest.TestCase):
 
         async def fake_adb(*args, timeout=40, check=True, full=False):
             calls.append(args)
-            if args[:1] == ('shell',) and any(
-                    isinstance(part, str) and 'swipe' in part for part in args):
-                order.append('swipe')
+            if len(args) >= 2 and args[1] == 'uiautomator':
+                order.append('scroll')
+            if args[:3] == ('shell', 'input', 'tap'):
+                order.append('tap')
             result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
             return result if full else b''
 
         async def instant_sleep(_delay):
             return None
 
-        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_READY=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertEqual(order[:3], ['dump', 'swipe', 'dump'])
-        swipes = self._swipe_calls(calls)
-        self.assertEqual(len(swipes), 1)
-        burst = swipes[0]
-        self.assertEqual(burst[0], 'shell')
-        self.assertIn('input swipe 120 560 120 140 80', burst[1])
-        self.assertIn('sleep 0.08', burst[1])
-        self.assertEqual(burst[1].count('input swipe'), CTRL.RECIPES_BURST_FLINGS)
-        self.assertTrue(any(c[:3] == ('shell', 'input', 'tap') for c in calls))
+        self.assertEqual(order, ['dump', 'scroll', 'dump', 'tap'])
+        self.assertFalse(self._swipe_calls(calls))
+        runtests = [c for c in calls if len(c) >= 3 and c[1] == 'uiautomator' and 'runtest' in c]
+        self.assertEqual(len(runtests), 1)
+        self.assertEqual(runtests[0][:4], ('shell', 'uiautomator', 'runtest', CTRL.SCROLL_JAR_REMOTE))
+        self.assertIn('D05Scroll', runtests[0])
+        self.assertIn('Service Recipes', runtests[0])
         events = (out / 'controller.jsonl').read_text()
-        self.assertIn('recipe_test_labels', events)
-        self.assertIn('Telltale Mode 08 test replay', events)
-        self.assertIn('recipes_burst_fling', events)
+        self.assertIn('recipes_direct_nav', events)
+        self.assertIn('uiautomator_scroll_into_view', events)
         self.assertIn('"settings_list": true', events)
 
-    def test_recipes_retaps_settings_when_burst_lands_on_dashboard(self):
+    def test_recipes_retaps_settings_when_dashboard_is_showing(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
@@ -555,31 +564,30 @@ class TapTextMatchTests(unittest.TestCase):
             calls.append(args)
             if args[:3] == ('shell', 'input', 'tap'):
                 order.append('tap')
-            elif args[:1] == ('shell',) and any(
-                    isinstance(part, str) and 'swipe' in part for part in args):
-                order.append('swipe')
+            elif len(args) >= 2 and args[1] == 'uiautomator':
+                order.append('scroll')
             result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
             return result if full else b''
 
         async def instant_sleep(_delay):
             return None
 
-        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_READY=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertEqual(order[:5], ['dump', 'tap', 'dump', 'swipe', 'dump'])
+        self.assertEqual(order, ['dump', 'tap', 'dump', 'scroll', 'dump', 'tap'])
+        self.assertFalse(self._swipe_calls(calls))
         taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps[0], ('shell', 'input', 'tap', 432, 718))
         self.assertEqual(taps[-1], ('shell', 'input', 'tap', 240, 435))
         events = (out / 'controller.jsonl').read_text()
         self.assertIn('settings_residency_lost', events)
-        swipes = self._swipe_calls(calls)
-        self.assertEqual(len(swipes), 1)
-        self.assertEqual(swipes[0][1].count('input swipe'), CTRL.RECIPES_BURST_FLINGS)
+        self.assertIn('recipes_direct_nav', events)
 
-    def test_recipes_fling_up_after_overshooting_to_language(self):
+    def test_recipes_scroll_into_view_from_language_overshoot(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         out = Path(tmp.name)
@@ -608,15 +616,15 @@ class TapTextMatchTests(unittest.TestCase):
         async def instant_sleep(_delay):
             return None
 
-        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl',
+                            TAP_SCROLL_ATTEMPTS=3, SCROLL_JAR_READY=True), \
                 patch.object(CTRL, 'dump', fake_dump), \
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        swipes = self._swipe_calls(calls)
-        self.assertEqual(len(swipes), 1)
-        self.assertIn('input swipe 120 140 120 560 80', swipes[0][1])
-        self.assertEqual(swipes[0][1].count('input swipe'), CTRL.FLINGS_PER_LOOK)
+        self.assertFalse(self._swipe_calls(calls))
+        runtests = [c for c in calls if len(c) >= 3 and c[1] == 'uiautomator' and 'runtest' in c]
+        self.assertEqual(len(runtests), 1)
 
     def test_recipes_reconnects_once_after_session_drop(self):
         tmp = tempfile.TemporaryDirectory()
@@ -814,6 +822,70 @@ class TapTextMatchTests(unittest.TestCase):
                 patch.object(CTRL, 'adb', fake_adb):
             asyncio.run(CTRL.tap_text('Connect now'))
         self.assertFalse(calls)
+
+
+class Mode01KeepaliveTests(unittest.TestCase):
+    def test_dashboard_pids_are_keepalive_and_mode08_is_not(self):
+        self.assertIn('41 5E 00 00', CTRL.mode01_keepalive_line('015E'))
+        self.assertIn('41 0C 0C 80', CTRL.mode01_keepalive_line('010C'))
+        self.assertIn('7E8 04 41 5E 00 00',
+                      CTRL.mode01_keepalive_line('015E', headers=True))
+        self.assertEqual(CTRL.mode01_keepalive_line('015E', spaces=False), '415E0000')
+        self.assertIn('41 0C', CTRL.mode01_keepalive_line('010C0D04110B10'))
+        self.assertIn('41 2F 00', CTRL.mode01_keepalive_line('012F'))
+        self.assertIsNone(CTRL.mode01_keepalive_line('0800'))
+        self.assertIsNone(CTRL.mode01_keepalive_line('0820'))
+        self.assertIsNone(CTRL.mode01_keepalive_line('0100'))
+        self.assertIsNone(CTRL.mode01_keepalive_line('ATRV'))
+        self.assertIsNone(CTRL.mode01_keepalive_line('0902'))
+
+    def test_device_rig_answers_015e_without_consuming_mode08_step(self):
+        from mode08_replay_reference import AdapterState
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+
+        class DummyWriter:
+            def __init__(self):
+                self.connection = 1
+                self.output = []
+                self.closed = False
+
+            def write(self, data):
+                self.output.append(data)
+
+            async def drain(self):
+                return None
+
+            def close(self):
+                self.closed = True
+
+            async def wait_closed(self):
+                return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl'):
+            rig = CTRL.DeviceRig()
+            state = AdapterState()
+            state.headers = True
+            state.active_scenario_id = 'normal_headered_multi_block'
+            writer = DummyWriter()
+            asyncio.run(rig.process_command('015E', state, writer))
+            self.assertEqual(state.step_index, 0)
+            self.assertTrue(any(b'41 5E' in chunk for chunk in writer.output))
+            self.assertFalse(any(b'48 00' in chunk for chunk in writer.output))
+            writer.output.clear()
+            asyncio.run(rig.process_command('ATRV', state, writer))
+            self.assertEqual(state.step_index, 0)
+            self.assertTrue(any(b'12.6V' in chunk for chunk in writer.output))
+            writer.output.clear()
+            asyncio.run(rig.process_command('0800', state, writer))
+            self.assertEqual(state.step_index, 1)
+            self.assertTrue(any(b'48 00 80 00 00 01' in chunk for chunk in writer.output))
+        events = (out / 'controller.jsonl').read_text()
+        keepalive = [json.loads(line) for line in events.splitlines()
+                     if '"tcp_keepalive_reply"' in line]
+        self.assertEqual([row.get('command') for row in keepalive], ['015E'])
 
 
 if __name__ == '__main__':

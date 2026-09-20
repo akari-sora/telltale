@@ -12,12 +12,14 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 
 ROOT = Path.cwd()
 OUT = ROOT / 'd05-device'
@@ -58,9 +60,28 @@ RECIPES_NEEDLES = (
     'Service-Rezepte',
     '車行診斷配方',
 )
+RECIPES_RECOVERIES = 2
 DRAWN_WAIT_SECONDS = 180
 DRAWN_POLL_SLEEP = 2
 REMOTE_DUMP = '/sdcard/d05_window.xml'
+SCROLL_JAR_REMOTE = '/data/local/tmp/d05_scroll.jar'
+SCROLL_JAVA = Path(__file__).resolve().parent / 'd05_scroll.java'
+SCROLL_NEEDLE_OK = re.compile(r'^[A-Za-z0-9 &._-]{1,80}$')
+SCROLL_JAR_READY = False
+# Dashboard Mode 01 polls observed in job 16609802535. Never 08xx.
+# Unknown 01 PIDs get a one-byte zero so NO DATA cannot yank the session
+# during Settings → Recipes (job 16610137504).
+MODE01_KEEPALIVE_PIDS = {
+    '04': (0x00,),
+    '05': (0x78,),
+    '0B': (0x64,),
+    '0C': (0x0C, 0x80),
+    '0D': (0x00,),
+    '0F': (0x3C,),
+    '10': (0x00, 0x00),
+    '11': (0x00,),
+    '5E': (0x00, 0x00),
+}
 RESUMED_MARKERS = ('topResumedActivity', 'mFocusedApp=', 'mResumedActivity', 'ResumedActivity')
 FOCUS_MARKERS = ('mCurrentFocus', 'mFocusedApp=')
 WAKE_SOFT_TIMEOUT = 20
@@ -440,8 +461,42 @@ def dashboard_ready(rows):
 
 
 def is_recipes_query(text):
-    lowered = (text or '').lower()
-    return lowered.startswith('service recipe') or lowered.startswith('active test')
+    first = (text or '').split('\n', 1)[0].strip().lower()
+    return first.startswith('service recipe') or first.startswith('active test')
+
+
+def mode01_keepalive_line(compact, headers=False, spaces=True):
+    """Answer dashboard Mode 01 polls. None means use the Mode 08 fixture path.
+
+    Job 16609802535 polled 015E/010C/… with immediate NO DATA, then ATRV,
+    then reference_disconnect while Settings was still above Service Recipes.
+    Job 16610137504 reached the recipes tile via scrollIntoView, then the
+    client still closed. Unknown 01 PIDs get a one-byte zero. Never 08xx.
+    ATRV / 0100 stay on ReplayServer.
+    """
+    if not compact or compact.startswith('AT') or compact.startswith('08'):
+        return None
+    if compact.startswith('0100') or not compact.startswith('01') or len(compact) < 4:
+        return None
+    body = compact[2:]
+    if len(body) % 2:
+        body = body[:-1]
+    if not body or any(ch not in '0123456789ABCDEF' for ch in body):
+        return None
+    payload = [0x41]
+    matched = False
+    for i in range(0, len(body), 2):
+        pid = body[i:i + 2]
+        data = MODE01_KEEPALIVE_PIDS.get(pid, (0x00,))
+        matched = True
+        payload.append(int(pid, 16))
+        payload.extend(data)
+    if not matched:
+        return None
+    tokens = [f'{byte:02X}' for byte in payload]
+    if headers:
+        tokens = ['7E8', f'{len(payload):02X}'] + tokens
+    return ' '.join(tokens) if spaces else ''.join(tokens)
 
 
 def first_line_values(rows):
@@ -465,8 +520,18 @@ def recipe_test_labels(rows):
 
 
 def session_dropped(rows):
-    return (locate_text(rows, 'Choose a connection') is not None and
-            locate_text(rows, 'Settings') is None)
+    """Connect home or the adapter-dropped sheet — not a Settings list."""
+    if locate_text(rows, 'Dashboard') is not None and locate_text(rows, 'Settings') is not None:
+        if settings_list_open(rows):
+            return False
+        # Tabs still present: residency / dashboard_surface handles this.
+        if not any('stopped responding' in line.lower() or 'has been dropped' in line.lower()
+                   for line in first_line_values(rows)):
+            return False
+    if locate_text(rows, 'Choose a connection') is not None:
+        return locate_text(rows, 'Settings') is None or locate_text(rows, 'Dashboard') is None
+    return any('stopped responding' in line.lower() or 'has been dropped' in line.lower()
+               for line in first_line_values(rows))
 
 
 def settings_list_open(rows):
@@ -550,6 +615,136 @@ def locate_recipes(rows):
     return row, x, y
 
 
+def _android_jar():
+    home = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT') or ''
+    platforms = Path(home) / 'platforms'
+    preferred = platforms / 'android-29' / 'android.jar'
+    if preferred.is_file():
+        return preferred
+    jars = sorted(platforms.glob('android-*/android.jar')) if platforms.is_dir() else []
+    return jars[-1] if jars else None
+
+
+def _javac():
+    found = shutil.which('javac')
+    if found:
+        return found
+    home = os.environ.get('JAVA_HOME')
+    if home:
+        candidate = Path(home) / 'bin' / 'javac'
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def _dexer():
+    home = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT') or ''
+    build_tools = Path(home) / 'build-tools'
+    if build_tools.is_dir():
+        d8s = sorted(build_tools.glob('*/d8'))
+        if d8s:
+            return 'd8', str(d8s[-1])
+        dxs = sorted(build_tools.glob('*/dx'))
+        if dxs:
+            return 'dx', str(dxs[-1])
+    d8 = shutil.which('d8')
+    if d8:
+        return 'd8', d8
+    dx = shutil.which('dx')
+    if dx:
+        return 'dx', dx
+    return None
+
+
+async def ensure_scroll_jar():
+    """Build and push the one-shot UiAutomator scrollIntoView helper."""
+    global SCROLL_JAR_READY
+    if SCROLL_JAR_READY:
+        return
+    try:
+        work = OUT / 'scroll-build'
+        work.mkdir(parents=True, exist_ok=True)
+        uia = work / 'uiautomator.jar'
+        await adb('pull', '/system/framework/uiautomator.jar', str(uia),
+                  timeout=20, check=False)
+        android_jar = _android_jar()
+        javac = _javac()
+        dexer = _dexer()
+        if not (SCROLL_JAVA.is_file() and javac and android_jar and dexer
+                and uia.is_file() and uia.stat().st_size > 0):
+            event('scroll_jar_compile_skipped', javac=bool(javac),
+                  android_jar=str(android_jar) if android_jar else '',
+                  uiautomator_bytes=uia.stat().st_size if uia.is_file() else 0,
+                  dexer=dexer[0] if dexer else '')
+            SCROLL_JAR_READY = True
+            return
+        source = work / 'D05Scroll.java'
+        source.write_text(SCROLL_JAVA.read_text(encoding='utf-8'))
+        javac_cmds = (
+            [javac, '--release', '8', '-cp', str(android_jar) + ':' + str(uia),
+             '-d', str(work), str(source)],
+            [javac, '-source', '8', '-target', '8', '-bootclasspath', str(android_jar),
+             '-cp', str(uia), '-d', str(work), str(source)],
+        )
+        compiled = None
+        classfile = work / 'D05Scroll.class'
+        for argv in javac_cmds:
+            compiled = await asyncio.to_thread(
+                subprocess.run, argv, capture_output=True, timeout=60,
+            )
+            if compiled.returncode == 0 and classfile.is_file():
+                break
+        if compiled is None or compiled.returncode or not classfile.is_file():
+            event('scroll_jar_javac_failed',
+                  stderr=(compiled.stderr.decode(errors='replace')[:1500] if compiled else ''))
+            SCROLL_JAR_READY = True
+            return
+        kind, tool = dexer
+        jar_out = work / 'd05_scroll.jar'
+        if kind == 'dx':
+            dexed = await asyncio.to_thread(
+                subprocess.run,
+                [tool, '--dex', '--output', str(jar_out), str(classfile)],
+                capture_output=True, timeout=60,
+            )
+        else:
+            dexed = await asyncio.to_thread(
+                subprocess.run,
+                [tool, '--lib', str(android_jar), '--output', str(jar_out), str(classfile)],
+                capture_output=True, timeout=60,
+            )
+            if not jar_out.is_file():
+                dex = work / 'classes.dex'
+                if dex.is_file():
+                    with zipfile.ZipFile(jar_out, 'w') as archive:
+                        archive.write(dex, 'classes.dex')
+        if not jar_out.is_file():
+            event('scroll_jar_dex_failed',
+                  stderr=dexed.stderr.decode(errors='replace')[:1500])
+            SCROLL_JAR_READY = True
+            return
+        await adb('push', str(jar_out), SCROLL_JAR_REMOTE, timeout=20, check=False)
+        event('scroll_jar_ready', remote=SCROLL_JAR_REMOTE,
+              sha256=hashlib.sha256(jar_out.read_bytes()).hexdigest())
+    except Exception as exc:
+        event('scroll_jar_compile_failed', error=type(exc).__name__ + ': ' + str(exc))
+    SCROLL_JAR_READY = True
+
+
+async def scroll_into_view(needle):
+    """UiAutomator scrollIntoView for a Flutter content-desc prefix.
+
+    Job 16610137504 selected Service Recipes this way. Gutter flings plus
+    locate dumps are the fallback when the jar cannot be built.
+    """
+    if not isinstance(needle, str) or not SCROLL_NEEDLE_OK.fullmatch(needle):
+        raise ValueError('Invalid scroll needle')
+    event('uiautomator_scroll_into_view', needle=needle)
+    await ensure_scroll_jar()
+    await adb('shell', 'uiautomator', 'runtest', SCROLL_JAR_REMOTE, '-c', 'D05Scroll',
+              '-e', 'needle', needle, timeout=60, check=False)
+
+
 async def fling_list(count=1, upward=False):
     """Fling the Settings ListView without hitting sliders or the tab bar.
 
@@ -596,17 +791,19 @@ async def find_text(text, exact=False, scroll=True):
     only scrolled the disconnect picker.
 
     Service Recipes sits below CONNECTION, the huge VEHICLE PROFILE, FUEL
-    AND DRIVETRAIN, and DIAGNOSTICS. Job 16609955129 burst 14 gutter flings
-    before confirming the Settings list and landed on Dashboard gauges —
-    so recipes dump first, burst only while CONNECTION (or the Settings
-    title) is visible, and re-tap Settings instead of flinging gauges.
-    Locate dumps skip prepare_window so Mode 01 NO DATA does not drop ELM
-    during the scroll (job 16609695855).
+    AND DRIVETRAIN, and DIAGNOSTICS. Job 16609955129 burst before the list
+    was confirmed and landed on Dashboard gauges — dump first, re-tap
+    Settings if gauges show. Job 16610137504 reached the tile with
+    UiAutomator scrollIntoView, then reference_disconnect yanked Connect;
+    prefer that scroll once residency holds, keep Mode 01 alive, and
+    reconnect+reenter before failing op8. Locate dumps skip prepare_window
+    (job 16609695855).
     """
     if not isinstance(text, str) or not 0 < len(text) <= 100:
         raise ValueError('Invalid UI text')
     recipes = scroll and is_recipes_query(text)
-    recovered = False
+    recovered = 0
+    scroll_done = False
     burst_done = False
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
         rows = await dump('locate', screenshot=False, prepare=False)
@@ -627,13 +824,14 @@ async def find_text(text, exact=False, scroll=True):
             await asyncio.sleep(0.8)
             continue
         if recipes and session_dropped(rows):
-            if recovered:
+            if recovered >= RECIPES_RECOVERIES:
                 raise RuntimeError(
                     f'UI text not visible: {text!r} (session dropped during Settings scroll)'
                 )
-            recovered = True
+            recovered += 1
+            scroll_done = False
             burst_done = False
-            event('recipes_session_dropped', attempt=attempt)
+            event('recipes_session_dropped', attempt=attempt, recovery=recovered)
             await enter_dashboard()
             found_tab, _ = await find_text('Settings', scroll=False)
             row, x, y = found_tab
@@ -645,8 +843,16 @@ async def find_text(text, exact=False, scroll=True):
         if recipes and (dashboard_surface(rows) or not settings_list_open(rows)):
             event('settings_residency_lost', attempt=attempt,
                   dashboard=dashboard_surface(rows))
+            scroll_done = False
             burst_done = False
             await tap_settings_tab(rows)
+            continue
+        if recipes and not scroll_done:
+            event('recipes_direct_nav', text=text, attempt=attempt,
+                  method='uiautomator_scroll_into_view')
+            await scroll_into_view('Service Recipes')
+            scroll_done = True
+            await asyncio.sleep(0.2)
             continue
         upward = bool(recipes and past_recipes(rows) and not still_above_recipes(rows))
         if recipes and not upward and not burst_done:
@@ -766,6 +972,11 @@ class DeviceRig(ReplayServer):
                 event('mode08_hold_deadline', connection=writer.connection, command=compact)
                 writer.close()
                 return True
+        keepalive = mode01_keepalive_line(compact, headers=state.headers, spaces=state.spaces)
+        if keepalive is not None:
+            event('tcp_keepalive_reply', connection=writer.connection, command=compact)
+            await ReplayServer._send_reply(self, writer, state, keepalive, echo=raw_cmd)
+            return False
         return await super().process_command(raw_cmd, state, writer)
     def arm(self, command):
         if self.target is not None or (self.release and not self.release.is_set()):
@@ -844,6 +1055,7 @@ async def main():
         raise RuntimeError('Wrong fixed APK')
     if (await adb('get-state')).decode().strip() != 'device':
         raise RuntimeError('Disposable emulator not ready')
+    await ensure_scroll_jar()
     rig = DeviceRig()
     listener = await asyncio.start_server(rig.handle_client, '127.0.0.1', 35008)
     await adb('reverse','tcp:35008','tcp:35008')
