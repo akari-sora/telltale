@@ -444,10 +444,10 @@ def get_local_logcat_size() -> int:
         return 0
 
 
-def read_recent_local_logcat(num_bytes: int = 65536, start_offset: int = 0) -> str:
+def read_recent_local_logcat(num_bytes: int = 65536, start_offset: int | None = None) -> str:
     """Direct zero-overhead inspection of streaming local logcat file.
 
-    If start_offset > 0, reads only bytes appended at or after start_offset,
+    If start_offset is not None, reads only bytes appended at or after start_offset,
     guaranteeing historical log entries from before hold_start cannot be read.
     """
     log_file = OUT / 'android_logcat.txt'
@@ -457,8 +457,8 @@ def read_recent_local_logcat(num_bytes: int = 65536, start_offset: int = 0) -> s
         with log_file.open('rb') as f:
             f.seek(0, os.SEEK_END)
             size = f.tell()
-            if start_offset > 0:
-                seek_pos = min(start_offset, size)
+            if start_offset is not None:
+                seek_pos = min(max(0, start_offset), size)
             else:
                 seek_pos = max(0, size - num_bytes)
             f.seek(seek_pos)
@@ -487,10 +487,11 @@ def is_logcat_lifecycle_confirmed(logcat_text: str, action: str, min_epoch_ts: f
     """Inspect recent logcat output for genuine native OS lifecycle transition.
 
     Returns (confirmed: bool, evidence: list[str]).
-    If min_epoch_ts > 0:
-      1. Every considered line MUST have a valid epoch timestamp.
-      2. The epoch timestamp must be strictly greater than min_epoch_ts (ts > min_epoch_ts).
-      Lines without an epoch timestamp, or with ts <= min_epoch_ts, are strictly rejected.
+    Strict Rules:
+      1. Every considered line MUST have a valid epoch timestamp (format: '<seconds>.<millis> ...').
+         Lines lacking a valid epoch timestamp are unconditionally rejected.
+      2. If min_epoch_ts > 0.0, the epoch timestamp must be strictly greater than min_epoch_ts (ts > min_epoch_ts).
+         Lines with ts <= min_epoch_ts (historical events at or before baseline) are strictly rejected.
     """
     if not logcat_text:
         return False, []
@@ -516,16 +517,14 @@ def is_logcat_lifecycle_confirmed(logcat_text: str, action: str, min_epoch_ts: f
         stripped = line.strip()
         if not stripped:
             continue
-        # Extract epoch timestamp if formatted with -v epoch (e.g., '1790012105.017  1948 ...')
+        # Hard requirement: every candidate log line MUST have a valid Epoch timestamp
         m_ts = re.match(r'^\s*(\d+\.\d+)\s+', stripped)
-        if min_epoch_ts > 0.0:
-            if not m_ts:
-                # Cannot verify freshness without epoch timestamp when baseline is set
-                continue
-            ts = float(m_ts.group(1))
-            if ts <= min_epoch_ts:
-                # Reject historical events from before or equal to baseline
-                continue
+        if not m_ts:
+            continue
+        ts = float(m_ts.group(1))
+        # Strictly reject historical events occurring before or equal to baseline
+        if min_epoch_ts > 0.0 and ts <= min_epoch_ts:
+            continue
         if target_pattern.search(stripped):
             evidence.append(stripped)
             if len(evidence) >= 5:
@@ -1939,7 +1938,6 @@ async def case(rig, index, click_text):
             pass
 
     # Record baseline logcat epoch timestamp and file offset to ensure strictly fresh event verification
-    baseline_logcat_offset = get_local_logcat_size()
     baseline_logcat_ts = 0.0
     recent_local = read_recent_local_logcat(16384)
     if recent_local:
@@ -1951,6 +1949,8 @@ async def case(rig, index, click_text):
             baseline_logcat_ts = get_latest_logcat_epoch_ts(base_text)
         except Exception:
             pass
+    # Capture baseline file size right before arming to ensure byte offset isolation
+    baseline_logcat_offset = get_local_logcat_size()
 
     rig.arm(command)
     await adb('shell', 'input', 'tap', x, y)

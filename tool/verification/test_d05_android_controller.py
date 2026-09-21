@@ -2094,6 +2094,56 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         ok_no_ts, _ = CTRL.is_logcat_lifecycle_confirmed(no_timestamp_log, 'HOME', min_epoch_ts=baseline_ts)
         self.assertFalse(ok_no_ts, "Matching line without epoch timestamp must be rejected when baseline is set")
 
+        # Counterexample 3B: Matching line lacks epoch timestamp (even with min_epoch_ts=0.0) -> must be rejected!
+        ok_no_ts_zero, _ = CTRL.is_logcat_lifecycle_confirmed(no_timestamp_log, 'HOME', min_epoch_ts=0.0)
+        self.assertFalse(ok_no_ts_zero, "Matching line without epoch timestamp must be rejected even with min_epoch_ts=0.0")
+
+    def test_case_offset_based_isolation_prevents_cross_case_confirmation(self):
+        with self._patch_out():
+            logcat_path = self.out / 'android_logcat.txt'
+            # 1. Simulate Case 1: writes HOME log into logcat
+            case1_log = (
+                "1790012105.017  1948  1967 I ActivityTaskManager: START u0 "
+                "{act=android.intent.action.MAIN cat=[android.intent.category.HOME] cmp=com.android.launcher3/.Launcher}\n"
+            )
+            logcat_path.write_text(case1_log)
+            case1_offset = CTRL.get_local_logcat_size()
+            case1_ts = 1790012105.017
+
+            # 2. Case 2 / Case 3 starts: records baseline offset and timestamp
+            baseline_offset = case1_offset
+            baseline_ts = case1_ts
+
+            # Before any new log is produced in Case 2/3, offset reading yields empty string
+            new_data = CTRL.read_recent_local_logcat(start_offset=baseline_offset)
+            self.assertEqual(new_data, "")
+
+            # Confirm that without new log, case cannot be confirmed
+            confirmed, _ = CTRL.is_logcat_lifecycle_confirmed(new_data, 'HOME', min_epoch_ts=baseline_ts)
+            self.assertFalse(confirmed)
+
+            # Even if read without offset isolation (reading whole file), timestamp check rejects it
+            confirmed_raw, _ = CTRL.is_logcat_lifecycle_confirmed(case1_log, 'HOME', min_epoch_ts=baseline_ts)
+            self.assertFalse(confirmed_raw, "Dual layer defense: timestamp filtering must also reject Case 1 log")
+
+            # 3. Simulate Case 3: Fresh HOME event appended after hold start
+            case3_log = (
+                "1790012200.500  1948  1967 I ActivityTaskManager: START u0 "
+                "{act=android.intent.action.MAIN cat=[android.intent.category.HOME] cmp=com.android.launcher3/.Launcher}\n"
+            )
+            with logcat_path.open('a') as f:
+                f.write(case3_log)
+
+            # Offset-based read returns ONLY the new line
+            isolated_read = CTRL.read_recent_local_logcat(start_offset=baseline_offset)
+            self.assertEqual(isolated_read, case3_log)
+            self.assertNotIn("1790012105.017", isolated_read)
+
+            # Confirmed with fresh line
+            confirmed_fresh, ev = CTRL.is_logcat_lifecycle_confirmed(isolated_read, 'HOME', min_epoch_ts=baseline_ts)
+            self.assertTrue(confirmed_fresh)
+            self.assertTrue(any('1790012200.500' in line for line in ev))
+
     def test_read_recent_local_logcat_start_offset_isolation(self):
         with self._patch_out():
             logcat_path = self.out / 'android_logcat.txt'
