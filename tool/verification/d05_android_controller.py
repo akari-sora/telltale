@@ -1914,21 +1914,25 @@ async def case(rig, index, click_text):
         # Modified Option B: Dynamic in-hold native OS state verification
         # Maximum hold budget: 1.88s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
         hold_budget_deadline = hold_start + 1.88
-        poll_interval = 0.03
+        poll_interval = 0.04
         verified_state = None
         verified_at = None
         state_evidence = []
+
+        # Allow OS 0.20s to dispatch keyevent and begin lifecycle transition before polling
+        await asyncio.sleep(0.20)
 
         while time.monotonic() < hold_budget_deadline:
             remaining_budget = hold_budget_deadline - time.monotonic()
             if remaining_budget <= 0.05:
                 break
 
-            # 1. Primary fast short-circuit: Query recent logcat (< 50ms, does not block on system_server global lock)
+            # 1. Primary fast short-circuit: Query recent logcat
+            # Give sufficient timeout (up to 0.85s) so adb subprocess is not killed on loaded QEMU host
             log_text = ""
             try:
-                log_timeout = min(0.35, max(0.10, remaining_budget))
-                log_out = await adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '60', timeout=log_timeout, check=False)
+                log_timeout = min(0.85, max(0.35, remaining_budget - 0.05))
+                log_out = await adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '100', timeout=log_timeout, check=False)
                 log_text = log_out.decode(errors='replace') if isinstance(log_out, (bytes, bytearray)) else str(log_out)
                 confirmed, evidence = is_logcat_lifecycle_confirmed(log_text, action, baseline_logcat_ts)
                 if confirmed:
@@ -1939,8 +1943,9 @@ async def case(rig, index, click_text):
             except Exception as exc:
                 event('hold_poll_logcat_error', action=action, error=str(exc))
 
-            # 2. Complementary path: Only query dumpsys if logcat returned empty (mocked in tests) or if hold elapsed > 1.2s
-            if not verified_state and (not log_text.strip() or (time.monotonic() - hold_start) > 1.2):
+            # 2. Complementary path: Only query dumpsys if logcat returned empty (e.g. mocked in unit tests)
+            # NEVER query dumpsys when logcat is functioning, as dumpsys blocks on mGlobalLock during window transition
+            if not verified_state and not log_text.strip():
                 rem = hold_budget_deadline - time.monotonic()
                 if rem > 0.20:
                     poll_timeout = min(0.60, rem)
