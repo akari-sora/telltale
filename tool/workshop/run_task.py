@@ -439,6 +439,57 @@ def _read_author_handoff(
     return raw
 
 
+def _read_resume_handoff(
+    path: Path, task_id: str, task: dict[str, Any]
+) -> tuple[dict[str, Any], str, int]:
+    try:
+        content = path.read_bytes()
+        raw = json.loads(content.decode("utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RunnerError(f"cannot read resume handoff: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise RunnerError("resume handoff must be a JSON object")
+    prev_sha256 = hashlib.sha256(content).hexdigest()
+    errors = validate_plan.validate_handoff(raw, require_head_sha=False)
+    if errors:
+        raise RunnerError("invalid resume handoff: " + "; ".join(errors))
+    status = raw.get("status")
+    completed = raw.get("completed")
+    if completed is not False or status not in {"failed", "in_progress"}:
+        raise RunnerError(
+            f"resume requires an unfinished handoff (status 'failed' or 'in_progress' with completed: false), got status={status!r}, completed={completed!r}"
+        )
+    if raw.get("task") != task_id:
+        raise RunnerError(
+            f"resume handoff task {raw.get('task')!r} does not match {task_id}"
+        )
+    if raw.get("issue") != task.get("issue"):
+        raise RunnerError(
+            f"resume handoff issue {raw.get('issue')!r} does not match {task.get('issue')}"
+        )
+    planned = task.get("run_commands") or []
+    results = raw.get("results") or []
+    if not isinstance(results, list):
+        raise RunnerError("resume handoff results must be a list")
+    if len(results) > len(planned):
+        raise RunnerError("resume handoff has more results than planned commands")
+    for idx, item in enumerate(results):
+        if not isinstance(item, dict) or item.get("argv") != planned[idx]:
+            raise RunnerError(
+                f"resume handoff command at index {idx} does not match the planned command"
+            )
+    cont_index = len(results)
+    for idx, item in enumerate(results):
+        if (
+            item.get("timed_out")
+            or item.get("exit") != 0
+            or item.get("truncated") is True
+        ):
+            cont_index = idx
+            break
+    return raw, prev_sha256, cont_index
+
+
 def _write_handoff(path: Path, payload: dict[str, Any]) -> None:
     errors = validate_plan.validate_handoff(payload)
     if errors:
@@ -619,6 +670,7 @@ def run_task(
     base_sha: str | None = None,
     review: bool = False,
     campaign: bool = False,
+    resume_from: Path | None = None,
 ) -> int:
     try:
         data = json.loads(plan_path.read_text(encoding="utf-8"))
@@ -635,6 +687,10 @@ def run_task(
     if errors:
         raise RunnerError("invalid plan: " + "; ".join(errors))
     task = _task_by_id(data, task_id)
+    if review and resume_from is not None:
+        raise RunnerError("cannot combine --review and --resume-from")
+    if dry_run and resume_from is not None:
+        raise RunnerError("cannot combine --dry-run and --resume-from")
     if review and dry_run:
         raise RunnerError(
             "review cannot be dry-run: that would accept the author handoff "
@@ -670,6 +726,18 @@ def run_task(
         original_root / "docs" / "workshop" / "ws" / task_id.lower() / "handoff.json"
     )
     author_handoff: dict[str, Any] | None = None
+    resume_handoff: dict[str, Any] | None = None
+    resume_sha256: str | None = None
+    resume_cont_index: int = 0
+    if resume_from is not None:
+        resume_handoff, resume_sha256, resume_cont_index = _read_resume_handoff(
+            resume_from, task_id, task
+        )
+        if handoff_dest.resolve() == resume_from.resolve():
+            raise RunnerError(
+                "output handoff path cannot be the same file as --resume-from; "
+                "specify a distinct --handoff destination"
+            )
     if review:
         author_path = handoff_dest
         review_path = author_path.with_name("review.json")
@@ -707,7 +775,95 @@ def run_task(
                 dir_leases.append(
                     (_acquire_lease(path, task_id, exclusive=exclusive), path)
                 )
-        if isolate:
+        if resume_handoff is not None:
+            git_root = _git_toplevel(cwd)
+            prev_wt_raw = resume_handoff.get("worktree")
+            if prev_wt_raw is not None:
+                prev_wt = Path(prev_wt_raw).expanduser().resolve()
+                if not prev_wt.is_dir():
+                    raise RunnerError(
+                        f"{task_id}: resume worktree does not exist: {prev_wt}"
+                    )
+                if prev_wt == git_root.resolve():
+                    raise RunnerError(
+                        f"{task_id}: resume worktree cannot be the caller checkout"
+                    )
+                try:
+                    wt_raw = subprocess.check_output(
+                        ["git", "-C", str(prev_wt), "rev-parse", "--git-common-dir"],
+                        text=True,
+                        stderr=subprocess.PIPE,
+                    ).strip()
+                    root_raw = subprocess.check_output(
+                        ["git", "-C", str(git_root), "rev-parse", "--git-common-dir"],
+                        text=True,
+                        stderr=subprocess.PIPE,
+                    ).strip()
+                    wt_common = (
+                        Path(wt_raw).resolve()
+                        if Path(wt_raw).is_absolute()
+                        else (prev_wt / wt_raw).resolve()
+                    )
+                    root_common = (
+                        Path(root_raw).resolve()
+                        if Path(root_raw).is_absolute()
+                        else (git_root / root_raw).resolve()
+                    )
+                    if wt_common != root_common:
+                        raise RunnerError(
+                            f"{task_id}: resume worktree belongs to a different repository"
+                        )
+                except (subprocess.CalledProcessError, OSError) as exc:
+                    raise RunnerError(
+                        f"{task_id}: resume worktree is not a valid git worktree"
+                    ) from exc
+                expected_sha = resume_handoff.get("head_sha")
+                actual_sha = _git_sha(prev_wt, "HEAD")
+                if expected_sha and actual_sha != expected_sha:
+                    raise RunnerError(
+                        f"{task_id}: resume worktree HEAD {actual_sha} has drifted "
+                        f"from handoff SHA {expected_sha}"
+                    )
+                head_sha = actual_sha
+                if (
+                    isolate_dir is not None
+                    and isolate_dir.expanduser().resolve() != prev_wt
+                ):
+                    raise RunnerError(
+                        f"{task_id}: isolate-dir does not match resume worktree {prev_wt}"
+                    )
+                worktree_path = str(prev_wt)
+                try:
+                    rel = cwd.resolve().relative_to(git_root.resolve())
+                except ValueError as exc:
+                    raise RunnerError("plan root is outside the git checkout") from exc
+                cwd = prev_wt if rel == Path(".") else prev_wt / rel
+                isolated_anchor = cwd / "tool" / "workshop" / "plan.json"
+                artifact_errors, _ = validate_plan.validate_plan(
+                    data,
+                    plan_path=isolated_anchor,
+                    check_artifacts=True,
+                )
+                if artifact_errors:
+                    raise RunnerError(
+                        "isolated checkout evidence failed: "
+                        + "; ".join(artifact_errors)
+                    )
+            else:
+                if isolate:
+                    raise RunnerError(
+                        f"{task_id}: cannot resume non-isolated handoff with --isolate"
+                    )
+                expected_sha = resume_handoff.get("head_sha")
+                if expected_sha:
+                    actual_sha = _git_sha(git_root, "HEAD")
+                    if actual_sha != expected_sha:
+                        raise RunnerError(
+                            f"{task_id}: repository HEAD {actual_sha} has drifted "
+                            f"from handoff SHA {expected_sha}"
+                        )
+                    head_sha = expected_sha
+        elif isolate:
             git_root = _git_toplevel(cwd)
             requested = base_sha or task.get("base_sha")
             head_sha = (
@@ -749,10 +905,14 @@ def run_task(
         results: list[dict[str, Any]] = []
         failed: list[str] = []
         unrun: list[str] = []
+        if resume_handoff is not None:
+            results = list(resume_handoff.get("results") or [])[:resume_cont_index]
         if dry_run:
             unrun = [" ".join(cmd) for cmd in commands]
         else:
-            for argv in commands:
+            start_index = resume_cont_index if resume_handoff is not None else 0
+            for idx in range(start_index, len(commands)):
+                argv = commands[idx]
                 if not isinstance(argv, list) or not all(
                     isinstance(item, str) for item in argv
                 ):
@@ -804,6 +964,11 @@ def run_task(
             payload["head_sha"] = head_sha
         if completed:
             payload["evidence"] = results
+        if resume_handoff is not None:
+            payload["resume"] = {
+                "previous_handoff_sha256": resume_sha256,
+                "continued_from_command_index": resume_cont_index,
+            }
         _write_handoff(handoff_dest, payload)
         return 0 if completed else 1
     finally:
@@ -839,6 +1004,14 @@ def main(argv: list[str]) -> int:
             "tasks; each entry needs path and sha256"
         ),
     )
+    parser.add_argument(
+        "--resume-from",
+        dest="resume_from",
+        help=(
+            "resume an unfinished handoff (status 'failed' or 'in_progress'); "
+            "continues from the first failed command preserving successful prefix"
+        ),
+    )
     args = parser.parse_args(argv[1:])
     try:
         return run_task(
@@ -853,6 +1026,7 @@ def main(argv: list[str]) -> int:
             base_sha=args.base_sha,
             review=args.review,
             campaign=args.campaign,
+            resume_from=Path(args.resume_from) if args.resume_from else None,
         )
     except RunnerError as exc:
         print(str(exc), file=sys.stderr)
