@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "policy": "USABILITY-R2",
-  "repository": "ImL1s/telltale",
+  "repository": "aa22396584/telltale",
   "epic": 11,
   "audited_sha": "3547d9c7406e4a87329d40d1454ddab7a3aa4379",
   "notes": "Current #11 campaign after the official testStart parser landed. tool/workshop/plan.json remains the historical seed and is not this file. Do not copy empty required_evidence from the seed. Hashes are of committed reporter captures, not invented.",
   "tasks": [
     {
       "id": "CURRENT-278",
-      "issue": 278,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/278",
+      "issue": 89,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/89",
       "priority": "P1",
       "status": "pending",
       "depends_on": [],
@@ -50,8 +50,8 @@
     },
     {
       "id": "CURRENT-47-NATIVE",
-      "issue": 47,
-      "issue_url": "https://github.com/ImL1s/telltale/issues/47",
+      "issue": 40,
+      "issue_url": "https://gitlab.com/aa22396584/telltale/-/issues/40",
       "priority": "P1",
       "status": "blocked",
       "depends_on": [],

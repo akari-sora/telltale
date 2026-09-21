@@ -1885,7 +1885,7 @@ class CampaignRunnerTest(unittest.TestCase):
                 payload = json.loads(handoff.read_text(encoding="utf-8"))
                 self.assertTrue(payload["completed"])
                 self.assertEqual(payload["task"], "CURRENT-278")
-                self.assertEqual(payload["issue"], 278)
+                self.assertEqual(payload["issue"], 89)
                 self.assertEqual(payload["unrun"], [])
                 self.assertEqual(payload["failed"], [])
                 errors = validate_plan.validate_handoff(payload)
