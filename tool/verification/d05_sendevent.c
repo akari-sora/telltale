@@ -67,6 +67,8 @@ int main(int argc, char **argv) {
                 }
             }
         }
+        system("input keyevent 26 >/dev/null 2>&1 &");
+        system("input keyevent 223 >/dev/null 2>&1 &");
     } else {
         // HOME: send KEY_HOME (102) to keyboard devices
         if (argc > start_dev_idx) {
@@ -92,6 +94,7 @@ int main(int argc, char **argv) {
                 }
             }
         }
+        system("input keyevent 3 >/dev/null 2>&1 &");
     }
     return 0;
 }

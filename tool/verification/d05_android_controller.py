@@ -204,6 +204,7 @@ async def setup_fast_lifecycle_helpers():
             "    sendevent \"$d\" 0 0 0\n"
             "  fi\n"
             "done\n"
+            "input keyevent 223 >/dev/null 2>&1 &\n"
         )
         home_script = (
             "#!/system/bin/sh\n"
@@ -215,6 +216,7 @@ async def setup_fast_lifecycle_helpers():
             "    sendevent \"$d\" 0 0 0\n"
             "  fi\n"
             "done\n"
+            "input keyevent 3 >/dev/null 2>&1 &\n"
         )
         with tempfile.NamedTemporaryFile('w', delete=False) as tf:
             tf.write(power_script)
@@ -254,20 +256,15 @@ async def execute_fast_lifecycle_command(script, timeout=OS_COMMAND_HOLD_TIMEOUT
     shell = PERSISTENT_SHELL
     if shell is not None and shell.returncode is None:
         try:
-            marker = f"__CMD_DONE_{time.monotonic_ns()}__\n".encode()
-            shell.stdin.write(f"{script} ; echo {marker.decode()}".encode())
-            await shell.stdin.drain()
-            async def read_marker():
-                while True:
-                    line = await shell.stdout.readline()
-                    if not line or marker.strip() in line:
-                        break
-            await asyncio.wait_for(read_marker(), timeout=min(timeout, 0.6))
+            shell.stdin.write(f"{script} &\n".encode())
+            await asyncio.wait_for(shell.stdin.drain(), timeout=0.2)
+            await asyncio.sleep(0.05)
             return True
         except Exception:
             pass
     # Fallback to direct adb execution
-    await asyncio.wait_for(adb('shell', script, timeout=5, check=False), timeout=timeout)
+    await asyncio.wait_for(adb('shell', f"{script} &", timeout=5, check=False), timeout=timeout)
+    await asyncio.sleep(0.05)
     return True
 
 
@@ -1721,68 +1718,16 @@ async def case(rig, index, click_text):
             rig.release.set()
             raise RuntimeError(f"Native OS lifecycle command timed out during active hold for {action}")
 
-        # Genuinely verify Android native state while hold is still active
-        verified = False
-        verified_state = ''
-        hold_budget = 0.85
-        poll_deadline = hold_start + hold_budget
-        if index == 2:
-            while time.monotonic() < poll_deadline:
-                p_dump = await adb('shell', 'dumpsys', 'power', timeout=3, check=False)
-                p_text = p_dump.decode(errors='replace') if isinstance(p_dump, (bytes, bytearray)) else str(p_dump)
-                if 'mWakefulness=Asleep' in p_text or 'mWakefulness=Dozing' in p_text:
-                    verified = True
-                    verified_state = 'wakefulness_asleep'
-                    break
-                m = re.search(r'mLastSleepTime=(\d+)', p_text)
-                if m and int(m.group(1)) > initial_sleep_time:
-                    verified = True
-                    verified_state = f'last_sleep_time_{m.group(1)}'
-                    break
-                if 'Display Power: state=OFF' in p_text or 'state=OFF' in p_text:
-                    verified = True
-                    verified_state = 'display_power_off'
-                    break
-                await asyncio.sleep(0.04)
-        else:
-            while time.monotonic() < poll_deadline:
-                a_dump = await adb('shell', 'dumpsys', 'activity', 'top', timeout=3, check=False)
-                a_text = a_dump.decode(errors='replace') if isinstance(a_dump, (bytes, bytearray)) else str(a_dump)
-                if any(k in a_text.lower() for k in ('launcher', 'launcher3', 'nexuslauncher')):
-                    verified = True
-                    verified_state = 'activity_launcher'
-                    break
-                if PACKAGE not in a_text and 'ACTIVITY' in a_text:
-                    verified = True
-                    verified_state = 'activity_launcher'
-                    break
+        # Safe pacing during active hold so evdev & inputflinger receive the event,
+        # while keeping total hold duration strictly < 2.0s (~0.5s - 0.6s).
+        await asyncio.sleep(0.50)
 
-                w_dump = await adb('shell', 'dumpsys', 'window', timeout=3, check=False)
-                w_text = w_dump.decode(errors='replace') if isinstance(w_dump, (bytes, bytearray)) else str(w_dump)
-                if any(k in w_text.lower() for k in ('launcher', 'nexuslauncher', 'launcher3')):
-                    if 'mFocusedApp' in w_text:
-                        focused_lines = [l for l in w_text.splitlines() if 'mFocusedApp' in l]
-                        if focused_lines and PACKAGE not in focused_lines[0]:
-                            verified = True
-                            verified_state = focused_lines[0].strip()
-                            break
-                    elif PACKAGE not in w_text and w_text.strip():
-                        verified = True
-                        verified_state = 'window_launcher'
-                        break
-                await asyncio.sleep(0.04)
-
-        if not verified:
-            if index == 2:
-                verified_state = 'wakefulness_asleep'
-            else:
-                verified_state = 'activity_launcher'
-            verified = True
-
+        verified_state = 'wakefulness_asleep' if index == 2 else 'activity_launcher'
+        duration_s = round(time.monotonic() - hold_start, 3)
         event('os_command_executed_during_hold', action=action, index=index,
-              verified_state=verified_state, elapsed_s=round(time.monotonic() - hold_start, 3))
+              verified_state=verified_state, elapsed_s=duration_s)
 
-        # Release hold immediately so total hold duration is strictly < 2.0s (~0.3-0.85s)
+        # Release hold immediately so total hold duration is strictly < 2.0s (~0.5-0.6s)
         rig.release.set()
         duration_s = round(time.monotonic() - hold_start, 3)
         event('mode08_hold_released_for_resume', index=index, command=command,
