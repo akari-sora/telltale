@@ -1979,6 +1979,180 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         self.assertNotIn('os_command_executed_during_hold', event_names)
         self.assertTrue(rig.release.is_set())
 
+    def test_is_launcher_active_positive_and_negative(self):
+        positives = [
+            'mResumedActivity: ActivityRecord{f92e438 u0 com.android.launcher3/.Launcher t5}',
+            'topResumedActivity=ActivityRecord{251038560 u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t19}',
+            'ResumedActivity: ActivityRecord{12345 u0 com.android.launcher3/.Launcher t1}',
+            'Proc # 0: fore   T/A/TOP  trm: 0 2784:com.android.launcher3/u0a100 (top-activity)',
+            'topDisplayFocusedStack=ActivityStack{d479a5e stackId=0 type=home mode=fullscreen visible=true translucent=false, 1 tasks}',
+            'mHomeStack=ActivityStack{b398e3f stackId=0 type=home mode=fullscreen visible=true translucent=true, 1 tasks}',
+            'Stack #0: type=home com.android.launcher3/.Launcher',
+        ]
+        for p in positives:
+            self.assertTrue(CTRL.is_launcher_active(p), f"Expected True for: {p}")
+
+        negatives = [
+            '',
+            None,
+            'mResumedActivity: ActivityRecord{a147202 u0 com.cbstudio.telltale/.MainActivity t6}',
+            'mResumedActivity: ActivityRecord{a147202 u0 com.android.settings/.Settings t2}',
+            'Stack #1: type=standard mode=fullscreen',
+        ]
+        for n in negatives:
+            self.assertFalse(CTRL.is_launcher_active(n), f"Expected False for: {n}")
+
+    def test_is_sleep_active_positive_and_negative(self):
+        positives = [
+            ('mWakefulness=Asleep\nmLastSleepTime=1000', 0),
+            ('mWakefulness=Dozing\nmLastSleepTime=1000', 0),
+            ('mWakefulness=Awake\nmLastSleepTime=2000', 1000),
+            ('  mWakefulness=Asleep\n  mLastSleepReason=power_button', 0),
+        ]
+        for text, init in positives:
+            self.assertTrue(CTRL.is_sleep_active(text, init), f"Expected True for: {text} with init={init}")
+
+        negatives = [
+            ('', 0),
+            (None, 0),
+            ('mWakefulness=Awake\nmLastSleepTime=1000', 1000),
+            ('mWakefulness=Awake\nmLastSleepTime=0', 0),
+        ]
+        for text, init in negatives:
+            self.assertFalse(CTRL.is_sleep_active(text, init), f"Expected False for: {text} with init={init}")
+
+    def test_case_modified_option_b_host_monotonic_timestamps(self):
+        class MockRig:
+            def __init__(self):
+                self.target = None
+                self.held = None
+                self.release = None
+                self.states = {}
+
+            def arm(self, command):
+                self.target = command
+                loop = asyncio.get_running_loop()
+                self.held = loop.create_future()
+                self.release = asyncio.Event()
+                self.held.set_result({'connection': 2, 'command': command})
+
+        rig = MockRig()
+        genuine_terminal_rows = [
+            dict(text='Discover Mode 08', desc='', enabled='true', clickable='true', bounds='[10,20][100,80]'),
+            dict(text='MODE 08 NON-ACTUATING DISCOVERY', desc='', enabled='true', bounds='[0,0][100,100]'),
+            dict(text='TID $01', desc='', enabled='true', bounds='[0,100][100,200]'),
+        ]
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            stdout = b''
+            if 'dumpsys' in args and 'activity' in args:
+                stdout = b'mResumedActivity: ActivityRecord{f92e438 u0 com.android.launcher3/.Launcher t5}'
+            elif 'dumpsys' in args and 'power' in args:
+                stdout = b'mWakefulness=Asleep mLastSleepReason=power_button'
+            return SimpleNamespace(returncode=0, stdout=stdout, stderr=b'') if full else stdout
+
+        async def fake_dump(label, screenshot=True, prepare=True):
+            return genuine_terminal_rows
+
+        async def fake_find_text(text, exact=False, scroll=True):
+            node = dict(text=text, desc='', bounds='[10,20][100,80]')
+            return (node, 50, 50), 0
+
+        async def fake_launch_app(is_resume=False):
+            pass
+
+        async def fake_actual_os_snapshot(label):
+            pass
+
+        async def fake_wait_for_mode08_terminal_ui(timeout=30):
+            return genuine_terminal_rows
+
+        async def instant_sleep(_delay):
+            pass
+
+        with self._patch_out(), \
+             patch.object(CTRL, 'adb', fake_adb), \
+             patch.object(CTRL, 'dump', fake_dump), \
+             patch.object(CTRL, 'find_text', fake_find_text), \
+             patch.object(CTRL, 'launch_app', fake_launch_app), \
+             patch.object(CTRL, 'wait_for_mode08_terminal_ui', fake_wait_for_mode08_terminal_ui), \
+             patch.object(CTRL, 'actual_os_snapshot', fake_actual_os_snapshot), \
+             patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.case(rig, 1, 'Discover Mode 08'))
+
+        lines = [json.loads(l) for l in self.event_file.read_text().splitlines() if l.strip()]
+        os_cmd_events = [e for e in lines if e['event'] == 'os_command_executed_during_hold']
+        self.assertEqual(len(os_cmd_events), 1)
+        ev = os_cmd_events[0]
+        self.assertEqual(ev['action'], 'HOME')
+        self.assertEqual(ev['verified_state'], 'activity_launcher')
+        self.assertIn('verified_at_monotonic', ev)
+        self.assertIn('hold_release_at_monotonic', ev)
+        self.assertLess(ev['verified_at_monotonic'], ev['hold_release_at_monotonic'])
+        self.assertGreater(ev['time_advance_ms'], 0)
+        self.assertTrue(len(ev['evidence']) > 0)
+
+        rel_events = [e for e in lines if e['event'] == 'mode08_hold_released_for_resume']
+        self.assertEqual(len(rel_events), 1)
+        rel_ev = rel_events[0]
+        self.assertEqual(rel_ev['verified_at_monotonic'], ev['verified_at_monotonic'])
+        self.assertEqual(rel_ev['hold_release_at_monotonic'], ev['hold_release_at_monotonic'])
+
+    def test_case_fails_closed_when_hold_budget_expires_without_verification(self):
+        class MockRig:
+            def __init__(self):
+                self.target = None
+                self.held = None
+                self.release = None
+                self.states = {}
+
+            def arm(self, command):
+                self.target = command
+                loop = asyncio.get_running_loop()
+                self.held = loop.create_future()
+                self.release = asyncio.Event()
+                self.held.set_result({'connection': 2, 'command': command})
+
+        rig = MockRig()
+        genuine_terminal_rows = [
+            dict(text='Discover Mode 08', desc='', enabled='true', clickable='true', bounds='[10,20][100,80]'),
+        ]
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            return b'mResumedActivity: ActivityRecord{a147202 u0 com.cbstudio.telltale/.MainActivity t6}'
+
+        async def fake_dump(label, screenshot=True, prepare=True):
+            return genuine_terminal_rows
+
+        async def fake_find_text(text, exact=False, scroll=True):
+            node = dict(text=text, desc='', bounds='[10,20][100,80]')
+            return (node, 50, 50), 0
+
+        async def instant_sleep(_delay):
+            pass
+
+        with self._patch_out(), \
+             patch.object(CTRL, 'adb', fake_adb), \
+             patch.object(CTRL, 'dump', fake_dump), \
+             patch.object(CTRL, 'find_text', fake_find_text), \
+             patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            start_time = 100.0
+            call_count = 0
+            def mock_monotonic():
+                nonlocal call_count
+                call_count += 1
+                return start_time + 0.5 * call_count
+
+            with patch.object(CTRL.time, 'monotonic', mock_monotonic):
+                with self.assertRaisesRegex(RuntimeError, 'Native OS lifecycle state transition not verified within hold budget'):
+                    asyncio.run(CTRL.case(rig, 1, 'Discover Mode 08'))
+
+        lines = [json.loads(l) for l in self.event_file.read_text().splitlines() if l.strip()]
+        event_names = [e['event'] for e in lines]
+        self.assertIn('mode08_hold_released_unverified', event_names)
+        self.assertNotIn('os_command_executed_during_hold', event_names)
+        self.assertTrue(rig.release.is_set())
+
 
 if __name__ == '__main__':
     unittest.main()

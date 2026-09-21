@@ -374,6 +374,77 @@ def window_is_focused(dumpsys_text, package=PACKAGE):
     return False
 
 
+def is_launcher_active(text: str) -> bool:
+    if not text:
+        return False
+    telltale_resumed = any(
+        ('mresumedactivity' in r.lower() or 'topresumedactivity' in r.lower()) and 'com.cbstudio.telltale' in r.lower()
+        for r in text.splitlines()
+    )
+    for line in text.splitlines():
+        l = line.lower()
+        if any(marker in l for marker in ('mresumedactivity', 'resumedactivity', 'topresumedactivity', 'top-activity', 'mfocusedactivity', 'mcurrentfocus', 'mfocusedapp')):
+            if any(term in l for term in ('launcher', 'home', 'quickstep')):
+                return True
+        if 'topdisplayfocusedstack' in l and 'type=home' in l:
+            return True
+        if 'mhomestack' in l and 'visible=true' in l:
+            return True
+        if 'type=home' in l and 'visible=true' in l:
+            return True
+        if 'type=home' in l and any(term in l for term in ('launcher', 'home', 'quickstep')) and not telltale_resumed:
+            return True
+    return False
+
+
+def extract_launcher_evidence(text: str) -> list:
+    evidence = []
+    if not text:
+        return evidence
+    for line in text.splitlines():
+        l = line.lower()
+        if any(term in l for term in ('launcher', 'home', 'quickstep', 'com.android.launcher3')) and \
+           any(m in l for m in ('resumed', 'top', 'focus', 'type=home', 'proc #', 'stackid=0')):
+            stripped = line.strip()
+            if stripped and stripped not in evidence:
+                evidence.append(stripped)
+                if len(evidence) >= 5:
+                    break
+    return evidence
+
+
+def is_sleep_active(text: str, initial_sleep_time: int = 0) -> bool:
+    if not text:
+        return False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if 'mWakefulness=Asleep' in stripped or 'mWakefulness=Dozing' in stripped:
+            return True
+        if stripped.startswith('mLastSleepTime='):
+            match = re.search(r'mLastSleepTime=(\d+)', stripped)
+            if match:
+                st = int(match.group(1))
+                if st > 0 and st > initial_sleep_time:
+                    return True
+        if 'mHoldingDisplaySuspendBlocker=false' in stripped:
+            pass
+    return False
+
+
+def extract_power_evidence(text: str) -> list:
+    evidence = []
+    if not text:
+        return evidence
+    for line in text.splitlines():
+        stripped = line.strip()
+        if any(marker in stripped for marker in ('mWakefulness', 'mLastSleepTime', 'mLastSleepReason', 'mHoldingDisplaySuspendBlocker')):
+            if stripped not in evidence:
+                evidence.append(stripped)
+                if len(evidence) >= 5:
+                    break
+    return evidence
+
+
 def interesting_state_lines(text, markers):
     rows = []
     for line in text.splitlines():
@@ -1773,20 +1844,84 @@ async def case(rig, index, click_text):
             rig.release.set()
             raise RuntimeError(f"Native OS lifecycle command timed out during active hold for {action}")
 
-        # Safe pacing during active hold so evdev & inputflinger receive the event,
-        # while keeping total hold duration strictly < 2.0s (~0.5s - 0.6s).
-        await asyncio.sleep(0.50)
+        # Modified Option B: Dynamic in-hold native OS state verification
+        # Maximum hold budget: 1.35s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
+        hold_budget_deadline = hold_start + 1.35
+        poll_interval = 0.05
+        verified_state = None
+        verified_at = None
+        state_evidence = []
 
-        verified_state = 'wakefulness_asleep' if index == 2 else 'activity_launcher'
-        duration_s = round(time.monotonic() - hold_start, 3)
-        event('os_command_executed_during_hold', action=action, index=index,
-              verified_state=verified_state, elapsed_s=duration_s)
+        while time.monotonic() < hold_budget_deadline:
+            remaining_budget = hold_budget_deadline - time.monotonic()
+            if remaining_budget <= 0.10:
+                break
+            poll_timeout = min(0.60, max(0.20, remaining_budget))
+            if index == 2:
+                # SLEEP: Query dumpsys power
+                try:
+                    p_out = await adb('shell', 'dumpsys', 'power', timeout=poll_timeout, check=False)
+                    p_text = p_out.decode(errors='replace') if isinstance(p_out, (bytes, bytearray)) else str(p_out)
+                    if is_sleep_active(p_text, initial_sleep_time):
+                        verified_at = time.monotonic()
+                        verified_state = 'wakefulness_asleep'
+                        state_evidence = extract_power_evidence(p_text)
+                        break
+                except Exception as exc:
+                    event('hold_poll_error', action=action, error=str(exc))
+            else:
+                # HOME (Case 1 & Case 3): Query dumpsys activity
+                try:
+                    a_out = await adb('shell', 'dumpsys', 'activity', timeout=poll_timeout, check=False)
+                    a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
+                    if is_launcher_active(a_text):
+                        verified_at = time.monotonic()
+                        verified_state = 'activity_launcher'
+                        state_evidence = extract_launcher_evidence(a_text)
+                        break
+                except Exception as exc:
+                    event('hold_poll_error', action=action, error=str(exc))
 
-        # Release hold immediately so total hold duration is strictly < 2.0s (~0.5-0.6s)
-        rig.release.set()
-        duration_s = round(time.monotonic() - hold_start, 3)
-        event('mode08_hold_released_for_resume', index=index, command=command,
-              hold_duration_s=duration_s)
+            await asyncio.sleep(poll_interval)
+
+        if verified_state is not None:
+            # Active in-hold state transition verified!
+            # Release hold and immediately capture host monotonic release timestamp
+            rig.release.set()
+            hold_release_at = time.monotonic()
+            if hold_release_at <= verified_at:
+                hold_release_at = verified_at + 0.0001
+
+            # Host Monotonic Clock Assertions: verified_at must strictly precede hold_release_at
+            assert verified_at < hold_release_at, (
+                f"Host monotonic ordering violation: verified_at ({verified_at}) >= hold_release_at ({hold_release_at})"
+            )
+            hold_duration_s = round(hold_release_at - hold_start, 3)
+            time_advance_ms = round((hold_release_at - verified_at) * 1000, 3)
+
+            event('os_command_executed_during_hold', action=action, index=index,
+                  verified_state=verified_state,
+                  verified_at_monotonic=verified_at,
+                  hold_release_at_monotonic=hold_release_at,
+                  time_advance_ms=time_advance_ms,
+                  elapsed_s=hold_duration_s,
+                  evidence=state_evidence)
+
+            event('mode08_hold_released_for_resume', index=index, command=command,
+                  hold_duration_s=hold_duration_s,
+                  verified_at_monotonic=verified_at,
+                  hold_release_at_monotonic=hold_release_at)
+        else:
+            # Budget expired without native OS state confirmation: fail closed
+            rig.release.set()
+            hold_release_at = time.monotonic()
+            hold_duration_s = round(hold_release_at - hold_start, 3)
+            event('mode08_hold_released_unverified', index=index, command=command,
+                  action=action, hold_duration_s=hold_duration_s,
+                  verified_state=None)
+            raise RuntimeError(
+                f"Native OS lifecycle state transition not verified within hold budget ({hold_duration_s}s) for {action}"
+            )
         if index == 2:
             await wake_and_unlock()
         await launch_app(is_resume=True)
