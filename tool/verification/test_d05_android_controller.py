@@ -1588,7 +1588,12 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         async def fake_adb(*args, timeout=40, check=True, full=False):
             if 'keyevent' in args:
                 await asyncio.sleep(0.01)
-            return SimpleNamespace(returncode=0, stdout=b'', stderr=b'') if full else b''
+            stdout = b''
+            if 'dumpsys' in args and 'activity' in args:
+                stdout = b'Stack #0: type=home com.android.launcher3/.Launcher'
+            elif 'dumpsys' in args and 'power' in args:
+                stdout = b'mWakefulness=Asleep mLastSleepReason=sleep_button'
+            return SimpleNamespace(returncode=0, stdout=stdout, stderr=b'') if full else stdout
 
         async def fake_dump(label, screenshot=True, prepare=True):
             return genuine_terminal_rows

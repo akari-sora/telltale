@@ -123,6 +123,27 @@ RESUMED_MARKERS = ('topResumedActivity', 'mFocusedApp=', 'mResumedActivity', 'Re
 FOCUS_MARKERS = ('mCurrentFocus', 'mFocusedApp=')
 WAKE_SOFT_TIMEOUT = 20
 WAKE_KEYEVENT_DISABLED = False
+POWER_INPUT_DEVICE = '/dev/input/event0'
+
+
+async def detect_input_devices():
+    global POWER_INPUT_DEVICE
+    try:
+        out = await adb('shell', 'cat', '/proc/bus/input/devices', timeout=5, check=False)
+        text = out.decode(errors='replace') if isinstance(out, (bytes, bytearray)) else str(out)
+        curr_name = ''
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith('N: Name='):
+                curr_name = line.split('=', 1)[1].strip('"')
+            elif line.startswith('H: Handlers=') and 'power' in curr_name.lower():
+                for part in line.split('=', 1)[1].split():
+                    if part.startswith('event'):
+                        POWER_INPUT_DEVICE = f'/dev/input/{part}'
+                        event('detected_power_device', device=POWER_INPUT_DEVICE, name=curr_name)
+                        return
+    except Exception as exc:
+        event('detect_input_devices_error', error=str(exc))
 
 
 def event(kind: str, **values):
@@ -272,6 +293,13 @@ async def prepare_window(*, unlock_swipe=False):
 
 async def wake_and_unlock():
     global WAKE_KEYEVENT_DISABLED
+    send_cmd = (
+        f'sendevent {POWER_INPUT_DEVICE} 1 116 1; '
+        f'sendevent {POWER_INPUT_DEVICE} 0 0 0; '
+        f'sendevent {POWER_INPUT_DEVICE} 1 116 0; '
+        f'sendevent {POWER_INPUT_DEVICE} 0 0 0'
+    )
+    await adb('shell', send_cmd, timeout=5, check=False)
     await prepare_window()
     if not WAKE_KEYEVENT_DISABLED:
         result = await adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP',
@@ -1503,20 +1531,40 @@ async def case(rig, index, click_text):
     try:
         receipt = await asyncio.wait_for(asyncio.shield(rig.held), timeout=90)
         event('held_query_confirmed_before_os_command', receipt=receipt, action=action)
-        # Execute OS lifecycle event (HOME or SLEEP) during active hold
-        await adb('shell', 'input', 'keyevent', '223' if index == 2 else '3',
-                  timeout=20, check=False)
-        # Verify OS-level state transition before releasing the hold
+        # Execute fast native OS lifecycle event (HOME or SLEEP) during active hold
         if index == 2:
-            power_data = await adb('shell', 'dumpsys', 'power', timeout=10, check=False)
+            # Native Power Button event (<20ms, avoids slow app_process JVM)
+            send_cmd = (
+                f'sendevent {POWER_INPUT_DEVICE} 1 116 1; '
+                f'sendevent {POWER_INPUT_DEVICE} 0 0 0; '
+                f'sendevent {POWER_INPUT_DEVICE} 1 116 0; '
+                f'sendevent {POWER_INPUT_DEVICE} 0 0 0'
+            )
+            await adb('shell', send_cmd, timeout=5, check=False)
+            power_data = await adb('shell', 'dumpsys', 'power', timeout=5, check=False)
             power_text = power_data.decode(errors='replace') if isinstance(power_data, (bytes, bytearray)) else str(power_data)
             is_asleep = 'mWakefulness=Asleep' in power_text or 'mLastSleepReason=sleep_button' in power_text
+            if not is_asleep:
+                await asyncio.sleep(0.1)
+                power_data = await adb('shell', 'dumpsys', 'power', timeout=5, check=False)
+                power_text = power_data.decode(errors='replace') if isinstance(power_data, (bytes, bytearray)) else str(power_data)
+                is_asleep = 'mWakefulness=Asleep' in power_text or 'mLastSleepReason=sleep_button' in power_text
             event('os_command_executed_during_hold', action=action, index=index,
                   verified_asleep=is_asleep)
         else:
-            act_data = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=10, check=False)
+            # Native Home intent dispatch via ActivityManager (~200ms, avoids slow input keyevent)
+            await adb('shell', 'am', 'start',
+                      '-a', 'android.intent.action.MAIN',
+                      '-c', 'android.intent.category.HOME',
+                      timeout=5, check=False)
+            act_data = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=5, check=False)
             act_text = act_data.decode(errors='replace') if isinstance(act_data, (bytes, bytearray)) else str(act_data)
             is_home = 'launcher' in act_text.lower()
+            if not is_home:
+                await asyncio.sleep(0.1)
+                act_data = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=5, check=False)
+                act_text = act_data.decode(errors='replace') if isinstance(act_data, (bytes, bytearray)) else str(act_data)
+                is_home = 'launcher' in act_text.lower()
             event('os_command_executed_during_hold', action=action, index=index,
                   verified_home=is_home)
         # Release hold now that OS event has been executed and verified in-flight
@@ -1568,6 +1616,7 @@ async def main():
     if (await adb('get-state')).decode().strip() != 'device':
         raise RuntimeError('Disposable emulator not ready')
     await ensure_scroll_jar()
+    await detect_input_devices()
     rig = DeviceRig()
     listener = await asyncio.start_server(rig.handle_client, '127.0.0.1', 35008)
     await adb('reverse','tcp:35008','tcp:35008')
