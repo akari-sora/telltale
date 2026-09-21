@@ -50,7 +50,7 @@ LIST_FLING_Y1 = 560
 LIST_FLING_Y2 = 140
 LIST_FLING_MS = 80
 LIST_FLING_GAP_S = 0.08
-FLINGS_PER_LOOK = 6
+FLINGS_PER_LOOK = 1
 # ui_1843 SeekBar thumbs start around x=99. Job 16610532958 Petrol /
 # drivetrain chips start at x=33. Focus left of both, above the tab bar.
 LIST_FOCUS_X = 20
@@ -1199,14 +1199,10 @@ async def fling_list(count=1, upward=False):
         await adb('shell', 'input', 'keyevent', key,
                   timeout=20, check=False)
     y1, y2 = (LIST_FLING_Y2, LIST_FLING_Y1) if upward else (LIST_FLING_Y1, LIST_FLING_Y2)
-    if count == 1:
-        await adb('shell', 'input', 'swipe', LIST_FLING_X, y1,
-                  LIST_FLING_X, y2, LIST_FLING_MS, timeout=15, check=False)
-        return
     swipe = f'input swipe {LIST_FLING_X} {y1} {LIST_FLING_X} {y2} {LIST_FLING_MS}'
     gap = f'sleep {LIST_FLING_GAP_S}'
     await adb('shell', f'; {gap}; '.join([swipe] * count),
-              timeout=max(20, count + 10), check=False)
+              timeout=max(20, count * 5 + 10), check=False)
 
 
 async def tap_settings_tab(rows):
@@ -1333,7 +1329,7 @@ async def find_text(text, exact=False, scroll=True):
                   node_label=node_primary_label(row),
                   scroll_attempts=0, scrolled=False)
             await adb('shell', 'input', 'tap', x, y)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(2.0)
             continue
         if recipes and dashboard_surface(rows):
             event('settings_residency_lost', attempt=attempt,
@@ -1366,8 +1362,11 @@ async def enter_dashboard():
     """Form Connect finishes 14/14 on the last-adapter card (Connect now).
 
     Job 16609550520 waited for Settings there and timed out. Tap Connect now
-    if present; never swipe. Ready signal is Settings\\nTab 5 of 5 or
-    Dashboard\\nTab 1 of 5.
+    if present; never swipe. Ready signal is Settings\nTab 5 of 5 or
+    Dashboard\nTab 1 of 5.
+    If the session was dropped, auto-reconnect by tapping 'Connect' on the
+    expanded Wi-Fi form (saved 127.0.0.1:35008), or tapping 'Wi-Fi' on the
+    connection picker.
     """
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
         rows = await dump('locate', screenshot=False)
@@ -1378,6 +1377,24 @@ async def enter_dashboard():
         if now:
             row, x, y = now
             event('selected_observed_ui_node', text='Connect now', node=row,
+                  node_label=node_primary_label(row),
+                  scroll_attempts=attempt, scrolled=False)
+            await adb('shell', 'input', 'tap', x, y)
+            await asyncio.sleep(0.8)
+            continue
+        connect = locate_text(rows, 'Connect', exact=True)
+        if connect:
+            row, x, y = connect
+            event('selected_observed_ui_node', text='Connect', node=row,
+                  node_label=node_primary_label(row),
+                  scroll_attempts=attempt, scrolled=False)
+            await adb('shell', 'input', 'tap', x, y)
+            await asyncio.sleep(1.0)
+            continue
+        wifi = locate_text(rows, 'Wi-Fi')
+        if wifi:
+            row, x, y = wifi
+            event('selected_observed_ui_node', text='Wi-Fi', node=row,
                   node_label=node_primary_label(row),
                   scroll_attempts=attempt, scrolled=False)
             await adb('shell', 'input', 'tap', x, y)

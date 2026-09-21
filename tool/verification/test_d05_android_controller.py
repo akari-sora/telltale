@@ -755,7 +755,7 @@ class TapTextMatchTests(unittest.TestCase):
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertEqual(order, ['dump', 'page', 'page', 'page', 'dump', 'tap'])
+        self.assertEqual(order, ['dump', 'page', 'dump', 'tap'])
         self.assertTrue(self._swipe_calls(calls))
         self.assertTrue(self._page_calls(calls))
         self.assertEqual(len(self._runtest_calls(calls)), 0)
@@ -821,7 +821,7 @@ class TapTextMatchTests(unittest.TestCase):
                 patch.object(CTRL, 'adb', fake_adb), \
                 patch.object(CTRL.asyncio, 'sleep', instant_sleep):
             asyncio.run(CTRL.tap_text('Service Recipes'))
-        self.assertEqual(order, ['dump', 'tap', 'dump', 'page', 'page', 'page', 'dump', 'tap'])
+        self.assertEqual(order, ['dump', 'tap', 'dump', 'page', 'dump', 'tap'])
         self.assertTrue(self._swipe_calls(calls))
         self.assertTrue(self._page_calls(calls))
         self.assertEqual(len(self._runtest_calls(calls)), 0)
@@ -1168,6 +1168,88 @@ class TapTextMatchTests(unittest.TestCase):
         self.assertFalse(any(c[:3] == ('shell', 'input', 'swipe') for c in calls))
         self.assertEqual([c for c in calls if c[:3] == ('shell', 'input', 'tap')],
                          [('shell', 'input', 'tap', 201, 326)])
+
+    def test_enter_dashboard_taps_connect_when_connect_now_absent(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        wifi_form = [
+            dict(text='', desc='Choose a connection', enabled='true',
+                 clickable='false', bounds='[16,128][190,151]'),
+            dict(text='', desc='Connect', enabled='true',
+                 clickable='true', bounds='[33,405][168,415]'),
+        ]
+        dashboard = [
+            dict(text='', desc='Dashboard\nTab 1 of 5', enabled='true',
+                 clickable='true', bounds='[0,684][96,752]'),
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+        ]
+        dumps = [wifi_form, dashboard]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True, prepare=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.enter_dashboard())
+        self.assertEqual([c for c in calls if c[:3] == ('shell', 'input', 'tap')],
+                         [('shell', 'input', 'tap', 100, 410)])
+
+    def test_enter_dashboard_taps_wifi_then_connect_on_dropped_session(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        dropped = [
+            dict(text='', desc='The adapter stopped responding and the connection has been dropped.',
+                 enabled='true', clickable='false', bounds='[65,46][447,88]'),
+            dict(text='', desc='Wi-Fi\nA TCP port, usually 192.168.0.10:35000',
+                 enabled='true', clickable='true', bounds='[16,399][464,474]'),
+        ]
+        wifi_form = [
+            dict(text='', desc='The adapter stopped responding and the connection has been dropped.',
+                 enabled='true', clickable='false', bounds='[65,46][447,88]'),
+            dict(text='', desc='Connect', enabled='true',
+                 clickable='true', bounds='[33,405][168,415]'),
+        ]
+        dashboard = [
+            dict(text='', desc='Settings\nTab 5 of 5', enabled='true',
+                 clickable='true', bounds='[384,684][480,752]'),
+        ]
+        dumps = [dropped, wifi_form, dashboard]
+        calls = []
+
+        async def fake_dump(label='view', screenshot=True, prepare=True):
+            return dumps.pop(0)
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+            return result if full else b''
+
+        async def instant_sleep(_delay):
+            return None
+
+        with patch.multiple(CTRL, OUT=out, EVENT_FILE=out / 'controller.jsonl', TAP_SCROLL_ATTEMPTS=3), \
+                patch.object(CTRL, 'dump', fake_dump), \
+                patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.enter_dashboard())
+        taps = [c for c in calls if c[:3] == ('shell', 'input', 'tap')]
+        self.assertEqual(len(taps), 2)
+        self.assertEqual(taps[0], ('shell', 'input', 'tap', 240, 436))
+        self.assertEqual(taps[1], ('shell', 'input', 'tap', 100, 410))
 
     def test_connect_now_is_noop_when_dashboard_tabs_are_already_up(self):
         tmp = tempfile.TemporaryDirectory()
