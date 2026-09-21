@@ -459,6 +459,9 @@ def _read_resume_handoff(
         raise RunnerError(
             f"resume requires an unfinished handoff (status 'failed' or 'in_progress' with completed: false), got status={status!r}, completed={completed!r}"
         )
+    sha = raw.get("head_sha")
+    if not isinstance(sha, str) or not validate_plan.SHA_RE.fullmatch(sha):
+        raise RunnerError("resume handoff requires a valid 40-character lowercase head_sha")
     if raw.get("task") != task_id:
         raise RunnerError(
             f"resume handoff task {raw.get('task')!r} does not match {task_id}"
@@ -478,6 +481,17 @@ def _read_resume_handoff(
             raise RunnerError(
                 f"resume handoff command at index {idx} does not match the planned command"
             )
+    unrun = raw.get("unrun")
+    expected_unrun = [
+        " ".join(argv)
+        for argv in planned[len(results):]
+    ]
+    if not isinstance(unrun, list) or not all(isinstance(item, str) for item in unrun):
+        raise RunnerError("resume handoff unrun must be a list of strings")
+    if unrun != expected_unrun:
+        raise RunnerError(
+            "resume handoff unrun suffix does not match the planned commands"
+        )
     cont_index = len(results)
     for idx, item in enumerate(results):
         if (
@@ -819,7 +833,7 @@ def run_task(
                     ) from exc
                 expected_sha = resume_handoff.get("head_sha")
                 actual_sha = _git_sha(prev_wt, "HEAD")
-                if expected_sha and actual_sha != expected_sha:
+                if not expected_sha or actual_sha != expected_sha:
                     raise RunnerError(
                         f"{task_id}: resume worktree HEAD {actual_sha} has drifted "
                         f"from handoff SHA {expected_sha}"
@@ -855,14 +869,13 @@ def run_task(
                         f"{task_id}: cannot resume non-isolated handoff with --isolate"
                     )
                 expected_sha = resume_handoff.get("head_sha")
-                if expected_sha:
-                    actual_sha = _git_sha(git_root, "HEAD")
-                    if actual_sha != expected_sha:
-                        raise RunnerError(
-                            f"{task_id}: repository HEAD {actual_sha} has drifted "
-                            f"from handoff SHA {expected_sha}"
-                        )
-                    head_sha = expected_sha
+                actual_sha = _git_sha(git_root, "HEAD")
+                if not expected_sha or actual_sha != expected_sha:
+                    raise RunnerError(
+                        f"{task_id}: repository HEAD {actual_sha} has drifted "
+                        f"from handoff SHA {expected_sha}"
+                    )
+                head_sha = expected_sha
         elif isolate:
             git_root = _git_toplevel(cwd)
             requested = base_sha or task.get("base_sha")
@@ -958,7 +971,7 @@ def run_task(
         }
         if worktree_path is not None:
             payload["worktree"] = worktree_path
-        if completed and head_sha is None:
+        if not dry_run and head_sha is None:
             head_sha = _git_sha(_git_toplevel(original_root), "HEAD")
         if head_sha is not None:
             payload["head_sha"] = head_sha
