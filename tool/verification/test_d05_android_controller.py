@@ -2023,6 +2023,123 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         for text, init in negatives:
             self.assertFalse(CTRL.is_sleep_active(text, init), f"Expected False for: {text} with init={init}")
 
+    def test_is_logcat_lifecycle_confirmed_home_and_sleep(self):
+        home_log = (
+            "1790012104.900  1948  1948 I SomeService: background log\n"
+            "1790012105.017  1948  1967 I ActivityTaskManager: START u0 "
+            "{act=android.intent.action.MAIN cat=[android.intent.category.HOME] cmp=com.android.launcher3/.Launcher} from uid 0\n"
+        )
+        ok_home, ev_home = CTRL.is_logcat_lifecycle_confirmed(home_log, 'HOME', min_epoch_ts=1790012104.0)
+        self.assertTrue(ok_home)
+        self.assertTrue(any('category.HOME' in line for line in ev_home))
+
+        sleep_log = (
+            "1790012156.206  1948  2043 I PowerManagerService: Going to sleep due to power_button (uid 1000)...\n"
+            "1790012156.230  1948  1983 I PowerManagerService: Sleeping (uid 1000)...\n"
+        )
+        ok_sleep, ev_sleep = CTRL.is_logcat_lifecycle_confirmed(sleep_log, 'SLEEP', min_epoch_ts=1790012155.0)
+        self.assertTrue(ok_sleep)
+        self.assertTrue(any('Going to sleep' in line for line in ev_sleep))
+
+        neg_log = (
+            "1790012104.900  1948  1948 I SomeService: background log\n"
+            "1790012105.000  1948  1948 I ActivityTaskManager: START u0 {cmp=com.cbstudio.telltale/.MainActivity}\n"
+        )
+        ok_neg_h, _ = CTRL.is_logcat_lifecycle_confirmed(neg_log, 'HOME', min_epoch_ts=1790012104.0)
+        self.assertFalse(ok_neg_h)
+        ok_neg_s, _ = CTRL.is_logcat_lifecycle_confirmed(neg_log, 'SLEEP', min_epoch_ts=1790012104.0)
+        self.assertFalse(ok_neg_s)
+
+    def test_is_logcat_lifecycle_confirmed_epoch_timestamp_filtering(self):
+        stale_log = (
+            "1790012000.000  1948  1967 I ActivityTaskManager: START u0 "
+            "{act=android.intent.action.MAIN cat=[android.intent.category.HOME] cmp=com.android.launcher3/.Launcher}\n"
+        )
+        # Stale log occurred at 1790012000, but baseline is 1790012100 -> must be rejected
+        ok_stale, _ = CTRL.is_logcat_lifecycle_confirmed(stale_log, 'HOME', min_epoch_ts=1790012100.0)
+        self.assertFalse(ok_stale)
+
+        # Fresh log occurred at 1790012105 -> must be accepted
+        fresh_log = (
+            "1790012105.000  1948  1967 I ActivityTaskManager: START u0 "
+            "{act=android.intent.action.MAIN cat=[android.intent.category.HOME] cmp=com.android.launcher3/.Launcher}\n"
+        )
+        ok_fresh, _ = CTRL.is_logcat_lifecycle_confirmed(fresh_log, 'HOME', min_epoch_ts=1790012100.0)
+        self.assertTrue(ok_fresh)
+
+    def test_case_modified_option_b_fast_logcat_short_circuit(self):
+        class MockRig:
+            def __init__(self):
+                self.target = None
+                self.held = None
+                self.release = None
+                self.states = {}
+
+            def arm(self, command):
+                self.target = command
+                loop = asyncio.get_running_loop()
+                self.held = loop.create_future()
+                self.release = asyncio.Event()
+                self.held.set_result({'connection': 1, 'command': command})
+
+        rig = MockRig()
+        genuine_terminal_rows = [
+            dict(text='Discover Mode 08', desc='', enabled='true', clickable='true', bounds='[10,20][100,80]'),
+            dict(text='MODE 08 NON-ACTUATING DISCOVERY', desc='', enabled='true', bounds='[0,0][100,100]'),
+            dict(text='TID $01', desc='', enabled='true', bounds='[0,100][100,200]'),
+        ]
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            stdout = b''
+            if 'logcat' in args:
+                stdout = (
+                    b"1790012105.017  1948  1967 I ActivityTaskManager: START u0 "
+                    b"{act=android.intent.action.MAIN cat=[android.intent.category.HOME] "
+                    b"cmp=com.android.launcher3/.Launcher} from uid 0\n"
+                )
+            return SimpleNamespace(returncode=0, stdout=stdout, stderr=b'') if full else stdout
+
+        async def fake_dump(label, screenshot=True, prepare=True):
+            return genuine_terminal_rows
+
+        async def fake_find_text(text, exact=False, scroll=True):
+            node = dict(text=text, desc='', bounds='[10,20][100,80]')
+            return (node, 50, 50), 0
+
+        async def fake_launch_app(is_resume=False):
+            pass
+
+        async def fake_actual_os_snapshot(label):
+            pass
+
+        async def fake_wait_for_mode08_terminal_ui(timeout=30):
+            return genuine_terminal_rows
+
+        async def instant_sleep(_delay):
+            pass
+
+        with self._patch_out(), \
+             patch.object(CTRL, 'adb', fake_adb), \
+             patch.object(CTRL, 'dump', fake_dump), \
+             patch.object(CTRL, 'find_text', fake_find_text), \
+             patch.object(CTRL, 'launch_app', fake_launch_app), \
+             patch.object(CTRL, 'wait_for_mode08_terminal_ui', fake_wait_for_mode08_terminal_ui), \
+             patch.object(CTRL, 'actual_os_snapshot', fake_actual_os_snapshot), \
+             patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.case(rig, 1, 'Discover Mode 08'))
+
+        lines = [json.loads(l) for l in self.event_file.read_text().splitlines() if l.strip()]
+        os_cmd_events = [e for e in lines if e['event'] == 'os_command_executed_during_hold']
+        self.assertEqual(len(os_cmd_events), 1)
+        ev = os_cmd_events[0]
+        self.assertEqual(ev['action'], 'HOME')
+        self.assertEqual(ev['verified_state'], 'activity_launcher')
+        self.assertIn('verified_at_monotonic', ev)
+        self.assertIn('hold_release_at_monotonic', ev)
+        self.assertLess(ev['verified_at_monotonic'], ev['hold_release_at_monotonic'])
+        self.assertGreater(ev['time_advance_ms'], 0)
+        self.assertTrue(any('category.HOME' in e for e in ev['evidence']))
+
     def test_case_modified_option_b_host_monotonic_timestamps(self):
         class MockRig:
             def __init__(self):

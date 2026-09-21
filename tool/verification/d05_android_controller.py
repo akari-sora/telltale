@@ -433,6 +433,50 @@ def is_sleep_active(text: str, initial_sleep_time: int = 0) -> bool:
     return False
 
 
+def is_logcat_lifecycle_confirmed(logcat_text: str, action: str, min_epoch_ts: float = 0.0) -> tuple:
+    """Inspect recent logcat output for genuine native OS lifecycle transition.
+
+    Returns (confirmed: bool, evidence: list[str]).
+    If min_epoch_ts > 0, only considers log lines occurring at or after min_epoch_ts - 0.20s.
+    """
+    if not logcat_text:
+        return False, []
+
+    evidence = []
+    # Patterns for HOME (Case 1 & Case 3)
+    # Matches ActivityTaskManager / Intent dispatch to Launcher
+    home_pattern = re.compile(
+        r'(?:cat=\[android\.intent\.category\.HOME\]|START u0.*cmp=.*launcher|Displayed .*launcher)',
+        re.IGNORECASE
+    )
+
+    # Patterns for SLEEP (Case 2)
+    # Matches PowerManagerService / WindowManager sleep trigger
+    sleep_pattern = re.compile(
+        r'(?:PowerManagerService:\s*(?:Going to sleep|Sleeping)|goToSleep\(GO_TO_SLEEP_REASON|mWakefulness=Asleep|Display Power: state=OFF)',
+        re.IGNORECASE
+    )
+
+    target_pattern = sleep_pattern if action == 'SLEEP' else home_pattern
+
+    for line in logcat_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Extract epoch timestamp if formatted with -v epoch (e.g., '1790012105.017  1948 ...')
+        m_ts = re.match(r'^\s*(\d+\.\d+)\s+', stripped)
+        if m_ts and min_epoch_ts > 0.0:
+            ts = float(m_ts.group(1))
+            if ts < min_epoch_ts - 0.20:
+                continue
+        if target_pattern.search(stripped):
+            evidence.append(stripped)
+            if len(evidence) >= 5:
+                break
+
+    return len(evidence) > 0, evidence
+
+
 def extract_power_evidence(text: str) -> list:
     evidence = []
     if not text:
@@ -1836,6 +1880,18 @@ async def case(rig, index, click_text):
                 initial_sleep_time = int(m_init.group(1))
         except Exception:
             pass
+
+    # Record baseline logcat epoch timestamp to ensure strictly fresh event verification
+    baseline_logcat_ts = 0.0
+    try:
+        base_out = await adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '1', timeout=2.0, check=False)
+        base_text = base_out.decode(errors='replace') if isinstance(base_out, (bytes, bytearray)) else str(base_out)
+        m_base = re.search(r'^\s*(\d+\.\d+)', base_text, re.MULTILINE)
+        if m_base:
+            baseline_logcat_ts = float(m_base.group(1))
+    except Exception:
+        pass
+
     rig.arm(command)
     await adb('shell', 'input', 'tap', x, y)
     try:
@@ -1858,7 +1914,7 @@ async def case(rig, index, click_text):
         # Modified Option B: Dynamic in-hold native OS state verification
         # Maximum hold budget: 1.88s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
         hold_budget_deadline = hold_start + 1.88
-        poll_interval = 0.02
+        poll_interval = 0.03
         verified_state = None
         verified_at = None
         state_evidence = []
@@ -1867,45 +1923,51 @@ async def case(rig, index, click_text):
             remaining_budget = hold_budget_deadline - time.monotonic()
             if remaining_budget <= 0.05:
                 break
-            poll_timeout = min(1.85, max(0.20, remaining_budget))
-            if index == 2:
-                # SLEEP: Query dumpsys power
-                try:
-                    p_out = await adb('shell', 'dumpsys', 'power', timeout=poll_timeout, check=False)
-                    p_text = p_out.decode(errors='replace') if isinstance(p_out, (bytes, bytearray)) else str(p_out)
-                    if is_sleep_active(p_text, initial_sleep_time):
-                        verified_at = time.monotonic()
-                        verified_state = 'wakefulness_asleep'
-                        state_evidence = extract_power_evidence(p_text)
-                        break
-                except Exception as exc:
-                    event('hold_poll_error', action=action, error=str(exc))
-            else:
-                # HOME (Case 1 & Case 3): Query dumpsys activity top (fastest, ~200-400ms) with full poll timeout
-                try:
-                    a_out = await adb('shell', 'dumpsys', 'activity', 'top', timeout=poll_timeout, check=False)
-                    a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
-                    if is_launcher_active(a_text):
-                        verified_at = time.monotonic()
-                        verified_state = 'activity_launcher'
-                        state_evidence = extract_launcher_evidence(a_text)
-                        break
-                except Exception as exc:
-                    event('hold_poll_error', action=action, error=str(exc))
 
+            # 1. Primary fast short-circuit: Query recent logcat (< 50ms, does not block on system_server global lock)
+            log_text = ""
+            try:
+                log_timeout = min(0.35, max(0.10, remaining_budget))
+                log_out = await adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '60', timeout=log_timeout, check=False)
+                log_text = log_out.decode(errors='replace') if isinstance(log_out, (bytes, bytearray)) else str(log_out)
+                confirmed, evidence = is_logcat_lifecycle_confirmed(log_text, action, baseline_logcat_ts)
+                if confirmed:
+                    verified_at = time.monotonic()
+                    verified_state = 'wakefulness_asleep' if index == 2 else 'activity_launcher'
+                    state_evidence = evidence
+                    break
+            except Exception as exc:
+                event('hold_poll_logcat_error', action=action, error=str(exc))
+
+            # 2. Complementary path: Only query dumpsys if logcat returned empty (mocked in tests) or if hold elapsed > 1.2s
+            if not verified_state and (not log_text.strip() or (time.monotonic() - hold_start) > 1.2):
                 rem = hold_budget_deadline - time.monotonic()
-                if rem > 0.40 and not verified_state:
-                    try:
-                        act_timeout = min(1.85, rem)
-                        a_out = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=act_timeout, check=False)
-                        a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
-                        if is_launcher_active(a_text):
-                            verified_at = time.monotonic()
-                            verified_state = 'activity_launcher'
-                            state_evidence = extract_launcher_evidence(a_text)
-                            break
-                    except Exception as exc:
-                        event('hold_poll_error', action=action, error=str(exc))
+                if rem > 0.20:
+                    poll_timeout = min(0.60, rem)
+                    if index == 2:
+                        # SLEEP: Query dumpsys power
+                        try:
+                            p_out = await adb('shell', 'dumpsys', 'power', timeout=poll_timeout, check=False)
+                            p_text = p_out.decode(errors='replace') if isinstance(p_out, (bytes, bytearray)) else str(p_out)
+                            if is_sleep_active(p_text, initial_sleep_time):
+                                verified_at = time.monotonic()
+                                verified_state = 'wakefulness_asleep'
+                                state_evidence = extract_power_evidence(p_text)
+                                break
+                        except Exception as exc:
+                            event('hold_poll_error', action=action, error=str(exc))
+                    else:
+                        # HOME (Case 1 & Case 3): Query dumpsys activity top
+                        try:
+                            a_out = await adb('shell', 'dumpsys', 'activity', 'top', timeout=poll_timeout, check=False)
+                            a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
+                            if is_launcher_active(a_text):
+                                verified_at = time.monotonic()
+                                verified_state = 'activity_launcher'
+                                state_evidence = extract_launcher_evidence(a_text)
+                                break
+                        except Exception as exc:
+                            event('hold_poll_error', action=action, error=str(exc))
 
             await asyncio.sleep(poll_interval)
 
