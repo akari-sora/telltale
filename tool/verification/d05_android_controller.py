@@ -204,7 +204,6 @@ async def setup_fast_lifecycle_helpers():
             "    sendevent \"$d\" 0 0 0\n"
             "  fi\n"
             "done\n"
-            "input keyevent 223 >/dev/null 2>&1 &\n"
         )
         home_script = (
             "#!/system/bin/sh\n"
@@ -216,7 +215,6 @@ async def setup_fast_lifecycle_helpers():
             "    sendevent \"$d\" 0 0 0\n"
             "  fi\n"
             "done\n"
-            "input keyevent 3 >/dev/null 2>&1 &\n"
         )
         with tempfile.NamedTemporaryFile('w', delete=False) as tf:
             tf.write(power_script)
@@ -482,7 +480,8 @@ async def launch_app(is_resume=False):
     if not is_resume:
         await wake_and_unlock()
     await adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity',
-              '-f', '0x10000000', timeout=60)
+              '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER',
+              '-f', '0x10200000', timeout=60)
     await wait_for_resumed_activity()
     if not is_resume:
         await wait_for_focused_window()
@@ -846,6 +845,15 @@ async def wait_for_mode08_terminal_ui(timeout=30):
             if any('power off' in ((r.get('text') or '')).lower() for r in rows):
                 event('dismissing_power_menu_dialog')
                 await adb('shell', 'input', 'keyevent', '4', timeout=5, check=False)
+                await asyncio.sleep(0.5)
+                continue
+
+            if any('apps list' in ((r.get('text') or '') + ' ' + (r.get('desc') or '')).lower() or
+                   'gallery' in ((r.get('text') or '') + ' ' + (r.get('desc') or '')).lower() for r in rows):
+                event('recovering_foreground_from_launcher')
+                await adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity',
+                          '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER',
+                          '-f', '0x10200000', timeout=20, check=False)
                 await asyncio.sleep(0.5)
                 continue
 
