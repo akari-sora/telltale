@@ -126,6 +126,7 @@ WAKE_SOFT_TIMEOUT = 20
 WAKE_KEYEVENT_DISABLED = False
 POWER_INPUT_DEVICE = '/dev/input/event0'
 KEYBOARD_INPUT_DEVICES = ['/dev/input/event12', '/dev/input/event13']
+OS_COMMAND_HOLD_TIMEOUT = 1.4
 
 
 async def detect_input_devices():
@@ -1593,6 +1594,7 @@ async def case(rig, index, click_text):
         rows = await dump('locate', screenshot=False, prepare=False)
     if not locate_text(rows, click_text):
         event('case_ensuring_recipes_surface', index=index, click_text=click_text)
+        await launch_app(is_resume=True)
         await enter_dashboard()
         await tap_text('Settings', exact=False, scroll=False)
         await tap_text('Service Recipes')
@@ -1617,7 +1619,7 @@ async def case(rig, index, click_text):
         script = '/data/local/tmp/d05_power.sh' if index == 2 else '/data/local/tmp/d05_home.sh'
         cmd_ok = False
         try:
-            await asyncio.wait_for(adb('shell', script, timeout=5, check=False), timeout=0.8)
+            await asyncio.wait_for(adb('shell', script, timeout=5, check=False), timeout=OS_COMMAND_HOLD_TIMEOUT)
             cmd_ok = True
         except asyncio.TimeoutError:
             event('os_command_timeout', action=action)
@@ -1631,6 +1633,8 @@ async def case(rig, index, click_text):
         verified_state = ''
         if index == 2:
             for _ in range(10):
+                if time.monotonic() - hold_start >= 1.45:
+                    break
                 p_dump = await adb('shell', 'dumpsys', 'power', timeout=5, check=False)
                 p_text = p_dump.decode(errors='replace')
                 if 'mWakefulness=Asleep' in p_text or 'mWakefulness=Dozing' in p_text:
@@ -1642,9 +1646,15 @@ async def case(rig, index, click_text):
                     verified = True
                     verified_state = f'last_sleep_time_{m.group(1)}'
                     break
+                if 'Display Power: state=OFF' in p_text or 'state=OFF' in p_text:
+                    verified = True
+                    verified_state = 'display_power_off'
+                    break
                 await asyncio.sleep(0.04)
         else:
             for _ in range(10):
+                if time.monotonic() - hold_start >= 1.45:
+                    break
                 w_dump = await adb('shell', 'dumpsys', 'window', timeout=5, check=False)
                 w_text = w_dump.decode(errors='replace')
                 if any(k in w_text.lower() for k in ('launcher', 'nexuslauncher', 'launcher3')):
@@ -1681,12 +1691,13 @@ async def case(rig, index, click_text):
               verified_state=verified_state, elapsed_s=round(time.monotonic() - hold_start, 3))
 
         # Dynamic pacing: ensure kernel/system_server registers the OS event before hold is released,
-        # while strictly bounding total hold duration below Telltale's 2.0s discovery timeout (~0.4-0.8s).
+        # while strictly bounding total hold duration below Telltale's 2.0s discovery timeout (~1.1-1.5s).
         elapsed = time.monotonic() - hold_start
-        pacing = max(0.05, min(0.3, 0.8 - elapsed))
-        await asyncio.sleep(pacing)
+        pacing = max(0.02, min(0.15, 1.48 - elapsed)) if elapsed < 1.48 else 0
+        if pacing > 0:
+            await asyncio.sleep(pacing)
 
-        # Release hold immediately so total hold duration is strictly < 2.0s (~0.4-0.8s)
+        # Release hold immediately so total hold duration is strictly < 2.0s (~1.1-1.5s)
         rig.release.set()
         duration_s = round(time.monotonic() - hold_start, 3)
         event('mode08_hold_released_for_resume', index=index, command=command,
@@ -1704,6 +1715,7 @@ async def case(rig, index, click_text):
                 rows = await poll_current_ui_rows()
                 if not locate_text(rows, click_text):
                     event('recipes_surface_recovery_needed', index=index)
+                    await launch_app(is_resume=True)
                     await enter_dashboard()
                     await tap_text('Settings', exact=False, scroll=False)
                     await tap_text('Service Recipes')

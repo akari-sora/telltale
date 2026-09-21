@@ -1877,6 +1877,7 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
             return (node, 50, 50), 0
 
         with self._patch_out(), \
+             patch.object(CTRL, 'OS_COMMAND_HOLD_TIMEOUT', 0.05), \
              patch.object(CTRL, 'adb', fake_adb), \
              patch.object(CTRL, 'dump', fake_dump), \
              patch.object(CTRL, 'find_text', fake_find_text):
