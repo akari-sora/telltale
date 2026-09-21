@@ -1729,6 +1729,21 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         comp_event = [e for e in lines if e['event'] == 'case_observations_complete'][0]
         self.assertEqual(comp_event['acceptance'], 'CONFIRMED_TERMINAL_UI')
 
+    def test_setup_fast_lifecycle_helpers_pushes_scripts(self):
+        calls = []
+        async def fake_adb(*args, **kwargs):
+            calls.append(args)
+            return b''
+
+        with self._patch_out(), patch.object(CTRL, 'adb', fake_adb):
+            asyncio.run(CTRL.setup_fast_lifecycle_helpers())
+
+        pushed_files = [c[2] for c in calls if c and c[0] == 'push']
+        self.assertIn('/data/local/tmp/d05_power.sh', pushed_files)
+        self.assertIn('/data/local/tmp/d05_home.sh', pushed_files)
+        chmod_calls = [c for c in calls if c and c[0] == 'shell' and c[1] == 'chmod']
+        self.assertTrue(len(chmod_calls) > 0)
+
 
 if __name__ == '__main__':
     unittest.main()
