@@ -1865,7 +1865,7 @@ async def case(rig, index, click_text):
             remaining_budget = hold_budget_deadline - time.monotonic()
             if remaining_budget <= 0.10:
                 break
-            poll_timeout = min(1.20, max(0.20, remaining_budget))
+            poll_timeout = min(1.30, max(0.25, remaining_budget))
             if index == 2:
                 # SLEEP: Query dumpsys power
                 try:
@@ -1879,9 +1879,9 @@ async def case(rig, index, click_text):
                 except Exception as exc:
                     event('hold_poll_error', action=action, error=str(exc))
             else:
-                # HOME (Case 1 & Case 3): Query dumpsys activity top (fastest, < 100ms)
+                # HOME (Case 1 & Case 3): Query dumpsys activity activities (fast internal stack query, ~370ms)
                 try:
-                    a_out = await adb('shell', 'dumpsys', 'activity', 'top', timeout=poll_timeout, check=False)
+                    a_out = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=poll_timeout, check=False)
                     a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
                     if is_launcher_active(a_text):
                         verified_at = time.monotonic()
