@@ -38,12 +38,12 @@ int main(int argc, char **argv) {
         if (fd_p >= 0) {
             emit(fd_p, EV_KEY, 116, 1);
             emit(fd_p, EV_SYN, SYN_REPORT, 0);
-            usleep(50000); // 50ms tap duration
+            usleep(20000); // 20ms tap duration
             emit(fd_p, EV_KEY, 116, 0);
             emit(fd_p, EV_SYN, SYN_REPORT, 0);
             close(fd_p);
         }
-        // Also send KEY_SLEEP (142)
+        // Also send KEY_SLEEP (142) to keyboard devices
         if (argc > start_dev_idx) {
             for (int i = start_dev_idx; i < argc; i++) {
                 int fd = open(argv[i], O_WRONLY);
@@ -55,10 +55,9 @@ int main(int argc, char **argv) {
                 close(fd);
             }
         } else {
-            for (int i = 1; i < 32; i++) {
-                char path[64];
-                snprintf(path, sizeof(path), "/dev/input/event%d", i);
-                int fd = open(path, O_WRONLY);
+            const char *devs[] = {"/dev/input/event12", "/dev/input/event14", "/dev/input/event0"};
+            for (int i = 0; i < 3; i++) {
+                int fd = open(devs[i], O_WRONLY);
                 if (fd >= 0) {
                     emit(fd, EV_KEY, 142, 1);
                     emit(fd, EV_SYN, SYN_REPORT, 0);
@@ -69,7 +68,7 @@ int main(int argc, char **argv) {
             }
         }
     } else {
-        // HOME: send KEY_HOME (102)
+        // HOME: send KEY_HOME (102) to keyboard devices
         if (argc > start_dev_idx) {
             for (int i = start_dev_idx; i < argc; i++) {
                 int fd = open(argv[i], O_WRONLY);
@@ -81,10 +80,9 @@ int main(int argc, char **argv) {
                 close(fd);
             }
         } else {
-            for (int i = 0; i < 32; i++) {
-                char path[64];
-                snprintf(path, sizeof(path), "/dev/input/event%d", i);
-                int fd = open(path, O_WRONLY);
+            const char *devs[] = {"/dev/input/event12", "/dev/input/event14", "/dev/input/event0"};
+            for (int i = 0; i < 3; i++) {
+                int fd = open(devs[i], O_WRONLY);
                 if (fd >= 0) {
                     emit(fd, EV_KEY, 102, 1);
                     emit(fd, EV_SYN, SYN_REPORT, 0);
