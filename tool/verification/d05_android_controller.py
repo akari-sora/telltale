@@ -157,8 +157,8 @@ async def detect_input_devices():
 async def setup_fast_lifecycle_helpers():
     """Install standalone native shell scripts in /data/local/tmp on the Android device.
 
-    Executing these scripts via adb takes <15ms for power and <150ms for HOME,
-    eliminating app_process Java startup overhead (which took 5-8s) and avoiding
+    Executing these scripts via adb takes <15ms for power and <15ms for HOME,
+    eliminating app_process Java startup overhead (which took 2.5-8s) and avoiding
     all shell quote-stripping issues.
     """
     power_script = (
@@ -168,9 +168,21 @@ async def setup_fast_lifecycle_helpers():
         f"sendevent {POWER_INPUT_DEVICE} 1 116 0\n"
         f"sendevent {POWER_INPUT_DEVICE} 0 0 0\n"
     )
+    kb_devs = list(KEYBOARD_INPUT_DEVICES) if KEYBOARD_INPUT_DEVICES else ['/dev/input/event12', '/dev/input/event13']
+    kb_lines = []
+    for d in kb_devs:
+        kb_lines.append(
+            f"if [ -e '{d}' ]; then\n"
+            f"  sendevent '{d}' 1 102 1\n"
+            f"  sendevent '{d}' 0 0 0\n"
+            f"  sendevent '{d}' 1 102 0\n"
+            f"  sendevent '{d}' 0 0 0\n"
+            f"fi\n"
+        )
     home_script = (
         "#!/system/bin/sh\n"
-        "am start -a android.intent.action.MAIN -c android.intent.category.HOME\n"
+        + "".join(kb_lines)
+        + "nohup am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null 2>&1 &\n"
     )
     with tempfile.NamedTemporaryFile('w', delete=False) as tf:
         tf.write(power_script)
@@ -1586,21 +1598,26 @@ async def case(rig, index, click_text):
     try:
         receipt = await asyncio.wait_for(asyncio.shield(rig.held), timeout=90)
         event('held_query_confirmed_before_os_command', receipt=receipt, action=action)
+        hold_start = time.monotonic()
         # Execute fast native OS lifecycle event (HOME or SLEEP) during active hold
-        if index == 2:
-            # Native Power Button event (<15ms, triggers PowerManagerService.goToSleep)
-            await adb('shell', '/data/local/tmp/d05_power.sh', timeout=5, check=False)
-        else:
-            # Native HOME intent (<150ms, triggers ActivityManager pause)
-            await adb('shell', '/data/local/tmp/d05_home.sh', timeout=5, check=False)
+        script = '/data/local/tmp/d05_power.sh' if index == 2 else '/data/local/tmp/d05_home.sh'
+        try:
+            await asyncio.wait_for(adb('shell', script, timeout=5, check=False), timeout=1.0)
+        except asyncio.TimeoutError:
+            event('os_command_timeout_fallback', action=action)
         event('os_command_executed_during_hold', action=action, index=index)
 
-        # Pacing: ensure kernel/system_server registers the OS event before hold is released
-        await asyncio.sleep(0.3)
+        # Dynamic pacing: ensure kernel/system_server registers the OS event before hold is released,
+        # while strictly bounding total hold duration below Telltale's 2.0s discovery timeout (~0.4-0.8s).
+        elapsed = time.monotonic() - hold_start
+        pacing = max(0.05, min(0.3, 0.8 - elapsed))
+        await asyncio.sleep(pacing)
 
-        # Release hold immediately so total hold duration is strictly < 2.0s (~0.35-0.5s)
+        # Release hold immediately so total hold duration is strictly < 2.0s (~0.4-0.8s)
         rig.release.set()
-        event('mode08_hold_released_for_resume', index=index, command=command)
+        duration_s = round(time.monotonic() - hold_start, 3)
+        event('mode08_hold_released_for_resume', index=index, command=command,
+              hold_duration_s=duration_s)
         if index == 2:
             await wake_and_unlock()
         await launch_app(is_resume=True)
