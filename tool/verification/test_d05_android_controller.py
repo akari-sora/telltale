@@ -2272,6 +2272,26 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         self.assertNotIn('os_command_executed_during_hold', event_names)
         self.assertTrue(rig.release.is_set())
 
+    def test_read_recent_local_logcat_and_streaming_verification(self):
+        with self._patch_out():
+            # When file does not exist
+            self.assertEqual(CTRL.read_recent_local_logcat(), "")
+
+            # When file exists
+            log_content = (
+                "1790016000.100  1000  1010 I SomeTag: Normal message\n"
+                "1790016001.250  1948  1967 I ActivityTaskManager: START u0 {act=android.intent.action.MAIN cat=[android.intent.category.HOME] cmp=com.android.launcher3/.Launcher} from uid 0\n"
+            )
+            (self.out / 'android_logcat.txt').write_text(log_content)
+            recent = CTRL.read_recent_local_logcat()
+            self.assertIn('ActivityTaskManager', recent)
+            latest_ts = CTRL.get_latest_logcat_epoch_ts(recent)
+            self.assertAlmostEqual(latest_ts, 1790016001.250)
+
+            confirmed, evidence = CTRL.is_logcat_lifecycle_confirmed(recent, 'HOME', 1790016000.0)
+            self.assertTrue(confirmed)
+            self.assertTrue(any('Launcher' in e for e in evidence))
+
     def test_request_hierarchy_falls_back_to_sdcard_on_null_root(self):
         async def fake_adb(*args, timeout=45, check=True, full=False):
             if args[:3] == ('exec-out', 'uiautomator', 'dump'):

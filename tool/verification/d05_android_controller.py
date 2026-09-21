@@ -433,6 +433,38 @@ def is_sleep_active(text: str, initial_sleep_time: int = 0) -> bool:
     return False
 
 
+def read_recent_local_logcat(num_bytes: int = 65536) -> str:
+    """Direct zero-overhead inspection of streaming local logcat file."""
+    log_file = OUT / 'android_logcat.txt'
+    if not log_file.is_file():
+        return ""
+    try:
+        with log_file.open('rb') as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            seek_pos = max(0, size - num_bytes)
+            f.seek(seek_pos)
+            data = f.read()
+            return data.decode(errors='replace')
+    except Exception:
+        return ""
+
+
+def get_latest_logcat_epoch_ts(log_text: str) -> float:
+    """Extract the highest epoch timestamp found in recent logcat text."""
+    latest = 0.0
+    if not log_text:
+        return latest
+    for m in re.finditer(r'^\s*(\d+\.\d+)\s+', log_text, re.MULTILINE):
+        try:
+            val = float(m.group(1))
+            if val > latest:
+                latest = val
+        except ValueError:
+            pass
+    return latest
+
+
 def is_logcat_lifecycle_confirmed(logcat_text: str, action: str, min_epoch_ts: float = 0.0) -> tuple:
     """Inspect recent logcat output for genuine native OS lifecycle transition.
 
@@ -1883,14 +1915,16 @@ async def case(rig, index, click_text):
 
     # Record baseline logcat epoch timestamp to ensure strictly fresh event verification
     baseline_logcat_ts = 0.0
-    try:
-        base_out = await adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '1', timeout=2.0, check=False)
-        base_text = base_out.decode(errors='replace') if isinstance(base_out, (bytes, bytearray)) else str(base_out)
-        m_base = re.search(r'^\s*(\d+\.\d+)', base_text, re.MULTILINE)
-        if m_base:
-            baseline_logcat_ts = float(m_base.group(1))
-    except Exception:
-        pass
+    recent_local = read_recent_local_logcat(16384)
+    if recent_local:
+        baseline_logcat_ts = get_latest_logcat_epoch_ts(recent_local)
+    if baseline_logcat_ts == 0.0:
+        try:
+            base_out = await adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '1', timeout=2.0, check=False)
+            base_text = base_out.decode(errors='replace') if isinstance(base_out, (bytes, bytearray)) else str(base_out)
+            baseline_logcat_ts = get_latest_logcat_epoch_ts(base_text)
+        except Exception:
+            pass
 
     rig.arm(command)
     await adb('shell', 'input', 'tap', x, y)
@@ -1914,34 +1948,39 @@ async def case(rig, index, click_text):
         # Modified Option B: Dynamic in-hold native OS state verification
         # Maximum hold budget: 1.88s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
         hold_budget_deadline = hold_start + 1.88
-        poll_interval = 0.04
+        poll_interval = 0.03
         verified_state = None
         verified_at = None
         state_evidence = []
 
-        # Allow OS 0.20s to dispatch keyevent and begin lifecycle transition before polling
-        await asyncio.sleep(0.20)
-
         while time.monotonic() < hold_budget_deadline:
             remaining_budget = hold_budget_deadline - time.monotonic()
-            if remaining_budget <= 0.05:
+            if remaining_budget <= 0.02:
                 break
 
-            # 1. Primary fast short-circuit: Query recent logcat
-            # Give sufficient timeout (up to 0.85s) so adb subprocess is not killed on loaded QEMU host
-            log_text = ""
-            try:
-                log_timeout = min(0.85, max(0.35, remaining_budget - 0.05))
-                log_out = await adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '100', timeout=log_timeout, check=False)
-                log_text = log_out.decode(errors='replace') if isinstance(log_out, (bytes, bytearray)) else str(log_out)
+            # 1. Primary zero-overhead short-circuit: Read streaming local android_logcat.txt (< 1ms, zero ADB calls)
+            log_text = read_recent_local_logcat(65536)
+            if log_text:
                 confirmed, evidence = is_logcat_lifecycle_confirmed(log_text, action, baseline_logcat_ts)
                 if confirmed:
                     verified_at = time.monotonic()
                     verified_state = 'wakefulness_asleep' if index == 2 else 'activity_launcher'
                     state_evidence = evidence
                     break
-            except Exception as exc:
-                event('hold_poll_logcat_error', action=action, error=str(exc))
+            else:
+                # Fallback for mocked unit tests where android_logcat.txt does not exist
+                try:
+                    log_timeout = min(0.85, max(0.35, remaining_budget - 0.05))
+                    log_out = await adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '100', timeout=log_timeout, check=False)
+                    log_text = log_out.decode(errors='replace') if isinstance(log_out, (bytes, bytearray)) else str(log_out)
+                    confirmed, evidence = is_logcat_lifecycle_confirmed(log_text, action, baseline_logcat_ts)
+                    if confirmed:
+                        verified_at = time.monotonic()
+                        verified_state = 'wakefulness_asleep' if index == 2 else 'activity_launcher'
+                        state_evidence = evidence
+                        break
+                except Exception as exc:
+                    event('hold_poll_logcat_error', action=action, error=str(exc))
 
             # 2. Complementary path: Only query dumpsys if logcat returned empty (e.g. mocked in unit tests)
             # NEVER query dumpsys when logcat is functioning, as dumpsys blocks on mGlobalLock during window transition
