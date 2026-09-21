@@ -609,6 +609,42 @@ void main() {
       );
       expect(transport.commandLog.contains('0100'), isTrue);
     });
+
+    test('T-TIMEOUT-FUTURE-DL: request with unexpired future deadline times out on swallowed prompt, throwing responseTimeout not deadlineExpired', () async {
+      final swallowed = <String>{};
+      final client = await _createConnectedClient(
+        faults: AdapterFaults(swallowPromptFor: swallowed),
+        commandTimeout: const Duration(milliseconds: 100),
+      );
+      final transport = client.transport as FakeElm327;
+      swallowed.add('0100');
+      final link = Elm327DiagnosticLink(client);
+
+      final request = DiagnosticRequest(
+        id: const DiagnosticRequestId('req-timeout-future-dl'),
+        pdu: ApplicationPdu(const [0x01, 0x00]),
+        target: DiagnosticTarget.wholeVehicleObd,
+        requiredCapabilities: const {
+          DiagnosticCapability.applicationPdu,
+          DiagnosticCapability.wholeVehicleObd,
+        },
+        connectionGeneration: link.connectionGeneration,
+        deadline: DateTime.now().add(const Duration(seconds: 6)),
+        ownership: const DiagnosticOwnership(mode: DiagnosticOwnershipMode.oneShot),
+      );
+
+      await expectLater(
+        link.send(request),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            equals(DiagnosticFailureKind.responseTimeout),
+          ),
+        ),
+      );
+      expect(transport.commandLog.contains('0100'), isTrue);
+    });
   });
 
   group('PollingEngine.discoverResponders() integration', () {

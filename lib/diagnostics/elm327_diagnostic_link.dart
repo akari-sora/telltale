@@ -103,12 +103,8 @@ class Elm327DiagnosticLink implements DiagnosticLink {
         cause: e,
       );
     } on TimeoutException catch (e) {
-      final isDeadline = (request.deadline != null &&
-              !request.deadline!.isAfter(
-                DateTime.now().add(const Duration(milliseconds: 25)),
-              )) ||
-          (e.message?.contains('time limit for this operation has passed') ??
-              false);
+      final deadline = request.deadline;
+      final isDeadline = deadline != null && !deadline.isAfter(DateTime.now());
       throw DiagnosticLinkException(
         kind: isDeadline
             ? DiagnosticFailureKind.deadlineExpired
