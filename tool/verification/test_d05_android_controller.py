@@ -2067,6 +2067,54 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         ok_fresh, _ = CTRL.is_logcat_lifecycle_confirmed(fresh_log, 'HOME', min_epoch_ts=1790012100.0)
         self.assertTrue(ok_fresh)
 
+    def test_is_logcat_lifecycle_confirmed_reviewer_counterexamples(self):
+        baseline_ts = 1790012100.0
+
+        # Counterexample 1: Baseline last line is already HOME (ts == baseline) -> must be rejected!
+        boundary_equal_log = (
+            "1790012100.000  1948  1967 I ActivityTaskManager: START u0 "
+            "{act=android.intent.action.MAIN cat=[android.intent.category.HOME] cmp=com.android.launcher3/.Launcher}\n"
+        )
+        ok_equal, _ = CTRL.is_logcat_lifecycle_confirmed(boundary_equal_log, 'HOME', min_epoch_ts=baseline_ts)
+        self.assertFalse(ok_equal, "Log with ts == baseline must not be confirmed as a fresh event")
+
+        # Counterexample 2: HOME occurred 100ms before baseline (ts == baseline - 0.100) -> must be rejected!
+        prior_100ms_log = (
+            "1790012099.900  1948  1967 I ActivityTaskManager: START u0 "
+            "{act=android.intent.action.MAIN cat=[android.intent.category.HOME] cmp=com.android.launcher3/.Launcher}\n"
+        )
+        ok_prior, _ = CTRL.is_logcat_lifecycle_confirmed(prior_100ms_log, 'HOME', min_epoch_ts=baseline_ts)
+        self.assertFalse(ok_prior, "Log 100ms before baseline must not be confirmed")
+
+        # Counterexample 3: Matching HOME line lacks epoch timestamp -> must be rejected!
+        no_timestamp_log = (
+            "I ActivityTaskManager: START u0 "
+            "{act=android.intent.action.MAIN cat=[android.intent.category.HOME] cmp=com.android.launcher3/.Launcher}\n"
+        )
+        ok_no_ts, _ = CTRL.is_logcat_lifecycle_confirmed(no_timestamp_log, 'HOME', min_epoch_ts=baseline_ts)
+        self.assertFalse(ok_no_ts, "Matching line without epoch timestamp must be rejected when baseline is set")
+
+    def test_read_recent_local_logcat_start_offset_isolation(self):
+        with self._patch_out():
+            logcat_path = self.out / 'android_logcat.txt'
+            # Write initial historical logs
+            logcat_path.write_text("1790010000.000 Initial historical log before hold\n")
+            initial_offset = CTRL.get_local_logcat_size()
+            self.assertGreater(initial_offset, 0)
+
+            # Reading with start_offset = initial_offset should yield empty string (no new bytes yet)
+            data_before = CTRL.read_recent_local_logcat(start_offset=initial_offset)
+            self.assertEqual(data_before, "")
+
+            # Append new log line generated after hold
+            with logcat_path.open('a') as f:
+                f.write("1790010001.000 Fresh event during hold\n")
+
+            # Reading with start_offset = initial_offset should only return newly appended line
+            data_after = CTRL.read_recent_local_logcat(start_offset=initial_offset)
+            self.assertEqual(data_after, "1790010001.000 Fresh event during hold\n")
+            self.assertNotIn("Initial historical log", data_after)
+
     def test_case_modified_option_b_fast_logcat_short_circuit(self):
         class MockRig:
             def __init__(self):
@@ -2089,14 +2137,22 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
             dict(text='TID $01', desc='', enabled='true', bounds='[0,100][100,200]'),
         ]
 
+        logcat_calls = 0
         async def fake_adb(*args, timeout=40, check=True, full=False):
+            nonlocal logcat_calls
             stdout = b''
             if 'logcat' in args:
-                stdout = (
-                    b"1790012105.017  1948  1967 I ActivityTaskManager: START u0 "
-                    b"{act=android.intent.action.MAIN cat=[android.intent.category.HOME] "
-                    b"cmp=com.android.launcher3/.Launcher} from uid 0\n"
-                )
+                logcat_calls += 1
+                if logcat_calls == 1:
+                    # Baseline call before arming
+                    stdout = b"1790012105.000  1948  1967 I System: baseline ready\n"
+                else:
+                    # Fresh event triggered by action during hold (strictly > baseline)
+                    stdout = (
+                        b"1790012105.500  1948  1967 I ActivityTaskManager: START u0 "
+                        b"{act=android.intent.action.MAIN cat=[android.intent.category.HOME] "
+                        b"cmp=com.android.launcher3/.Launcher} from uid 0\n"
+                    )
             return SimpleNamespace(returncode=0, stdout=stdout, stderr=b'') if full else stdout
 
         async def fake_dump(label, screenshot=True, prepare=True):

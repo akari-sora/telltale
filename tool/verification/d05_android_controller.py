@@ -433,8 +433,23 @@ def is_sleep_active(text: str, initial_sleep_time: int = 0) -> bool:
     return False
 
 
-def read_recent_local_logcat(num_bytes: int = 65536) -> str:
-    """Direct zero-overhead inspection of streaming local logcat file."""
+def get_local_logcat_size() -> int:
+    """Return the current file size in bytes of the local streaming logcat."""
+    log_file = OUT / 'android_logcat.txt'
+    if not log_file.is_file():
+        return 0
+    try:
+        return log_file.stat().st_size
+    except Exception:
+        return 0
+
+
+def read_recent_local_logcat(num_bytes: int = 65536, start_offset: int = 0) -> str:
+    """Direct zero-overhead inspection of streaming local logcat file.
+
+    If start_offset > 0, reads only bytes appended at or after start_offset,
+    guaranteeing historical log entries from before hold_start cannot be read.
+    """
     log_file = OUT / 'android_logcat.txt'
     if not log_file.is_file():
         return ""
@@ -442,7 +457,10 @@ def read_recent_local_logcat(num_bytes: int = 65536) -> str:
         with log_file.open('rb') as f:
             f.seek(0, os.SEEK_END)
             size = f.tell()
-            seek_pos = max(0, size - num_bytes)
+            if start_offset > 0:
+                seek_pos = min(start_offset, size)
+            else:
+                seek_pos = max(0, size - num_bytes)
             f.seek(seek_pos)
             data = f.read()
             return data.decode(errors='replace')
@@ -469,7 +487,10 @@ def is_logcat_lifecycle_confirmed(logcat_text: str, action: str, min_epoch_ts: f
     """Inspect recent logcat output for genuine native OS lifecycle transition.
 
     Returns (confirmed: bool, evidence: list[str]).
-    If min_epoch_ts > 0, only considers log lines occurring at or after min_epoch_ts - 0.20s.
+    If min_epoch_ts > 0:
+      1. Every considered line MUST have a valid epoch timestamp.
+      2. The epoch timestamp must be strictly greater than min_epoch_ts (ts > min_epoch_ts).
+      Lines without an epoch timestamp, or with ts <= min_epoch_ts, are strictly rejected.
     """
     if not logcat_text:
         return False, []
@@ -497,9 +518,13 @@ def is_logcat_lifecycle_confirmed(logcat_text: str, action: str, min_epoch_ts: f
             continue
         # Extract epoch timestamp if formatted with -v epoch (e.g., '1790012105.017  1948 ...')
         m_ts = re.match(r'^\s*(\d+\.\d+)\s+', stripped)
-        if m_ts and min_epoch_ts > 0.0:
+        if min_epoch_ts > 0.0:
+            if not m_ts:
+                # Cannot verify freshness without epoch timestamp when baseline is set
+                continue
             ts = float(m_ts.group(1))
-            if ts < min_epoch_ts - 0.20:
+            if ts <= min_epoch_ts:
+                # Reject historical events from before or equal to baseline
                 continue
         if target_pattern.search(stripped):
             evidence.append(stripped)
@@ -1913,7 +1938,8 @@ async def case(rig, index, click_text):
         except Exception:
             pass
 
-    # Record baseline logcat epoch timestamp to ensure strictly fresh event verification
+    # Record baseline logcat epoch timestamp and file offset to ensure strictly fresh event verification
+    baseline_logcat_offset = get_local_logcat_size()
     baseline_logcat_ts = 0.0
     recent_local = read_recent_local_logcat(16384)
     if recent_local:
@@ -1959,7 +1985,7 @@ async def case(rig, index, click_text):
                 break
 
             # 1. Primary zero-overhead short-circuit: Read streaming local android_logcat.txt (< 1ms, zero ADB calls)
-            log_text = read_recent_local_logcat(65536)
+            log_text = read_recent_local_logcat(65536, start_offset=baseline_logcat_offset)
             if log_text:
                 confirmed, evidence = is_logcat_lifecycle_confirmed(log_text, action, baseline_logcat_ts)
                 if confirmed:
@@ -2020,8 +2046,6 @@ async def case(rig, index, click_text):
             # Release hold and immediately capture host monotonic release timestamp
             rig.release.set()
             hold_release_at = time.monotonic()
-            if hold_release_at <= verified_at:
-                hold_release_at = verified_at + 0.0001
 
             # Host Monotonic Clock Assertions: verified_at must strictly precede hold_release_at
             assert verified_at < hold_release_at, (
