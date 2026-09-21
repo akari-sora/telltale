@@ -1503,17 +1503,25 @@ async def case(rig, index, click_text):
     try:
         receipt = await asyncio.wait_for(asyncio.shield(rig.held), timeout=90)
         event('held_query_confirmed_before_os_command', receipt=receipt, action=action)
-        key_task = asyncio.create_task(
-            adb('shell', 'input', 'keyevent', '223' if index == 2 else '3',
-                timeout=20, check=False)
-        )
-        # Release hold at 0.5s while keyevent is executing so app receives Mode 08
-        # response well within its 2.0s discovery timeout, avoiding connection lost.
-        await asyncio.sleep(0.5)
+        # Execute OS lifecycle event (HOME or SLEEP) during active hold
+        await adb('shell', 'input', 'keyevent', '223' if index == 2 else '3',
+                  timeout=20, check=False)
+        # Verify OS-level state transition before releasing the hold
+        if index == 2:
+            power_data = await adb('shell', 'dumpsys', 'power', timeout=10, check=False)
+            power_text = power_data.decode(errors='replace') if isinstance(power_data, (bytes, bytearray)) else str(power_data)
+            is_asleep = 'mWakefulness=Asleep' in power_text or 'mLastSleepReason=sleep_button' in power_text
+            event('os_command_executed_during_hold', action=action, index=index,
+                  verified_asleep=is_asleep)
+        else:
+            act_data = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=10, check=False)
+            act_text = act_data.decode(errors='replace') if isinstance(act_data, (bytes, bytearray)) else str(act_data)
+            is_home = 'launcher' in act_text.lower()
+            event('os_command_executed_during_hold', action=action, index=index,
+                  verified_home=is_home)
+        # Release hold now that OS event has been executed and verified in-flight
         rig.release.set()
         event('mode08_hold_released_for_resume', index=index, command=command)
-        await key_task
-        event('os_command_executed_during_hold', action=action, index=index)
         if index == 2:
             await wake_and_unlock()
         await launch_app(is_resume=True)

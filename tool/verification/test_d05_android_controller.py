@@ -1622,21 +1622,21 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         lines = [json.loads(l) for l in self.event_file.read_text().splitlines() if l.strip()]
         event_names = [e['event'] for e in lines]
 
-        # Verify hold released before or concurrently with OS command completion
+        # Verify hold released strictly AFTER OS command execution and verification during hold
         self.assertIn('held_query_confirmed_before_os_command', event_names)
-        self.assertIn('mode08_hold_released_for_resume', event_names)
         self.assertIn('os_command_executed_during_hold', event_names)
+        self.assertIn('mode08_hold_released_for_resume', event_names)
         self.assertIn('case_observations_complete', event_names)
 
-        # Confirm release came right after held query confirmation
+        # Confirm order: held query -> OS command executed during hold -> hold released -> complete
         held_idx = event_names.index('held_query_confirmed_before_os_command')
-        rel_idx = event_names.index('mode08_hold_released_for_resume')
         os_cmd_idx = event_names.index('os_command_executed_during_hold')
+        rel_idx = event_names.index('mode08_hold_released_for_resume')
         complete_idx = event_names.index('case_observations_complete')
 
-        self.assertLess(held_idx, rel_idx)
-        self.assertLess(rel_idx, os_cmd_idx)
-        self.assertLess(os_cmd_idx, complete_idx)
+        self.assertLess(held_idx, os_cmd_idx)
+        self.assertLess(os_cmd_idx, rel_idx)
+        self.assertLess(rel_idx, complete_idx)
 
         # Confirm acceptance marker
         comp_event = [e for e in lines if e['event'] == 'case_observations_complete'][0]
