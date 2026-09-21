@@ -420,14 +420,16 @@ def is_sleep_active(text: str, initial_sleep_time: int = 0) -> bool:
         stripped = line.strip()
         if 'mWakefulness=Asleep' in stripped or 'mWakefulness=Dozing' in stripped:
             return True
+        if 'isSleeping=true' in stripped or 'Display Power: state=OFF' in stripped:
+            return True
         if stripped.startswith('mLastSleepTime='):
             match = re.search(r'mLastSleepTime=(\d+)', stripped)
             if match:
                 st = int(match.group(1))
                 if st > 0 and st > initial_sleep_time:
                     return True
-        if 'mHoldingDisplaySuspendBlocker=false' in stripped:
-            pass
+        if 'mLastSleepReason=power_button' in stripped or 'mLastSleepReason=device_admin' in stripped:
+            return True
     return False
 
 
@@ -1863,9 +1865,9 @@ async def case(rig, index, click_text):
 
         while time.monotonic() < hold_budget_deadline:
             remaining_budget = hold_budget_deadline - time.monotonic()
-            if remaining_budget <= 0.06:
+            if remaining_budget <= 0.05:
                 break
-            poll_timeout = min(1.80, max(0.20, remaining_budget))
+            poll_timeout = min(1.85, max(0.20, remaining_budget))
             if index == 2:
                 # SLEEP: Query dumpsys power
                 try:
@@ -1879,10 +1881,9 @@ async def case(rig, index, click_text):
                 except Exception as exc:
                     event('hold_poll_error', action=action, error=str(exc))
             else:
-                # HOME (Case 1 & Case 3): Query dumpsys activity top first (fastest, ~200-400ms), fallback to activities
+                # HOME (Case 1 & Case 3): Query dumpsys activity top (fastest, ~200-400ms) with full poll timeout
                 try:
-                    top_timeout = min(0.60, poll_timeout)
-                    a_out = await adb('shell', 'dumpsys', 'activity', 'top', timeout=top_timeout, check=False)
+                    a_out = await adb('shell', 'dumpsys', 'activity', 'top', timeout=poll_timeout, check=False)
                     a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
                     if is_launcher_active(a_text):
                         verified_at = time.monotonic()
@@ -1892,10 +1893,10 @@ async def case(rig, index, click_text):
                 except Exception as exc:
                     event('hold_poll_error', action=action, error=str(exc))
 
-                remaining_budget = hold_budget_deadline - time.monotonic()
-                if remaining_budget > 0.10:
+                rem = hold_budget_deadline - time.monotonic()
+                if rem > 0.40 and not verified_state:
                     try:
-                        act_timeout = min(1.80, remaining_budget)
+                        act_timeout = min(1.85, rem)
                         a_out = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=act_timeout, check=False)
                         a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
                         if is_launcher_active(a_text):
