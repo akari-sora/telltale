@@ -159,15 +159,41 @@ async def setup_fast_lifecycle_helpers():
     """Install standalone native shell scripts in /data/local/tmp on the Android device.
 
     Executing these scripts via adb eliminates shell quote-stripping issues.
+    Uses sub-10ms Linux evdev sendevent for instant lifecycle triggering, with
+    detached background keyevent fallback.
     """
     await adb('shell', 'svc', 'power', 'stayon', 'false', timeout=10, check=False)
+    power_dev = POWER_INPUT_DEVICE or '/dev/input/event0'
     power_script = (
         "#!/system/bin/sh\n"
-        "input keyevent 223\n"
+        f"if [ -e '{power_dev}' ]; then\n"
+        f"  sendevent '{power_dev}' 1 116 1\n"
+        f"  sendevent '{power_dev}' 0 0 0\n"
+        f"  sendevent '{power_dev}' 1 116 0\n"
+        f"  sendevent '{power_dev}' 0 0 0\n"
+        "fi\n"
+        "if command -v setsid >/dev/null 2>&1; then\n"
+        "  setsid input keyevent 223 </dev/null >/dev/null 2>&1 &\n"
+        "else\n"
+        "  input keyevent 223 </dev/null >/dev/null 2>&1 &\n"
+        "fi\n"
     )
+    kb_devs = " ".join(KEYBOARD_INPUT_DEVICES) if KEYBOARD_INPUT_DEVICES else "/dev/input/event12 /dev/input/event13"
     home_script = (
         "#!/system/bin/sh\n"
-        "input keyevent 3\n"
+        f"for d in {kb_devs}; do\n"
+        "  if [ -e \"$d\" ]; then\n"
+        "    sendevent \"$d\" 1 102 1\n"
+        "    sendevent \"$d\" 0 0 0\n"
+        "    sendevent \"$d\" 1 102 0\n"
+        "    sendevent \"$d\" 0 0 0\n"
+        "  fi\n"
+        "done\n"
+        "if command -v setsid >/dev/null 2>&1; then\n"
+        "  setsid input keyevent 3 </dev/null >/dev/null 2>&1 &\n"
+        "else\n"
+        "  input keyevent 3 </dev/null >/dev/null 2>&1 &\n"
+        "fi\n"
     )
     with tempfile.NamedTemporaryFile('w', delete=False) as tf:
         tf.write(power_script)
@@ -1606,8 +1632,16 @@ async def case(rig, index, click_text):
         raise RuntimeError('Refusing to tap a node with empty text and content-desc')
     event('selected_observed_ui_node', text=click_text, node=row, node_label=label,
           scroll_attempts=attempt, scrolled=bool(attempt > 0))
+    initial_sleep_time = 0
     if index == 2:
         await adb('shell', 'svc', 'power', 'stayon', 'false', timeout=10, check=False)
+        try:
+            p_init = await adb('shell', 'dumpsys', 'power', timeout=5, check=False)
+            m_init = re.search(r'mLastSleepTime=(\d+)', p_init.decode(errors='replace'))
+            if m_init:
+                initial_sleep_time = int(m_init.group(1))
+        except Exception:
+            pass
     rig.arm(command)
     await adb('shell', 'input', 'tap', x, y)
     try:
@@ -1639,7 +1673,7 @@ async def case(rig, index, click_text):
                     verified_state = 'wakefulness_asleep'
                     break
                 m = re.search(r'mLastSleepTime=(\d+)', p_text)
-                if m and int(m.group(1)) > 0:
+                if m and int(m.group(1)) > initial_sleep_time:
                     verified = True
                     verified_state = f'last_sleep_time_{m.group(1)}'
                     break
