@@ -2,10 +2,10 @@
 
 # Telltale
 
-> **GitHub home:** https://github.com/aa22396584/telltale  
-> Please open issues and pull requests there.  
-> **Also on:** [Codeberg](https://codeberg.org/ImL1s/telltale) · [GitLab](https://gitlab.com/aa22396584/telltale)  
-> Former GitHub account `ImL1s` is restricted; use `aa22396584` for browsing and contributions.
+> **Development home:** https://gitlab.com/aa22396584/telltale  
+> Please open issues and merge requests there.  
+> **Mirrors:** [GitHub](https://github.com/aa22396584/telltale) · [Codeberg](https://codeberg.org/ImL1s/telltale)  
+> Former GitHub account `ImL1s` is restricted; use GitLab for primary development and `aa22396584` on GitHub for backup mirror.
 
 > **Install / downtime notes:** prefer
 > **[Google Play](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)**;
@@ -16,6 +16,7 @@
 > `https://codeberg.org/ImL1s/telltale/releases` or
 > `https://github.com/aa22396584/telltale/releases`.
 
+[![GitLab CI](https://gitlab.com/aa22396584/telltale/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/telltale/-/pipelines)
 [![CI](https://github.com/aa22396584/telltale/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aa22396584/telltale/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/aa22396584/telltale?include_prereleases&sort=semver&label=latest%20release)](https://github.com/aa22396584/telltale/releases)
 [![Google Play](https://img.shields.io/badge/Google_Play-View_listing-414141?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)

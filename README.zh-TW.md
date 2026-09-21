@@ -2,9 +2,9 @@
 
 # Telltale
 
-> **開發、Issues 與 PR：** https://github.com/aa22396584/telltale  
-> **鏡像：** [GitLab](https://gitlab.com/aa22396584/telltale) · [Codeberg](https://codeberg.org/ImL1s/telltale)  
-> 舊帳號 `ImL1s` 目前受限，請改用 `aa22396584` 瀏覽與貢獻。
+> **開發主庫、Issues 與 MR：** https://gitlab.com/aa22396584/telltale  
+> **鏡像：** [GitHub](https://github.com/aa22396584/telltale) · [Codeberg](https://codeberg.org/ImL1s/telltale)  
+> 舊帳號 `ImL1s` 目前受限；以 GitLab 為主要開發中心，`aa22396584` 於 GitHub 作為備份鏡像。
 
 > **安裝／停機指引：** 建議優先
 > **[Google Play](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)**；
@@ -15,6 +15,7 @@
 > `https://codeberg.org/ImL1s/telltale/releases` 或
 > `https://github.com/aa22396584/telltale/releases`。
 
+[![GitLab CI](https://gitlab.com/aa22396584/telltale/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/telltale/-/pipelines)
 [![CI](https://github.com/aa22396584/telltale/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aa22396584/telltale/actions/workflows/ci.yml)
 [![最新版本](https://img.shields.io/github/v/release/aa22396584/telltale?include_prereleases&sort=semver&label=latest%20release)](https://github.com/aa22396584/telltale/releases)
 [![Google Play](https://img.shields.io/badge/Google_Play-View_listing-414141?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)
