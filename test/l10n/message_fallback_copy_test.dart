@@ -504,7 +504,7 @@ void main() {
   test(
     'a FormulaException with no identifier does not render the engine sentence',
     () {
-      const exception = FormulaException('運算結果不是有效數值', 'A', issue: null);
+      const exception = FormulaException('Result is not a finite number', 'A', issue: null);
       expect(formulaIssueText(_en, exception), isNull);
       expect(_en.pidFormulaUnidentified, isNot(contains('運算')));
       expect(chinese.hasMatch(_en.pidFormulaUnidentified), isFalse);

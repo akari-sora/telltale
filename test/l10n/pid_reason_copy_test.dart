@@ -383,7 +383,7 @@ void main() {
     expect(
       formulaIssueText(
         en,
-        const FormulaException('運算結果不是有效數值', 'A', issue: null),
+        const FormulaException('Result is not a finite number', 'A', issue: null),
       ),
       isNull,
     );

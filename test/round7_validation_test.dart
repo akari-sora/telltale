@@ -81,7 +81,7 @@ void main() {
       () => engine.evaluateBytes('VAL{010B}', const [0x40],
           requester: consumer, now: now),
       throwsA(isA<FormulaException>().having(
-        (e) => e.toString(), 'message', contains('兩個定義'))),
+        (e) => e.toString(), 'message', contains('Two definitions'))),
       reason: 'the remedy is to remove a gauge, not to wait for a reading '
           'that has already arrived twice',
     );
@@ -115,7 +115,7 @@ void main() {
       () => engine.evaluateBytes('BARO', const [0x00],
           requester: baroSource('A', 'plain'), now: now),
       throwsA(isA<FormulaException>().having(
-          (e) => e.toString(), 'message', contains('兩個定義'))),
+          (e) => e.toString(), 'message', contains('Two definitions'))),
       reason: 'picking either would be picking at random, which is what the '
           'sibling rule already refuses to do',
     );
