@@ -162,13 +162,29 @@ async def setup_fast_lifecycle_helpers():
     eliminating app_process Java startup overhead and avoiding shell quote-stripping issues.
     """
     await adb('shell', 'svc', 'power', 'stayon', 'false', timeout=10, check=False)
+    power_dev = POWER_INPUT_DEVICE or '/dev/input/event0'
     power_script = (
         "#!/system/bin/sh\n"
-        "input keyevent 223\n"
+        f"if [ -e '{power_dev}' ]; then\n"
+        f"  sendevent '{power_dev}' 1 116 1\n"
+        f"  sendevent '{power_dev}' 0 0 0\n"
+        f"  sendevent '{power_dev}' 1 116 0\n"
+        f"  sendevent '{power_dev}' 0 0 0\n"
+        "fi\n"
+        "input keyevent 223 >/dev/null 2>&1 < /dev/null &\n"
     )
+    kb_devs = " ".join(KEYBOARD_INPUT_DEVICES) if KEYBOARD_INPUT_DEVICES else "/dev/input/event14 /dev/input/event12"
     home_script = (
         "#!/system/bin/sh\n"
-        "input keyevent 3\n"
+        f"for d in {kb_devs}; do\n"
+        "  if [ -e \"$d\" ]; then\n"
+        "    sendevent \"$d\" 1 172 1\n"
+        "    sendevent \"$d\" 0 0 0\n"
+        "    sendevent \"$d\" 1 172 0\n"
+        "    sendevent \"$d\" 0 0 0\n"
+        "  fi\n"
+        "done\n"
+        "input keyevent 3 >/dev/null 2>&1 < /dev/null &\n"
     )
     with tempfile.NamedTemporaryFile('w', delete=False) as tf:
         tf.write(power_script)
@@ -1632,9 +1648,7 @@ async def case(rig, index, click_text):
         verified = False
         verified_state = ''
         if index == 2:
-            for _ in range(10):
-                if time.monotonic() - hold_start >= 1.75:
-                    break
+            while time.monotonic() - hold_start < 1.75:
                 p_dump = await adb('shell', 'dumpsys', 'power', timeout=5, check=False)
                 p_text = p_dump.decode(errors='replace')
                 if 'mWakefulness=Asleep' in p_text or 'mWakefulness=Dozing' in p_text:
@@ -1652,9 +1666,7 @@ async def case(rig, index, click_text):
                     break
                 await asyncio.sleep(0.04)
         else:
-            for _ in range(10):
-                if time.monotonic() - hold_start >= 1.75:
-                    break
+            while time.monotonic() - hold_start < 1.75:
                 w_dump = await adb('shell', 'dumpsys', 'window', timeout=5, check=False)
                 w_text = w_dump.decode(errors='replace')
                 if any(k in w_text.lower() for k in ('launcher', 'nexuslauncher', 'launcher3')):
