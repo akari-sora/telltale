@@ -352,7 +352,7 @@ def parse_ui_rows(xml):
         raise ValueError('UI dump hierarchy had no nodes')
     return [dict(text=n.get('text'), desc=n.get('content-desc'), bounds=n.get('bounds'),
                  enabled=n.get('enabled'), clickable=n.get('clickable'), clazz=n.get('class'),
-                 resource_id=n.get('resource-id'))
+                 resource_id=n.get('resource-id'), package=n.get('package'))
             for n in root.iter('node') if n.get('text') or n.get('content-desc') or n.get('class') == 'android.widget.EditText']
 
 
@@ -561,6 +561,16 @@ async def dump(label='view', screenshot=True, prepare=True):
         xml, stderr, returncode, source = await request_hierarchy()
         try:
             rows = parse_ui_rows(xml)
+            diag = find_system_dialog(rows)
+            if diag:
+                event('system_dialog_detected', attempt=attempt,
+                      resource_id=diag.get('resource_id'),
+                      text=diag.get('text'), package=diag.get('package'))
+                if time.monotonic() >= deadline:
+                    break
+                await dismiss_system_dialog(rows)
+                await asyncio.sleep(DUMP_RETRY_SLEEP or 1.0)
+                continue
             break
         except (ET.ParseError, ValueError) as exc:
             last_error = exc
@@ -655,6 +665,42 @@ def locate_text(rows, text, exact=False):
         return None
     _, _, row, x, y = min(matching)
     return row, x, y
+
+
+def find_system_dialog(rows):
+    """Detect system ANR dialogs, crash alerts, or power menus blocking the UI."""
+    for r in rows:
+        rid = r.get('resource_id') or ''
+        txt = (r.get('text') or '').strip().lower()
+        desc = (r.get('desc') or '').strip().lower()
+        pkg = r.get('package') or ''
+        combined = f'{txt} {desc}'
+        if rid in ('android:id/aerr_close', 'android:id/aerr_wait'):
+            return r
+        if "isn't responding" in combined or 'keeps stopping' in combined or 'has stopped' in combined:
+            return r
+        if 'power off' in combined and (pkg == 'android' or rid.startswith('android:id/')):
+            return r
+    return None
+
+
+async def dismiss_system_dialog(rows):
+    """Dismiss any blocking system ANR, crash, or power menu dialog."""
+    wait_node = locate_text(rows, 'Wait', exact=True)
+    if wait_node:
+        row, x, y = wait_node
+        event('dismiss_system_dialog_action', action='tap_wait', x=x, y=y)
+        await adb('shell', 'input', 'tap', str(x), str(y), timeout=5, check=False)
+        return True
+    close_node = locate_text(rows, 'Close app', exact=True) or locate_text(rows, 'OK', exact=True)
+    if close_node:
+        row, x, y = close_node
+        event('dismiss_system_dialog_action', action='tap_close', x=x, y=y)
+        await adb('shell', 'input', 'tap', str(x), str(y), timeout=5, check=False)
+        return True
+    event('dismiss_system_dialog_action', action='keyevent_back')
+    await adb('shell', 'input', 'keyevent', '4', timeout=5, check=False)
+    return True
 
 
 def dashboard_ready(rows):

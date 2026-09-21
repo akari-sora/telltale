@@ -79,6 +79,28 @@ class HierarchyParseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'truncated'):
             CTRL.parse_ui_rows(b"<?xml version='1.0'?><hierarchy rotation='0'><node text='x'")
 
+    def test_find_system_dialog_detects_anr_and_ignores_valid_ui(self):
+        anr_xml = (
+            b"<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>"
+            b"<hierarchy rotation='0'>"
+            b"<node index='0' text='' resource-id='' class='android.widget.FrameLayout' package='android' "
+            b"bounds='[64,305][415,470]' enabled='true' clickable='false'>"
+            b"<node index='0' text=\"System UI isn't responding\" resource-id='android:id/alertTitle' "
+            b"class='android.widget.TextView' package='android' bounds='[88,323][391,351]' enabled='true' clickable='false' />"
+            b"<node index='0' text='Close app' resource-id='android:id/aerr_close' class='android.widget.Button' "
+            b"package='android' bounds='[64,366][415,414]' enabled='true' clickable='true' />"
+            b"<node index='1' text='Wait' resource-id='android:id/aerr_wait' class='android.widget.Button' "
+            b"package='android' bounds='[64,414][415,462]' enabled='true' clickable='true' />"
+            b"</node></hierarchy>"
+        )
+        anr_rows = CTRL.parse_ui_rows(anr_xml)
+        diag = CTRL.find_system_dialog(anr_rows)
+        self.assertIsNotNone(diag)
+        self.assertEqual(diag['resource_id'], 'android:id/alertTitle')
+
+        valid_rows = CTRL.parse_ui_rows(VALID_HIERARCHY)
+        self.assertIsNone(CTRL.find_system_dialog(valid_rows))
+
 
 class ResumeDetectionTests(unittest.TestCase):
     def test_top_resumed_activity_counts(self):
@@ -180,6 +202,51 @@ class DumpRetryTests(unittest.TestCase):
                 self._run(CTRL.dump('initial', screenshot=False))
         self.assertTrue(any(path.name.endswith('_logcat.txt') for path in self.out.glob('*')))
         self.assertTrue(any('_raw.bin' in path.name for path in self.out.glob('*')))
+
+    def test_dump_dismisses_system_anr_dialog_and_retries(self):
+        anr_xml = (
+            b"<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>"
+            b"<hierarchy rotation='0'>"
+            b"<node index='0' text='' resource-id='' class='android.widget.FrameLayout' package='android' "
+            b"bounds='[64,305][415,470]' enabled='true' clickable='false'>"
+            b"<node index='0' text=\"System UI isn't responding\" resource-id='android:id/alertTitle' "
+            b"class='android.widget.TextView' package='android' bounds='[88,323][391,351]' enabled='true' clickable='false' />"
+            b"<node index='0' text='Close app' resource-id='android:id/aerr_close' class='android.widget.Button' "
+            b"package='android' bounds='[64,366][415,414]' enabled='true' clickable='true' />"
+            b"<node index='1' text='Wait' resource-id='android:id/aerr_wait' class='android.widget.Button' "
+            b"package='android' bounds='[64,414][415,462]' enabled='true' clickable='true' />"
+            b"</node></hierarchy>"
+        )
+        responses = [anr_xml, VALID_HIERARCHY]
+        tap_calls = []
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            self.calls.append(args)
+            if args[:3] == ('exec-out', 'uiautomator', 'dump'):
+                count = len([c for c in self.calls if c[:3] == ('exec-out', 'uiautomator', 'dump')])
+                stdout = responses[0] if count == 1 else responses[1]
+                result = SimpleNamespace(returncode=0, stdout=stdout, stderr=b'')
+                return result if full else stdout
+            if args[:3] == ('shell', 'input', 'tap'):
+                tap_calls.append(args)
+                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'') if full else b''
+            if args[:2] in (('shell', 'input'), ('shell', 'wm'), ('shell', 'svc'), ('shell', 'settings')):
+                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'') if full else b''
+            raise AssertionError('unexpected adb args: ' + repr(args))
+
+        async def instant_sleep(_delay):
+            return None
+
+        with self._patch_out(), patch.object(CTRL, 'adb', fake_adb), \
+                patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            rows = self._run(CTRL.dump('initial', screenshot=False))
+        self.assertEqual(rows[0]['text'], 'Discover Mode 08')
+        # Tapped the Wait button at x=(64+415)//2=239, y=(414+462)//2=438
+        self.assertEqual(tap_calls, [('shell', 'input', 'tap', '239', '438')])
+        # controller.jsonl recorded the detection and dismissal
+        events = [json.loads(line) for line in (self.out / 'controller.jsonl').read_text().splitlines()]
+        self.assertTrue(any(e.get('event') == 'system_dialog_detected' for e in events))
+        self.assertTrue(any(e.get('event') == 'dismiss_system_dialog_action' and e.get('action') == 'tap_wait' for e in events))
 
     def test_launch_app_waits_until_main_activity_resumes(self):
         dumpsys = [
