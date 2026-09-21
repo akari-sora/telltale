@@ -1744,6 +1744,37 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         chmod_calls = [c for c in calls if c and c[0] == 'shell' and c[1] == 'chmod']
         self.assertTrue(len(chmod_calls) > 0)
 
+    def test_wait_for_mode08_terminal_ui_dismisses_power_menu(self):
+        calls = []
+        async def fake_adb(*args, **kwargs):
+            calls.append(args)
+            return b''
+
+        power_menu_rows = [{'text': 'Power off', 'desc': '', 'bounds': '[0,0][100,100]'}]
+        valid_mode08_rows = [
+            {'text': 'Service Recipes', 'desc': '', 'bounds': '[0,0][100,100]'},
+            {'text': 'TID $01', 'desc': '', 'bounds': '[0,100][100,200]'}
+        ]
+        poll_count = 0
+        async def fake_poll():
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count == 1:
+                return power_menu_rows
+            return valid_mode08_rows
+
+        with self._patch_out(), patch.object(CTRL, 'adb', fake_adb), \
+             patch.object(CTRL, 'poll_current_ui_rows', fake_poll):
+            rows = asyncio.run(CTRL.wait_for_mode08_terminal_ui(timeout=5))
+
+        self.assertEqual(rows, valid_mode08_rows)
+        # Verify BACK keyevent was sent to dismiss the power menu
+        keyevent_calls = [c for c in calls if c and c[:3] == ('shell', 'input', 'keyevent') and c[3] == '4']
+        self.assertEqual(len(keyevent_calls), 1)
+        events = [json.loads(l) for l in self.event_file.read_text().splitlines() if l.strip()]
+        self.assertIn('dismissing_power_menu_dialog', [e['event'] for e in events])
+
 
 if __name__ == '__main__':
     unittest.main()
+

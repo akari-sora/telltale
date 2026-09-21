@@ -347,14 +347,13 @@ async def prepare_window(*, unlock_swipe=False):
 
 async def wake_and_unlock():
     global WAKE_KEYEVENT_DISABLED
-    await adb('shell', '/data/local/tmp/d05_power.sh', timeout=5, check=False)
-    await prepare_window()
     if not WAKE_KEYEVENT_DISABLED:
         result = await adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP',
                            timeout=WAKE_SOFT_TIMEOUT, check=False, full=True)
         if result.returncode == -1:
             WAKE_KEYEVENT_DISABLED = True
             event('wake_keyevent_skipped', reason='timeout')
+    await prepare_window()
 
 
 async def wait_for_drawn_window(timeout=None):
@@ -776,6 +775,12 @@ async def wait_for_mode08_terminal_ui(timeout=30):
     while time.monotonic() < deadline:
         rows = await poll_current_ui_rows()
         if rows:
+            if any('power off' in ((r.get('text') or '')).lower() for r in rows):
+                event('dismissing_power_menu_dialog')
+                await adb('shell', 'input', 'keyevent', '4', timeout=5, check=False)
+                await asyncio.sleep(0.5)
+                continue
+
             for row in rows:
                 text = ((row.get('text') or '') + ' ' + (row.get('desc') or '')).strip()
                 for bad in CONNECT_PAGE_REJECT_MARKERS:
@@ -1420,6 +1425,11 @@ async def enter_dashboard():
     """
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
         rows = await dump('locate', screenshot=False)
+        if any('power off' in ((r.get('text') or '')).lower() for r in rows):
+            event('dismissing_power_menu_in_enter_dashboard')
+            await adb('shell', 'input', 'keyevent', '4', timeout=5, check=False)
+            await asyncio.sleep(0.5)
+            continue
         if dashboard_ready(rows):
             event('dashboard_tabs_ready', attempt=attempt)
             return
@@ -1579,6 +1589,11 @@ async def case(rig, index, click_text):
     command = '0820' if index == 2 else '0800'
     action = 'SLEEP' if index == 2 else 'HOME'
     rows = await dump('locate', screenshot=False, prepare=False)
+    if any('power off' in ((r.get('text') or '')).lower() for r in rows):
+        event('dismissing_power_menu_in_case_locate')
+        await adb('shell', 'input', 'keyevent', '4', timeout=5, check=False)
+        await asyncio.sleep(0.5)
+        rows = await dump('locate', screenshot=False, prepare=False)
     if not locate_text(rows, click_text):
         event('case_ensuring_recipes_surface', index=index, click_text=click_text)
         await enter_dashboard()
