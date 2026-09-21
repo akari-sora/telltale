@@ -1744,6 +1744,28 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         chmod_calls = [c for c in calls if c and c[0] == 'shell' and c[1] == 'chmod']
         self.assertTrue(len(chmod_calls) > 0)
 
+    def test_setup_fast_lifecycle_helpers_native_elf_on_linux(self):
+        calls = []
+        async def fake_adb(*args, **kwargs):
+            calls.append(args)
+            return b''
+
+        def fake_subprocess_run(cmd, capture_output=True):
+            return subprocess.CompletedProcess(cmd, 0, stdout=b'', stderr=b'')
+
+        with self._patch_out(), patch.object(CTRL, 'adb', fake_adb), \
+             patch.object(CTRL.sys, 'platform', 'linux'), \
+             patch.object(CTRL.shutil, 'which', lambda x: '/usr/bin/gcc'), \
+             patch.object(CTRL.subprocess, 'run', fake_subprocess_run):
+            asyncio.run(CTRL.setup_fast_lifecycle_helpers())
+
+        pushed_files = [c[2] for c in calls if c and c[0] == 'push']
+        self.assertIn('/data/local/tmp/d05_power.sh', pushed_files)
+        self.assertIn('/data/local/tmp/d05_home.sh', pushed_files)
+        events = [json.loads(l) for l in self.event_file.read_text().splitlines() if l.strip()]
+        elf_events = [e for e in events if e['event'] == 'fast_lifecycle_helpers_installed' and e.get('type') == 'native_static_elf']
+        self.assertEqual(len(elf_events), 1)
+
     def test_wait_for_mode08_terminal_ui_dismisses_power_menu(self):
         calls = []
         async def fake_adb(*args, **kwargs):

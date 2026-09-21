@@ -166,49 +166,70 @@ async def setup_fast_lifecycle_helpers():
     await adb('shell', 'settings', 'put', 'global', 'power_button_press_action', '1', timeout=5, check=False)
     power_dev = POWER_INPUT_DEVICE or '/dev/input/event0'
     kb_devs = " ".join(KEYBOARD_INPUT_DEVICES) if KEYBOARD_INPUT_DEVICES else "/dev/input/event12 /dev/input/event13"
-    power_script = (
-        "#!/system/bin/sh\n"
-        f"if [ -e '{power_dev}' ]; then\n"
-        f"  sendevent '{power_dev}' 1 116 1\n"
-        f"  sendevent '{power_dev}' 0 0 0\n"
-        "  sleep 0.05 2>/dev/null || usleep 50000 2>/dev/null || :\n"
-        f"  sendevent '{power_dev}' 1 116 0\n"
-        f"  sendevent '{power_dev}' 0 0 0\n"
-        "fi\n"
-        f"for d in {kb_devs}; do\n"
-        "  if [ -e \"$d\" ]; then\n"
-        "    sendevent \"$d\" 1 142 1\n"
-        "    sendevent \"$d\" 0 0 0\n"
-        "    sendevent \"$d\" 1 142 0\n"
-        "    sendevent \"$d\" 0 0 0\n"
-        "  fi\n"
-        "done\n"
-    )
-    home_script = (
-        "#!/system/bin/sh\n"
-        f"for d in {kb_devs}; do\n"
-        "  if [ -e \"$d\" ]; then\n"
-        "    sendevent \"$d\" 1 102 1\n"
-        "    sendevent \"$d\" 0 0 0\n"
-        "    sendevent \"$d\" 1 102 0\n"
-        "    sendevent \"$d\" 0 0 0\n"
-        "  fi\n"
-        "done\n"
-    )
-    with tempfile.NamedTemporaryFile('w', delete=False) as tf:
-        tf.write(power_script)
-        power_path = tf.name
-    with tempfile.NamedTemporaryFile('w', delete=False) as tf:
-        tf.write(home_script)
-        home_path = tf.name
-    try:
-        await adb('push', power_path, '/data/local/tmp/d05_power.sh', timeout=10, check=False)
-        await adb('push', home_path, '/data/local/tmp/d05_home.sh', timeout=10, check=False)
-        await adb('shell', 'chmod', '755', '/data/local/tmp/d05_power.sh', '/data/local/tmp/d05_home.sh', timeout=10, check=False)
-        event('fast_lifecycle_helpers_installed')
-    finally:
-        Path(power_path).unlink(missing_ok=True)
-        Path(home_path).unlink(missing_ok=True)
+    c_source = Path('tool/verification/d05_sendevent.c')
+    built_bin = None
+    if c_source.exists() and shutil.which('gcc') and sys.platform.startswith('linux'):
+        try:
+            with tempfile.NamedTemporaryFile('wb', delete=False) as tf:
+                tmp_bin = tf.name
+            res = subprocess.run(['gcc', str(c_source), '-static', '-O2', '-o', tmp_bin], capture_output=True)
+            if res.returncode == 0:
+                built_bin = tmp_bin
+        except Exception:
+            built_bin = None
+
+    if built_bin:
+        try:
+            await adb('push', built_bin, '/data/local/tmp/d05_power.sh', timeout=10, check=False)
+            await adb('push', built_bin, '/data/local/tmp/d05_home.sh', timeout=10, check=False)
+            await adb('shell', 'chmod', '755', '/data/local/tmp/d05_power.sh', '/data/local/tmp/d05_home.sh', timeout=10, check=False)
+            event('fast_lifecycle_helpers_installed', type='native_static_elf')
+        finally:
+            Path(built_bin).unlink(missing_ok=True)
+    else:
+        power_script = (
+            "#!/system/bin/sh\n"
+            f"if [ -e '{power_dev}' ]; then\n"
+            f"  sendevent '{power_dev}' 1 116 1\n"
+            f"  sendevent '{power_dev}' 0 0 0\n"
+            "  sleep 0.05 2>/dev/null || usleep 50000 2>/dev/null || :\n"
+            f"  sendevent '{power_dev}' 1 116 0\n"
+            f"  sendevent '{power_dev}' 0 0 0\n"
+            "fi\n"
+            f"for d in {kb_devs}; do\n"
+            "  if [ -e \"$d\" ]; then\n"
+            "    sendevent \"$d\" 1 142 1\n"
+            "    sendevent \"$d\" 0 0 0\n"
+            "    sendevent \"$d\" 1 142 0\n"
+            "    sendevent \"$d\" 0 0 0\n"
+            "  fi\n"
+            "done\n"
+        )
+        home_script = (
+            "#!/system/bin/sh\n"
+            f"for d in {kb_devs}; do\n"
+            "  if [ -e \"$d\" ]; then\n"
+            "    sendevent \"$d\" 1 102 1\n"
+            "    sendevent \"$d\" 0 0 0\n"
+            "    sendevent \"$d\" 1 102 0\n"
+            "    sendevent \"$d\" 0 0 0\n"
+            "  fi\n"
+            "done\n"
+        )
+        with tempfile.NamedTemporaryFile('w', delete=False) as tf:
+            tf.write(power_script)
+            power_path = tf.name
+        with tempfile.NamedTemporaryFile('w', delete=False) as tf:
+            tf.write(home_script)
+            home_path = tf.name
+        try:
+            await adb('push', power_path, '/data/local/tmp/d05_power.sh', timeout=10, check=False)
+            await adb('push', home_path, '/data/local/tmp/d05_home.sh', timeout=10, check=False)
+            await adb('shell', 'chmod', '755', '/data/local/tmp/d05_power.sh', '/data/local/tmp/d05_home.sh', timeout=10, check=False)
+            event('fast_lifecycle_helpers_installed', type='shell_script')
+        finally:
+            Path(power_path).unlink(missing_ok=True)
+            Path(home_path).unlink(missing_ok=True)
 
 
 def event(kind: str, **values):
@@ -1660,10 +1681,6 @@ async def case(rig, index, click_text):
         if not cmd_ok:
             rig.release.set()
             raise RuntimeError(f"Native OS lifecycle command timed out during active hold for {action}")
-
-        # Non-blocking background keyevent in Python (never blocks adb shell script or hold window)
-        bg_key = '223' if index == 2 else '3'
-        asyncio.create_task(adb('shell', 'input', 'keyevent', bg_key, timeout=10, check=False))
 
         # Genuinely verify Android native state while hold is still active
         verified = False
