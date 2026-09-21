@@ -1774,6 +1774,121 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         events = [json.loads(l) for l in self.event_file.read_text().splitlines() if l.strip()]
         self.assertIn('dismissing_power_menu_dialog', [e['event'] for e in events])
 
+    def test_case_verifies_genuine_sleep_state(self):
+        class MockRig:
+            def __init__(self):
+                self.target = None
+                self.held = None
+                self.release = None
+                self.states = {}
+
+            def arm(self, command):
+                self.target = command
+                loop = asyncio.get_running_loop()
+                self.held = loop.create_future()
+                self.release = asyncio.Event()
+                self.held.set_result({'connection': 2, 'command': command})
+
+        rig = MockRig()
+        genuine_terminal_rows = [
+            dict(text='', desc='Service Recipes & Active Diagnostics', enabled='true', bounds='[0,0][480,100]'),
+            dict(text='', desc='MODE 08 NON-ACTUATING DISCOVERY', enabled='true', bounds='[0,100][480,200]'),
+            dict(text='Mode 08 is not supported by this ECU', desc='', enabled='true', bounds='[0,200][480,300]'),
+            dict(text='Discover Mode 08', desc='', enabled='true', clickable='true', bounds='[10,20][100,80]'),
+        ]
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            stdout = b''
+            if 'dumpsys' in args and 'power' in args:
+                stdout = b'mWakefulness=Asleep mLastSleepTime=123456'
+            elif 'dumpsys' in args and 'activity' in args:
+                stdout = b'Stack #0: type=home com.android.launcher3/.Launcher'
+            return SimpleNamespace(returncode=0, stdout=stdout, stderr=b'') if full else stdout
+
+        async def fake_dump(label, screenshot=True, prepare=True):
+            return genuine_terminal_rows
+
+        async def fake_find_text(text, exact=False, scroll=True):
+            node = dict(text=text, desc='', bounds='[10,20][100,80]')
+            return (node, 50, 50), 0
+
+        async def fake_launch_app(is_resume=False):
+            pass
+
+        async def fake_wake_and_unlock():
+            pass
+
+        async def fake_actual_os_snapshot(label):
+            pass
+
+        async def fake_wait_for_mode08_terminal_ui(timeout=30):
+            return genuine_terminal_rows
+
+        async def instant_sleep(_delay):
+            pass
+
+        with self._patch_out(), \
+             patch.object(CTRL, 'adb', fake_adb), \
+             patch.object(CTRL, 'dump', fake_dump), \
+             patch.object(CTRL, 'find_text', fake_find_text), \
+             patch.object(CTRL, 'launch_app', fake_launch_app), \
+             patch.object(CTRL, 'wake_and_unlock', fake_wake_and_unlock), \
+             patch.object(CTRL, 'wait_for_mode08_terminal_ui', fake_wait_for_mode08_terminal_ui), \
+             patch.object(CTRL, 'actual_os_snapshot', fake_actual_os_snapshot), \
+             patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            asyncio.run(CTRL.case(rig, 2, 'Discover Mode 08'))
+
+        lines = [json.loads(l) for l in self.event_file.read_text().splitlines() if l.strip()]
+        os_cmd_events = [e for e in lines if e['event'] == 'os_command_executed_during_hold']
+        self.assertEqual(len(os_cmd_events), 1)
+        self.assertEqual(os_cmd_events[0]['action'], 'SLEEP')
+        self.assertEqual(os_cmd_events[0]['verified_state'], 'wakefulness_asleep')
+
+    def test_case_fails_if_os_command_times_out(self):
+        class MockRig:
+            def __init__(self):
+                self.target = None
+                self.held = None
+                self.release = None
+                self.states = {}
+
+            def arm(self, command):
+                self.target = command
+                loop = asyncio.get_running_loop()
+                self.held = loop.create_future()
+                self.release = asyncio.Event()
+                self.held.set_result({'connection': 2, 'command': command})
+
+        rig = MockRig()
+        genuine_terminal_rows = [
+            dict(text='Discover Mode 08', desc='', enabled='true', clickable='true', bounds='[10,20][100,80]'),
+        ]
+
+        async def fake_adb(*args, timeout=40, check=True, full=False):
+            if args and args[0] == 'shell' and len(args) > 1 and 'd05_home.sh' in str(args[1]):
+                await asyncio.sleep(10.0)
+            return b''
+
+        async def fake_dump(label, screenshot=True, prepare=True):
+            return genuine_terminal_rows
+
+        async def fake_find_text(text, exact=False, scroll=True):
+            node = dict(text=text, desc='', bounds='[10,20][100,80]')
+            return (node, 50, 50), 0
+
+        with self._patch_out(), \
+             patch.object(CTRL, 'adb', fake_adb), \
+             patch.object(CTRL, 'dump', fake_dump), \
+             patch.object(CTRL, 'find_text', fake_find_text):
+            with self.assertRaisesRegex(RuntimeError, 'Native OS lifecycle command timed out'):
+                asyncio.run(CTRL.case(rig, 1, 'Discover Mode 08'))
+
+        lines = [json.loads(l) for l in self.event_file.read_text().splitlines() if l.strip()]
+        event_names = [e['event'] for e in lines]
+        self.assertIn('os_command_timeout', event_names)
+        self.assertNotIn('os_command_executed_during_hold', event_names)
+        self.assertTrue(rig.release.is_set())
+
 
 if __name__ == '__main__':
     unittest.main()

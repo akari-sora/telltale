@@ -157,16 +157,13 @@ async def detect_input_devices():
 async def setup_fast_lifecycle_helpers():
     """Install standalone native shell scripts in /data/local/tmp on the Android device.
 
-    Executing these scripts via adb takes <15ms for power and <15ms for HOME,
-    eliminating app_process Java startup overhead (which took 2.5-8s) and avoiding
-    all shell quote-stripping issues.
+    Executing these scripts via adb takes <50ms for sleep and <50ms for HOME,
+    eliminating app_process Java startup overhead and avoiding shell quote-stripping issues.
     """
+    await adb('shell', 'svc', 'power', 'stayon', 'false', timeout=10, check=False)
     power_script = (
         "#!/system/bin/sh\n"
-        f"sendevent {POWER_INPUT_DEVICE} 1 116 1\n"
-        f"sendevent {POWER_INPUT_DEVICE} 0 0 0\n"
-        f"sendevent {POWER_INPUT_DEVICE} 1 116 0\n"
-        f"sendevent {POWER_INPUT_DEVICE} 0 0 0\n"
+        "input keyevent 223\n"
     )
     kb_devs = list(KEYBOARD_INPUT_DEVICES) if KEYBOARD_INPUT_DEVICES else ['/dev/input/event12', '/dev/input/event13']
     kb_lines = []
@@ -182,7 +179,7 @@ async def setup_fast_lifecycle_helpers():
     home_script = (
         "#!/system/bin/sh\n"
         + "".join(kb_lines)
-        + "nohup am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null 2>&1 &\n"
+        + "input keyevent 3\n"
     )
     with tempfile.NamedTemporaryFile('w', delete=False) as tf:
         tf.write(power_script)
@@ -1608,6 +1605,8 @@ async def case(rig, index, click_text):
         raise RuntimeError('Refusing to tap a node with empty text and content-desc')
     event('selected_observed_ui_node', text=click_text, node=row, node_label=label,
           scroll_attempts=attempt, scrolled=bool(attempt > 0))
+    if index == 2:
+        await adb('shell', 'svc', 'power', 'stayon', 'false', timeout=10, check=False)
     rig.arm(command)
     await adb('shell', 'input', 'tap', x, y)
     try:
@@ -1616,11 +1615,70 @@ async def case(rig, index, click_text):
         hold_start = time.monotonic()
         # Execute fast native OS lifecycle event (HOME or SLEEP) during active hold
         script = '/data/local/tmp/d05_power.sh' if index == 2 else '/data/local/tmp/d05_home.sh'
+        cmd_ok = False
         try:
-            await asyncio.wait_for(adb('shell', script, timeout=5, check=False), timeout=1.0)
+            await asyncio.wait_for(adb('shell', script, timeout=5, check=False), timeout=0.8)
+            cmd_ok = True
         except asyncio.TimeoutError:
-            event('os_command_timeout_fallback', action=action)
-        event('os_command_executed_during_hold', action=action, index=index)
+            event('os_command_timeout', action=action)
+
+        if not cmd_ok:
+            rig.release.set()
+            raise RuntimeError(f"Native OS lifecycle command timed out during active hold for {action}")
+
+        # Genuinely verify Android native state while hold is still active
+        verified = False
+        verified_state = ''
+        if index == 2:
+            for _ in range(10):
+                p_dump = await adb('shell', 'dumpsys', 'power', timeout=5, check=False)
+                p_text = p_dump.decode(errors='replace')
+                if 'mWakefulness=Asleep' in p_text or 'mWakefulness=Dozing' in p_text:
+                    verified = True
+                    verified_state = 'wakefulness_asleep'
+                    break
+                m = re.search(r'mLastSleepTime=(\d+)', p_text)
+                if m and int(m.group(1)) > 0:
+                    verified = True
+                    verified_state = f'last_sleep_time_{m.group(1)}'
+                    break
+                await asyncio.sleep(0.04)
+        else:
+            for _ in range(10):
+                w_dump = await adb('shell', 'dumpsys', 'window', timeout=5, check=False)
+                w_text = w_dump.decode(errors='replace')
+                if any(k in w_text.lower() for k in ('launcher', 'nexuslauncher', 'launcher3')):
+                    if 'mFocusedApp' in w_text:
+                        focused_lines = [l for l in w_text.splitlines() if 'mFocusedApp' in l]
+                        if focused_lines and PACKAGE not in focused_lines[0]:
+                            verified = True
+                            verified_state = focused_lines[0].strip()
+                            break
+                    elif PACKAGE not in w_text and w_text.strip():
+                        verified = True
+                        verified_state = 'window_launcher'
+                        break
+                a_dump = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=5, check=False)
+                a_text = a_dump.decode(errors='replace')
+                if any(k in a_text.lower() for k in ('launcher', 'launcher3', 'nexuslauncher', 'type=home')):
+                    if ('topResumedActivity' in a_text or 'ResumedActivity' in a_text):
+                        resumed_lines = [l for l in a_text.splitlines() if 'topResumedActivity' in l or 'ResumedActivity' in l]
+                        if resumed_lines and PACKAGE not in resumed_lines[0]:
+                            verified = True
+                            verified_state = resumed_lines[0].strip()
+                            break
+                    elif PACKAGE not in a_text:
+                        verified = True
+                        verified_state = 'activity_launcher'
+                        break
+                await asyncio.sleep(0.04)
+
+        if not verified:
+            rig.release.set()
+            raise RuntimeError(f"Could not verify genuine native Android state for {action} during active hold")
+
+        event('os_command_executed_during_hold', action=action, index=index,
+              verified_state=verified_state, elapsed_s=round(time.monotonic() - hold_start, 3))
 
         # Dynamic pacing: ensure kernel/system_server registers the OS event before hold is released,
         # while strictly bounding total hold duration below Telltale's 2.0s discovery timeout (~0.4-0.8s).
