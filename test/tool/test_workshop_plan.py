@@ -2027,6 +2027,98 @@ class CurrentCampaignTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, msg=completed.stderr)
         self.assertIn("invented rejected", completed.stdout)
 
+    def test_campaign_repository_is_current_gitlab_namespace(self) -> None:
+        path = ROOT / "tool" / "workshop" / "campaign.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(data.get("repository"), "aa22396584/telltale")
+
+    def test_campaign_legacy_stages_map_to_current_gitlab_issues(self) -> None:
+        path = ROOT / "tool" / "workshop" / "campaign.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        tasks = {t["id"]: t for t in data.get("tasks", [])}
+
+        # CURRENT-278 maps to current GitLab #89
+        self.assertIn("CURRENT-278", tasks)
+        t278 = tasks["CURRENT-278"]
+        self.assertEqual(t278["issue"], 89)
+        self.assertEqual(
+            t278["issue_url"],
+            "https://gitlab.com/aa22396584/telltale/-/issues/89",
+        )
+        self.assertEqual(t278["status"], "pending")
+        self.assertEqual(t278["priority"], "P1")
+        self.assertEqual(t278["reviewer_role"], "implementation")
+
+        # CURRENT-47-NATIVE maps to current GitLab #40
+        self.assertIn("CURRENT-47-NATIVE", tasks)
+        t47 = tasks["CURRENT-47-NATIVE"]
+        self.assertEqual(t47["issue"], 40)
+        self.assertEqual(
+            t47["issue_url"],
+            "https://gitlab.com/aa22396584/telltale/-/issues/40",
+        )
+        self.assertEqual(t47["status"], "blocked")
+        self.assertEqual(t47["priority"], "P1")
+        self.assertEqual(t47["reviewer_role"], "review")
+
+    def test_campaign_preserves_stage_identities_and_historical_audit_sha(self) -> None:
+        path = ROOT / "tool" / "workshop" / "campaign.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        task_ids = [t["id"] for t in data.get("tasks", [])]
+        self.assertEqual(task_ids, ["CURRENT-278", "CURRENT-47-NATIVE"])
+        self.assertEqual(
+            data.get("audited_sha"),
+            "3547d9c7406e4a87329d40d1454ddab7a3aa4379",
+        )
+        self.assertEqual(data.get("policy"), "USABILITY-R2")
+        self.assertEqual(data.get("schemaVersion"), 1)
+        self.assertEqual(data.get("epic"), 11)
+
+    def test_campaign_command_manifests_and_evidence_digests_unchanged(self) -> None:
+        path = ROOT / "tool" / "workshop" / "campaign.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        tasks = {t["id"]: t for t in data.get("tasks", [])}
+
+        t278 = tasks["CURRENT-278"]
+        self.assertEqual(
+            t278["run_commands"],
+            [["python3", "tool/workshop/assert_official_reporter.py"]],
+        )
+        expected_evidence = [
+            {
+                "path": "test/tool/fixtures/official-success.jsonl",
+                "sha256": "ac07f367ef8703bba10f198f85b3424143b2e5956c5304976928bf725d41dc58",
+                "required": True,
+            },
+            {
+                "path": "test/tool/fixtures/fnv1a64_reporter_capture.jsonl",
+                "sha256": "9ec587566bb3ab2ed10ee0969d78f5193446b70d7a67af433488d8b70703376a",
+                "required": True,
+            },
+            {
+                "path": "test/tool/fixtures/fnv1a64_reporter_capture.meta.json",
+                "sha256": "a92c4d6aed0247fd501e7359268dcd290c99f764606228390357f135af52d77b",
+                "required": True,
+            },
+            {
+                "path": "test/tool/fixtures/reporter_fail_capture.jsonl",
+                "sha256": "27f0a423083bd3fab2a274cbb9b97f2f2778e1632cab75d1343fde0e72b00931",
+                "required": True,
+            },
+        ]
+        self.assertEqual(t278["required_evidence"], expected_evidence)
+
+        t47 = tasks["CURRENT-47-NATIVE"]
+        self.assertEqual(t47["run_commands"], [])
+        self.assertEqual(t47["required_evidence"], [])
+        self.assertEqual(
+            t47["hardware_or_license_blockers"],
+            [
+                "identified disposable AOSP native OS share-chooser / permission-dialog instrumentation; Flutter integration_test cannot drive that UI"
+            ],
+        )
+
+
 
 if __name__ == "__main__":
     unittest.main()
