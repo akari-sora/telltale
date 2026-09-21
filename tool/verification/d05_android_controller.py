@@ -569,16 +569,25 @@ async def request_hierarchy():
     stderr = dumped.stderr.decode(errors='replace')
     source = 'exec-out-tty'
     has_xml = b'<hierarchy' in xml or b'<?xml' in xml
-    saw_null_root = b'null root node' in xml or 'null root node' in stderr
-    if has_xml or xml or saw_null_root:
+    if has_xml:
         return xml, stderr, dumped.returncode, source
-    await adb('shell', 'rm', '-f', REMOTE_DUMP, check=False)
-    file_dump = await adb('shell', 'uiautomator', 'dump', REMOTE_DUMP, timeout=45, check=False, full=True)
-    xml = await adb('exec-out', 'cat', REMOTE_DUMP, check=False)
-    extra = file_dump.stderr.decode(errors='replace')
-    if extra:
-        stderr = (stderr + '\n' + extra).strip()
-    return xml, stderr, file_dump.returncode, 'sdcard'
+
+    saw_null_root = b'null root node' in xml or 'null root node' in stderr
+    if saw_null_root or not has_xml:
+        await asyncio.sleep(1.0)
+
+    for _ in range(3):
+        await adb('shell', 'rm', '-f', REMOTE_DUMP, check=False)
+        file_dump = await adb('shell', 'uiautomator', 'dump', REMOTE_DUMP, timeout=45, check=False, full=True)
+        file_xml = await adb('exec-out', 'cat', REMOTE_DUMP, check=False)
+        extra = file_dump.stderr.decode(errors='replace')
+        if extra:
+            stderr = (stderr + '\n' + extra).strip()
+        if b'<hierarchy' in file_xml or b'<?xml' in file_xml:
+            return file_xml, stderr, file_dump.returncode, 'sdcard'
+        await asyncio.sleep(0.5)
+
+    return xml, stderr, dumped.returncode, source
 
 
 async def capture_dump_failure_evidence(label, xml):

@@ -161,7 +161,7 @@ class DumpRetryTests(unittest.TestCase):
             if args[:3] == ('shell', 'dumpsys', 'window'):
                 data = b'  mCurrentFocus=Window{abc u0 com.cbstudio.telltale/com.cbstudio.telltale.MainActivity}\n'
                 return SimpleNamespace(returncode=0, stdout=data, stderr=b'') if full else data
-            if args[:2] in (('shell', 'input'), ('shell', 'wm'), ('shell', 'svc'), ('shell', 'settings')):
+            if args[:2] in (('shell', 'input'), ('shell', 'wm'), ('shell', 'svc'), ('shell', 'settings'), ('shell', 'rm'), ('shell', 'uiautomator'), ('exec-out', 'cat')):
                 result = SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
                 return result if full else b''
             if args[:1] == ('logcat',):
@@ -2154,6 +2154,28 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
         self.assertIn('mode08_hold_released_unverified', event_names)
         self.assertNotIn('os_command_executed_during_hold', event_names)
         self.assertTrue(rig.release.is_set())
+
+    def test_request_hierarchy_falls_back_to_sdcard_on_null_root(self):
+        async def fake_adb(*args, timeout=45, check=True, full=False):
+            if args[:3] == ('exec-out', 'uiautomator', 'dump'):
+                res = SimpleNamespace(returncode=0, stdout=NULL_ROOT_STDERR.encode(), stderr=NULL_ROOT_STDERR.encode())
+                return res if full else NULL_ROOT_STDERR.encode()
+            if args[:2] == ('shell', 'rm'):
+                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'') if full else b''
+            if args[:3] == ('shell', 'uiautomator', 'dump'):
+                return SimpleNamespace(returncode=0, stdout=b'UI hierchary dumped to: /sdcard/window_dump.xml\n', stderr=b'') if full else b''
+            if args[:2] == ('exec-out', 'cat'):
+                return VALID_HIERARCHY
+            return SimpleNamespace(returncode=0, stdout=b'', stderr=b'') if full else b''
+
+        async def instant_sleep(_delay):
+            pass
+
+        with patch.object(CTRL, 'adb', fake_adb), patch.object(CTRL.asyncio, 'sleep', instant_sleep):
+            xml, stderr, code, source = asyncio.run(CTRL.request_hierarchy())
+            self.assertEqual(source, 'sdcard')
+            self.assertEqual(xml, VALID_HIERARCHY)
+            self.assertEqual(code, 0)
 
 
 if __name__ == '__main__':
