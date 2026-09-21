@@ -159,26 +159,31 @@ async def setup_fast_lifecycle_helpers():
     """Install standalone native shell scripts in /data/local/tmp on the Android device.
 
     Executing these scripts via adb eliminates shell quote-stripping issues.
-    Uses sub-10ms Linux evdev sendevent for instant lifecycle triggering, with
-    detached background keyevent fallback.
+    Uses sub-10ms Linux evdev sendevent for instant lifecycle triggering.
     """
     await adb('shell', 'svc', 'power', 'stayon', 'false', timeout=10, check=False)
+    await adb('shell', 'settings', 'put', 'global', 'power_button_long_press', '0', timeout=5, check=False)
+    await adb('shell', 'settings', 'put', 'global', 'power_button_press_action', '1', timeout=5, check=False)
     power_dev = POWER_INPUT_DEVICE or '/dev/input/event0'
+    kb_devs = " ".join(KEYBOARD_INPUT_DEVICES) if KEYBOARD_INPUT_DEVICES else "/dev/input/event12 /dev/input/event13"
     power_script = (
         "#!/system/bin/sh\n"
         f"if [ -e '{power_dev}' ]; then\n"
         f"  sendevent '{power_dev}' 1 116 1\n"
         f"  sendevent '{power_dev}' 0 0 0\n"
+        "  sleep 0.05 2>/dev/null || usleep 50000 2>/dev/null || :\n"
         f"  sendevent '{power_dev}' 1 116 0\n"
         f"  sendevent '{power_dev}' 0 0 0\n"
         "fi\n"
-        "if command -v setsid >/dev/null 2>&1; then\n"
-        "  setsid input keyevent 223 </dev/null >/dev/null 2>&1 &\n"
-        "else\n"
-        "  input keyevent 223 </dev/null >/dev/null 2>&1 &\n"
-        "fi\n"
+        f"for d in {kb_devs}; do\n"
+        "  if [ -e \"$d\" ]; then\n"
+        "    sendevent \"$d\" 1 142 1\n"
+        "    sendevent \"$d\" 0 0 0\n"
+        "    sendevent \"$d\" 1 142 0\n"
+        "    sendevent \"$d\" 0 0 0\n"
+        "  fi\n"
+        "done\n"
     )
-    kb_devs = " ".join(KEYBOARD_INPUT_DEVICES) if KEYBOARD_INPUT_DEVICES else "/dev/input/event12 /dev/input/event13"
     home_script = (
         "#!/system/bin/sh\n"
         f"for d in {kb_devs}; do\n"
@@ -189,11 +194,6 @@ async def setup_fast_lifecycle_helpers():
         "    sendevent \"$d\" 0 0 0\n"
         "  fi\n"
         "done\n"
-        "if command -v setsid >/dev/null 2>&1; then\n"
-        "  setsid input keyevent 3 </dev/null >/dev/null 2>&1 &\n"
-        "else\n"
-        "  input keyevent 3 </dev/null >/dev/null 2>&1 &\n"
-        "fi\n"
     )
     with tempfile.NamedTemporaryFile('w', delete=False) as tf:
         tf.write(power_script)
@@ -1660,6 +1660,10 @@ async def case(rig, index, click_text):
         if not cmd_ok:
             rig.release.set()
             raise RuntimeError(f"Native OS lifecycle command timed out during active hold for {action}")
+
+        # Non-blocking background keyevent in Python (never blocks adb shell script or hold window)
+        bg_key = '223' if index == 2 else '3'
+        asyncio.create_task(adb('shell', 'input', 'keyevent', bg_key, timeout=10, check=False))
 
         # Genuinely verify Android native state while hold is still active
         verified = False
