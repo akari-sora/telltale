@@ -479,14 +479,16 @@ async def wait_for_focused_window(timeout=30):
 async def launch_app(is_resume=False):
     if not is_resume:
         await wake_and_unlock()
-    await adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity',
-              '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER',
-              '-f', '0x10200000', timeout=60)
-    await wait_for_resumed_activity()
-    if not is_resume:
+        await adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity',
+                  '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER',
+                  '-f', '0x10000000', timeout=60)
+        await wait_for_resumed_activity()
         await wait_for_focused_window()
         await wait_for_drawn_window()
     else:
+        await adb('shell', 'am', 'start', '-n', PACKAGE + '/.MainActivity',
+                  '-f', '0x10000000', timeout=30)
+        await wait_for_resumed_activity()
         event('app_resumed_ready', package=PACKAGE)
 
 
@@ -851,9 +853,8 @@ async def wait_for_mode08_terminal_ui(timeout=30):
             if any('apps list' in ((r.get('text') or '') + ' ' + (r.get('desc') or '')).lower() or
                    'gallery' in ((r.get('text') or '') + ' ' + (r.get('desc') or '')).lower() for r in rows):
                 event('recovering_foreground_from_launcher')
-                await adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity',
-                          '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER',
-                          '-f', '0x10200000', timeout=20, check=False)
+                await adb('shell', 'am', 'start', '-n', PACKAGE + '/.MainActivity',
+                          '-f', '0x10000000', timeout=20, check=False)
                 await asyncio.sleep(0.5)
                 continue
 
