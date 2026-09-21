@@ -11,6 +11,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import '../diagnostics/diagnostic_link.dart';
+import '../diagnostics/elm327_diagnostic_link.dart';
 import 'addressing.dart';
 import 'dtc/dtc.dart';
 import 'elapsed_clock.dart';
@@ -268,8 +270,12 @@ class PollingEngine {
     FormulaEngine? formulaEngine,
     PriorityScheduler? scheduler,
     this.elapsedClock,
+    DiagnosticLink? diagnosticLink,
   }) : formula = formulaEngine ?? FormulaEngine(),
-       scheduler = scheduler ?? PriorityScheduler();
+       scheduler = scheduler ?? PriorityScheduler(),
+       diagnosticLink = diagnosticLink ?? Elm327DiagnosticLink(client);
+
+  final DiagnosticLink diagnosticLink;
 
   /// Connection-scoped monotonic clock for freshness.
   ///
@@ -816,17 +822,32 @@ class PollingEngine {
     _requireStillOwned(owner);
     _requireTimeToWork(deadline);
     _censusAttempted = true;
-    final ObdResponse response;
+    final DiagnosticResponse response;
     try {
-      response = await client.sendGlobal(
-        '0100',
-        owner: owner,
-        deadline: deadline,
+      response = await diagnosticLink.send(
+        DiagnosticRequest(
+          id: DiagnosticRequestId('census-${diagnosticLink.connectionGeneration}'),
+          pdu: ApplicationPdu(const [0x01, 0x00]),
+          target: DiagnosticTarget.wholeVehicleObd,
+          requiredCapabilities: const {
+            DiagnosticCapability.applicationPdu,
+            DiagnosticCapability.wholeVehicleObd,
+          },
+          connectionGeneration: diagnosticLink.connectionGeneration,
+          deadline: deadline,
+          cancellation: DiagnosticCancellation.none,
+          ownership: DiagnosticOwnership(
+            mode: DiagnosticOwnershipMode.oneShot,
+            token: owner,
+          ),
+        ),
       );
     } on Object {
       return _responders;
     }
-    if (!response.isSuccess || !response.headersEnabled) return _responders;
+    if (!response.isSuccess || !response.provenance.sourceAttributionAvailable) {
+      return _responders;
+    }
 
     // A responder is a controller that answered *this* request, in the shape
     // this request has an answer in.
@@ -843,12 +864,12 @@ class PollingEngine {
     // The shape is not a heuristic: a positive Mode 01 PID 00 response is
     // `41 00` followed by the four-byte support mask.
     final seen = <String>{
-      for (final frame in response.frames)
-        if (frame.sourceId != null &&
-            frame.bytes.length >= 6 &&
-            frame.bytes[0] == 0x41 &&
-            frame.bytes[1] == 0x00)
-          frame.sourceId!,
+      for (final message in response.messages)
+        if (message.sourceAddress != null &&
+            message.pdu.bytes.length >= 6 &&
+            message.pdu.bytes[0] == 0x41 &&
+            message.pdu.bytes[1] == 0x00)
+          message.sourceAddress!,
     };
     // Never narrowed by a later, worse probe: a controller that answered once
     // exists, and a reply that missed it is evidence about the reply.
