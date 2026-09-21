@@ -869,7 +869,7 @@ class PollingEngine {
             message.pdu.bytes.length >= 6 &&
             message.pdu.bytes[0] == 0x41 &&
             message.pdu.bytes[1] == 0x00)
-          message.sourceAddress!,
+          message.sourceAddress!.value,
     };
     // Never narrowed by a later, worse probe: a controller that answered once
     // exists, and a reply that missed it is evidence about the reply.

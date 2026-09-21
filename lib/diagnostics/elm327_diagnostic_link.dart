@@ -103,9 +103,20 @@ class Elm327DiagnosticLink implements DiagnosticLink {
         cause: e,
       );
     } on TimeoutException catch (e) {
+      final isDeadline = (request.deadline != null &&
+              !request.deadline!.isAfter(
+                DateTime.now().add(const Duration(milliseconds: 25)),
+              )) ||
+          (e.message?.contains('time limit for this operation has passed') ??
+              false);
       throw DiagnosticLinkException(
-        kind: DiagnosticFailureKind.deadlineExpired,
-        message: e.message ?? 'Operation timed out',
+        kind: isDeadline
+            ? DiagnosticFailureKind.deadlineExpired
+            : DiagnosticFailureKind.responseTimeout,
+        message: e.message ??
+            (isDeadline
+                ? 'Operation deadline expired'
+                : 'Timed out waiting for response'),
         cause: e,
       );
     } on TransportException catch (e) {
@@ -157,7 +168,7 @@ class Elm327DiagnosticLink implements DiagnosticLink {
         if (frame.bytes.isNotEmpty)
           DiagnosticMessage(
             pdu: ApplicationPdu(frame.bytes),
-            sourceAddress: frame.sourceId,
+            sourceAddress: DiagnosticSourceAddress.tryParse(frame.sourceId),
           ),
     ];
 

@@ -13,11 +13,14 @@ Future<Elm327Client> _createConnectedClient({
   BusProtocol protocol = BusProtocol.can11,
   List<FakeEcu>? ecus,
   String? forceProtocolNumber,
+  AdapterFaults faults = const AdapterFaults(),
+  Duration commandTimeout = const Duration(milliseconds: 500),
 }) async {
   final transport = FakeElm327(
     protocol: protocol,
     responseLatency: latency,
     forceProtocolNumber: forceProtocolNumber,
+    faults: faults,
     ecus: ecus ?? [
       FakeEcu(
         name: 'ECM',
@@ -31,7 +34,7 @@ Future<Elm327Client> _createConnectedClient({
   );
   final client = Elm327Client(
     transport,
-    commandTimeout: const Duration(milliseconds: 500),
+    commandTimeout: commandTimeout,
     responsePendingTimeout: const Duration(milliseconds: 600),
   );
   final ok = await client.connect();
@@ -121,6 +124,33 @@ void main() {
       expect(pdu, equals(pdu2));
       expect(pdu.hashCode, equals(pdu2.hashCode));
       expect(pdu.toString(), contains('01 00'));
+    });
+
+    test('DiagnosticSourceAddress enforces valid widths, bounds, canonical uppercase hex and immutability', () {
+      final addrLegacy = DiagnosticSourceAddress('10');
+      expect(addrLegacy.value, equals('10'));
+
+      final addrStd = DiagnosticSourceAddress('7E8');
+      expect(addrStd.value, equals('7E8'));
+
+      final addrExt = DiagnosticSourceAddress('18DAF110');
+      expect(addrExt.value, equals('18DAF110'));
+
+      final addrLower = DiagnosticSourceAddress('7e8');
+      expect(addrLower.value, equals('7E8'));
+      expect(addrLower, equals(addrStd));
+      expect(addrLower.hashCode, equals(addrStd.hashCode));
+
+      expect(() => DiagnosticSourceAddress(''), throwsArgumentError);
+      expect(() => DiagnosticSourceAddress('XYZ'), throwsArgumentError);
+      expect(() => DiagnosticSourceAddress('FFF'), throwsArgumentError);
+      expect(() => DiagnosticSourceAddress('FFFFFFFF'), throwsArgumentError);
+      expect(() => DiagnosticSourceAddress('1'), throwsArgumentError);
+      expect(() => DiagnosticSourceAddress('1234'), throwsArgumentError);
+
+      expect(DiagnosticSourceAddress.tryParse('7E8'), equals(addrStd));
+      expect(DiagnosticSourceAddress.tryParse(null), isNull);
+      expect(DiagnosticSourceAddress.tryParse('bad'), isNull);
     });
   });
 
@@ -498,13 +528,86 @@ void main() {
 
       expect(response.messages, isNotEmpty);
       final firstMsg = response.messages.first;
-      expect(firstMsg.sourceAddress, equals('7E8'));
+      expect(firstMsg.sourceAddress, equals(DiagnosticSourceAddress('7E8')));
+      expect(firstMsg.sourceAddress?.value, equals('7E8'));
       expect(firstMsg.pdu.bytes, equals([0x41, 0x00, 0xBE, 0x3F, 0xA8, 0x13]));
 
       expect(response.provenance.backendId, equals('elm327'));
       expect(response.provenance.connectionGeneration, equals(link.connectionGeneration));
       expect(response.provenance.target, equals(DiagnosticTarget.wholeVehicleObd));
       expect(response.provenance.sourceAttributionAvailable, isTrue);
+      expect((client.transport as FakeElm327).commandLog.contains('0100'), isTrue);
+    });
+  });
+
+  group('Elm327DiagnosticLink timeouts and response delay', () {
+    test('T-TIMEOUT-RESP: request without deadline times out on swallowed prompt, throwing responseTimeout after sending wire command', () async {
+      final swallowed = <String>{};
+      final client = await _createConnectedClient(
+        faults: AdapterFaults(swallowPromptFor: swallowed),
+        commandTimeout: const Duration(milliseconds: 100),
+      );
+      final transport = client.transport as FakeElm327;
+      swallowed.add('0100');
+      final link = Elm327DiagnosticLink(client);
+
+      final request = DiagnosticRequest(
+        id: const DiagnosticRequestId('req-timeout-resp'),
+        pdu: ApplicationPdu(const [0x01, 0x00]),
+        target: DiagnosticTarget.wholeVehicleObd,
+        requiredCapabilities: const {
+          DiagnosticCapability.applicationPdu,
+          DiagnosticCapability.wholeVehicleObd,
+        },
+        connectionGeneration: link.connectionGeneration,
+        ownership: const DiagnosticOwnership(mode: DiagnosticOwnershipMode.oneShot),
+      );
+
+      await expectLater(
+        link.send(request),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            equals(DiagnosticFailureKind.responseTimeout),
+          ),
+        ),
+      );
+      expect(transport.commandLog.contains('0100'), isTrue);
+    });
+
+    test('T-TIMEOUT-DL: in-flight request with short deadline times out while waiting for delayed reply, throwing deadlineExpired after sending wire command', () async {
+      final client = await _createConnectedClient(
+        commandTimeout: const Duration(milliseconds: 500),
+      );
+      final transport = client.transport as FakeElm327;
+      transport.slowCommands['0100'] = const Duration(milliseconds: 150);
+      final link = Elm327DiagnosticLink(client);
+
+      final request = DiagnosticRequest(
+        id: const DiagnosticRequestId('req-timeout-dl'),
+        pdu: ApplicationPdu(const [0x01, 0x00]),
+        target: DiagnosticTarget.wholeVehicleObd,
+        requiredCapabilities: const {
+          DiagnosticCapability.applicationPdu,
+          DiagnosticCapability.wholeVehicleObd,
+        },
+        connectionGeneration: link.connectionGeneration,
+        deadline: DateTime.now().add(const Duration(milliseconds: 40)),
+        ownership: const DiagnosticOwnership(mode: DiagnosticOwnershipMode.oneShot),
+      );
+
+      await expectLater(
+        link.send(request),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            equals(DiagnosticFailureKind.deadlineExpired),
+          ),
+        ),
+      );
+      expect(transport.commandLog.contains('0100'), isTrue);
     });
   });
 

@@ -373,10 +373,85 @@ class DiagnosticRequest {
       'DiagnosticRequest(id: $id, pdu: $pdu, target: $target, gen: $connectionGeneration, deadline: $deadline)';
 }
 
+/// Immutable, typed diagnostic source address (ECU responder address).
+///
+/// Accepts the three standard forms produced by ELM327 attribution:
+/// - 2 hex digits: legacy source byte (00..FF)
+/// - 3 hex digits: standard CAN 11-bit ID (000..7FF)
+/// - 8 hex digits: extended CAN 29-bit ID (00000000..1FFFFFFF)
+///
+/// Canonicalized to uppercase hex. Rejects empty, non-hex, invalid width,
+/// and out-of-range IDs.
+class DiagnosticSourceAddress {
+  final String value;
+
+  DiagnosticSourceAddress(String raw) : value = _validateAndCanonicalize(raw);
+
+  static DiagnosticSourceAddress? tryParse(String? raw) {
+    if (raw == null) return null;
+    try {
+      return DiagnosticSourceAddress(raw);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  static String _validateAndCanonicalize(String raw) {
+    final trimmed = raw.trim().toUpperCase();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(raw, 'raw', 'Source address cannot be empty.');
+    }
+    final length = trimmed.length;
+    if (length != 2 && length != 3 && length != 8) {
+      throw ArgumentError.value(
+        raw,
+        'raw',
+        'Source address must be 2, 3, or 8 hex characters, got length $length.',
+      );
+    }
+    final int? parsed = int.tryParse(trimmed, radix: 16);
+    if (parsed == null) {
+      throw ArgumentError.value(
+        raw,
+        'raw',
+        'Source address must contain valid hexadecimal characters.',
+      );
+    }
+    if (length == 3 && parsed > 0x7FF) {
+      throw ArgumentError.value(
+        raw,
+        'raw',
+        'Standard 11-bit CAN address must be <= 0x7FF (got 0x$trimmed).',
+      );
+    }
+    if (length == 8 && parsed > 0x1FFFFFFF) {
+      throw ArgumentError.value(
+        raw,
+        'raw',
+        'Extended 29-bit CAN address must be <= 0x1FFFFFFF (got 0x$trimmed).',
+      );
+    }
+    return trimmed;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DiagnosticSourceAddress &&
+          runtimeType == other.runtimeType &&
+          value == other.value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => 'DiagnosticSourceAddress($value)';
+}
+
 /// Single application message from a diagnostic response.
 class DiagnosticMessage {
   final ApplicationPdu pdu;
-  final String? sourceAddress;
+  final DiagnosticSourceAddress? sourceAddress;
 
   const DiagnosticMessage({
     required this.pdu,
@@ -491,6 +566,7 @@ enum DiagnosticFailureKind {
   unsupportedTarget,
   cancelled,
   deadlineExpired,
+  responseTimeout,
   retiredGeneration,
   retiredOperation,
   transportFailure,
