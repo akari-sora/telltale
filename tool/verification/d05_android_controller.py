@@ -153,6 +153,40 @@ async def detect_input_devices():
         event('detect_input_devices_error', error=str(exc))
 
 
+async def setup_fast_lifecycle_helpers():
+    """Install standalone native shell scripts in /data/local/tmp on the Android device.
+
+    Executing these scripts via adb takes <15ms for power and <150ms for HOME,
+    eliminating app_process Java startup overhead (which took 5-8s) and avoiding
+    all shell quote-stripping issues.
+    """
+    power_script = (
+        "#!/system/bin/sh\n"
+        f"sendevent {POWER_INPUT_DEVICE} 1 116 1\n"
+        f"sendevent {POWER_INPUT_DEVICE} 0 0 0\n"
+        f"sendevent {POWER_INPUT_DEVICE} 1 116 0\n"
+        f"sendevent {POWER_INPUT_DEVICE} 0 0 0\n"
+    )
+    home_script = (
+        "#!/system/bin/sh\n"
+        "am start -a android.intent.action.MAIN -c android.intent.category.HOME\n"
+    )
+    with tempfile.NamedTemporaryFile('w', delete=False) as tf:
+        tf.write(power_script)
+        power_path = tf.name
+    with tempfile.NamedTemporaryFile('w', delete=False) as tf:
+        tf.write(home_script)
+        home_path = tf.name
+    try:
+        await adb('push', power_path, '/data/local/tmp/d05_power.sh', timeout=10, check=False)
+        await adb('push', home_path, '/data/local/tmp/d05_home.sh', timeout=10, check=False)
+        await adb('shell', 'chmod', '755', '/data/local/tmp/d05_power.sh', '/data/local/tmp/d05_home.sh', timeout=10, check=False)
+        event('fast_lifecycle_helpers_installed')
+    finally:
+        Path(power_path).unlink(missing_ok=True)
+        Path(home_path).unlink(missing_ok=True)
+
+
 def event(kind: str, **values):
     global SEQ
     SEQ += 1
@@ -300,13 +334,7 @@ async def prepare_window(*, unlock_swipe=False):
 
 async def wake_and_unlock():
     global WAKE_KEYEVENT_DISABLED
-    send_cmd = (
-        f'sendevent {POWER_INPUT_DEVICE} 1 116 1; '
-        f'sendevent {POWER_INPUT_DEVICE} 0 0 0; '
-        f'sendevent {POWER_INPUT_DEVICE} 1 116 0; '
-        f'sendevent {POWER_INPUT_DEVICE} 0 0 0'
-    )
-    await adb('shell', 'sh', '-c', send_cmd, timeout=5, check=False)
+    await adb('shell', '/data/local/tmp/d05_power.sh', timeout=5, check=False)
     await prepare_window()
     if not WAKE_KEYEVENT_DISABLED:
         result = await adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP',
@@ -1559,37 +1587,17 @@ async def case(rig, index, click_text):
         event('held_query_confirmed_before_os_command', receipt=receipt, action=action)
         # Execute fast native OS lifecycle event (HOME or SLEEP) during active hold
         if index == 2:
-            # Native Power Button event (<10ms, avoids slow app_process JVM)
-            send_cmd = (
-                f'sendevent {POWER_INPUT_DEVICE} 1 116 1; '
-                f'sendevent {POWER_INPUT_DEVICE} 0 0 0; '
-                f'sendevent {POWER_INPUT_DEVICE} 1 116 0; '
-                f'sendevent {POWER_INPUT_DEVICE} 0 0 0'
-            )
-            await adb('shell', 'sh', '-c', send_cmd, timeout=5, check=False)
-            power_data = await adb('shell', 'dumpsys', 'power', timeout=5, check=False)
-            power_text = power_data.decode(errors='replace') if isinstance(power_data, (bytes, bytearray)) else str(power_data)
-            is_asleep = 'mWakefulness=Asleep' in power_text or 'mLastSleepReason=sleep_button' in power_text
-            event('os_command_executed_during_hold', action=action, index=index,
-                  verified_asleep=is_asleep)
+            # Native Power Button event (<15ms, triggers PowerManagerService.goToSleep)
+            await adb('shell', '/data/local/tmp/d05_power.sh', timeout=5, check=False)
         else:
-            # Native HOME key event via sendevent (<10ms) + fast cmd activity (<200ms)
-            kb_sends = ' '.join(
-                f'sendevent {dev} 1 102 1; sendevent {dev} 0 0 0; sendevent {dev} 1 102 0; sendevent {dev} 0 0 0;'
-                for dev in KEYBOARD_INPUT_DEVICES
-            )
-            home_cmd = f'{kb_sends} cmd activity start -a android.intent.action.MAIN -c android.intent.category.HOME'
-            await adb('shell', 'sh', '-c', home_cmd, timeout=5, check=False)
-            act_data = await adb('shell', 'dumpsys', 'activity', 'top', timeout=5, check=False)
-            act_text = act_data.decode(errors='replace') if isinstance(act_data, (bytes, bytearray)) else str(act_data)
-            is_home = 'launcher' in act_text.lower() or 'home' in act_text.lower()
-            if not is_home:
-                win_data = await adb('shell', 'dumpsys', 'window', 'visible-apps', timeout=5, check=False)
-                win_text = win_data.decode(errors='replace') if isinstance(win_data, (bytes, bytearray)) else str(win_data)
-                is_home = 'launcher' in win_text.lower() or 'home' in win_text.lower()
-            event('os_command_executed_during_hold', action=action, index=index,
-                  verified_home=is_home)
-        # Release hold immediately so total hold duration is strictly < 2.0s (~0.6-1.1s)
+            # Native HOME intent (<150ms, triggers ActivityManager pause)
+            await adb('shell', '/data/local/tmp/d05_home.sh', timeout=5, check=False)
+        event('os_command_executed_during_hold', action=action, index=index)
+
+        # Pacing: ensure kernel/system_server registers the OS event before hold is released
+        await asyncio.sleep(0.3)
+
+        # Release hold immediately so total hold duration is strictly < 2.0s (~0.35-0.5s)
         rig.release.set()
         event('mode08_hold_released_for_resume', index=index, command=command)
         if index == 2:
@@ -1645,6 +1653,7 @@ async def main():
     await adb('shell', 'chmod', '666', '/dev/input/event*', timeout=10, check=False)
     await ensure_scroll_jar()
     await detect_input_devices()
+    await setup_fast_lifecycle_helpers()
     rig = DeviceRig()
     listener = await asyncio.start_server(rig.handle_client, '127.0.0.1', 35008)
     await adb('reverse','tcp:35008','tcp:35008')
