@@ -378,12 +378,12 @@ def is_launcher_active(text: str) -> bool:
     if not text:
         return False
     telltale_resumed = any(
-        ('mresumedactivity' in r.lower() or 'topresumedactivity' in r.lower()) and 'com.cbstudio.telltale' in r.lower()
+        ('mresumedactivity' in r.lower() or 'topresumedactivity' in r.lower() or 'activity com.cbstudio.telltale' in r.lower()) and 'com.cbstudio.telltale' in r.lower()
         for r in text.splitlines()
     )
     for line in text.splitlines():
         l = line.lower()
-        if any(marker in l for marker in ('mresumedactivity', 'resumedactivity', 'topresumedactivity', 'top-activity', 'mfocusedactivity', 'mcurrentfocus', 'mfocusedapp')):
+        if any(marker in l for marker in ('mresumedactivity', 'resumedactivity', 'topresumedactivity', 'top-activity', 'mfocusedactivity', 'mcurrentfocus', 'mfocusedapp', 'activity ', 'task ')):
             if any(term in l for term in ('launcher', 'home', 'quickstep')):
                 return True
         if 'topdisplayfocusedstack' in l and 'type=home' in l:
@@ -404,7 +404,7 @@ def extract_launcher_evidence(text: str) -> list:
     for line in text.splitlines():
         l = line.lower()
         if any(term in l for term in ('launcher', 'home', 'quickstep', 'com.android.launcher3')) and \
-           any(m in l for m in ('resumed', 'top', 'focus', 'type=home', 'proc #', 'stackid=0')):
+           any(m in l for m in ('resumed', 'top', 'focus', 'type=home', 'proc #', 'stackid=0', 'activity ', 'task ')):
             stripped = line.strip()
             if stripped and stripped not in evidence:
                 evidence.append(stripped)
@@ -1845,8 +1845,8 @@ async def case(rig, index, click_text):
             raise RuntimeError(f"Native OS lifecycle command timed out during active hold for {action}")
 
         # Modified Option B: Dynamic in-hold native OS state verification
-        # Maximum hold budget: 1.35s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
-        hold_budget_deadline = hold_start + 1.35
+        # Maximum hold budget: 1.65s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
+        hold_budget_deadline = hold_start + 1.65
         poll_interval = 0.05
         verified_state = None
         verified_at = None
@@ -1856,7 +1856,7 @@ async def case(rig, index, click_text):
             remaining_budget = hold_budget_deadline - time.monotonic()
             if remaining_budget <= 0.10:
                 break
-            poll_timeout = min(0.60, max(0.20, remaining_budget))
+            poll_timeout = min(1.20, max(0.20, remaining_budget))
             if index == 2:
                 # SLEEP: Query dumpsys power
                 try:
@@ -1870,9 +1870,9 @@ async def case(rig, index, click_text):
                 except Exception as exc:
                     event('hold_poll_error', action=action, error=str(exc))
             else:
-                # HOME (Case 1 & Case 3): Query dumpsys activity
+                # HOME (Case 1 & Case 3): Query dumpsys activity top (fastest, < 100ms)
                 try:
-                    a_out = await adb('shell', 'dumpsys', 'activity', timeout=poll_timeout, check=False)
+                    a_out = await adb('shell', 'dumpsys', 'activity', 'top', timeout=poll_timeout, check=False)
                     a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
                     if is_launcher_active(a_text):
                         verified_at = time.monotonic()

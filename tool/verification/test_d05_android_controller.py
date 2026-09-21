@@ -1988,6 +1988,8 @@ class CaseHoldAndReleaseOrderTests(unittest.TestCase):
             'topDisplayFocusedStack=ActivityStack{d479a5e stackId=0 type=home mode=fullscreen visible=true translucent=false, 1 tasks}',
             'mHomeStack=ActivityStack{b398e3f stackId=0 type=home mode=fullscreen visible=true translucent=true, 1 tasks}',
             'Stack #0: type=home com.android.launcher3/.Launcher',
+            'ACTIVITY com.android.launcher3/.uioverrides.QuickstepLauncher 8c728e pid=1892',
+            'TASK com.android.launcher3 id=5',
         ]
         for p in positives:
             self.assertTrue(CTRL.is_launcher_active(p), f"Expected True for: {p}")
