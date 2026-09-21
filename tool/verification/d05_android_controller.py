@@ -126,7 +126,7 @@ WAKE_SOFT_TIMEOUT = 20
 WAKE_KEYEVENT_DISABLED = False
 POWER_INPUT_DEVICE = '/dev/input/event0'
 KEYBOARD_INPUT_DEVICES = ['/dev/input/event12', '/dev/input/event13']
-OS_COMMAND_HOLD_TIMEOUT = 1.65
+OS_COMMAND_HOLD_TIMEOUT = 1.80
 
 
 async def detect_input_devices():
@@ -158,33 +158,16 @@ async def detect_input_devices():
 async def setup_fast_lifecycle_helpers():
     """Install standalone native shell scripts in /data/local/tmp on the Android device.
 
-    Executing these scripts via adb takes <50ms for sleep and <50ms for HOME,
-    eliminating app_process Java startup overhead and avoiding shell quote-stripping issues.
+    Executing these scripts via adb eliminates shell quote-stripping issues.
     """
     await adb('shell', 'svc', 'power', 'stayon', 'false', timeout=10, check=False)
-    power_dev = POWER_INPUT_DEVICE or '/dev/input/event0'
     power_script = (
         "#!/system/bin/sh\n"
-        f"if [ -e '{power_dev}' ]; then\n"
-        f"  sendevent '{power_dev}' 1 116 1\n"
-        f"  sendevent '{power_dev}' 0 0 0\n"
-        f"  sendevent '{power_dev}' 1 116 0\n"
-        f"  sendevent '{power_dev}' 0 0 0\n"
-        "fi\n"
-        "input keyevent 223 >/dev/null 2>&1 < /dev/null &\n"
+        "input keyevent 223\n"
     )
-    kb_devs = " ".join(KEYBOARD_INPUT_DEVICES) if KEYBOARD_INPUT_DEVICES else "/dev/input/event14 /dev/input/event12"
     home_script = (
         "#!/system/bin/sh\n"
-        f"for d in {kb_devs}; do\n"
-        "  if [ -e \"$d\" ]; then\n"
-        "    sendevent \"$d\" 1 172 1\n"
-        "    sendevent \"$d\" 0 0 0\n"
-        "    sendevent \"$d\" 1 172 0\n"
-        "    sendevent \"$d\" 0 0 0\n"
-        "  fi\n"
-        "done\n"
-        "input keyevent 3 >/dev/null 2>&1 < /dev/null &\n"
+        "input keyevent 3\n"
     )
     with tempfile.NamedTemporaryFile('w', delete=False) as tf:
         tf.write(power_script)
@@ -1648,7 +1631,7 @@ async def case(rig, index, click_text):
         verified = False
         verified_state = ''
         if index == 2:
-            while time.monotonic() - hold_start < 1.75:
+            while time.monotonic() - hold_start < 1.85:
                 p_dump = await adb('shell', 'dumpsys', 'power', timeout=5, check=False)
                 p_text = p_dump.decode(errors='replace')
                 if 'mWakefulness=Asleep' in p_text or 'mWakefulness=Dozing' in p_text:
@@ -1666,7 +1649,7 @@ async def case(rig, index, click_text):
                     break
                 await asyncio.sleep(0.04)
         else:
-            while time.monotonic() - hold_start < 1.75:
+            while time.monotonic() - hold_start < 1.85:
                 w_dump = await adb('shell', 'dumpsys', 'window', timeout=5, check=False)
                 w_text = w_dump.decode(errors='replace')
                 if any(k in w_text.lower() for k in ('launcher', 'nexuslauncher', 'launcher3')):
@@ -1703,13 +1686,13 @@ async def case(rig, index, click_text):
               verified_state=verified_state, elapsed_s=round(time.monotonic() - hold_start, 3))
 
         # Dynamic pacing: ensure kernel/system_server registers the OS event before hold is released,
-        # while strictly bounding total hold duration below Telltale's 2.0s discovery timeout (~1.2-1.75s).
+        # while strictly bounding total hold duration below Telltale's 2.0s discovery timeout (~1.2-1.85s).
         elapsed = time.monotonic() - hold_start
-        pacing = max(0.02, min(0.15, 1.75 - elapsed)) if elapsed < 1.75 else 0
+        pacing = max(0.01, min(0.04, 1.85 - elapsed)) if elapsed < 1.85 else 0
         if pacing > 0:
             await asyncio.sleep(pacing)
 
-        # Release hold immediately so total hold duration is strictly < 2.0s (~1.2-1.75s)
+        # Release hold immediately so total hold duration is strictly < 2.0s (~1.2-1.85s)
         rig.release.set()
         duration_s = round(time.monotonic() - hold_start, 3)
         event('mode08_hold_released_for_resume', index=index, command=command,
