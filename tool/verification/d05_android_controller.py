@@ -1854,8 +1854,8 @@ async def case(rig, index, click_text):
             raise RuntimeError(f"Native OS lifecycle command timed out during active hold for {action}")
 
         # Modified Option B: Dynamic in-hold native OS state verification
-        # Maximum hold budget: 1.80s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
-        hold_budget_deadline = hold_start + 1.80
+        # Maximum hold budget: 1.88s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
+        hold_budget_deadline = hold_start + 1.88
         poll_interval = 0.02
         verified_state = None
         verified_at = None
@@ -1863,9 +1863,9 @@ async def case(rig, index, click_text):
 
         while time.monotonic() < hold_budget_deadline:
             remaining_budget = hold_budget_deadline - time.monotonic()
-            if remaining_budget <= 0.10:
+            if remaining_budget <= 0.06:
                 break
-            poll_timeout = min(1.65, max(0.20, remaining_budget))
+            poll_timeout = min(1.80, max(0.20, remaining_budget))
             if index == 2:
                 # SLEEP: Query dumpsys power
                 try:
@@ -1879,9 +1879,10 @@ async def case(rig, index, click_text):
                 except Exception as exc:
                     event('hold_poll_error', action=action, error=str(exc))
             else:
-                # HOME (Case 1 & Case 3): Query dumpsys activity activities (fast internal stack query, ~370ms)
+                # HOME (Case 1 & Case 3): Query dumpsys activity top first (fastest, ~200-400ms), fallback to activities
                 try:
-                    a_out = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=poll_timeout, check=False)
+                    top_timeout = min(0.60, poll_timeout)
+                    a_out = await adb('shell', 'dumpsys', 'activity', 'top', timeout=top_timeout, check=False)
                     a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
                     if is_launcher_active(a_text):
                         verified_at = time.monotonic()
@@ -1890,6 +1891,20 @@ async def case(rig, index, click_text):
                         break
                 except Exception as exc:
                     event('hold_poll_error', action=action, error=str(exc))
+
+                remaining_budget = hold_budget_deadline - time.monotonic()
+                if remaining_budget > 0.10:
+                    try:
+                        act_timeout = min(1.80, remaining_budget)
+                        a_out = await adb('shell', 'dumpsys', 'activity', 'activities', timeout=act_timeout, check=False)
+                        a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
+                        if is_launcher_active(a_text):
+                            verified_at = time.monotonic()
+                            verified_state = 'activity_launcher'
+                            state_evidence = extract_launcher_evidence(a_text)
+                            break
+                    except Exception as exc:
+                        event('hold_poll_error', action=action, error=str(exc))
 
             await asyncio.sleep(poll_interval)
 
