@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 import sys
@@ -1898,6 +1899,669 @@ class CampaignRunnerTest(unittest.TestCase):
                     shutil.rmtree(ws_root, ignore_errors=True)
                 elif ws_root.exists() and not any(ws_root.iterdir()):
                     ws_root.rmdir()
+
+
+class ResumeAndCollisionRunnerTest(unittest.TestCase):
+    def test_resume_failed_isolated_task_preserves_successful_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[
+                    ["python3", "tool/workshop/c1.py"],
+                    ["python3", "tool/workshop/c2.py"],
+                    ["python3", "tool/workshop/c3.py"],
+                ],
+            )
+            workshop = tmp / "tool" / "workshop"
+            c1 = workshop / "c1.py"
+            c1.write_text(
+                "from pathlib import Path\n"
+                "p = Path('counter.txt')\n"
+                "val = int(p.read_text()) if p.exists() else 0\n"
+                "p.write_text(str(val + 1))\n"
+                "Path('resume-marker.txt').write_text('marker-payload')\n",
+                encoding="utf-8",
+            )
+            c2 = workshop / "c2.py"
+            c2.write_text(
+                "from pathlib import Path\n"
+                "if not Path('flag.txt').exists(): raise SystemExit(1)\n",
+                encoding="utf-8",
+            )
+            c3 = workshop / "c3.py"
+            c3.write_text(
+                "from pathlib import Path\n"
+                "p = Path('counter.txt')\n"
+                "val = int(p.read_text()) if p.exists() else 0\n"
+                "p.write_text(str(val + 1))\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "-C", str(tmp), "add", "-A"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(tmp), "commit", "-m", "scripts"], check=True, capture_output=True)
+            sha = subprocess.check_output(["git", "-C", str(tmp), "rev-parse", "HEAD"], text=True).strip()
+            data = json.loads(plan.read_text(encoding="utf-8"))
+            data["audited_sha"] = sha
+            plan.write_text(json.dumps(data), encoding="utf-8")
+            subprocess.run(["git", "-C", str(tmp), "commit", "-am", "plan"], check=True, capture_output=True)
+            sha = subprocess.check_output(["git", "-C", str(tmp), "rev-parse", "HEAD"], text=True).strip()
+
+            handoff_failed = tmp / "handoff_failed.json"
+            worktree_dir = tmp / ".worktrees" / "ws-ws-01"
+            code1 = run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=handoff_failed,
+                isolate=True,
+                isolate_dir=worktree_dir,
+                base_sha=sha,
+                timeout=10,
+            )
+            self.assertEqual(code1, 1)
+            self.assertTrue(handoff_failed.exists())
+            raw_failed = json.loads(handoff_failed.read_text(encoding="utf-8"))
+            self.assertEqual(raw_failed["status"], "failed")
+            self.assertFalse(raw_failed["completed"])
+            self.assertEqual(len(raw_failed["results"]), 2)
+            self.assertEqual(raw_failed["results"][0]["exit"], 0)
+            self.assertEqual(raw_failed["results"][1]["exit"], 1)
+            self.assertEqual(raw_failed["unrun"], ["python3 tool/workshop/c3.py"])
+
+            wt_counter = worktree_dir / "counter.txt"
+            self.assertEqual(wt_counter.read_text(encoding="utf-8").strip(), "1")
+
+            marker = worktree_dir / "resume-marker.txt"
+            marker_sha_before = hashlib.sha256(marker.read_bytes()).hexdigest()
+            failed_bytes_before = handoff_failed.read_bytes()
+            failed_sha_before = hashlib.sha256(failed_bytes_before).hexdigest()
+
+            # Fix c2 condition in the worktree
+            (worktree_dir / "flag.txt").write_text("ok", encoding="utf-8")
+
+            handoff_resumed = tmp / "handoff_resumed.json"
+            code2 = run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=handoff_resumed,
+                resume_from=handoff_failed,
+                timeout=10,
+            )
+            self.assertEqual(code2, 0)
+
+            # Counter is 2 (c1 skipped, c2 ran and passed, c3 ran and passed)
+            self.assertEqual(wt_counter.read_text(encoding="utf-8").strip(), "2")
+            marker_sha_after = hashlib.sha256(marker.read_bytes()).hexdigest()
+            self.assertEqual(marker_sha_before, marker_sha_after)
+            self.assertEqual(failed_bytes_before, handoff_failed.read_bytes())
+
+            resumed = json.loads(handoff_resumed.read_text(encoding="utf-8"))
+            self.assertTrue(resumed["completed"])
+            self.assertEqual(resumed["status"], "completed")
+            self.assertEqual(len(resumed["results"]), 3)
+            self.assertEqual(resumed["unrun"], [])
+            self.assertEqual(resumed["failed"], [])
+            self.assertEqual(resumed["resume"]["previous_handoff_sha256"], failed_sha_before)
+            self.assertEqual(resumed["resume"]["continued_from_command_index"], 1)
+
+    def test_resume_rejects_changed_command_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[
+                    ["python3", "tool/workshop/c1.py"],
+                    ["python3", "tool/workshop/c2.py"],
+                ],
+            )
+            workshop = tmp / "tool" / "workshop"
+            c1 = workshop / "c1.py"
+            c1.write_text("print('c1')\n", encoding="utf-8")
+            c2 = workshop / "c2.py"
+            c2.write_text("raise SystemExit(1)\n", encoding="utf-8")
+
+            handoff_failed = tmp / "failed.json"
+            run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=handoff_failed,
+                timeout=5,
+            )
+            data = json.loads(plan.read_text(encoding="utf-8"))
+            data["tasks"][0]["run_commands"] = [
+                ["python3", "tool/workshop/c1.py", "--new-arg"],
+                ["python3", "tool/workshop/c2.py"],
+            ]
+            plan.write_text(json.dumps(data), encoding="utf-8")
+
+            with self.assertRaises(run_task.RunnerError) as ctx:
+                run_task.run_task(
+                    plan,
+                    "WS-01",
+                    handoff_path=tmp / "resumed.json",
+                    resume_from=handoff_failed,
+                    timeout=5,
+                )
+            self.assertIn("does not match the planned command", str(ctx.exception))
+
+    def test_resume_rejects_changed_unrun_suffix(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[
+                    ["python3", "tool/workshop/c1.py"],
+                    ["python3", "tool/workshop/c2.py"],
+                    ["python3", "tool/workshop/c3.py"],
+                ],
+            )
+            workshop = tmp / "tool" / "workshop"
+            c1 = workshop / "c1.py"
+            c1.write_text(
+                "from pathlib import Path\n"
+                "p = Path('counter.txt')\n"
+                "val = int(p.read_text()) if p.exists() else 0\n"
+                "p.write_text(str(val + 1))\n",
+                encoding="utf-8",
+            )
+            c2 = workshop / "c2.py"
+            c2.write_text("raise SystemExit(1)\n", encoding="utf-8")
+            c3 = workshop / "c3.py"
+            c3.write_text("print('c3')\n", encoding="utf-8")
+
+            handoff_failed = tmp / "failed.json"
+            run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=handoff_failed,
+                timeout=5,
+            )
+            raw_failed = json.loads(handoff_failed.read_text(encoding="utf-8"))
+            self.assertEqual(raw_failed["unrun"], ["python3 tool/workshop/c3.py"])
+            counter = tmp / "counter.txt"
+            self.assertEqual(counter.read_text().strip(), "1")
+
+            data = json.loads(plan.read_text(encoding="utf-8"))
+            data["tasks"][0]["run_commands"] = [
+                ["python3", "tool/workshop/c1.py"],
+                ["python3", "tool/workshop/c2.py"],
+                ["python3", "tool/workshop/c3.py", "--changed"],
+            ]
+            plan.write_text(json.dumps(data), encoding="utf-8")
+
+            with self.assertRaises(run_task.RunnerError) as ctx:
+                run_task.run_task(
+                    plan,
+                    "WS-01",
+                    handoff_path=tmp / "resumed.json",
+                    resume_from=handoff_failed,
+                    timeout=5,
+                )
+            self.assertIn("unrun suffix does not match", str(ctx.exception))
+            self.assertEqual(counter.read_text().strip(), "1")
+
+    def test_resume_rejects_wrong_task_or_issue(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[["python3", "tool/workshop/c1.py"]],
+            )
+            workshop = tmp / "tool" / "workshop"
+            c1 = workshop / "c1.py"
+            c1.write_text("raise SystemExit(1)\n", encoding="utf-8")
+
+            handoff_failed = tmp / "failed.json"
+            run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=handoff_failed,
+                timeout=5,
+            )
+            raw_data = json.loads(handoff_failed.read_text(encoding="utf-8"))
+            raw_data["task"] = "WS-02"
+            tampered_task = tmp / "tampered_task.json"
+            tampered_task.write_text(json.dumps(raw_data), encoding="utf-8")
+            with self.assertRaises(run_task.RunnerError) as ctx:
+                run_task.run_task(
+                    plan,
+                    "WS-01",
+                    handoff_path=tmp / "resumed.json",
+                    resume_from=tampered_task,
+                    timeout=5,
+                )
+            self.assertIn("does not match WS-01", str(ctx.exception))
+
+            raw_data["task"] = "WS-01"
+            raw_data["issue"] = 9999
+            tampered_issue = tmp / "tampered_issue.json"
+            tampered_issue.write_text(json.dumps(raw_data), encoding="utf-8")
+            with self.assertRaises(run_task.RunnerError) as ctx:
+                run_task.run_task(
+                    plan,
+                    "WS-01",
+                    handoff_path=tmp / "resumed.json",
+                    resume_from=tampered_issue,
+                    timeout=5,
+                )
+            self.assertIn("does not match", str(ctx.exception))
+
+    def test_resume_rejects_completed_or_blocked_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[["python3", "tool/workshop/c1.py"]],
+            )
+            workshop = tmp / "tool" / "workshop"
+            c1 = workshop / "c1.py"
+            c1.write_text("print('ok')\n", encoding="utf-8")
+
+            handoff_completed = tmp / "completed.json"
+            code = run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=handoff_completed,
+                timeout=5,
+            )
+            self.assertEqual(code, 0)
+
+            with self.assertRaises(run_task.RunnerError) as ctx:
+                run_task.run_task(
+                    plan,
+                    "WS-01",
+                    handoff_path=tmp / "resumed.json",
+                    resume_from=handoff_completed,
+                    timeout=5,
+                )
+            self.assertIn("resume requires an unfinished handoff", str(ctx.exception))
+
+            blocked_data = json.loads(handoff_completed.read_text(encoding="utf-8"))
+            blocked_data["status"] = "blocked"
+            blocked_data["completed"] = False
+            blocked_path = tmp / "blocked.json"
+            blocked_path.write_text(json.dumps(blocked_data), encoding="utf-8")
+            with self.assertRaises(run_task.RunnerError) as ctx:
+                run_task.run_task(
+                    plan,
+                    "WS-01",
+                    handoff_path=tmp / "resumed.json",
+                    resume_from=blocked_path,
+                    timeout=5,
+                )
+            self.assertIn("resume requires an unfinished handoff", str(ctx.exception))
+
+    def test_resume_rejects_worktree_head_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[["python3", "tool/workshop/c1.py"]],
+            )
+            workshop = tmp / "tool" / "workshop"
+            c1 = workshop / "c1.py"
+            c1.write_text("raise SystemExit(1)\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(tmp), "add", "-A"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(tmp), "commit", "-m", "c1"], check=True, capture_output=True)
+            sha = subprocess.check_output(["git", "-C", str(tmp), "rev-parse", "HEAD"], text=True).strip()
+            data = json.loads(plan.read_text(encoding="utf-8"))
+            data["audited_sha"] = sha
+            plan.write_text(json.dumps(data), encoding="utf-8")
+            subprocess.run(["git", "-C", str(tmp), "commit", "-am", "plan"], check=True, capture_output=True)
+            sha = subprocess.check_output(["git", "-C", str(tmp), "rev-parse", "HEAD"], text=True).strip()
+
+            handoff_failed = tmp / "failed.json"
+            worktree_dir = tmp / ".worktrees" / "ws-ws-01"
+            run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=handoff_failed,
+                isolate=True,
+                isolate_dir=worktree_dir,
+                base_sha=sha,
+                timeout=5,
+            )
+            subprocess.run(
+                ["git", "-C", str(worktree_dir), "commit", "--allow-empty", "-m", "drift"],
+                check=True,
+                capture_output=True,
+            )
+            with self.assertRaises(run_task.RunnerError) as ctx:
+                run_task.run_task(
+                    plan,
+                    "WS-01",
+                    handoff_path=tmp / "resumed.json",
+                    resume_from=handoff_failed,
+                    timeout=5,
+                )
+            self.assertIn("has drifted from handoff SHA", str(ctx.exception))
+
+    def test_resume_rejects_missing_head_sha(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[
+                    ["python3", "tool/workshop/c1.py"],
+                    ["python3", "tool/workshop/c2.py"],
+                ],
+            )
+            workshop = tmp / "tool" / "workshop"
+            c1 = workshop / "c1.py"
+            c1.write_text("raise SystemExit(1)\n", encoding="utf-8")
+            c2 = workshop / "c2.py"
+            c2.write_text(
+                "from pathlib import Path\n"
+                "Path('side_effect.txt').write_text('bad')\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "-C", str(tmp), "add", "-A"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(tmp), "commit", "-m", "scripts"], check=True, capture_output=True)
+            sha = subprocess.check_output(["git", "-C", str(tmp), "rev-parse", "HEAD"], text=True).strip()
+            data = json.loads(plan.read_text(encoding="utf-8"))
+            data["audited_sha"] = sha
+            plan.write_text(json.dumps(data), encoding="utf-8")
+            subprocess.run(["git", "-C", str(tmp), "commit", "-am", "plan"], check=True, capture_output=True)
+            sha = subprocess.check_output(["git", "-C", str(tmp), "rev-parse", "HEAD"], text=True).strip()
+
+            handoff_failed = tmp / "failed.json"
+            worktree_dir = tmp / ".worktrees" / "ws-ws-01"
+            run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=handoff_failed,
+                isolate=True,
+                isolate_dir=worktree_dir,
+                base_sha=sha,
+                timeout=5,
+            )
+            raw_failed = json.loads(handoff_failed.read_text(encoding="utf-8"))
+            self.assertIn("head_sha", raw_failed)
+            del raw_failed["head_sha"]
+            handoff_no_sha = tmp / "failed_no_sha.json"
+            handoff_no_sha.write_text(json.dumps(raw_failed), encoding="utf-8")
+
+            with self.assertRaises(run_task.RunnerError) as ctx:
+                run_task.run_task(
+                    plan,
+                    "WS-01",
+                    handoff_path=tmp / "resumed.json",
+                    resume_from=handoff_no_sha,
+                    timeout=5,
+                )
+            self.assertIn("requires a valid 40-character lowercase head_sha", str(ctx.exception))
+            self.assertFalse((worktree_dir / "side_effect.txt").exists())
+
+    def test_resume_preserves_previous_handoff_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[["python3", "tool/workshop/c1.py"]],
+            )
+            workshop = tmp / "tool" / "workshop"
+            c1 = workshop / "c1.py"
+            c1.write_text("raise SystemExit(1)\n", encoding="utf-8")
+
+            handoff_failed = tmp / "failed.json"
+            run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=handoff_failed,
+                timeout=5,
+            )
+            orig_bytes = handoff_failed.read_bytes()
+
+            with self.assertRaises(run_task.RunnerError) as ctx:
+                run_task.run_task(
+                    plan,
+                    "WS-01",
+                    handoff_path=handoff_failed,
+                    resume_from=handoff_failed,
+                    timeout=5,
+                )
+            self.assertIn("cannot be the same file as --resume-from", str(ctx.exception))
+            self.assertEqual(orig_bytes, handoff_failed.read_bytes())
+
+    def test_real_same_task_subprocess_lease_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[["python3", "tool/workshop/blocker.py"]],
+            )
+            workshop = tmp / "tool" / "workshop"
+            blocker = workshop / "blocker.py"
+            blocker.write_text(
+                "import time, sys\n"
+                "time.sleep(2)\n"
+                "print('done')\n",
+                encoding="utf-8",
+            )
+            probe = workshop / "probe.py"
+            probe.write_text(
+                "from pathlib import Path\n"
+                "Path('b_side_effect.txt').write_text('bad')\n",
+                encoding="utf-8",
+            )
+
+            proc_a = subprocess.Popen(
+                [sys.executable, str(ROOT / "tool" / "workshop" / "run_task.py"), str(plan), "--task", "WS-01"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            lease_file = tmp / "docs" / "workshop" / "ws" / "ws-01" / "lease.json"
+            for _ in range(50):
+                if lease_file.exists():
+                    break
+                time.sleep(0.05)
+            self.assertTrue(lease_file.exists())
+
+            proc_b = subprocess.run(
+                [sys.executable, str(ROOT / "tool" / "workshop" / "run_task.py"), str(plan), "--task", "WS-01"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc_b.returncode, 2)
+            self.assertIn("lease held", proc_b.stderr)
+            self.assertFalse((tmp / "b_side_effect.txt").exists())
+
+            proc_a.communicate(timeout=10)
+            self.assertEqual(proc_a.returncode, 0)
+
+            proc_after = subprocess.run(
+                [sys.executable, str(ROOT / "tool" / "workshop" / "run_task.py"), str(plan), "--task", "WS-01", "--handoff", str(tmp / "after.json")],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc_after.returncode, 0)
+
+    def test_real_hierarchical_writable_dir_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan_a = _plan(
+                tmp,
+                commands=[["python3", "tool/workshop/blocker.py"]],
+            )
+            workshop = tmp / "tool" / "workshop"
+            blocker = workshop / "blocker.py"
+            blocker.write_text(
+                "import time\n"
+                "time.sleep(2)\n",
+                encoding="utf-8",
+            )
+            probe = workshop / "probe.py"
+            probe.write_text("print('ok')\n", encoding="utf-8")
+
+            data_b = json.loads(plan_a.read_text(encoding="utf-8"))
+            data_b["tasks"] = [
+                {
+                    "id": "WS-02",
+                    "issue": 2,
+                    "issue_url": "https://github.com/ImL1s/telltale/issues/2",
+                    "priority": "P0",
+                    "status": "pending",
+                    "depends_on": [],
+                    "writable_dirs": ["docs/workshop/ws/ws-01/child/"],
+                    "run_commands": [["python3", "tool/workshop/probe.py"]],
+                    "required_evidence": [],
+                    "hardware_or_license_blockers": [],
+                    "reviewer_role": "implementation",
+                    "done_criteria": "named tests pass",
+                }
+            ]
+            plan_b = workshop / "plan_b.json"
+            plan_b.write_text(json.dumps(data_b), encoding="utf-8")
+
+            proc_a = subprocess.Popen(
+                [sys.executable, str(ROOT / "tool" / "workshop" / "run_task.py"), str(plan_a), "--task", "WS-01"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            lease_file = tmp / "docs" / "workshop" / "ws" / "ws-01" / "lease.json"
+            for _ in range(50):
+                if lease_file.exists():
+                    break
+                time.sleep(0.05)
+            self.assertTrue(lease_file.exists())
+
+            proc_b = subprocess.run(
+                [sys.executable, str(ROOT / "tool" / "workshop" / "run_task.py"), str(plan_b), "--task", "WS-02"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc_b.returncode, 2)
+            self.assertIn("lease held", proc_b.stderr)
+
+            proc_a.communicate(timeout=10)
+            self.assertEqual(proc_a.returncode, 0)
+
+    def test_real_disjoint_tasks_run_in_parallel(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[["python3", "tool/workshop/p1.py"]],
+                extra=[
+                    {
+                        "id": "WS-02",
+                        "issue": 2,
+                        "issue_url": "https://github.com/ImL1s/telltale/issues/2",
+                        "priority": "P0",
+                        "status": "pending",
+                        "depends_on": [],
+                        "writable_dirs": ["docs/workshop/ws/ws-02/"],
+                        "run_commands": [["python3", "tool/workshop/p2.py"]],
+                        "required_evidence": [],
+                        "hardware_or_license_blockers": [],
+                        "reviewer_role": "implementation",
+                        "done_criteria": "named tests pass",
+                    }
+                ],
+            )
+            workshop = tmp / "tool" / "workshop"
+            p1 = workshop / "p1.py"
+            p1.write_text("import time; time.sleep(0.5); print('p1')\n", encoding="utf-8")
+            p2 = workshop / "p2.py"
+            p2.write_text("import time; time.sleep(0.5); print('p2')\n", encoding="utf-8")
+
+            proc_a = subprocess.Popen(
+                [sys.executable, str(ROOT / "tool" / "workshop" / "run_task.py"), str(plan), "--task", "WS-01"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            proc_b = subprocess.Popen(
+                [sys.executable, str(ROOT / "tool" / "workshop" / "run_task.py"), str(plan), "--task", "WS-02"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            out_a, _ = proc_a.communicate(timeout=10)
+            out_b, _ = proc_b.communicate(timeout=10)
+            self.assertEqual(proc_a.returncode, 0)
+            self.assertEqual(proc_b.returncode, 0)
+
+    def test_timeout_releases_real_subprocess_lease(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[["python3", "tool/workshop/sleeper.py"]],
+            )
+            workshop = tmp / "tool" / "workshop"
+            sleeper = workshop / "sleeper.py"
+            sleeper.write_text("import time; time.sleep(10)\n", encoding="utf-8")
+            quick = workshop / "quick.py"
+            quick.write_text("print('quick')\n", encoding="utf-8")
+
+            proc = subprocess.run(
+                [sys.executable, str(ROOT / "tool" / "workshop" / "run_task.py"), str(plan), "--task", "WS-01", "--timeout", "0.5"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 1)
+
+            data = json.loads(plan.read_text(encoding="utf-8"))
+            data["tasks"][0]["run_commands"] = [["python3", "tool/workshop/quick.py"]]
+            plan.write_text(json.dumps(data), encoding="utf-8")
+
+            proc2 = subprocess.run(
+                [sys.executable, str(ROOT / "tool" / "workshop" / "run_task.py"), str(plan), "--task", "WS-01", "--timeout", "5"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc2.returncode, 0)
+
+    def test_isolated_author_review_end_to_end_preserves_author_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            plan = _plan(
+                tmp,
+                commands=[["python3", "tool/workshop/probe.py"]],
+            )
+            workshop = tmp / "tool" / "workshop"
+            probe = workshop / "probe.py"
+            probe.write_text("print('evidence')\n", encoding="utf-8")
+
+            author_handoff = tmp / "author.json"
+            author_wt = tmp / ".worktrees" / "ws-ws-01"
+            code_author = run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=author_handoff,
+                isolate=True,
+                isolate_dir=author_wt,
+                timeout=5,
+            )
+            self.assertEqual(code_author, 0)
+            self.assertTrue(author_handoff.exists())
+            author_bytes = author_handoff.read_bytes()
+            author_sha = hashlib.sha256(author_bytes).hexdigest()
+            author_data = json.loads(author_bytes.decode("utf-8"))
+
+            review_wt = tmp / ".worktrees" / "ws-ws-01-review"
+            code_review = run_task.run_task(
+                plan,
+                "WS-01",
+                handoff_path=author_handoff,
+                review=True,
+                isolate=True,
+                isolate_dir=review_wt,
+                timeout=5,
+            )
+            self.assertEqual(code_review, 0)
+
+            self.assertEqual(author_bytes, author_handoff.read_bytes())
+            self.assertEqual(author_sha, hashlib.sha256(author_handoff.read_bytes()).hexdigest())
+
+            review_path = tmp / "review.json"
+            self.assertTrue(review_path.exists())
+            review_data = json.loads(review_path.read_text(encoding="utf-8"))
+            self.assertEqual(review_data["reviewer_role"], "review")
+            self.assertEqual(review_data["head_sha"], author_data["head_sha"])
+            self.assertNotEqual(review_data["worktree"], author_data["worktree"])
 
 
 if __name__ == "__main__":
