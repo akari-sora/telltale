@@ -1854,9 +1854,9 @@ async def case(rig, index, click_text):
             raise RuntimeError(f"Native OS lifecycle command timed out during active hold for {action}")
 
         # Modified Option B: Dynamic in-hold native OS state verification
-        # Maximum hold budget: 1.65s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
-        hold_budget_deadline = hold_start + 1.65
-        poll_interval = 0.05
+        # Maximum hold budget: 1.80s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
+        hold_budget_deadline = hold_start + 1.80
+        poll_interval = 0.02
         verified_state = None
         verified_at = None
         state_evidence = []
@@ -1865,7 +1865,7 @@ async def case(rig, index, click_text):
             remaining_budget = hold_budget_deadline - time.monotonic()
             if remaining_budget <= 0.10:
                 break
-            poll_timeout = min(1.30, max(0.25, remaining_budget))
+            poll_timeout = min(1.65, max(0.20, remaining_budget))
             if index == 2:
                 # SLEEP: Query dumpsys power
                 try:
