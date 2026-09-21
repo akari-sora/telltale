@@ -341,11 +341,11 @@ class FormulaEngine {
       // boost formula dividing by a baro value that has not arrived yet would
       // show 0 kPa rather than admitting it cannot be computed.
       _Operator('/', (a, b) {
-        if (b == 0) throw const _ArithmeticFailure('除以零', FormulaIssue.divisionByZero);
+        if (b == 0) throw const _ArithmeticFailure('Division by zero', FormulaIssue.divisionByZero);
         return a / b;
       }),
       _Operator('%', (a, b) {
-        if (b == 0) throw const _ArithmeticFailure('模除以零', FormulaIssue.moduloByZero);
+        if (b == 0) throw const _ArithmeticFailure('Modulo by zero', FormulaIssue.moduloByZero);
         // Truncated remainder, not Dart's Euclidean `%`.
         //
         // These formulas come from Torque, which is a Java app, and Java's `%`
@@ -562,7 +562,7 @@ class FormulaEngine {
     }
     if (_baroParenForm(equation)) {
       throw FormulaException(
-        '此方言不支援 BARO()',
+        'This dialect does not support BARO()',
         equation,
         issue: FormulaIssue.baroParenFormUnsupported,
         term: 'BARO()',
@@ -570,7 +570,7 @@ class FormulaEngine {
     }
     if (_int16Unclaimed(equation)) {
       throw FormulaException(
-        '此方言不認領 INT16',
+        'This dialect does not claim INT16',
         equation,
         issue: FormulaIssue.int16Unclaimed,
         term: 'INT16',
@@ -579,7 +579,7 @@ class FormulaEngine {
     final timeWindow = _timeWindowTorqueFunction(equation);
     if (timeWindow != null) {
       throw FormulaException(
-        '此方言不支援 $timeWindow',
+        'This dialect does not support $timeWindow',
         equation,
         issue: FormulaIssue.timeWindowUnsupported,
         term: timeWindow,
@@ -610,7 +610,7 @@ class FormulaEngine {
     // at worst; neither is a reading.
     if (result.isNaN || result.isInfinite) {
       throw FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         equation,
         issue: FormulaIssue.resultNotFinite,
       );
@@ -662,7 +662,7 @@ class FormulaEngine {
     for (final token in refused) {
       if (upper.contains(token)) {
         throw FormulaException(
-          '測試用回應不是十六進位位元組',
+          'Sample response is not hex bytes',
           payload,
           issue: FormulaIssue.unparsableTerm,
           term: token,
@@ -671,7 +671,7 @@ class FormulaEngine {
     }
     if (RegExp(r'[^0-9A-Fa-f\s,:\-]').hasMatch(trimmed)) {
       throw FormulaException(
-        '測試用回應含有不是十六進位的字元',
+        'Sample response contains non-hex characters',
         payload,
         issue: FormulaIssue.unparsableTerm,
         term: trimmed,
@@ -680,7 +680,7 @@ class FormulaEngine {
     final hex = trimmed.replaceAll(RegExp(r'[\s,:\-]'), '');
     if (hex.length.isOdd) {
       throw FormulaException(
-        '測試用回應的十六進位長度是奇數',
+        'Sample response has an odd hex length',
         payload,
         issue: FormulaIssue.unparsableTerm,
         term: trimmed,
@@ -691,7 +691,7 @@ class FormulaEngine {
       final b = int.tryParse(hex.substring(i, i + 2), radix: 16);
       if (b == null) {
         throw FormulaException(
-          '測試用回應不是十六進位位元組',
+          'Sample response is not hex bytes',
           payload,
           issue: FormulaIssue.unparsableTerm,
           term: trimmed,
@@ -723,7 +723,7 @@ class FormulaEngine {
     if (s.contains('BARO')) {
       if (requester == null) {
         throw FormulaException(
-          '無法判斷 BARO 所屬的控制器，拒絕求值',
+          'Cannot determine which controller owns BARO; refusing to evaluate',
           equation,
           issue: FormulaIssue.baroControllerUnknown,
         );
@@ -731,8 +731,9 @@ class FormulaEngine {
       final controller = _controllerKey(requester.header);
       if (_baroAmbiguous.contains(controller)) {
         throw FormulaException(
-          '有兩個定義同時提供大氣壓力，數值可能是其中任何一個，因此無法採用。'
-          '請移除其中一個測量大氣壓力的錶。',
+          'Two definitions both supply barometric pressure; the value could be '
+          'either one, so it cannot be used. '
+          'Remove one of the barometric pressure gauges.',
           equation,
           issue: FormulaIssue.baroTwoDefinitions,
         );
@@ -742,7 +743,7 @@ class FormulaEngine {
       // "wrong by the altitude" into "unavailable", which the gauge can show.
       if (baro == null) {
         throw FormulaException(
-          '尚未取得大氣壓力量測值，無法計算',
+          'Barometric pressure has not been measured yet; cannot evaluate',
           equation,
           issue: FormulaIssue.baroNotYetMeasured,
         );
@@ -757,7 +758,7 @@ class FormulaEngine {
             receivedElapsed: baro.receivedElapsed,
           )) {
         throw FormulaException(
-          '大氣壓力量測值已過期，無法計算',
+          'Barometric pressure measurement is stale; cannot evaluate',
           equation,
           issue: FormulaIssue.baroMeasurementStale,
         );
@@ -772,7 +773,7 @@ class FormulaEngine {
       // resolving it to whichever controller wrote the key last is the defect.
       if (requester == null) {
         throw FormulaException(
-          '無法判斷 VAL{$key} 所屬的控制器，拒絕求值',
+          'Cannot determine which controller owns VAL{$key}; refusing to evaluate',
           equation,
           issue: FormulaIssue.dependencyControllerUnknown,
           pidKey: key,
@@ -802,11 +803,13 @@ class FormulaEngine {
               // gauge for them is on the dashboard — take the MAP gauge off
               // and the ambiguity is still there, with nothing on screen left
               // to remove. The action that works is changing the *definition*.
-              ? '有兩個定義同時解讀 $key，數值可能是其中任何一個，因此無法採用。'
-                  '請讓其中一個改用不同的模式+PID。'
-                  '注意：推算數值需要的 PID（010B、010C、010D）本 App 一定會讀取，'
-                  '把面板上的錶移掉不會停止讀取它們。'
-              : '尚未取得相依 PID $key 的有效數值',
+              ? 'Two definitions both decode $key; the value could be either '
+                  'one, so it cannot be used. '
+                  'Change one to use a different mode+PID. '
+                  'Note: PIDs needed for derived values (010B, 010C, 010D) are '
+                  'always read; removing the gauge from the dashboard will not '
+                  'stop reading them.'
+              : 'Dependent PID $key has not been measured yet',
           equation,
           // Two facts, not one identifier with a flag. "Nobody has read this
           // yet" is waited out; "two definitions decode it" is only fixed by
@@ -826,7 +829,7 @@ class FormulaEngine {
       final index = letter.codeUnitAt(0) - 0x41; // 'A'
       if (index >= bytes.length) {
         throw FormulaException(
-          '公式參照位元組 $letter，但回應只有 ${bytes.length} 個位元組',
+          'Formula references byte $letter, but the response has only ${bytes.length} byte(s)',
           equation,
           // One identifier for both throw sites, deliberately. `SIGNED(C)` and
           // a bare `C` are two spellings of one fact — the formula named a
@@ -941,7 +944,7 @@ class FormulaEngine {
       // 1664 instead of 1724 and nothing would look amiss. Refuse instead.
       if (i >= bytes.length) {
         throw FormulaException(
-          '公式參照位元組 $letter，但回應只有 ${bytes.length} 個位元組',
+          'Formula references byte $letter, but the response has only ${bytes.length} byte(s)',
           equation,
           // One identifier for both throw sites, deliberately. `SIGNED(C)` and
           // a bare `C` are two spellings of one fact — the formula named a
@@ -1002,7 +1005,7 @@ class FormulaEngine {
       if (match == null) return s;
       if (++guard > 64) {
         throw FormulaException(
-          '公式的括號巢狀太深',
+          'Parenthesis nesting is too deep',
           source,
           issue: FormulaIssue.parenthesisNestingTooDeep,
         );
@@ -1030,7 +1033,7 @@ class FormulaEngine {
   static double _signed16(double x) {
     if (!x.isFinite) {
       throw const FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         '',
         issue: FormulaIssue.resultNotFinite,
       );
@@ -1045,7 +1048,7 @@ class FormulaEngine {
   static double _signed8(double x) {
     if (!x.isFinite) {
       throw const FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         '',
         issue: FormulaIssue.resultNotFinite,
       );
@@ -1061,7 +1064,7 @@ class FormulaEngine {
   static double _signed24(double x) {
     if (!x.isFinite) {
       throw const FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         '',
         issue: FormulaIssue.resultNotFinite,
       );
@@ -1077,7 +1080,7 @@ class FormulaEngine {
   static double _signed32(double x) {
     if (!x.isFinite) {
       throw const FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         '',
         issue: FormulaIssue.resultNotFinite,
       );
@@ -1095,7 +1098,7 @@ class FormulaEngine {
     for (final x in parts) {
       if (!x.isFinite) {
         throw const FormulaException(
-          '運算結果不是有效數值',
+          'Result is not a finite number',
           '',
           issue: FormulaIssue.resultNotFinite,
         );
@@ -1108,7 +1111,7 @@ class FormulaEngine {
     final value = ByteData.sublistView(bytes).getFloat32(0, Endian.big);
     if (!value.isFinite) {
       throw const FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         '',
         issue: FormulaIssue.resultNotFinite,
       );
@@ -1124,7 +1127,7 @@ class FormulaEngine {
   static double _int(double x) {
     if (!x.isFinite) {
       throw const FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         '',
         issue: FormulaIssue.resultNotFinite,
       );
@@ -1141,7 +1144,7 @@ class FormulaEngine {
     for (final x in parts) {
       if (!x.isFinite) {
         throw const FormulaException(
-          '運算結果不是有效數值',
+          'Result is not a finite number',
           '',
           issue: FormulaIssue.resultNotFinite,
         );
@@ -1154,7 +1157,7 @@ class FormulaEngine {
     final value = ByteData.sublistView(bytes).getFloat64(0, Endian.big);
     if (!value.isFinite) {
       throw const FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         '',
         issue: FormulaIssue.resultNotFinite,
       );
@@ -1171,7 +1174,7 @@ class FormulaEngine {
     for (final x in parts) {
       if (!x.isFinite) {
         throw const FormulaException(
-          '運算結果不是有效數值',
+          'Result is not a finite number',
           '',
           issue: FormulaIssue.resultNotFinite,
         );
@@ -1192,7 +1195,7 @@ class FormulaEngine {
     for (final x in parts) {
       if (!x.isFinite) {
         throw const FormulaException(
-          '運算結果不是有效數值',
+          'Result is not a finite number',
           '',
           issue: FormulaIssue.resultNotFinite,
         );
@@ -1213,7 +1216,7 @@ class FormulaEngine {
     final value = _random();
     if (!value.isFinite) {
       throw const FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         '',
         issue: FormulaIssue.resultNotFinite,
       );
@@ -1237,7 +1240,7 @@ class FormulaEngine {
       if (match == null) return s;
       if (++guard > 64) {
         throw FormulaException(
-          '公式的函式巢狀太深',
+          'Function nesting is too deep',
           source,
           issue: FormulaIssue.functionNestingTooDeep,
         );
@@ -1262,7 +1265,7 @@ class FormulaEngine {
       if (match == null) return s;
       if (++guard > 64) {
         throw FormulaException(
-          '公式的函式巢狀太深',
+          'Function nesting is too deep',
           source,
           issue: FormulaIssue.functionNestingTooDeep,
         );
@@ -1291,7 +1294,7 @@ class FormulaEngine {
       if (call == null) return s;
       if (++guard > 64) {
         throw FormulaException(
-          '公式的函式巢狀太深',
+          'Function nesting is too deep',
           source,
           issue: FormulaIssue.functionNestingTooDeep,
         );
@@ -1317,7 +1320,7 @@ class FormulaEngine {
       if (call == null) return s;
       if (++guard > 64) {
         throw FormulaException(
-          '公式的函式巢狀太深',
+          'Function nesting is too deep',
           source,
           issue: FormulaIssue.functionNestingTooDeep,
         );
@@ -1353,7 +1356,7 @@ class FormulaEngine {
       if (call == null) return s;
       if (++guard > 64) {
         throw FormulaException(
-          '公式的函式巢狀太深',
+          'Function nesting is too deep',
           source,
           issue: FormulaIssue.functionNestingTooDeep,
         );
@@ -1388,7 +1391,7 @@ class FormulaEngine {
       if (call == null) return s;
       if (++guard > 64) {
         throw FormulaException(
-          '公式的函式巢狀太深',
+          'Function nesting is too deep',
           source,
           issue: FormulaIssue.functionNestingTooDeep,
         );
@@ -1441,7 +1444,7 @@ class FormulaEngine {
       if (call == null) return s;
       if (++guard > 64) {
         throw FormulaException(
-          '公式的函式巢狀太深',
+          'Function nesting is too deep',
           source,
           issue: FormulaIssue.functionNestingTooDeep,
         );
@@ -1792,7 +1795,7 @@ class FormulaEngine {
     while (previous != s) {
       if (++_functionPasses > 64) {
         throw FormulaException(
-          '公式的函式巢狀太深',
+          'Function nesting is too deep',
           source,
           issue: FormulaIssue.functionNestingTooDeep,
         );
@@ -1803,7 +1806,7 @@ class FormulaEngine {
       s = _applyFunction(s, _log10Pattern, source, (v) {
         if (v <= 0) {
           throw FormulaException(
-            'LOG10 的引數必須大於 0（收到 $v）',
+            'LOG10 argument must be greater than 0 (got $v)',
             source,
             issue: FormulaIssue.log10NonPositiveArgument,
             argument: v,
@@ -1814,7 +1817,7 @@ class FormulaEngine {
       s = _applyPrefixedFunction(s, _logPattern, source, (v) {
         if (v <= 0) {
           throw FormulaException(
-            'LOG 的引數必須大於 0（收到 $v）',
+            'LOG argument must be greater than 0 (got $v)',
             source,
             issue: FormulaIssue.logNonPositiveArgument,
             argument: v,
@@ -1825,7 +1828,7 @@ class FormulaEngine {
       s = _applyPrefixedFunction(s, _log1pPattern, source, (v) {
         if (!v.isFinite || v <= -1) {
           throw FormulaException(
-            '運算結果不是有效數值',
+            'Result is not a finite number',
             source,
             issue: FormulaIssue.resultNotFinite,
           );
@@ -1845,7 +1848,7 @@ class FormulaEngine {
       s = _applyFunction(s, _sqrtPattern, source, (v) {
         if (v < 0) {
           throw FormulaException(
-            'SQRT 的引數必須大於或等於 0（收到 $v）',
+            'SQRT argument must be non-negative (got $v)',
             source,
             issue: FormulaIssue.sqrtNegativeArgument,
             argument: v,
@@ -1861,7 +1864,7 @@ class FormulaEngine {
       s = _applyBinaryFunction(s, 'BIT', source, (value, bit) {
         if (!value.isFinite) {
           throw FormulaException(
-            '運算結果不是有效數值',
+            'Result is not a finite number',
             source,
             issue: FormulaIssue.resultNotFinite,
           );
@@ -1897,7 +1900,7 @@ class FormulaEngine {
     while (s.contains('(')) {
       if (++guard > 256) {
         throw FormulaException(
-          '公式的括號巢狀太深',
+          'Parenthesis nesting is too deep',
           source,
           issue: FormulaIssue.parenthesisNestingTooDeep,
         );
@@ -2009,7 +2012,7 @@ class FormulaEngine {
     // continue has to say so.
     if (value.isNaN || value.isInfinite) {
       throw const FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         '',
         issue: FormulaIssue.resultNotFinite,
       );
@@ -2058,7 +2061,7 @@ class FormulaEngine {
     final retry = _scientificToDecimal(magnitude.toStringAsExponential());
     if (retry == null || _scientificToken.hasMatch(retry)) {
       throw const FormulaException(
-        '運算結果不是有效數值',
+        'Result is not a finite number',
         '',
         issue: FormulaIssue.resultNotFinite,
       );
@@ -2172,7 +2175,7 @@ class FormulaEngine {
       // `~1e999` hits `Infinity.toInt()` inside the evaluator. Import must
       // not throw; the row is refused as unparsable.
       return FormulaException(
-        '公式求值發生未預期的錯誤',
+        'Unexpected error evaluating formula',
         equation,
         issue: FormulaIssue.unparsableTerm,
         term: e.runtimeType.toString(),
