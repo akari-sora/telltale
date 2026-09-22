@@ -239,7 +239,10 @@ abstract class DiagnosticTarget {
 
   static const DiagnosticTarget wholeVehicleObd = _WholeVehicleObdTarget();
 
-  const factory DiagnosticTarget.physical(int address) = _PhysicalEcuTarget;
+  const factory DiagnosticTarget.physicalCan({
+    required DiagnosticCanIdentifier requestIdentifier,
+    required DiagnosticCanIdentifier expectedResponderIdentifier,
+  }) = PhysicalCanDiagnosticTarget;
 }
 
 class _WholeVehicleObdTarget extends DiagnosticTarget {
@@ -257,24 +260,159 @@ class _WholeVehicleObdTarget extends DiagnosticTarget {
   String toString() => 'DiagnosticTarget.wholeVehicleObd';
 }
 
-class _PhysicalEcuTarget extends DiagnosticTarget {
-  final int address;
+class PhysicalCanDiagnosticTarget extends DiagnosticTarget {
+  final DiagnosticCanIdentifier requestIdentifier;
+  final DiagnosticCanIdentifier expectedResponderIdentifier;
 
-  const _PhysicalEcuTarget(this.address);
+  const PhysicalCanDiagnosticTarget({
+    required this.requestIdentifier,
+    required this.expectedResponderIdentifier,
+  });
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _PhysicalEcuTarget &&
+      other is PhysicalCanDiagnosticTarget &&
           runtimeType == other.runtimeType &&
-          address == other.address;
+          requestIdentifier == other.requestIdentifier &&
+          expectedResponderIdentifier == other.expectedResponderIdentifier;
 
   @override
-  int get hashCode => Object.hash(_PhysicalEcuTarget, address);
+  int get hashCode => Object.hash(
+        PhysicalCanDiagnosticTarget,
+        requestIdentifier,
+        expectedResponderIdentifier,
+      );
 
   @override
   String toString() =>
-      'DiagnosticTarget.physical(0x${address.toRadixString(16).toUpperCase()})';
+      'DiagnosticTarget.physicalCan(req: $requestIdentifier, exp: $expectedResponderIdentifier)';
+}
+
+/// Strongly-typed CAN routing identifier for diagnostic addressing.
+///
+/// 11-bit standard identifiers: 000..7FF, canonicalized to 3 uppercase hex digits.
+/// 29-bit extended identifiers: 00000000..1FFFFFFF, canonicalized to 8 uppercase hex digits.
+///
+/// Rejects empty input, non-hex strings, invalid character widths, and out-of-range IDs.
+class DiagnosticCanIdentifier {
+  final int id;
+  final bool isExtended;
+  final String value;
+
+  bool get isStandard => !isExtended;
+
+  const DiagnosticCanIdentifier._({
+    required this.id,
+    required this.isExtended,
+    required this.value,
+  });
+
+  factory DiagnosticCanIdentifier.standard(int id) {
+    if (id < 0 || id > 0x7FF) {
+      throw ArgumentError.value(
+        id,
+        'id',
+        'Standard 11-bit CAN ID must be between 0x000 and 0x7FF (got 0x${id.toRadixString(16)}).',
+      );
+    }
+    final value = id.toRadixString(16).padLeft(3, '0').toUpperCase();
+    return DiagnosticCanIdentifier._(
+      id: id,
+      isExtended: false,
+      value: value,
+    );
+  }
+
+  factory DiagnosticCanIdentifier.extended(int id) {
+    if (id < 0 || id > 0x1FFFFFFF) {
+      throw ArgumentError.value(
+        id,
+        'id',
+        'Extended 29-bit CAN ID must be between 0x00000000 and 0x1FFFFFFF (got 0x${id.toRadixString(16)}).',
+      );
+    }
+    final value = id.toRadixString(16).padLeft(8, '0').toUpperCase();
+    return DiagnosticCanIdentifier._(
+      id: id,
+      isExtended: true,
+      value: value,
+    );
+  }
+
+  factory DiagnosticCanIdentifier.parse(String raw) {
+    final trimmed = raw.trim().toUpperCase();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(raw, 'raw', 'CAN identifier cannot be empty.');
+    }
+    final length = trimmed.length;
+    if (length != 3 && length != 8) {
+      throw ArgumentError.value(
+        raw,
+        'raw',
+        'CAN identifier must be 3 or 8 hex characters, got length $length.',
+      );
+    }
+    final int? parsed = int.tryParse(trimmed, radix: 16);
+    if (parsed == null) {
+      throw ArgumentError.value(
+        raw,
+        'raw',
+        'CAN identifier must contain only valid hexadecimal characters.',
+      );
+    }
+    if (length == 3) {
+      if (parsed > 0x7FF) {
+        throw ArgumentError.value(
+          raw,
+          'raw',
+          'Standard 11-bit CAN identifier must be <= 0x7FF (got 0x$trimmed).',
+        );
+      }
+      return DiagnosticCanIdentifier._(
+        id: parsed,
+        isExtended: false,
+        value: trimmed,
+      );
+    } else {
+      if (parsed > 0x1FFFFFFF) {
+        throw ArgumentError.value(
+          raw,
+          'raw',
+          'Extended 29-bit CAN identifier must be <= 0x1FFFFFFF (got 0x$trimmed).',
+        );
+      }
+      return DiagnosticCanIdentifier._(
+        id: parsed,
+        isExtended: true,
+        value: trimmed,
+      );
+    }
+  }
+
+  static DiagnosticCanIdentifier? tryParse(String? raw) {
+    if (raw == null) return null;
+    try {
+      return DiagnosticCanIdentifier.parse(raw);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DiagnosticCanIdentifier &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          isExtended == other.isExtended &&
+          value == other.value;
+
+  @override
+  int get hashCode => Object.hash(id, isExtended, value);
+
+  @override
+  String toString() => 'DiagnosticCanIdentifier($value)';
 }
 
 /// Capabilities exposed by diagnostic links.
@@ -354,6 +492,7 @@ class DiagnosticRequest {
   final Set<DiagnosticCapability> requiredCapabilities;
   final int connectionGeneration;
   final DateTime? deadline;
+  final Duration? responseTimeout;
   final DiagnosticCancellation cancellation;
   final DiagnosticOwnership ownership;
 
@@ -364,13 +503,14 @@ class DiagnosticRequest {
     required this.requiredCapabilities,
     required this.connectionGeneration,
     this.deadline,
+    this.responseTimeout,
     this.cancellation = DiagnosticCancellation.none,
     required this.ownership,
   });
 
   @override
   String toString() =>
-      'DiagnosticRequest(id: $id, pdu: $pdu, target: $target, gen: $connectionGeneration, deadline: $deadline)';
+      'DiagnosticRequest(id: $id, pdu: $pdu, target: $target, gen: $connectionGeneration, deadline: $deadline, responseTimeout: $responseTimeout)';
 }
 
 /// Immutable, typed diagnostic source address (ECU responder address).
@@ -578,12 +718,14 @@ class DiagnosticLinkException implements Exception {
   final String message;
   final TransportIssue? transportIssue;
   final Object? cause;
+  final StackTrace? stackTrace;
 
   const DiagnosticLinkException({
     required this.kind,
     required this.message,
     this.transportIssue,
     this.cause,
+    this.stackTrace,
   });
 
   @override

@@ -1663,7 +1663,8 @@ class ObdSession extends Notifier<ObdConnectionState> {
     required int vehicleYear,
   }) async {
     final client = _client;
-    if (client == null || !state.isConnected || !_foreground) {
+    final engine = _engine;
+    if (client == null || engine == null || !state.isConnected || !_foreground) {
       throw const PowertrainProbeRefusedException(
         PowertrainProbeRefusal.notConnectedOrNotInForeground,
       );
@@ -1698,6 +1699,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
         operationName: 'powertrainBatteryProbe:$commandKey',
         action: () => PowertrainBatteryProbe.run(
           client: client,
+          diagnosticLink: engine.diagnosticLink,
           snapshot: snapshot,
           profileId: profileId,
           commandKey: commandKey,

@@ -17,6 +17,13 @@ class Elm327DiagnosticLink implements DiagnosticLink {
     if (!client.addressing.supportsObd2) {
       return const {};
     }
+    if (client.addressing.isCan) {
+      return const {
+        DiagnosticCapability.applicationPdu,
+        DiagnosticCapability.wholeVehicleObd,
+        DiagnosticCapability.physicalEcuAddressing,
+      };
+    }
     return const {
       DiagnosticCapability.applicationPdu,
       DiagnosticCapability.wholeVehicleObd,
@@ -59,11 +66,39 @@ class Elm327DiagnosticLink implements DiagnosticLink {
       }
     }
 
-    if (request.target != DiagnosticTarget.wholeVehicleObd) {
+    final String? header;
+    if (request.target == DiagnosticTarget.wholeVehicleObd) {
+      header = null;
+    } else if (request.target is PhysicalCanDiagnosticTarget) {
+      final physicalTarget = request.target as PhysicalCanDiagnosticTarget;
+      if (!client.addressing.isCan || !client.addressing.supportsObd2) {
+        throw const DiagnosticLinkException(
+          kind: DiagnosticFailureKind.unsupportedTarget,
+          message:
+              'Physical CAN addressing requires a resolved OBD2 CAN bus.',
+        );
+      }
+      if (!client.addressing.acceptsHeader(physicalTarget.requestIdentifier.value)) {
+        throw DiagnosticLinkException(
+          kind: DiagnosticFailureKind.unsupportedTarget,
+          message:
+              'Request identifier ${physicalTarget.requestIdentifier.value} does not match the resolved CAN bus header width.',
+        );
+      }
+      if (!client.addressing.acceptedReceiveWidths.contains(
+        physicalTarget.expectedResponderIdentifier.value.length,
+      )) {
+        throw DiagnosticLinkException(
+          kind: DiagnosticFailureKind.unsupportedTarget,
+          message:
+              'Expected responder identifier ${physicalTarget.expectedResponderIdentifier.value} does not match accepted receive widths for the resolved CAN bus.',
+        );
+      }
+      header = physicalTarget.requestIdentifier.value;
+    } else {
       throw DiagnosticLinkException(
         kind: DiagnosticFailureKind.unsupportedTarget,
-        message:
-            'Target ${request.target} is not supported by Elm327DiagnosticLink in Slice 1.',
+        message: 'Target ${request.target} is not supported by Elm327DiagnosticLink.',
       );
     }
 
@@ -93,6 +128,8 @@ class Elm327DiagnosticLink implements DiagnosticLink {
     try {
       obdResponse = await client.sendGlobal(
         elmAscii.text,
+        header: header,
+        timeout: request.responseTimeout,
         owner: request.ownership.token,
         deadline: request.deadline,
       );
@@ -115,18 +152,20 @@ class Elm327DiagnosticLink implements DiagnosticLink {
                 : 'Timed out waiting for response'),
         cause: e,
       );
-    } on TransportException catch (e) {
+    } on TransportException catch (e, stackTrace) {
       throw DiagnosticLinkException(
         kind: DiagnosticFailureKind.transportFailure,
         message: e.message,
         transportIssue: e.issue,
         cause: e,
+        stackTrace: stackTrace,
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       throw DiagnosticLinkException(
         kind: DiagnosticFailureKind.transportFailure,
         message: e.toString(),
         cause: e,
+        stackTrace: stackTrace,
       );
     }
 

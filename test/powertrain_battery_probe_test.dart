@@ -3,6 +3,7 @@ import 'dart:collection';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:torque_obd/diagnostics/elm327_diagnostic_link.dart';
 import 'package:torque_obd/obd/addressing.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
 import 'package:torque_obd/obd/powertrain_battery/powertrain_battery_catalog.dart';
@@ -259,6 +260,7 @@ void main() {
 
       final result = await PowertrainBatteryProbe.run(
         client: client,
+        diagnosticLink: Elm327DiagnosticLink(client),
         snapshot: snapshot,
         profileId: profile.id,
         commandKey: command.wireKey,
@@ -299,6 +301,7 @@ void main() {
 
       final result = await PowertrainBatteryProbe.run(
         client: client,
+        diagnosticLink: Elm327DiagnosticLink(client),
         snapshot: snapshot,
         profileId: profile.id,
         commandKey: command.wireKey,
@@ -324,6 +327,7 @@ void main() {
 
     final result = await PowertrainBatteryProbe.run(
       client: client,
+      diagnosticLink: Elm327DiagnosticLink(client),
       snapshot: snapshot,
       profileId: 'forged-profile',
       commandKey: '7E0:7E8:22:FFFF',
@@ -367,6 +371,7 @@ void main() {
 
     final result = await PowertrainBatteryProbe.run(
       client: client,
+      diagnosticLink: Elm327DiagnosticLink(client),
       snapshot: snapshot,
       profileId: profile.id,
       commandKey: command.wireKey,
