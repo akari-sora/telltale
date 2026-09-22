@@ -288,6 +288,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
   Elm327Client? _client;
   PollingEngine? _engine;
   DiagnosticLinkOwnershipAuthority? _linkOwnership;
+  Future<Set<String>?>? _censusInFlight;
 
   /// Build provenance is compile-time in production and injectable only so
   /// unit tests can lock the safety boundary without launching an APK.
@@ -1472,21 +1473,6 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // Support discovery runs in the background: it is useful for greying out
     // PIDs the car does not have, but nothing should wait on it.
     unawaited(engine.discoverSupportedPids());
-    // Who is on this bus, asked once against the vehicle actually attached.
-    // A fault-code scan establishes who answered and never who should have,
-    // so a controller that stays silent appears in no count and the engine's
-    // clean reply stands for the whole car.
-    // Bounded, because nothing else bounds it. Fired unawaited, this had no
-    // deadline at all — and a scan starting a moment later joined it, so the
-    // census the scan was blocked on could outlive the scan's own budget.
-    final censusDeadline = DateTime.now().add(censusBudget);
-    unawaited(
-      _runDiagnosticOneShot<Set<String>?>(
-        operationName: 'initialResponderCensus',
-        deadline: censusDeadline,
-        action: () => engine.discoverResponders(deadline: censusDeadline),
-      ).catchError((_) => null),
-    );
 
     _sessionProtocol = client.protocolDescription.isEmpty
         ? client.protocolNumber
@@ -1501,6 +1487,29 @@ class ObdSession extends Notifier<ObdConnectionState> {
       clearError: true,
     );
     _startPeriodicSnapshots();
+
+    // Who is on this bus, asked once against the vehicle actually attached.
+    // A fault-code scan establishes who answered and never who should have,
+    // so a controller that stays silent appears in no count and the engine's
+    // clean reply stands for the whole car.
+    // Bounded, because nothing else bounds it. Fired unawaited, this had no
+    // deadline at all — and a scan starting a moment later joined it, so the
+    // census the scan was blocked on could outlive the scan's own budget.
+    final censusDeadline = DateTime.now().add(censusBudget);
+    final censusFuture = _runDiagnosticOneShot<Set<String>?>(
+      operationName: 'initialResponderCensus',
+      deadline: censusDeadline,
+      action: () => engine.discoverResponders(deadline: censusDeadline),
+    );
+    _censusInFlight = censusFuture;
+    unawaited(
+      censusFuture.catchError((_) => null).whenComplete(() {
+        if (identical(_censusInFlight, censusFuture)) {
+          _censusInFlight = null;
+        }
+      }),
+    );
+
     return true;
   }
 
@@ -1676,7 +1685,6 @@ class ObdSession extends Notifier<ObdConnectionState> {
     try {
       result = await _runDiagnosticOneShot<PowertrainBatteryProbeResult>(
         operationName: 'powertrainBatteryProbe:$commandKey',
-        deadline: lease.consent.expiresAt,
         action: () => PowertrainBatteryProbe.run(
           client: client,
           snapshot: snapshot,
@@ -1718,11 +1726,30 @@ class ObdSession extends Notifier<ObdConnectionState> {
   Future<void> ensureResponderCensus({DateTime? deadline}) async {
     final engine = _engine;
     if (engine == null || engine.responders != null) return;
-    await _runDiagnosticOneShot<Set<String>?>(
+    final inFlight = _censusInFlight;
+    if (inFlight != null) {
+      if (deadline == null) {
+        await inFlight;
+      } else {
+        final left = deadline.difference(DateTime.now());
+        if (left <= Duration.zero) return;
+        await inFlight.timeout(left, onTimeout: () => null);
+      }
+      return;
+    }
+    final future = _runDiagnosticOneShot<Set<String>?>(
       operationName: 'ensureResponderCensus',
       deadline: deadline,
       action: () => engine.discoverResponders(deadline: deadline),
     );
+    _censusInFlight = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_censusInFlight, future)) {
+        _censusInFlight = null;
+      }
+    }
   }
 
   Future<T> _runDiagnosticOneShot<T>({
@@ -2074,6 +2101,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
     _initSub = null;
     _linkOwnership?.dispose();
     _linkOwnership = null;
+    _censusInFlight = null;
     _engine = null;
     _client = null;
 

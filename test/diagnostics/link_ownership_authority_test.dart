@@ -4,8 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:torque_obd/diagnostics/diagnostic_link.dart';
 import 'package:torque_obd/diagnostics/diagnostic_link_ownership.dart';
+import 'package:torque_obd/obd/pid/pid_library.dart';
 import 'package:torque_obd/obd/polling_engine.dart';
 import 'package:torque_obd/obd/powertrain_battery/powertrain_battery_catalog.dart';
+import 'package:torque_obd/obd/powertrain_battery/powertrain_battery_probe.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
 import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/state/pid_registry.dart';
@@ -762,5 +764,213 @@ void main() {
 
       await session.disconnect();
     });
+
+    test(
+      'Initial post-connect census automatically executes under authority and populates responders',
+      () async {
+        final container = await _createContainer({});
+        addTearDown(container.dispose);
+
+        final adapter = _createBmsAdapter();
+        adapter.slowCommands['0100'] = const Duration(milliseconds: 50);
+
+        final session = container.read(obdSessionProvider.notifier);
+        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+
+        final authority = session.linkOwnership;
+        expect(authority, isNotNull);
+
+        // Do NOT call ensureResponderCensus() manually!
+        // Initial post-connect census runs automatically under authority.
+        await _waitForWireCommand(adapter, '0100');
+        expect(
+          session.engine?.isRunning,
+          isFalse,
+          reason: 'Polling engine must be paused while initial census is on wire',
+        );
+
+        final deadline = DateTime.now().add(const Duration(seconds: 2));
+        while (session.engine?.responders == null && DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+
+        expect(session.engine?.responders, contains('7E8'));
+        expect(
+          authority!.displacedRestorationCount,
+          1,
+          reason: 'Authority must have completed displaced polling restoration for initial census',
+        );
+        expect(
+          session.engine?.isRunning,
+          isTrue,
+          reason: 'Polling engine must be restored and running after initial census',
+        );
+
+        await session.disconnect();
+      },
+    );
+
+    test(
+      'B9 wire-level proof: normal 010D polling is held during slow BMS probe and resumes afterward',
+      () async {
+        final container = await _createContainer({
+          'powertrain_battery_experiments_enabled_v1': true,
+        });
+        addTearDown(container.dispose);
+
+        final snapshot = await PowertrainBatteryCatalogAsset.load();
+        final profile = snapshot.catalog.profiles.singleWhere(
+          (p) => p.id == 'mg-zs-ev-au-2021',
+        );
+        final command = profile.commands.singleWhere(
+          (c) => c.modeAndIdentifier == '22B046',
+        );
+
+        final adapter = _createBmsAdapter(
+          response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
+        );
+        adapter.slowCommands[command.modeAndIdentifier] = const Duration(
+          milliseconds: 150,
+        );
+
+        final session = container.read(obdSessionProvider.notifier);
+        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+
+        // Sync 010D so that normal polling dispatches it
+        session.syncActivePids(const [PidLibrary.vehicleSpeed]);
+
+        // 1. Wait for at least one 010D on the wire
+        await _waitForWireCommand(adapter, '010D');
+        final initial010DCount = adapter.commandLog.where((c) => c == '010D').length;
+        expect(initial010DCount, greaterThan(0));
+
+        final consents = container.read(
+          powertrainExperimentalProbeConsentsProvider.notifier,
+        );
+        consents.authorize(
+          snapshot: snapshot,
+          profileId: profile.id,
+          commandKey: command.wireKey,
+          vehicleYear: 2021,
+          connectionGeneration: session.connectionGeneration,
+        );
+
+        // 2. Launch slow BMS probe
+        final pending = session.probePowertrainBatteryCommand(
+          snapshot: snapshot,
+          profileId: profile.id,
+          commandKey: command.wireKey,
+          vehicleYear: 2021,
+        );
+
+        // 3. Wait for 22B046 to appear on wire
+        await _waitForWireCommand(adapter, command.modeAndIdentifier);
+        final duringBms010DCount = adapter.commandLog.where((c) => c == '010D').length;
+        expect(
+          duringBms010DCount,
+          equals(initial010DCount),
+          reason: 'Normal 010D polling must NOT be dispatched on wire while BMS probe is in flight',
+        );
+
+        // 4. Await BMS completion
+        final result = await pending;
+        expect(result.failure, isNull);
+
+        // 5. After BMS completes and polling is restored: 010D count increases again
+        await _waitForWireCommand(adapter, '010D', afterCount: duringBms010DCount);
+        final postBms010DCount = adapter.commandLog.where((c) => c == '010D').length;
+        expect(
+          postBms010DCount,
+          greaterThan(duringBms010DCount),
+          reason: 'Normal 010D polling must resume and dispatch on wire after BMS probe finishes',
+        );
+
+        await session.disconnect();
+      },
+    );
+
+    test(
+      'BMS queue expiry compatibility: expired consent in authority queue returns transport failure without throwing raw exception',
+      () async {
+        final container = await _createContainer({
+          'powertrain_battery_experiments_enabled_v1': true,
+        });
+        addTearDown(container.dispose);
+
+        final snapshot = await PowertrainBatteryCatalogAsset.load();
+        final profile = snapshot.catalog.profiles.singleWhere(
+          (p) => p.id == 'mg-zs-ev-au-2021',
+        );
+        final command = profile.commands.singleWhere(
+          (c) => c.modeAndIdentifier == '22B046',
+        );
+
+        final adapter = _createBmsAdapter(
+          response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
+        );
+        // Make census slow to occupy authority
+        adapter.slowCommands['0100'] = const Duration(milliseconds: 200);
+
+        final session = container.read(obdSessionProvider.notifier);
+        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+
+        // 1. Occupy authority with slow census
+        final slowCensus = session.ensureResponderCensus();
+        await _waitForWireCommand(adapter, '0100');
+
+        // 2. Authorize BMS probe with short remaining lifetime so it expires while queued
+        final consents = container.read(
+          powertrainExperimentalProbeConsentsProvider.notifier,
+        );
+        // consentLifetime is 4s, so setting now to 3950ms in the past leaves 50ms
+        final shortConsentNow = DateTime.now().subtract(
+          PowertrainExperimentalProbeConsents.consentLifetime,
+        ).add(const Duration(milliseconds: 50));
+
+        consents.authorize(
+          snapshot: snapshot,
+          profileId: profile.id,
+          commandKey: command.wireKey,
+          vehicleYear: 2021,
+          connectionGeneration: session.connectionGeneration,
+          now: shortConsentNow,
+        );
+
+        // 3. Queue BMS probe in authority behind the slow census
+        final pendingBms = session.probePowertrainBatteryCommand(
+          snapshot: snapshot,
+          profileId: profile.id,
+          commandKey: command.wireKey,
+          vehicleYear: 2021,
+        );
+
+        // 4. Wait for census to complete (at 200ms, the 50ms consent is guaranteed expired)
+        await slowCensus;
+
+        // 5. Await BMS result - must return a valid PowertrainBatteryProbeResult with transport failure, NOT throw DiagnosticLinkException
+        final result = await pendingBms;
+        expect(
+          result.failure,
+          equals(PowertrainBatteryProbeFailure.transport),
+          reason: 'Expired consent in authority queue must return transport failure',
+        );
+
+        // 6. 22B046 must NOT have reached the wire
+        expect(
+          adapter.commandLog.where((c) => c == command.modeAndIdentifier),
+          isEmpty,
+          reason: 'BMS probe with expired consent must not dispatch command on wire',
+        );
+
+        // 7. Consent was consumed exactly once
+        expect(
+          container.read(powertrainExperimentalProbeConsentsProvider),
+          isEmpty,
+          reason: 'Consent must be consumed and removed',
+        );
+
+        await session.disconnect();
+      },
+    );
   });
 }
