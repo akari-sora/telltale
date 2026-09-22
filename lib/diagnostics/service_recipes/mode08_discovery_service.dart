@@ -328,7 +328,7 @@ abstract final class Mode08DiscoveryService {
           perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
           hasAnonymous: hadAnonymousResponses,
         );
-      } on OperationRetiredException catch (e) {
+      } on OperationRetiredException {
         if (allSupportedTids.isNotEmpty) {
           uncompletedBlocks.add(currentBaseTid);
           return Mode08DiscoveryResult(
@@ -339,7 +339,8 @@ abstract final class Mode08DiscoveryService {
             discoveredAt: now,
             isComplete: false,
             unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
-            failureReason: 'Discovery operation retired: $e',
+            failureReason:
+                'Discovery stopped because the diagnostic session is no longer active.',
             incompletionReason: Mode08IncompletionReason.sessionDisconnected,
             failedBlock: currentBaseTid,
             ecu: primaryEcu,
@@ -353,7 +354,8 @@ abstract final class Mode08DiscoveryService {
         }
         return Mode08DiscoveryResult.failure(
           supportStatus: EcuSupportStatus.unknown,
-          reason: 'Discovery operation retired: $e',
+          reason:
+              'Discovery stopped because the diagnostic session is no longer active.',
           incompletionReason: Mode08IncompletionReason.sessionDisconnected,
           failedBlock: currentBaseTid,
           ecu: primaryEcu,

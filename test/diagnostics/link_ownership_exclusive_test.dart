@@ -24,6 +24,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:torque_obd/diagnostics/diagnostic_link.dart';
 import 'package:torque_obd/diagnostics/diagnostic_link_ownership.dart';
+import 'package:torque_obd/obd/pid/pid_library.dart';
 import 'package:torque_obd/obd/polling_engine.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
 import 'package:torque_obd/state/obd_session.dart';
@@ -313,19 +314,37 @@ void main() {
         final session = container.read(obdSessionProvider.notifier);
         expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
         await _waitForInitialCensus(session);
+
+        // Sync 010D so that normal polling dispatches it onto wire
+        session.syncActivePids(const [PidLibrary.vehicleSpeed]);
+
+        // 1. Wait for at least one 010D on the wire before discovery
+        await _waitForWireCommand(adapter, '010D');
+        final baseline010DCount = adapter.commandLog.where((c) => c == '010D').length;
+        expect(baseline010DCount, greaterThan(0), reason: 'Normal 010D polling must be active on wire before exclusive takeover');
+
         final initialRestorations = session.linkOwnership?.displacedRestorationCount ?? 0;
 
         final discoveryNotifier = container.read(mode08DiscoveryStateProvider.notifier);
         final discoveryFuture = discoveryNotifier.runDiscovery();
 
-        // 1. Wait for 0800 on wire
+        // 2. Wait for 0800 on wire
         await _waitForWireCommand(adapter, '0800');
+        final countDuring0800 = adapter.commandLog.where((c) => c == '010D').length;
 
         // Verify polling is stopped during 0800
         expect(session.engine?.isRunning, isFalse, reason: 'E5: Engine must be stopped during 0800');
 
-        // 2. Wait for 0820 on wire
+        // 3. Wait for 0820 on wire
         await _waitForWireCommand(adapter, '0820');
+        final countDuring0820 = adapter.commandLog.where((c) => c == '010D').length;
+
+        // Verify 010D count did not increase while exclusive discovery is in flight
+        expect(
+          countDuring0820,
+          equals(countDuring0800),
+          reason: 'Normal 010D polling must NOT be dispatched on wire while exclusive discovery is in flight',
+        );
 
         // Verify polling is still stopped during 0820
         expect(session.engine?.isRunning, isFalse, reason: 'E6: Engine must remain stopped during 0820');
@@ -333,14 +352,14 @@ void main() {
         // Await full completion
         await discoveryFuture;
 
-        // 3. Inspect final state
+        // 4. Inspect final state
         final discoveryState = container.read(mode08DiscoveryStateProvider);
         expect(discoveryState.isCompleted, isTrue);
         expect(discoveryState.result?.isSupported, isTrue);
         expect(discoveryState.result?.supportedTids, containsAll([0x01, 0x21]));
         expect(discoveryState.result?.queriedBlocks, equals([0x00, 0x20]));
 
-        // 4. Verify wire sequence: no normal polling (010D) between 0800 and 0820
+        // 5. Verify wire sequence: no normal polling (01xx) between 0800 and 0820
         final log = adapter.commandLog;
         final index0800 = log.lastIndexOf('0800');
         final index0820 = log.lastIndexOf('0820');
@@ -354,7 +373,14 @@ void main() {
           reason: 'E6 / M1 Invariant: No PID polling commands may appear between 0800 and 0820',
         );
 
-        // 5. E7: Verify polling is restored after discovery completes
+        // 6. E7: Verify polling is restored after discovery completes and dispatches on wire again
+        await _waitForWireCommand(adapter, '010D', afterCount: countDuring0820);
+        final postDiscovery010DCount = adapter.commandLog.where((c) => c == '010D').length;
+        expect(
+          postDiscovery010DCount,
+          greaterThan(countDuring0820),
+          reason: 'Normal 010D polling must resume and dispatch on wire after Mode 08 discovery completes',
+        );
         expect(session.engine?.isRunning, isTrue, reason: 'E7: Polling must be restored after completion');
         expect(session.linkOwnership?.displacedRestorationCount, equals(initialRestorations + 1));
 

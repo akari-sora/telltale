@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:torque_obd/diagnostics/diagnostic_link.dart';
+import 'package:torque_obd/diagnostics/service_recipes/mode08_discovery_service.dart';
 import 'package:torque_obd/diagnostics/service_recipes/qualification_tier.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
 import 'package:torque_obd/obd/elm_can_addressing.dart';
@@ -292,6 +293,94 @@ void main() {
       expect(finalState.result!.supportedTids, equals({0x02}),
           reason: 'Stale task A completion must be discarded and must not overwrite task B');
     });
+
+    test('DiagnosticLinkException.retiredOperation maps cleanly to sanitized sessionDisconnected failure without raw exception prose', () async {
+      final fake = FakeElm327(
+        protocol: BusProtocol.can11,
+        ecus: [
+          FakeEcu(
+            name: 'ECM',
+            requestId: '7E0',
+            responseId: '7E8',
+            responses: _physicsReplies(),
+          ),
+        ],
+      );
+      final client = await _connect(fake);
+
+      final sessionNotifier = _ConnectedMockSessionNotifier(client);
+      sessionNotifier.onRunExclusiveOverride = ({
+        required operationName,
+        required action,
+        cancellation,
+        deadline,
+      }) async {
+        throw const DiagnosticLinkException(
+          kind: DiagnosticFailureKind.retiredOperation,
+          message: 'Raw link exception: session retired by lifecycle',
+        );
+      };
+
+      final container = ProviderContainer(
+        overrides: [
+          obdSessionProvider.overrideWith(() => sessionNotifier),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(mode08DiscoveryStateProvider.notifier);
+      await notifier.runDiscovery();
+
+      final state = container.read(mode08DiscoveryStateProvider);
+      expect(state.isFailed, isTrue);
+      expect(state.message, equals('Discovery stopped because the diagnostic session is no longer active.'));
+      expect(state.message, isNot(contains('Unexpected discovery failure')));
+      expect(state.message, isNot(contains('DiagnosticLinkException')));
+      expect(state.result?.incompletionReason, equals(Mode08IncompletionReason.sessionDisconnected));
+    });
+
+    test('DiagnosticLinkException.deadlineExpired maps cleanly to sanitized timeout failure', () async {
+      final fake = FakeElm327(
+        protocol: BusProtocol.can11,
+        ecus: [
+          FakeEcu(
+            name: 'ECM',
+            requestId: '7E0',
+            responseId: '7E8',
+            responses: _physicsReplies(),
+          ),
+        ],
+      );
+      final client = await _connect(fake);
+
+      final sessionNotifier = _ConnectedMockSessionNotifier(client);
+      sessionNotifier.onRunExclusiveOverride = ({
+        required operationName,
+        required action,
+        cancellation,
+        deadline,
+      }) async {
+        throw const DiagnosticLinkException(
+          kind: DiagnosticFailureKind.deadlineExpired,
+          message: 'Raw link exception: exclusive lease deadline exceeded',
+        );
+      };
+
+      final container = ProviderContainer(
+        overrides: [
+          obdSessionProvider.overrideWith(() => sessionNotifier),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(mode08DiscoveryStateProvider.notifier);
+      await notifier.runDiscovery();
+
+      final state = container.read(mode08DiscoveryStateProvider);
+      expect(state.isFailed, isTrue);
+      expect(state.message, equals('Discovery timed out before completion.'));
+      expect(state.result?.incompletionReason, equals(Mode08IncompletionReason.timeout));
+    });
   });
 }
 
@@ -301,6 +390,12 @@ class _ConnectedMockSessionNotifier extends Notifier<ObdConnectionState>
 
   Elm327Client _mockClient;
   int _generation = 1;
+  Future<dynamic> Function({
+    required String operationName,
+    required Future<dynamic> Function(Object wireOwner) action,
+    DiagnosticCancellation? cancellation,
+    DateTime? deadline,
+  })? onRunExclusiveOverride;
 
   @override
   Elm327Client? get client => _mockClient;
@@ -335,6 +430,15 @@ class _ConnectedMockSessionNotifier extends Notifier<ObdConnectionState>
     DiagnosticCancellation? cancellation,
     DateTime? deadline,
   }) async {
+    if (onRunExclusiveOverride != null) {
+      final res = await onRunExclusiveOverride!(
+        operationName: operationName,
+        action: action,
+        cancellation: cancellation,
+        deadline: deadline,
+      );
+      return res as T;
+    }
     if (!state.isConnected) {
       throw const DiagnosticLinkException(
         kind: DiagnosticFailureKind.retiredOperation,
