@@ -747,6 +747,173 @@ class TestValidateProvenance(unittest.TestCase):
             if tmp_dir.exists():
                 tmp_dir.rmdir()
 
+    def test_catalog_manifest_spec_missing_rejected(self) -> None:
+        """Missing catalog_manifest dictionary in inventory fails closed."""
+        data = copy.deepcopy(self.raw_inventory)
+        del data["artifacts"][0]["catalog_manifest"]
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "CATALOG_MANIFEST_SPEC_MISSING" for e in errors),
+            msg=f"Expected CATALOG_MANIFEST_SPEC_MISSING, got: {[e.error_code for e in errors]}",
+        )
+
+    def test_catalog_manifest_malformed_fields_rejected(self) -> None:
+        """Malformed expected_sha256 or non-positive sizes fail closed."""
+        # 1. Malformed SHA256
+        data1 = copy.deepcopy(self.raw_inventory)
+        data1["artifacts"][0]["catalog_manifest"]["expected_sha256"] = "not-a-64-hex-digest"
+        errors1 = validate_provenance.validate_provenance_data(
+            data1, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(any(e.error_code == "MALFORMED_SHA256" for e in errors1))
+
+        # 2. Invalid size
+        data2 = copy.deepcopy(self.raw_inventory)
+        data2["artifacts"][0]["catalog_manifest"]["expected_size_bytes"] = -1
+        errors2 = validate_provenance.validate_provenance_data(
+            data2, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(any(e.error_code == "CATALOG_SIZE_MISMATCH" for e in errors2))
+
+    def test_runtime_licence_registry_assets_missing_or_empty_rejected(self) -> None:
+        """Missing or empty runtime_licence_registry_assets fails closed."""
+        # Missing key
+        data1 = copy.deepcopy(self.raw_inventory)
+        del data1["artifacts"][0]["runtime_licence_registry_assets"]
+        errors1 = validate_provenance.validate_provenance_data(
+            data1, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "LICENCE_REGISTRY_ASSETS_MISSING" for e in errors1)
+        )
+
+        # Empty list
+        data2 = copy.deepcopy(self.raw_inventory)
+        data2["artifacts"][0]["runtime_licence_registry_assets"] = []
+        errors2 = validate_provenance.validate_provenance_data(
+            data2, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "LICENCE_REGISTRY_ASSETS_MISSING" for e in errors2)
+        )
+
+    def test_runtime_licence_registry_assets_bidirectional_parity_enforced(self) -> None:
+        """Omitting a Dart registered licence asset from inventory fails closed."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["runtime_licence_registry_assets"] = [
+            a for a in data["artifacts"][0]["runtime_licence_registry_assets"]
+            if a != "assets/licenses/GPL-3.0.txt"
+        ]
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(
+                e.error_code == "LICENCE_REGISTRY_ASSET_MISSING"
+                and "GPL-3.0.txt" in e.message
+                for e in errors
+            ),
+            msg=f"Expected LICENCE_REGISTRY_ASSET_MISSING for omitted Dart asset, got: {[e.message for e in errors]}",
+        )
+
+    def test_artifact_class_missing_or_mismatch_rejected(self) -> None:
+        """Missing or mismatched artifact_class fails closed."""
+        # Missing
+        data1 = copy.deepcopy(self.raw_inventory)
+        del data1["artifacts"][0]["artifact_class"]
+        errors1 = validate_provenance.validate_provenance_data(
+            data1, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(any(e.error_code == "MISSING_ARTIFACT_CLASS" for e in errors1))
+
+        # Mismatch
+        data2 = copy.deepcopy(self.raw_inventory)
+        data2["artifacts"][0]["artifact_class"] = "other-class"
+        errors2 = validate_provenance.validate_provenance_data(
+            data2, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(any(e.error_code == "ARTIFACT_CLASS_MISMATCH" for e in errors2))
+
+    def test_owning_issues_boolean_rejected(self) -> None:
+        """Booleans in owning_issues are strictly rejected."""
+        data1 = copy.deepcopy(self.raw_inventory)
+        data1["artifacts"][0]["owning_issues"] = [True]
+        errors1 = validate_provenance.validate_provenance_data(
+            data1, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(any(e.error_code == "OWNING_ISSUES_MISSING" for e in errors1))
+
+    def test_remediation_required_subkeys_missing_rejected(self) -> None:
+        """Missing on_rights_revocation or on_integrity_failure in remediation fails closed."""
+        data1 = copy.deepcopy(self.raw_inventory)
+        del data1["artifacts"][0]["remediation"]["on_rights_revocation"]
+        errors1 = validate_provenance.validate_provenance_data(
+            data1, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(any(e.error_code == "REMEDIATION_MISSING" for e in errors1))
+
+        data2 = copy.deepcopy(self.raw_inventory)
+        data2["artifacts"][0]["remediation"]["on_integrity_failure"] = "   "
+        errors2 = validate_provenance.validate_provenance_data(
+            data2, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(any(e.error_code == "REMEDIATION_MISSING" for e in errors2))
+
+    def test_notices_owned_licence_identifier_drift_rejected(self) -> None:
+        """Omitting notices-owned required licence from licence_identifier emits LICENCE_IDENTIFIER_DRIFT."""
+        data = copy.deepcopy(self.raw_inventory)
+        # Remove CC-BY-4.0 from licence_identifier string
+        data["artifacts"][0]["licence_identifier"] = (
+            "Multi-licence (Apache-2.0, MIT, GPL-3.0, GPL-3.0-or-later, CC-BY-SA-4.0, U.S.-Government-Public-Domain)"
+        )
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(
+                e.error_code == "LICENCE_IDENTIFIER_DRIFT"
+                and "CC-BY-4.0" in e.message
+                for e in errors
+            ),
+            msg=f"Expected LICENCE_IDENTIFIER_DRIFT for CC-BY-4.0, got: {[f'{e.error_code}: {e.message}' for e in errors]}",
+        )
+
+    def test_notices_token_boundary_embedded_word_rejected(self) -> None:
+        """Token boundary check: embedded substring like COMMIT does not satisfy MIT requirement."""
+        notices_path = REPO_ROOT / "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md"
+        notices_text = notices_path.read_text(encoding="utf-8")
+
+        tmp_dir = REPO_ROOT / ".test_tmp_boundary"
+        tmp_dir.mkdir(exist_ok=True)
+        try:
+            # Replace 'bin/` MIT;' with 'bin/` COMMITTED;'
+            mutated = notices_text.replace("`bin/` MIT;", "`bin/` COMMITTED;")
+            tmp_file = tmp_dir / "mutated_notices_boundary.md"
+            tmp_file.write_text(mutated, encoding="utf-8")
+            rel = str(tmp_file.relative_to(REPO_ROOT))
+
+            data = copy.deepcopy(self.raw_inventory)
+            data["artifacts"][0]["source_coverage"]["notices_path"] = rel
+            data["artifacts"][0]["source_of_truth_paths"]["notices"] = rel
+            data["artifacts"][0]["licence_location"] = rel
+            errors = validate_provenance.validate_provenance_data(
+                data, REPO_ROOT, scope="production-package"
+            )
+            self.assertTrue(
+                any(
+                    e.error_code == "LICENCE_MISSING" and "MIT" in e.message
+                    for e in errors
+                ),
+                msg=f"Expected LICENCE_MISSING when MIT is only embedded in COMMITTED, got: {[e.message for e in errors]}",
+            )
+        finally:
+            for p in tmp_dir.glob("*"):
+                p.unlink()
+            if tmp_dir.exists():
+                tmp_dir.rmdir()
+
 
 if __name__ == "__main__":
     unittest.main()

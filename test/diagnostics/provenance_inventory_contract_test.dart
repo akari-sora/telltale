@@ -30,6 +30,7 @@ void main() {
   test('A1: canonical inventory defines powertrain-battery-bundled-third-party', () {
     expect(inventory['schema_version'], equals(1));
     expect(batteryClass['id'], equals('powertrain-battery-bundled-third-party'));
+    expect(batteryClass['artifact_class'], equals('powertrain-battery-bundled-third-party'));
     expect(batteryClass['scope'], equals('production-package'));
     expect(batteryClass['role'], equals('runtime'));
   });

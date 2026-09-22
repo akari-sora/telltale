@@ -89,6 +89,12 @@ class ValidationError:
     message: str
 
 
+def _matches_licence_token(licence: str, text: str) -> bool:
+    """Checks if a licence identifier appears as an exact token (with word/punctuation boundaries)."""
+    pattern = rf"(?<![A-Za-z0-9_.-]){re.escape(licence)}(?![A-Za-z0-9_.-])"
+    return bool(re.search(pattern, text))
+
+
 def parse_pubspec_assets(pubspec_path: Path) -> set[str]:
     """Extracts declared assets from pubspec.yaml."""
     if not pubspec_path.is_file():
@@ -238,6 +244,24 @@ def validate_provenance_data(
             )
         seen_ids.add(artifact_id)
 
+        artifact_class = item.get("artifact_class")
+        if not isinstance(artifact_class, str) or not artifact_class.strip():
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "MISSING_ARTIFACT_CLASS",
+                    "Artifact entry is missing a valid non-empty 'artifact_class'",
+                )
+            )
+        elif artifact_class != artifact_id:
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "ARTIFACT_CLASS_MISMATCH",
+                    f"Artifact class '{artifact_class}' does not match artifact id '{artifact_id}'",
+                )
+            )
+
         artifact_scope = item.get("scope")
         if artifact_scope not in ALLOWED_SCOPES:
             errors.append(
@@ -327,14 +351,25 @@ def validate_provenance_data(
             )
 
         remediation = item.get("remediation")
-        if not remediation or (isinstance(remediation, dict) and not any(remediation.values())):
+        if not isinstance(remediation, dict):
             errors.append(
                 ValidationError(
                     artifact_id,
                     "REMEDIATION_MISSING",
-                    "Remediation guidance is required and cannot be empty",
+                    "Remediation guidance is required and must be an object",
                 )
             )
+        else:
+            for rem_key in ("on_rights_revocation", "on_integrity_failure"):
+                val = remediation.get(rem_key)
+                if not isinstance(val, str) or not val.strip():
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "REMEDIATION_MISSING",
+                            f"Remediation guidance requires non-empty '{rem_key}' string",
+                        )
+                    )
 
         _check_no_absolute_paths(artifact_id, item, errors)
 
@@ -368,7 +403,11 @@ def validate_provenance_data(
             )
 
         owning_issues = item.get("owning_issues")
-        if not isinstance(owning_issues, list) or not owning_issues or not all(isinstance(x, int) and x > 0 for x in owning_issues):
+        if (
+            not isinstance(owning_issues, list)
+            or not owning_issues
+            or not all(type(x) is int and not isinstance(x, bool) and x > 0 for x in owning_issues)
+        ):
             errors.append(
                 ValidationError(
                     artifact_id,
@@ -440,9 +479,18 @@ def validate_provenance_data(
 
         # 5. Runtime licence registry assets
         lic_registry_assets = item.get("runtime_licence_registry_assets")
-        if isinstance(lic_registry_assets, list):
+        if not isinstance(lic_registry_assets, list) or not lic_registry_assets:
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "LICENCE_REGISTRY_ASSETS_MISSING",
+                    "'runtime_licence_registry_assets' must be a non-empty list",
+                )
+            )
+        else:
+            declared_lic_set = set(lic_registry_assets)
             for lic_asset in lic_registry_assets:
-                if lic_asset not in dart_license_assets:
+                if not isinstance(lic_asset, str) or lic_asset not in dart_license_assets:
                     errors.append(
                         ValidationError(
                             artifact_id,
@@ -450,15 +498,57 @@ def validate_provenance_data(
                             f"Licence asset '{lic_asset}' is not registered in powertrain_battery_licenses.dart",
                         )
                     )
+            for dart_asset in sorted(dart_license_assets):
+                if dart_asset not in declared_lic_set:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "LICENCE_REGISTRY_ASSET_MISSING",
+                            f"Dart registered licence asset '{dart_asset}' is not declared in 'runtime_licence_registry_assets'",
+                        )
+                    )
 
         # 6. Catalog manifest cross-check
         catalog_manifest = item.get("catalog_manifest")
-        if isinstance(catalog_manifest, dict):
+        if not isinstance(catalog_manifest, dict):
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "CATALOG_MANIFEST_SPEC_MISSING",
+                    "'catalog_manifest' is required and must be an object",
+                )
+            )
+        else:
             manifest_file = catalog_manifest.get("manifest_file")
             target_file = catalog_manifest.get("target_file")
             expected_sha256 = catalog_manifest.get("expected_sha256")
             expected_size = catalog_manifest.get("expected_size_bytes")
             expected_schema = catalog_manifest.get("expected_schema_version")
+
+            if not expected_sha256 or not SHA256_RE.match(expected_sha256):
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "MALFORMED_SHA256",
+                        f"Catalog manifest 'expected_sha256' '{expected_sha256}' is malformed",
+                    )
+                )
+            if not isinstance(expected_size, int) or isinstance(expected_size, bool) or expected_size <= 0:
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "CATALOG_SIZE_MISMATCH",
+                        f"Catalog manifest 'expected_size_bytes' must be a positive integer, got '{expected_size}'",
+                    )
+                )
+            if expected_schema is not None and (not isinstance(expected_schema, int) or isinstance(expected_schema, bool) or expected_schema <= 0):
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "CATALOG_SCHEMA_VERSION_MISMATCH",
+                        f"Catalog manifest 'expected_schema_version' must be a positive integer, got '{expected_schema}'",
+                    )
+                )
 
             if not manifest_file or not (repo_root / manifest_file).is_file():
                 errors.append(
@@ -780,17 +870,25 @@ def validate_provenance_data(
                     )
                 req_lics = rec.get("required_licenses", rec.get("allowed_licenses", set()))
                 for lic in req_lics:
-                    if lic not in PERMITTED_OPEN_SOURCE_LICENSES or (isinstance(lic_id, str) and lic not in lic_id):
+                    if lic not in PERMITTED_OPEN_SOURCE_LICENSES:
                         errors.append(
                             ValidationError(
                                 artifact_id,
                                 "LICENCE_NOT_PERMITTED",
-                                f"Notices-owned record '{pin_name}' licence '{lic}' is not permitted or declared in licence_identifier",
+                                f"Notices-owned record '{pin_name}' licence '{lic}' is not permitted",
+                            )
+                        )
+                    if isinstance(lic_id, str) and not _matches_licence_token(lic, lic_id):
+                        errors.append(
+                            ValidationError(
+                                artifact_id,
+                                "LICENCE_IDENTIFIER_DRIFT",
+                                f"License '{lic}' required by notices-owned record '{pin_name}' is not declared in 'licence_identifier'",
                             )
                         )
                 snippet = pin_info.get("snippet", "")
                 for lic in sorted(req_lics):
-                    if lic not in snippet:
+                    if not _matches_licence_token(lic, snippet):
                         errors.append(
                             ValidationError(
                                 artifact_id,
@@ -810,7 +908,7 @@ def validate_provenance_data(
         # Cross-check licence_identifier covers all distinct owner licenses
         if isinstance(lic_id, str):
             for lic in sorted(all_owner_licenses):
-                if lic not in lic_id:
+                if not _matches_licence_token(lic, lic_id):
                     errors.append(
                         ValidationError(
                             artifact_id,
