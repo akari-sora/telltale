@@ -188,5 +188,65 @@ void main() {
         );
       }
     });
+
+    test('ADR strictly rejects unmeasured metric drift, invalid symbol names, and enforces evidence boundaries', () {
+      // 1. Prohibit unmeasured numeric claims in cost matrix / findings
+      expect(
+        content,
+        isNot(contains('0 ms additional startup')),
+        reason: 'ADR must not fabricate unmeasured 0 ms sidecar startup metrics.',
+      );
+      expect(
+        content,
+        isNot(contains('60–120 MB RSS')),
+        reason: 'ADR must not cite unmeasured RSS numbers without project artifacts.',
+      );
+      expect(
+        content,
+        isNot(contains('zero measurable benefit')),
+        reason: 'ADR must not claim zero measurable benefit when no prototype was benchmarked.',
+      );
+
+      // 2. Prohibit non-existent symbol names and enforce delivered types
+      expect(
+        content,
+        isNot(contains('DiagnosticOwnershipKind')),
+        reason: 'DiagnosticOwnershipKind does not exist in codebase (use DiagnosticOwnershipMode).',
+      );
+      expect(
+        content,
+        isNot(contains('DiagnosticOwnershipToken')),
+        reason: 'DiagnosticOwnershipToken does not exist in codebase (use DiagnosticOwnership).',
+      );
+      expect(
+        content,
+        contains('DiagnosticOwnershipMode'),
+        reason: 'ADR must cite correct delivered enum DiagnosticOwnershipMode.',
+      );
+      expect(
+        content,
+        contains('DiagnosticOwnership'),
+        reason: 'ADR must cite correct delivered class DiagnosticOwnership.',
+      );
+
+      // 3. Pin physical L4 field evidence to BLE on GT86
+      expect(
+        content,
+        contains('Toyota GT86'),
+        reason: 'Physical field evidence must reference the actual GT86 test vehicle.',
+      );
+      expect(
+        content,
+        contains('Bluetooth Low Energy'),
+        reason: 'Physical field evidence must pin L4 medium to BLE.',
+      );
+
+      // 4. Pin that Ircama functional path does not overclaim Mode 08 discovery or freeze frame
+      expect(
+        content,
+        contains('does not claim Mode 08 discovery or freeze-frame execution'),
+        reason: 'Ircama loopback evidence must not overclaim Mode 08 discovery or freeze-frame read.',
+      );
+    });
   });
 }
