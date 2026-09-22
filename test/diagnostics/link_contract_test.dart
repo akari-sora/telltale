@@ -155,13 +155,13 @@ void main() {
   });
 
   group('Elm327DiagnosticLink capability absence and projection', () {
-    test('T-CAP-01: Elm327DiagnosticLink reports no raw-CAN, raw-ISO-TP or physical-ECU capability', () async {
+    test('T-CAP-01: Elm327DiagnosticLink reports physical-ECU on CAN but no raw-CAN or raw-ISO-TP', () async {
       final client = await _createConnectedClient();
       final link = Elm327DiagnosticLink(client);
 
       expect(link.capabilities.contains(DiagnosticCapability.rawCanFrame), isFalse);
       expect(link.capabilities.contains(DiagnosticCapability.rawIsoTpPayload), isFalse);
-      expect(link.capabilities.contains(DiagnosticCapability.physicalEcuAddressing), isFalse);
+      expect(link.capabilities.contains(DiagnosticCapability.physicalEcuAddressing), isTrue);
       expect(link.capabilities.contains(DiagnosticCapability.applicationPdu), isTrue);
       expect(link.capabilities.contains(DiagnosticCapability.wholeVehicleObd), isTrue);
     });

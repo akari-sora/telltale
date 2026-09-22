@@ -4,9 +4,9 @@ library;
 import 'dart:async';
 import 'dart:developer' as developer;
 
+import '../../diagnostics/diagnostic_link.dart';
 import '../elm327_client.dart';
 import '../pid/formula_engine.dart';
-import '../transport/obd_transport.dart';
 import 'powertrain_battery_catalog.dart';
 import 'powertrain_battery_profile.dart';
 import 'profile_catalog_validator.dart';
@@ -109,10 +109,33 @@ final class PowertrainBatteryProbeResult {
   bool get passed => failure == null;
 }
 
+class _NormalizedProbeFrame {
+  final List<int> bytes;
+  final String? sourceId;
+  const _NormalizedProbeFrame({required this.bytes, this.sourceId});
+}
+
+class _NormalizedProbeResponse {
+  final bool isSuccess;
+  final bool headersEnabled;
+  final List<int> rawBytes;
+  final List<_NormalizedProbeFrame> frames;
+  final String? errorCodeName;
+
+  const _NormalizedProbeResponse({
+    required this.isSuccess,
+    required this.headersEnabled,
+    required this.rawBytes,
+    required this.frames,
+    this.errorCodeName,
+  });
+}
+
 abstract final class PowertrainBatteryProbe {
   /// Sends exactly one catalog command and never installs or schedules it.
   static Future<PowertrainBatteryProbeResult> run({
     required Elm327Client client,
+    required DiagnosticLink diagnosticLink,
     required PowertrainBatteryCatalogSnapshot snapshot,
     required String profileId,
     required String commandKey,
@@ -186,7 +209,52 @@ abstract final class PowertrainBatteryProbe {
       'tx=${command.requestHeader} rx=${command.expectedResponder} '
       'request=${command.modeAndIdentifier}',
     );
-    final ObdResponse response;
+
+    final pduBytes = _hexBytes(command.modeAndIdentifier);
+    if (pduBytes == null) {
+      return refused(
+        PowertrainBatteryProbeFailure.envelopeMismatch,
+        'command modeAndIdentifier is not hexadecimal',
+      );
+    }
+
+    final DiagnosticCanIdentifier reqId;
+    final DiagnosticCanIdentifier expId;
+    try {
+      reqId = DiagnosticCanIdentifier.parse(command.requestHeader);
+      expId = DiagnosticCanIdentifier.parse(command.expectedResponder);
+    } on ArgumentError catch (e) {
+      return refused(
+        PowertrainBatteryProbeFailure.unsupportedBus,
+        'invalid CAN identifier: ${e.message}',
+      );
+    }
+
+    final target = DiagnosticTarget.physicalCan(
+      requestIdentifier: reqId,
+      expectedResponderIdentifier: expId,
+    );
+
+    final request = DiagnosticRequest(
+      id: DiagnosticRequestId(
+        'bms-${profile.id}-${command.wireKey}-${diagnosticLink.connectionGeneration}',
+      ),
+      pdu: ApplicationPdu(pduBytes),
+      target: target,
+      requiredCapabilities: const {
+        DiagnosticCapability.applicationPdu,
+        DiagnosticCapability.physicalEcuAddressing,
+      },
+      connectionGeneration: diagnosticLink.connectionGeneration,
+      responseTimeout: client.commandTimeout,
+      deadline: deadline,
+      ownership: DiagnosticOwnership(
+        mode: DiagnosticOwnershipMode.oneShot,
+        token: lifecycleOwner,
+      ),
+    );
+
+    final DiagnosticResponse response;
     PowertrainBatteryProbeResult transportFailed(String detail) =>
         PowertrainBatteryProbeResult.failure(
           profileId: profile.id,
@@ -197,18 +265,27 @@ abstract final class PowertrainBatteryProbe {
           detail: detail,
           capturedAt: DateTime.now().toUtc(),
         );
+
     try {
-      response = await client.sendGlobal(
-        command.modeAndIdentifier,
-        header: command.requestHeader,
-        timeout: client.commandTimeout,
-        owner: lifecycleOwner,
-        deadline: deadline,
-      );
-    } on TimeoutException {
-      return transportFailed('experimental probe timed out');
-    } on TransportException {
-      return transportFailed('experimental probe transport failed');
+      response = await diagnosticLink.send(request);
+    } on DiagnosticLinkException catch (e) {
+      switch (e.kind) {
+        case DiagnosticFailureKind.responseTimeout:
+        case DiagnosticFailureKind.deadlineExpired:
+          return transportFailed('experimental probe timed out');
+        case DiagnosticFailureKind.transportFailure:
+          return transportFailed('experimental probe transport failed');
+        case DiagnosticFailureKind.unsupportedTarget:
+        case DiagnosticFailureKind.capabilityUnavailable:
+          return refused(
+            PowertrainBatteryProbeFailure.unsupportedBus,
+            e.message,
+          );
+        case DiagnosticFailureKind.cancelled:
+        case DiagnosticFailureKind.retiredGeneration:
+        case DiagnosticFailureKind.retiredOperation:
+          return transportFailed('experimental probe operation retired or cancelled');
+      }
     } on Object catch (error, stackTrace) {
       _reportDiagnostic(diagnosticSink, error, stackTrace, 'sendGlobal');
       return PowertrainBatteryProbeResult.failure(
@@ -221,13 +298,29 @@ abstract final class PowertrainBatteryProbe {
         capturedAt: DateTime.now().toUtc(),
       );
     }
-    // Keep decoding outside the transport exception boundary. A programming
-    // defect in the decoder must never be presented as a retryable link fault.
-    return decode(
+
+    final allBytes = <int>[
+      for (final msg in response.messages) ...msg.pdu.bytes,
+    ];
+    final normalized = _NormalizedProbeResponse(
+      isSuccess: response.isSuccess,
+      headersEnabled: response.provenance.sourceAttributionAvailable,
+      rawBytes: allBytes,
+      frames: [
+        for (final msg in response.messages)
+          _NormalizedProbeFrame(
+            bytes: msg.pdu.bytes,
+            sourceId: msg.sourceAddress?.value,
+          ),
+      ],
+      errorCodeName: response.status.name,
+    );
+
+    return _decodeValidatedWrapper(
       profile: profile,
       command: command,
       catalogSha256: catalogSha256,
-      response: response,
+      response: normalized,
       capturedAt: DateTime.now().toUtc(),
       diagnosticSink: diagnosticSink,
     );
@@ -244,19 +337,25 @@ abstract final class PowertrainBatteryProbe {
   }) {
     final at = (capturedAt ?? DateTime.now()).toUtc();
     try {
+      final normalized = _NormalizedProbeResponse(
+        isSuccess: response.isSuccess,
+        headersEnabled: response.headersEnabled,
+        rawBytes: response.bytes,
+        frames: [
+          for (final frame in response.frames)
+            _NormalizedProbeFrame(bytes: frame.bytes, sourceId: frame.sourceId),
+        ],
+        errorCodeName: response.errorCode.name,
+      );
       return _decodeValidated(
         profile: profile,
         command: command,
         catalogSha256: catalogSha256,
-        response: response,
+        response: normalized,
         capturedAt: at,
       );
     } on Object catch (error, stackTrace) {
       _reportDiagnostic(diagnosticSink, error, stackTrace, 'decode');
-      // Formula failures have their own typed result inside the validated
-      // decoder. Anything else is a programming/invariant failure: disclose
-      // neither exception text nor a suggestion to retry, and quarantine the
-      // profile through [requiresConnectionQuarantine].
       return PowertrainBatteryProbeResult.failure(
         profileId: profile.id,
         catalogSha256: catalogSha256,
@@ -266,6 +365,37 @@ abstract final class PowertrainBatteryProbe {
         detail: 'decoder invariant failed; this profile is quarantined',
         capturedAt: at,
         rawResponseBytes: response.bytes,
+      );
+    }
+  }
+
+  static PowertrainBatteryProbeResult _decodeValidatedWrapper({
+    required PowertrainBatteryProfile profile,
+    required PowertrainBatteryCommand command,
+    required String catalogSha256,
+    required _NormalizedProbeResponse response,
+    required DateTime capturedAt,
+    PowertrainBatteryProbeDiagnosticSink? diagnosticSink,
+  }) {
+    try {
+      return _decodeValidated(
+        profile: profile,
+        command: command,
+        catalogSha256: catalogSha256,
+        response: response,
+        capturedAt: capturedAt,
+      );
+    } on Object catch (error, stackTrace) {
+      _reportDiagnostic(diagnosticSink, error, stackTrace, 'decode');
+      return PowertrainBatteryProbeResult.failure(
+        profileId: profile.id,
+        catalogSha256: catalogSha256,
+        sourceRevision: profile.source.revision,
+        command: command,
+        failure: PowertrainBatteryProbeFailure.decoder,
+        detail: 'decoder invariant failed; this profile is quarantined',
+        capturedAt: capturedAt,
+        rawResponseBytes: response.rawBytes,
       );
     }
   }
@@ -300,7 +430,7 @@ abstract final class PowertrainBatteryProbe {
     required PowertrainBatteryProfile profile,
     required PowertrainBatteryCommand command,
     required String catalogSha256,
-    required ObdResponse response,
+    required _NormalizedProbeResponse response,
     required DateTime capturedAt,
   }) {
     final at = capturedAt;
@@ -324,21 +454,21 @@ abstract final class PowertrainBatteryProbe {
     if (!response.isSuccess) {
       return failed(
         PowertrainBatteryProbeFailure.transport,
-        'adapter response: ${response.errorCode.name}',
+        'adapter response: ${response.errorCodeName}',
       );
     }
     if (!response.headersEnabled) {
       return failed(
         PowertrainBatteryProbeFailure.anonymousResponse,
         'the adapter did not prove response headers were enabled',
-        raw: response.bytes,
+        raw: response.rawBytes,
       );
     }
     if (response.frames.length != 1) {
       return failed(
         PowertrainBatteryProbeFailure.ambiguousResponse,
         'expected exactly one complete response frame',
-        raw: response.bytes,
+        raw: response.rawBytes,
       );
     }
     final frame = response.frames.single;
