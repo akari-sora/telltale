@@ -19,11 +19,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:torque_obd/diagnostics/diagnostic_link.dart';
 import 'package:torque_obd/diagnostics/service_recipes/candidate_matrix.dart';
 import 'package:torque_obd/diagnostics/service_recipes/mode08_codec.dart';
 import 'package:torque_obd/diagnostics/service_recipes/mode08_discovery_service.dart';
 import 'package:torque_obd/diagnostics/service_recipes/qualification_tier.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
+import 'package:torque_obd/obd/elm_can_addressing.dart';
+import 'package:torque_obd/obd/elm_composite_transaction.dart';
+import 'package:torque_obd/obd/elm_flow_control.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
 import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/state/service_recipes_provider.dart';
@@ -71,6 +75,22 @@ class _TestConnectedCanSession extends ObdSession {
         phase: ConnectionPhase.connected,
         protocol: 'ISO 15765-4 (CAN 11/500)',
       );
+
+  @override
+  Future<T> runDiagnosticExclusive<T>({
+    required String operationName,
+    required Future<T> Function(Object wireOwner) action,
+    DiagnosticCancellation? cancellation,
+    DateTime? deadline,
+  }) async {
+    if (!state.isConnected) {
+      throw const DiagnosticLinkException(
+        kind: DiagnosticFailureKind.retiredOperation,
+        message: 'Mock session disconnected',
+      );
+    }
+    return await action(Object());
+  }
 
   void triggerDisconnect() {
     state = const ObdConnectionState(
@@ -124,6 +144,34 @@ class _GateableTransport implements ObdTransport {
       await gate!.future;
     }
     await _inner.write(data);
+  }
+}
+
+class _RetiringClient extends Elm327Client {
+  _RetiringClient(super.transport);
+
+  @override
+  Future<ObdResponse> sendTransacted(
+    String command, {
+    String? header,
+    bool restoreHeader = false,
+    int? extendedAddressByte,
+    int? canPriorityByte,
+    ElmCanReceiveFilterConfig? canReceiveFilter,
+    ElmFlowControlConfig? flowControl,
+    bool hostVisibleIsoTp = false,
+    bool responseHeaders = false,
+    ElmCompositeTransactionConfig? configuration,
+    Duration? timeout,
+    Duration? budget,
+    Duration? drainBudget,
+    Duration? cleanupBudget,
+    Object? owner,
+    DateTime? deadline,
+    Stopwatch Function()? stopwatchProvider,
+    Duration Function()? elapsedProvider,
+  }) async {
+    throw const OperationRetiredException('Raw wire exception: lease retired');
   }
 }
 
@@ -1038,6 +1086,33 @@ void main() {
       await tester.runAsync(() async {
         await client.disconnect();
       });
+    });
+
+    test('Mode08DiscoveryService maps OperationRetiredException to sanitized prose without exposing raw exception string', () async {
+      final fake = FakeElm327(
+        protocol: BusProtocol.can11,
+        ecus: [
+          FakeEcu(
+            name: 'ECM',
+            requestId: '7E0',
+            responseId: '7E8',
+            responses: _physicsReplies(),
+          ),
+        ],
+      );
+      final client = _RetiringClient(fake);
+      await client.connect();
+
+      final result = await Mode08DiscoveryService.discoverSupportedTids(
+        client: client,
+        timeout: const Duration(milliseconds: 300),
+      );
+
+      expect(result.isSupported, isFalse);
+      expect(result.incompletionReason, equals(Mode08IncompletionReason.sessionDisconnected));
+      expect(result.failureReason, equals('Discovery stopped because the diagnostic session is no longer active.'));
+      expect(result.failureReason, isNot(contains('OperationRetiredException')));
+      expect(result.failureReason, isNot(contains('Raw wire exception')));
     });
   });
 }

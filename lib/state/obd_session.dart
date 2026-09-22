@@ -252,6 +252,20 @@ final class _PowertrainProbeWireOwner {
   final int experimentalAccessEpoch;
 }
 
+/// Wire-owner lease token for an exclusive diagnostic operation (e.g. non-actuating Mode 08 discovery).
+///
+/// Binds transmission permission to the exact connection generation and pause epoch.
+/// If the session goes to background or disconnects, the lease is retired immediately.
+final class _DiagnosticExclusiveWireOwner {
+  const _DiagnosticExclusiveWireOwner({
+    required this.pauseEpoch,
+    required this.connectionGeneration,
+  });
+
+  final int pauseEpoch;
+  final int connectionGeneration;
+}
+
 /// Turns an exception thrown while connecting into a sentence for a driver.
 ///
 /// `'$e'` used to reach the screen directly. Measured on a phone, 2026-08-20,
@@ -1402,6 +1416,9 @@ class ObdSession extends Notifier<ObdConnectionState> {
               lease.connectionGeneration == generation &&
               lease.experimentalAccessEpoch == _experimentalAccessEpoch &&
               ref.read(powertrainBatteryExperimentalAccessProvider),
+        _DiagnosticExclusiveWireOwner lease =>
+          lease.pauseEpoch == _pauseEpoch &&
+              lease.connectionGeneration == generation,
         _ => false,
       };
     };
@@ -1787,6 +1804,66 @@ class ObdSession extends Notifier<ObdConnectionState> {
     return authority.runOneShot<T>(
       operationName: operationName,
       action: action,
+      cancellation: cancellation,
+      deadline: deadline,
+    );
+  }
+
+  /// Executes [action] with exclusive diagnostic link ownership across multiple blocks/commands.
+  ///
+  /// Captures the active authority, client, engine, connection generation, and pause epoch.
+  /// Passes an opaque wire owner token to [action] which must be passed to commands
+  /// (e.g. [Elm327Client.sendTransacted]) to ensure the entire multi-step sequence is
+  /// retired immediately if backgrounding or disconnection occurs.
+  Future<T> runDiagnosticExclusive<T>({
+    required String operationName,
+    required Future<T> Function(Object wireOwner) action,
+    DiagnosticCancellation? cancellation,
+    DateTime? deadline,
+  }) async {
+    final authority = _linkOwnership;
+    final client = _client;
+    final engine = _engine;
+    final generation = _generation;
+    final pauseEpoch = _pauseEpoch;
+
+    if (authority == null ||
+        client == null ||
+        engine == null ||
+        !state.isConnected ||
+        !_foreground ||
+        _pausedByLifecycle ||
+        _awaitingResumeValidation) {
+      throw const DiagnosticLinkException(
+        kind: DiagnosticFailureKind.retiredOperation,
+        message:
+            'No active diagnostic link ownership authority for connected session.',
+      );
+    }
+
+    final wireOwner = _DiagnosticExclusiveWireOwner(
+      pauseEpoch: pauseEpoch,
+      connectionGeneration: generation,
+    );
+
+    return authority.runExclusive<T>(
+      operationName: operationName,
+      action: () async {
+        if (_superseded(generation) ||
+            !state.isConnected ||
+            !identical(_client, client) ||
+            !identical(_engine, engine) ||
+            !_foreground ||
+            _pausedByLifecycle ||
+            _awaitingResumeValidation ||
+            pauseEpoch != _pauseEpoch) {
+          throw const DiagnosticLinkException(
+            kind: DiagnosticFailureKind.retiredOperation,
+            message: 'Session invalidated before exclusive action could start.',
+          );
+        }
+        return await action(wireOwner);
+      },
       cancellation: cancellation,
       deadline: deadline,
     );

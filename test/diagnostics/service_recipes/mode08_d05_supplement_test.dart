@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:torque_obd/diagnostics/diagnostic_link.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
 import 'package:torque_obd/obd/transport/wifi_transport.dart';
 import 'package:torque_obd/state/obd_session.dart';
@@ -51,6 +52,22 @@ class _SupplementSession extends ObdSession {
       phase: ConnectionPhase.connected,
       protocol: 'ISO 15765-4 (CAN 11/500)',
     );
+  }
+
+  @override
+  Future<T> runDiagnosticExclusive<T>({
+    required String operationName,
+    required Future<T> Function(Object wireOwner) action,
+    DiagnosticCancellation? cancellation,
+    DateTime? deadline,
+  }) async {
+    if (!state.isConnected) {
+      throw const DiagnosticLinkException(
+        kind: DiagnosticFailureKind.retiredOperation,
+        message: 'Mock session disconnected',
+      );
+    }
+    return await action(Object());
   }
 }
 

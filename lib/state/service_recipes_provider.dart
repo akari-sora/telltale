@@ -13,6 +13,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../diagnostics/diagnostic_link.dart';
 import '../diagnostics/service_recipes/active_test_profile.dart';
 import '../diagnostics/service_recipes/candidate_matrix.dart';
 import '../diagnostics/service_recipes/mode08_discovery_service.dart';
@@ -196,12 +197,18 @@ class Mode08DiscoveryNotifier extends Notifier<Mode08DiscoveryState> {
     state = Mode08DiscoveryState.discovering(startedAt: DateTime.now().toUtc());
 
     try {
-      final discoveryResult = await Mode08DiscoveryService.discoverSupportedTids(
-        client: client,
-        timeout: timeout,
-        budget: budget,
+      final discoveryResult =
+          await sessionController.runDiagnosticExclusive<Mode08DiscoveryResult>(
+        operationName: 'mode08Discovery',
         deadline: deadline,
-        isSessionValid: () => !_isSuperseded(token, sessionGeneration, client),
+        action: (wireOwner) => Mode08DiscoveryService.discoverSupportedTids(
+          client: client,
+          timeout: timeout,
+          budget: budget,
+          deadline: deadline,
+          owner: wireOwner,
+          isSessionValid: () => !_isSuperseded(token, sessionGeneration, client),
+        ),
       );
 
       // Verify task was not superseded while discovery was running
@@ -219,6 +226,34 @@ class Mode08DiscoveryNotifier extends Notifier<Mode08DiscoveryState> {
           nrc: discoveryResult.nrc,
         );
       }
+    } on DiagnosticLinkException catch (e) {
+      if (_isSuperseded(token, sessionGeneration, client)) {
+        return;
+      }
+      final sanitizedReason = switch (e.kind) {
+        DiagnosticFailureKind.retiredOperation =>
+          'Discovery stopped because the diagnostic session is no longer active.',
+        DiagnosticFailureKind.deadlineExpired =>
+          'Discovery timed out before completion.',
+        _ => 'Discovery failed on diagnostic link.',
+      };
+      final incompletionReason = switch (e.kind) {
+        DiagnosticFailureKind.retiredOperation =>
+          Mode08IncompletionReason.sessionDisconnected,
+        DiagnosticFailureKind.deadlineExpired =>
+          Mode08IncompletionReason.timeout,
+        _ => Mode08IncompletionReason.none,
+      };
+      final failureResult = Mode08DiscoveryResult.failure(
+        supportStatus: EcuSupportStatus.unknown,
+        reason: sanitizedReason,
+        incompletionReason: incompletionReason,
+        discoveredAt: DateTime.now().toUtc(),
+      );
+      state = Mode08DiscoveryState.failed(
+        result: failureResult,
+        message: sanitizedReason,
+      );
     } catch (e) {
       if (_isSuperseded(token, sessionGeneration, client)) {
         return;
