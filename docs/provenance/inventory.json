@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "inventory_date": "2026-09-22",
+  "description": "Canonical cross-cutting provenance inventory for public and packaged artifacts.",
+  "artifacts": [
+    {
+      "id": "powertrain-battery-bundled-third-party",
+      "artifact_class": "powertrain-battery-bundled-third-party",
+      "scope": "production-package",
+      "role": "runtime",
+      "title": "Powertrain Battery Catalog & Bundled Third-Party Notices/Licences",
+      "owning_issues": [11, 69, 96],
+      "source_of_truth_paths": {
+        "catalog": "assets/powertrain_battery/powertrain_battery_catalog.json",
+        "manifest": "assets/powertrain_battery/powertrain_battery_catalog.manifest.json",
+        "notices": "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md",
+        "evidence_matrix": "tool/powertrain_evidence/matrix.json"
+      },
+      "catalog_manifest": {
+        "manifest_file": "assets/powertrain_battery/powertrain_battery_catalog.manifest.json",
+        "target_file": "assets/powertrain_battery/powertrain_battery_catalog.json",
+        "expected_sha256": "8f505e20c2ea2c777b26cb422c882be51ccfbae48de343254a16d501b80df3e9",
+        "expected_size_bytes": 443259,
+        "expected_schema_version": 3,
+        "profile_count": 221
+      },
+      "licence_identifier": "Multi-licence (Apache-2.0, MIT, GPL-3.0, GPL-3.0-or-later, CC-BY-SA-4.0, CC-BY-4.0, U.S.-Government-Public-Domain)",
+      "licence_location": "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md",
+      "required_package_assets": [
+        "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md",
+        "assets/licenses/Apache-2.0.txt",
+        "assets/licenses/wican-bridge-MIT.txt",
+        "assets/licenses/ovms-MIT.txt",
+        "assets/licenses/GPL-3.0.txt",
+        "assets/powertrain_battery/powertrain_battery_catalog.json",
+        "assets/powertrain_battery/powertrain_battery_catalog.manifest.json"
+      ],
+      "runtime_licence_registry_assets": [
+        "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md",
+        "assets/licenses/Apache-2.0.txt",
+        "assets/licenses/wican-bridge-MIT.txt",
+        "assets/licenses/ovms-MIT.txt",
+        "assets/licenses/GPL-3.0.txt"
+      ],
+      "distribution_decision": "approved",
+      "commercial_use_decision": "allowed",
+      "commercial_use_rationale": "Permitted open-source licences (Apache-2.0, MIT, GPL-3.0, GPL-3.0-or-later, CC-BY-SA-4.0, CC-BY-4.0, U.S.-Government-Public-Domain) with required attribution notices and licence texts bundled in app package and exposed via LicenseRegistry.",
+      "reviewer_status": "reviewed",
+      "remediation": {
+        "on_rights_revocation": "Remove affected profile subset or entire bundled catalog asset; generic OBD, demo mode, and user-authored PIDs remain operational without interruption.",
+        "on_integrity_failure": "Regenerate manifest via tool/update_powertrain_battery_manifest.py or replace corrupted catalog asset; runtime loader fails closed for battery catalog only without affecting generic diagnostics."
+      },
+      "source_coverage": {
+        "catalog_path": "assets/powertrain_battery/powertrain_battery_catalog.json",
+        "catalog_manifest_path": "assets/powertrain_battery/powertrain_battery_catalog.manifest.json",
+        "notices_path": "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md",
+        "evidence_matrix_path": "tool/powertrain_evidence/matrix.json",
+        "required_owner_fields": [
+          "name",
+          "url",
+          "revision",
+          "license"
+        ]
+      }
+    }
+  ]
+}
