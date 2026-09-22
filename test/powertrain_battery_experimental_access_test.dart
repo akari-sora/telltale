@@ -965,6 +965,7 @@ void main() {
       vehicleYear: 2021,
     );
     await _waitForCommand(adapter, command.modeAndIdentifier);
+    expect(session.engine?.isRunning, isFalse, reason: 'Polling engine must be paused while BMS probe is in flight');
 
     binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
@@ -979,9 +980,57 @@ void main() {
       container.read(powertrainExperimentalProbeConsentsProvider),
       isEmpty,
     );
+    expect(session.engine?.isRunning, isFalse, reason: 'Polling engine must not restart in background');
     binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await session.disconnect();
+  });
+
+  test('BMS slow one-shot pauses polling in-flight and restores afterward', () async {
+    final container = await _container({
+      'powertrain_battery_experiments_enabled_v1': true,
+    });
+    addTearDown(container.dispose);
+    final snapshot = await PowertrainBatteryCatalogAsset.load();
+    final profile = snapshot.catalog.profiles.singleWhere(
+      (profile) => profile.id == 'mg-zs-ev-au-2021',
+    );
+    final command = profile.commands.singleWhere(
+      (command) => command.modeAndIdentifier == '22B046',
+    );
+    final adapter = _experimentalAdapter(
+      response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
+    );
+    adapter.slowCommands[command.modeAndIdentifier] = const Duration(
+      milliseconds: 150,
+    );
+    final session = container.read(obdSessionProvider.notifier);
+    expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+    expect(session.engine?.isRunning, isTrue);
+
+    final consents = container.read(
+      powertrainExperimentalProbeConsentsProvider.notifier,
+    );
+    consents.authorize(
+      snapshot: snapshot,
+      profileId: profile.id,
+      commandKey: command.wireKey,
+      vehicleYear: 2021,
+      connectionGeneration: session.connectionGeneration,
+    );
+    final pending = session.probePowertrainBatteryCommand(
+      snapshot: snapshot,
+      profileId: profile.id,
+      commandKey: command.wireKey,
+      vehicleYear: 2021,
+    );
+    await _waitForCommand(adapter, command.modeAndIdentifier);
+    expect(session.engine?.isRunning, isFalse, reason: 'Polling must be paused while probe is in flight');
+
+    final result = await pending;
+    expect(result.failure, isNull);
+    expect(session.engine?.isRunning, isTrue, reason: 'Polling must be restored after probe completes');
     await session.disconnect();
   });
 

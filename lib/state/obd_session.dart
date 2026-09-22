@@ -15,6 +15,8 @@ import 'package:flutter/widgets.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/elapsed_realtime.dart';
+import '../diagnostics/diagnostic_link.dart';
+import '../diagnostics/diagnostic_link_ownership.dart';
 import '../core/field_evidence/evidence_text.dart';
 import '../core/field_evidence/platform_metadata.dart';
 import '../core/network/android_wifi_route_binder.dart';
@@ -285,6 +287,7 @@ ObdConnectionIssue connectExceptionIssue(Object error) =>
 class ObdSession extends Notifier<ObdConnectionState> {
   Elm327Client? _client;
   PollingEngine? _engine;
+  DiagnosticLinkOwnershipAuthority? _linkOwnership;
 
   /// Build provenance is compile-time in production and injectable only so
   /// unit tests can lock the safety boundary without launching an APK.
@@ -512,9 +515,14 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // to.
     _client?.suspendLiveness();
     final engine = _engine;
-    if (engine == null || !engine.isRunning) return;
+    if (engine == null) return;
+    final hadActivePolling =
+        engine.isRunning || (_linkOwnership?.hasDisplacedPolling ?? false);
+    if (!hadActivePolling) return;
     _pausedByLifecycle = true;
-    _lifecycleChain = _lifecycleChain.then((_) => _pauseNow(engine));
+    if (engine.isRunning) {
+      _lifecycleChain = _lifecycleChain.then((_) => _pauseNow(engine));
+    }
   }
 
   /// Stops the poller, then says so on screen.
@@ -636,8 +644,13 @@ class ObdSession extends Notifier<ObdConnectionState> {
       // Bounded, because nothing else bounds it. Fired unawaited, this had no
       // deadline at all — and a scan starting a moment later joined it, so the
       // census the scan was blocked on could outlive the scan's own budget.
+      final censusDeadline = DateTime.now().add(censusBudget);
       unawaited(
-        engine.discoverResponders(deadline: DateTime.now().add(censusBudget)),
+        _runDiagnosticOneShot<Set<String>?>(
+          operationName: 'resumeResponderCensus',
+          deadline: censusDeadline,
+          action: () => engine.discoverResponders(deadline: censusDeadline),
+        ).catchError((_) => null),
       );
     }
   }
@@ -665,6 +678,10 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// The live client, for the two things that talk to the adapter directly:
   /// the transcript export and the manual command box.
   Elm327Client? get client => _client;
+
+  /// The active diagnostic link ownership authority for this session.
+  @visibleForTesting
+  DiagnosticLinkOwnershipAuthority? get linkOwnership => _linkOwnership;
 
   /// This attempt's record, created at the tap rather than at the handshake.
   ObdTranscript? _attemptTranscript;
@@ -1396,6 +1413,50 @@ class ObdSession extends Notifier<ObdConnectionState> {
       if (!_telemetry.isClosed) _telemetry.add(snapshot);
     });
 
+    _linkOwnership?.dispose();
+    final authorityGeneration = generation;
+    final authorityClient = client;
+    final authorityEngine = engine;
+    _linkOwnership = DiagnosticLinkOwnershipAuthority(
+      pollingIsRunning: () =>
+          identical(_engine, authorityEngine) &&
+          !_superseded(authorityGeneration) &&
+          authorityEngine.isRunning,
+      pausePolling: () async {
+        if (!identical(_engine, authorityEngine) ||
+            _superseded(authorityGeneration)) {
+          return;
+        }
+        await authorityEngine.stop();
+      },
+      resumePolling: () {
+        if (!identical(_engine, authorityEngine) ||
+            _superseded(authorityGeneration)) {
+          return;
+        }
+        authorityEngine.start();
+      },
+      canRestorePolling: () {
+        return _generation == authorityGeneration &&
+            identical(_client, authorityClient) &&
+            identical(_engine, authorityEngine) &&
+            state.isConnected &&
+            _foreground &&
+            !_pausedByLifecycle &&
+            !_awaitingResumeValidation;
+      },
+      onDisplacedPollingRestored: () {
+        if (!authorityEngine.supportDiscoveryComplete &&
+            _generation == authorityGeneration &&
+            identical(_engine, authorityEngine) &&
+            _foreground &&
+            !_pausedByLifecycle &&
+            !_awaitingResumeValidation) {
+          unawaited(authorityEngine.discoverSupportedPids());
+        }
+      },
+    );
+
     syncActivePids(ref.read(activePidsProvider));
     // A protocol search can take 25 seconds, and the user may well have put
     // the phone down during it. Starting to poll from the background is both
@@ -1418,8 +1479,13 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // Bounded, because nothing else bounds it. Fired unawaited, this had no
     // deadline at all — and a scan starting a moment later joined it, so the
     // census the scan was blocked on could outlive the scan's own budget.
+    final censusDeadline = DateTime.now().add(censusBudget);
     unawaited(
-      engine.discoverResponders(deadline: DateTime.now().add(censusBudget)),
+      _runDiagnosticOneShot<Set<String>?>(
+        operationName: 'initialResponderCensus',
+        deadline: censusDeadline,
+        action: () => engine.discoverResponders(deadline: censusDeadline),
+      ).catchError((_) => null),
     );
 
     _sessionProtocol = client.protocolDescription.isEmpty
@@ -1608,13 +1674,17 @@ class ObdSession extends Notifier<ObdConnectionState> {
 
     PowertrainBatteryProbeResult? result;
     try {
-      result = await PowertrainBatteryProbe.run(
-        client: client,
-        snapshot: snapshot,
-        profileId: profileId,
-        commandKey: commandKey,
-        lifecycleOwner: wireOwner,
+      result = await _runDiagnosticOneShot<PowertrainBatteryProbeResult>(
+        operationName: 'powertrainBatteryProbe:$commandKey',
         deadline: lease.consent.expiresAt,
+        action: () => PowertrainBatteryProbe.run(
+          client: client,
+          snapshot: snapshot,
+          profileId: profileId,
+          commandKey: commandKey,
+          lifecycleOwner: wireOwner,
+          deadline: lease.consent.expiresAt,
+        ),
       );
       if (_generation != generation ||
           _pauseEpoch != pauseEpoch ||
@@ -1648,7 +1718,38 @@ class ObdSession extends Notifier<ObdConnectionState> {
   Future<void> ensureResponderCensus({DateTime? deadline}) async {
     final engine = _engine;
     if (engine == null || engine.responders != null) return;
-    await engine.discoverResponders(deadline: deadline);
+    await _runDiagnosticOneShot<Set<String>?>(
+      operationName: 'ensureResponderCensus',
+      deadline: deadline,
+      action: () => engine.discoverResponders(deadline: deadline),
+    );
+  }
+
+  Future<T> _runDiagnosticOneShot<T>({
+    required String operationName,
+    required Future<T> Function() action,
+    DiagnosticCancellation? cancellation,
+    DateTime? deadline,
+  }) async {
+    final authority = _linkOwnership;
+    final client = _client;
+    final engine = _engine;
+    if (authority == null ||
+        client == null ||
+        engine == null ||
+        !state.isConnected) {
+      throw const DiagnosticLinkException(
+        kind: DiagnosticFailureKind.retiredOperation,
+        message:
+            'No active diagnostic link ownership authority for connected session.',
+      );
+    }
+    return authority.runOneShot<T>(
+      operationName: operationName,
+      action: action,
+      cancellation: cancellation,
+      deadline: deadline,
+    );
   }
 
   Future<List<Dtc>> readDtcs(DtcKind kind, {DateTime? deadline}) async {
@@ -1971,6 +2072,8 @@ class ObdSession extends Notifier<ObdConnectionState> {
 
     _snapshotSub = null;
     _initSub = null;
+    _linkOwnership?.dispose();
+    _linkOwnership = null;
     _engine = null;
     _client = null;
 
