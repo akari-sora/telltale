@@ -266,9 +266,184 @@ class TestValidateProvenance(unittest.TestCase):
             any(e.error_code == "LICENCE_REGISTRY_ASSET_MISSING" for e in errors)
         )
 
+    def test_licence_location_missing_rejected(self) -> None:
+        """Field negative: missing or nonexistent licence_location is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["licence_location"] = "NONEXISTENT_LICENCE_FILE.md"
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "LICENCE_LOCATION_MISSING" for e in errors)
+        )
+
+    def test_commercial_rationale_missing_rejected(self) -> None:
+        """Field negative: missing commercial_use_rationale is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["commercial_use_rationale"] = ""
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "COMMERCIAL_RATIONALE_MISSING" for e in errors)
+        )
+
+    def test_owning_issues_missing_rejected(self) -> None:
+        """Field negative: missing or empty owning_issues is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["owning_issues"] = []
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "OWNING_ISSUES_MISSING" for e in errors)
+        )
+
+    def test_licence_identifier_drift_rejected(self) -> None:
+        """Integrity negative: licence_identifier omitting owner license is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        # Omit GPL-3.0-or-later and CC-BY-4.0
+        data["artifacts"][0]["licence_identifier"] = "Multi-licence (Apache-2.0, MIT)"
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "LICENCE_IDENTIFIER_DRIFT" for e in errors)
+        )
+
+    def test_source_coverage_missing_rejected(self) -> None:
+        """Schema negative: missing both source_coverage and source_families is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0].pop("source_coverage", None)
+        data["artifacts"][0].pop("source_families", None)
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "SOURCE_COVERAGE_MISSING" for e in errors)
+        )
+
+    def test_valid_but_wrong_revision_rejected(self) -> None:
+        """Targeted negative: valid 40-hex revision that drifts from owner truth is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["source_families"] = [
+            {
+                "name": "OBDb/Toyota-Prius",
+                "url": "https://github.com/OBDb/Toyota-Prius",
+                "revision": "1111111111111111111111111111111111111111",  # valid 40-hex, but wrong!
+                "licence": "CC-BY-SA-4.0",
+            }
+        ]
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "REVISION_DRIFT_OR_MISMATCH" for e in errors)
+        )
+
+    def test_valid_but_wrong_sha256_rejected(self) -> None:
+        """Targeted negative: valid 64-hex SHA that drifts from owner truth is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["source_families"] = [
+            {
+                "name": "OBDb/Kia-EV9",
+                "url": "https://github.com/OBDb/Kia-EV9",
+                "revision": "85d8cff25e849a6e421cda20cbadfd4630fe85e7",
+                "artifact_sha256": "2222222222222222222222222222222222222222222222222222222222222222",  # valid 64-hex, but wrong!
+                "licence": "CC-BY-SA-4.0",
+            }
+        ]
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "ARTIFACT_SHA256_MISMATCH" for e in errors)
+        )
+
+    def test_valid_but_wrong_licence_rejected(self) -> None:
+        """Targeted negative: valid license enum that drifts from owner truth is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["source_families"] = [
+            {
+                "name": "OBDb/Toyota-Prius",
+                "url": "https://github.com/OBDb/Toyota-Prius",
+                "revision": "0a8c4ec72be860861548a3aeb2be007eecd83941",
+                "licence": "MIT",  # valid license enum, but wrong for Toyota-Prius (CC-BY-SA-4.0)!
+            }
+        ]
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "LICENCE_MISMATCH" for e in errors)
+        )
+
+    def test_owner_source_missing_rejected(self) -> None:
+        """Targeted negative: missing required owner research source is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["require_all_research_sources"] = True
+        # Provide only a single source, omitting other 13 required research sources
+        data["artifacts"][0]["source_families"] = [
+            {
+                "name": "OBDb/Toyota-Prius",
+                "url": "https://github.com/OBDb/Toyota-Prius",
+                "revision": "0a8c4ec72be860861548a3aeb2be007eecd83941",
+                "licence": "CC-BY-SA-4.0",
+            }
+        ]
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "OWNER_SOURCE_MISSING" for e in errors)
+        )
+
+    def test_extra_unowned_source_rejected(self) -> None:
+        """Targeted negative: source with no backing in owner truth is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["source_families"] = [
+            {
+                "name": "invented/unowned-magic-profile",
+                "url": "https://github.com/invented/unowned-magic-profile",
+                "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "licence": "MIT",
+            }
+        ]
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "UNOWNED_SOURCE_DETECTED" for e in errors)
+        )
+
+    def test_source_url_missing_rejected(self) -> None:
+        """Targeted negative: missing source URL is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["source_families"] = [
+            {
+                "name": "OBDb/Toyota-Prius",
+                "url": "",  # missing URL!
+                "revision": "0a8c4ec72be860861548a3aeb2be007eecd83941",
+                "licence": "CC-BY-SA-4.0",
+            }
+        ]
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "SOURCE_URL_MISSING" for e in errors)
+        )
+
     def test_malformed_revision_rejected(self) -> None:
         data = copy.deepcopy(self.raw_inventory)
-        data["artifacts"][0]["source_families"][0]["revision"] = "not-a-sha-commit"
+        data["artifacts"][0]["source_families"] = [
+            {
+                "name": "OBDb/Toyota-Prius",
+                "url": "https://github.com/OBDb/Toyota-Prius",
+                "revision": "not-a-sha-commit",
+                "licence": "CC-BY-SA-4.0",
+            }
+        ]
         errors = validate_provenance.validate_provenance_data(
             data, REPO_ROOT, scope="production-package"
         )
@@ -278,7 +453,15 @@ class TestValidateProvenance(unittest.TestCase):
 
     def test_malformed_digest_rejected(self) -> None:
         data = copy.deepcopy(self.raw_inventory)
-        data["artifacts"][0]["source_families"][0]["artifact_sha256"] = "short"
+        data["artifacts"][0]["source_families"] = [
+            {
+                "name": "OBDb/Toyota-Prius",
+                "url": "https://github.com/OBDb/Toyota-Prius",
+                "revision": "0a8c4ec72be860861548a3aeb2be007eecd83941",
+                "artifact_sha256": "short",
+                "licence": "CC-BY-SA-4.0",
+            }
+        ]
         errors = validate_provenance.validate_provenance_data(
             data, REPO_ROOT, scope="production-package"
         )
@@ -314,6 +497,38 @@ class TestValidateProvenance(unittest.TestCase):
         self.assertNotIn("app shutdown", report.lower())
         self.assertNotIn("obd disabled", report.lower())
         self.assertNotIn("demo disabled", report.lower())
+
+    # =========================================================================
+    # Upgraded M1 Mutation Verification: Valid-but-wrong owner revision/hash
+    # =========================================================================
+
+    def test_m1_valid_but_wrong_owner_revision_bypass_detection(self) -> None:
+        """M1: Valid-but-wrong 40-hex commit bypass attempt is detected and rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        data["artifacts"][0]["source_families"] = [
+            {
+                "name": "iternio/ev-obd-pids",
+                "url": "https://github.com/iternio/ev-obd-pids",
+                "revision": "c45a018b60b3341d2d8bfb22cf0491c4e878165a",
+                "licence": "Apache-2.0",
+            },
+            {
+                "name": "OBDb/Toyota-Prius",
+                "url": "https://github.com/OBDb/Toyota-Prius",
+                "revision": "ffffffffffffffffffffffffffffffffffffffff",  # valid 40-hex bypass attempt
+                "licence": "CC-BY-SA-4.0",
+            },
+        ]
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        # Without owner-truth cross-checking, this valid 40-hex string would bypass validation!
+        # With owner-truth binding, it MUST be caught as REVISION_DRIFT_OR_MISMATCH:
+        m1_errors = [e for e in errors if e.error_code == "REVISION_DRIFT_OR_MISMATCH"]
+        self.assertTrue(
+            len(m1_errors) > 0,
+            msg="M1 failure: valid-but-wrong revision was not caught as REVISION_DRIFT_OR_MISMATCH!",
+        )
 
 
 if __name__ == "__main__":

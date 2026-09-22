@@ -24,7 +24,7 @@
         "expected_schema_version": 3,
         "profile_count": 221
       },
-      "licence_identifier": "Multi-licence (Apache-2.0, MIT, GPL-3.0, CC-BY-SA-4.0)",
+      "licence_identifier": "Multi-licence (Apache-2.0, MIT, GPL-3.0, GPL-3.0-or-later, CC-BY-SA-4.0, CC-BY-4.0, U.S.-Government-Public-Domain)",
       "licence_location": "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md",
       "required_package_assets": [
         "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md",
@@ -44,98 +44,24 @@
       ],
       "distribution_decision": "approved",
       "commercial_use_decision": "allowed",
-      "commercial_use_rationale": "Permitted open-source licences (Apache-2.0, MIT, GPL-3.0, CC-BY-SA-4.0) with required attribution notices and licence texts bundled in app package and exposed via LicenseRegistry.",
+      "commercial_use_rationale": "Permitted open-source licences (Apache-2.0, MIT, GPL-3.0, GPL-3.0-or-later, CC-BY-SA-4.0, CC-BY-4.0, U.S.-Government-Public-Domain) with required attribution notices and licence texts bundled in app package and exposed via LicenseRegistry.",
       "reviewer_status": "reviewed",
       "remediation": {
         "on_rights_revocation": "Remove affected profile subset or entire bundled catalog asset; generic OBD, demo mode, and user-authored PIDs remain operational without interruption.",
         "on_integrity_failure": "Regenerate manifest via tool/update_powertrain_battery_manifest.py or replace corrupted catalog asset; runtime loader fails closed for battery catalog only without affecting generic diagnostics."
       },
-      "source_families": [
-        {
-          "name": "peternixon/MG-EV-OBD-PID",
-          "url": "https://github.com/peternixon/MG-EV-OBD-PID",
-          "revision": "2f485fcbffa2259d9e1db92d14483c1bef55dcca",
-          "source_path": "extendedpids/MG ZS EV.csv",
-          "artifact_sha256": "f20ee02b2710def73c008fb54f086172a4e3323a751e8392efd1f0e3d9de0923",
-          "licence": "Apache-2.0"
-        },
-        {
-          "name": "NathanNam/obd2-logger",
-          "url": "https://github.com/NathanNam/obd2-logger",
-          "revision": "f93d7a0afb1cfb8aff9681a7db33db46d55804a2",
-          "source_path": "src/profiles/builtin/lexus-rx450hl-2020.json",
-          "artifact_sha256": "8109db2ef0164a199d08afb2c6cfc2c419801d0a508cbfcaa52e657e0e46d29c",
-          "licence": "Apache-2.0"
-        },
-        {
-          "name": "iternio/ev-obd-pids",
-          "url": "https://github.com/iternio/ev-obd-pids",
-          "revision": "c45a018b60b3341d2d8bfb22cf0491c4e878165a",
-          "licence": "Apache-2.0",
-          "licence_asset": "assets/licenses/Apache-2.0.txt"
-        },
-        {
-          "name": "openvehicles/Open-Vehicle-Monitoring-System-3",
-          "url": "https://github.com/openvehicles/Open-Vehicle-Monitoring-System-3",
-          "revision": "587a91d7b46bd7ce6d092e5acb7c2d3b7c5d7740",
-          "licence": "MIT",
-          "licence_asset": "assets/licenses/ovms-MIT.txt"
-        },
-        {
-          "name": "meatpiHQ/wican-fw",
-          "url": "https://github.com/meatpiHQ/wican-fw",
-          "revision": "bc3ae6d4ad09f32b96ca101b31950e4fbf56b825",
-          "licence": "GPL-3.0",
-          "licence_asset": "assets/licenses/GPL-3.0.txt"
-        },
-        {
-          "name": "langemand/SoulEVSpy",
-          "url": "https://github.com/langemand/SoulEVSpy",
-          "revision": "0a1cafb93a65d17e0c7e1bb3ad2bc9cb965d02a7",
-          "licence": "Apache-2.0",
-          "licence_asset": "assets/licenses/Apache-2.0.txt"
-        },
-        {
-          "name": "fesch/CanZE",
-          "url": "https://github.com/fesch/CanZE",
-          "revision": "e9554a6081187b034ff79d032e2eaeb94c1206b1",
-          "licence": "GPL-3.0-or-later",
-          "licence_asset": "assets/licenses/GPL-3.0.txt"
-        },
-        {
-          "name": "OBDb/Toyota-Prius",
-          "url": "https://github.com/OBDb/Toyota-Prius",
-          "revision": "0a8c4ec72be860861548a3aeb2be007eecd83941",
-          "artifact_sha256": "e037a50ab2f256e5f2668aefc63c1ddb30b7686c372be199b3421972b933bd4b",
-          "licence": "CC-BY-SA-4.0"
-        },
-        {
-          "name": "OBDb/Toyota-bZ4X",
-          "url": "https://github.com/OBDb/Toyota-bZ4X",
-          "revision": "fad9ece2987eeccc5c0027921aadb7c8cc72a9aa",
-          "licence": "CC-BY-SA-4.0"
-        },
-        {
-          "name": "OBDb/Kia-EV9",
-          "url": "https://github.com/OBDb/Kia-EV9",
-          "revision": "85d8cff25e849a6e421cda20cbadfd4630fe85e7",
-          "artifact_sha256": "dd9e4c5c5009f96bfcc9711ea49aab7e0a7fa3aaf7f693b37f2cdcd8c7bfb975",
-          "licence": "CC-BY-SA-4.0"
-        },
-        {
-          "name": "OBDb/MG-MG4",
-          "url": "https://github.com/OBDb/MG-MG4",
-          "revision": "271f098e5020ca0be109db68dc277d7bfa962c1e",
-          "licence": "CC-BY-SA-4.0"
-        },
-        {
-          "name": "AkinYavuz1/wican-bridge",
-          "url": "https://github.com/AkinYavuz1/wican-bridge",
-          "revision": "aa11ba72ede480bb9c9071b84837eadbd2b7e29a",
-          "licence": "MIT",
-          "licence_asset": "assets/licenses/wican-bridge-MIT.txt"
-        }
-      ]
+      "source_coverage": {
+        "catalog_path": "assets/powertrain_battery/powertrain_battery_catalog.json",
+        "catalog_manifest_path": "assets/powertrain_battery/powertrain_battery_catalog.manifest.json",
+        "notices_path": "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md",
+        "evidence_matrix_path": "tool/powertrain_evidence/matrix.json",
+        "required_owner_fields": [
+          "name",
+          "url",
+          "revision",
+          "license"
+        ]
+      }
     }
   ]
 }

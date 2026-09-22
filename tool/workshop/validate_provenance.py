@@ -307,7 +307,56 @@ def validate_provenance_data(
 
         _check_no_absolute_paths(artifact_id, item, errors)
 
-        # Source-of-truth paths verification
+        # 2. Field validations (licence_location, commercial_use_rationale, owning_issues, licence_identifier)
+        lic_loc = item.get("licence_location")
+        if not isinstance(lic_loc, str) or not lic_loc.strip():
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "LICENCE_LOCATION_MISSING",
+                    "'licence_location' is required and must be a non-empty string",
+                )
+            )
+        elif not (repo_root / lic_loc).is_file():
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "LICENCE_LOCATION_MISSING",
+                    f"Licence location file '{lic_loc}' missing on disk",
+                )
+            )
+
+        comm_rationale = item.get("commercial_use_rationale")
+        if not isinstance(comm_rationale, str) or not comm_rationale.strip():
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "COMMERCIAL_RATIONALE_MISSING",
+                    "'commercial_use_rationale' is required and cannot be empty",
+                )
+            )
+
+        owning_issues = item.get("owning_issues")
+        if not isinstance(owning_issues, list) or not owning_issues or not all(isinstance(x, int) and x > 0 for x in owning_issues):
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "OWNING_ISSUES_MISSING",
+                    "'owning_issues' must be a non-empty list of positive issue integers",
+                )
+            )
+
+        lic_id = item.get("licence_identifier")
+        if not isinstance(lic_id, str) or not lic_id.strip():
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "LICENCE_IDENTIFIER_MISSING",
+                    "'licence_identifier' is required and cannot be empty",
+                )
+            )
+
+        # 3. Source-of-truth paths verification
         sot_paths = item.get("source_of_truth_paths")
         if not isinstance(sot_paths, dict) or not sot_paths:
             errors.append(
@@ -328,7 +377,7 @@ def validate_provenance_data(
                         )
                     )
 
-        # Required package assets verification
+        # 4. Required package assets verification
         pkg_assets = item.get("required_package_assets")
         if not isinstance(pkg_assets, list) or not pkg_assets:
             errors.append(
@@ -358,7 +407,7 @@ def validate_provenance_data(
                         )
                     )
 
-        # Runtime licence registry assets
+        # 5. Runtime licence registry assets
         lic_registry_assets = item.get("runtime_licence_registry_assets")
         if isinstance(lic_registry_assets, list):
             for lic_asset in lic_registry_assets:
@@ -371,7 +420,7 @@ def validate_provenance_data(
                         )
                     )
 
-        # Catalog manifest cross-check
+        # 6. Catalog manifest cross-check
         catalog_manifest = item.get("catalog_manifest")
         if isinstance(catalog_manifest, dict):
             manifest_file = catalog_manifest.get("manifest_file")
@@ -454,47 +503,242 @@ def validate_provenance_data(
                         )
                     )
 
-        # Source families verification
-        source_families = item.get("source_families", [])
+        # 7. Owner truth extraction & validation (source_coverage & source_families)
+        source_coverage = item.get("source_coverage")
+        source_families = item.get("source_families")
+
+        if source_coverage is None and source_families is None:
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "SOURCE_COVERAGE_MISSING",
+                    "Artifact must declare 'source_coverage' or 'source_families'",
+                )
+            )
+
+        # Extract owner truth from matrix and notices
+        matrix_rel = (
+            source_coverage.get("evidence_matrix_path")
+            if isinstance(source_coverage, dict) and "evidence_matrix_path" in source_coverage
+            else (sot_paths.get("evidence_matrix") if isinstance(sot_paths, dict) else None)
+        )
+        notices_rel = (
+            source_coverage.get("notices_path")
+            if isinstance(source_coverage, dict) and "notices_path" in source_coverage
+            else (sot_paths.get("notices") if isinstance(sot_paths, dict) else None)
+        )
+
+        owner_research: dict[str, dict[str, Any]] = {}
+        owner_catalog: dict[str, dict[str, Any]] = {}
+        all_owner_licenses: set[str] = set()
+
+        if matrix_rel and (repo_root / matrix_rel).is_file():
+            try:
+                matrix_data = json.loads((repo_root / matrix_rel).read_text(encoding="utf-8"))
+                for r in matrix_data.get("research", []):
+                    for sf in r.get("source_families", []):
+                        fam = sf.get("family", "").lower()
+                        if fam:
+                            owner_research[fam] = sf
+                            if sf.get("license"):
+                                all_owner_licenses.add(sf.get("license"))
+                for p in matrix_data.get("catalog", {}).get("profiles", []):
+                    for sf in p.get("source_families", []):
+                        fam = sf.get("family", "").lower()
+                        if fam:
+                            if fam not in owner_catalog:
+                                owner_catalog[fam] = sf
+                            if sf.get("license"):
+                                all_owner_licenses.add(sf.get("license"))
+            except Exception as e:
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "EVIDENCE_MATRIX_PARSE_ERROR",
+                        f"Failed to parse evidence matrix: {e}",
+                    )
+                )
+
+        notices_pins: dict[str, dict[str, str]] = {}
+        if notices_rel and (repo_root / notices_rel).is_file():
+            notices_text = (repo_root / notices_rel).read_text(encoding="utf-8")
+            for m in re.finditer(r"-\s*`([^`]+)`(?:\s*\([^)]*\))?,\s*pinned at\s*`([0-9a-f]{40})`", notices_text):
+                repo_name = m.group(1).strip()
+                rev = m.group(2).strip()
+                notices_pins[repo_name.lower()] = {"name": repo_name, "revision": rev}
+
+        # Validate owner research families
+        for fam_key, src in owner_research.items():
+            s_name = src.get("name")
+            if not s_name:
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "SOURCE_NAME_MISSING",
+                        f"Owner source family '{fam_key}' is missing required field 'name'",
+                    )
+                )
+            s_url = src.get("url")
+            if not s_url:
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "SOURCE_URL_MISSING",
+                        f"Owner source family '{fam_key}' is missing required field 'url'",
+                    )
+                )
+            s_rev = src.get("revision")
+            if s_rev and not SHA40_RE.match(s_rev):
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "MALFORMED_REVISION",
+                        f"Owner source family '{fam_key}' has malformed revision '{s_rev}'",
+                    )
+                )
+            s_sha = src.get("artifact_sha256")
+            if s_sha and not SHA256_RE.match(s_sha):
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "MALFORMED_SHA256",
+                        f"Owner source family '{fam_key}' has malformed artifact_sha256 '{s_sha}'",
+                    )
+                )
+
+        # Cross-check notices pins vs research families
+        for pin_key, pin_info in notices_pins.items():
+            if pin_key in owner_research:
+                expected_rev = owner_research[pin_key].get("revision")
+                if expected_rev and pin_info["revision"] != expected_rev:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "REVISION_DRIFT_OR_MISMATCH",
+                            f"Notices pinned revision '{pin_info['revision']}' for '{pin_info['name']}' drifts from evidence matrix revision '{expected_rev}'",
+                        )
+                    )
+
+        # Cross-check licence_identifier covers all distinct owner licenses
+        if isinstance(lic_id, str):
+            for lic in sorted(all_owner_licenses):
+                if lic not in lic_id:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "LICENCE_IDENTIFIER_DRIFT",
+                            f"License '{lic}' present in owner truth is not declared in 'licence_identifier'",
+                        )
+                    )
+
+        # If source_families is explicitly present, perform strict tuple validation
         if isinstance(source_families, list):
-            for src in source_families:
-                name = src.get("name", "<unnamed>")
-                rev = src.get("revision")
-                if rev is not None:
-                    if not isinstance(rev, str) or not SHA40_RE.match(rev):
+            seen_declared_fams: set[str] = set()
+            for sf in source_families:
+                sf_name = sf.get("name", "<unnamed>")
+                sf_url = sf.get("url")
+                if not sf_url:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "SOURCE_URL_MISSING",
+                            f"Source family '{sf_name}' is missing required field 'url'",
+                        )
+                    )
+                sf_rev = sf.get("revision")
+                if sf_rev is not None:
+                    if not isinstance(sf_rev, str) or not SHA40_RE.match(sf_rev):
                         errors.append(
                             ValidationError(
                                 artifact_id,
                                 "MALFORMED_REVISION",
-                                f"Source family '{name}' has malformed revision '{rev}'; must be 40-character hex commit",
+                                f"Source family '{sf_name}' has malformed revision '{sf_rev}'",
                             )
                         )
-                digest = src.get("artifact_sha256")
-                if digest is not None:
-                    if not isinstance(digest, str) or not SHA256_RE.match(digest):
+                sf_sha = sf.get("artifact_sha256")
+                if sf_sha is not None:
+                    if not isinstance(sf_sha, str) or not SHA256_RE.match(sf_sha):
                         errors.append(
                             ValidationError(
                                 artifact_id,
                                 "MALFORMED_SHA256",
-                                f"Source family '{name}' has malformed digest '{digest}'; must be 64-character hex SHA-256",
+                                f"Source family '{sf_name}' has malformed digest '{sf_sha}'",
                             )
                         )
-                lic_asset = src.get("licence_asset")
-                if lic_asset is not None:
-                    if not (repo_root / lic_asset).is_file():
+                sf_lic = sf.get("licence")
+                if not sf_lic:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "LICENCE_MISSING",
+                            f"Source family '{sf_name}' is missing required field 'licence'",
+                        )
+                    )
+
+                # Match against owner truth
+                fam_candidate = sf_name.lower()
+                matched_owner = owner_research.get(fam_candidate) or owner_catalog.get(fam_candidate)
+                # Also try notices pins
+                matched_pin = notices_pins.get(fam_candidate)
+
+                if matched_owner is None and matched_pin is None:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "UNOWNED_SOURCE_DETECTED",
+                            f"Source family '{sf_name}' has no backing owner entry in evidence matrix or notices",
+                        )
+                    )
+                else:
+                    seen_declared_fams.add(fam_candidate)
+                    if matched_owner:
+                        owner_rev = matched_owner.get("revision")
+                        if owner_rev and sf_rev and sf_rev != owner_rev:
+                            errors.append(
+                                ValidationError(
+                                    artifact_id,
+                                    "REVISION_DRIFT_OR_MISMATCH",
+                                    f"Declared revision '{sf_rev}' for '{sf_name}' does not match owner revision '{owner_rev}'",
+                                )
+                            )
+                        owner_lic = matched_owner.get("license")
+                        if owner_lic and sf_lic and sf_lic != owner_lic:
+                            errors.append(
+                                ValidationError(
+                                    artifact_id,
+                                    "LICENCE_MISMATCH",
+                                    f"Declared licence '{sf_lic}' for '{sf_name}' does not match owner licence '{owner_lic}'",
+                                )
+                            )
+                        owner_sha = matched_owner.get("artifact_sha256")
+                        if owner_sha and sf_sha and sf_sha != owner_sha:
+                            errors.append(
+                                ValidationError(
+                                    artifact_id,
+                                    "ARTIFACT_SHA256_MISMATCH",
+                                    f"Declared SHA-256 '{sf_sha}' for '{sf_name}' does not match owner SHA-256 '{owner_sha}'",
+                                )
+                            )
+                    elif matched_pin:
+                        pin_rev = matched_pin.get("revision")
+                        if pin_rev and sf_rev and sf_rev != pin_rev:
+                            errors.append(
+                                ValidationError(
+                                    artifact_id,
+                                    "REVISION_DRIFT_OR_MISMATCH",
+                                    f"Declared revision '{sf_rev}' for '{sf_name}' does not match notices pinned revision '{pin_rev}'",
+                                )
+                            )
+
+            # Check if any research owner source was omitted from the explicit list
+            if item.get("require_all_research_sources", False):
+                for res_fam, res_src in owner_research.items():
+                    if res_fam not in seen_declared_fams:
                         errors.append(
                             ValidationError(
                                 artifact_id,
-                                "SOURCE_LICENCE_ASSET_MISSING",
-                                f"Source family '{name}' licence asset '{lic_asset}' missing on disk",
-                            )
-                        )
-                    if pkg_assets and lic_asset not in pkg_assets:
-                        errors.append(
-                            ValidationError(
-                                artifact_id,
-                                "SOURCE_LICENCE_NOT_IN_PACKAGE_ASSETS",
-                                f"Source family '{name}' licence asset '{lic_asset}' not in required_package_assets",
+                                "OWNER_SOURCE_MISSING",
+                                f"Required owner research source '{res_src.get('name')}' is missing from declared source families",
                             )
                         )
 
@@ -529,10 +773,12 @@ def format_report_text(
                 )
             pkg_assets = art.get("required_package_assets", [])
             lines.append(f"    - Package assets: {len(pkg_assets)} verified in pubspec.yaml")
-            lic_assets = art.get("runtime_licence_registry_assets", [])
-            lines.append(f"    - Licence registry: {len(lic_assets)} verified in powertrain_battery_licenses.dart")
-            srcs = art.get("source_families", [])
-            lines.append(f"    - Upstream source families: {len(srcs)} verified (valid revisions/hashes)")
+            srcs = art.get("source_families")
+            cov = art.get("source_coverage")
+            if cov:
+                lines.append("    - Source coverage: verified against owner truth (matrix.json + notices)")
+            elif srcs:
+                lines.append(f"    - Upstream source families: {len(srcs)} verified against owner truth")
     else:
         lines.append(f"[FAIL] Provenance inventory validation failed with {len(errors)} error(s) for scope: {scope}")
         for err in errors:
