@@ -87,7 +87,7 @@ The remaining finite D05 device criterion was executed and satisfied in GitLab C
 
 1. **Continuous single-session execution**: All three lifecycle cases (Case 1: HOME,
    Case 2: SLEEP, Case 3: HOME) executed within the same continuous Android session
-   on an identified Android 10 (API 29) x86 container against the pinned candidate APK
+   on an identified Android 10 (API 29) x86_64 emulator against the pinned candidate APK
    (`acc80f75b599d7f85e5c11416ec6c2e92f774f6b9e1699584414ca35abbade9e`).
 2. **True Mode08 in-flight correlation**: Each lifecycle event occurred while Mode 08
    request `0800` or `0820` was actively held on connection 1; resume/release observed
@@ -95,8 +95,10 @@ The remaining finite D05 device criterion was executed and satisfied in GitLab C
 3. **Rigorous offline verifier passing**: Forensic verification via hardened
    `tool/verification/verify_artifacts.py` verified 4-way SHA-256 hash alignment
    (PNG images, XML dumps, `controller.jsonl`, `SHA256SUMS`, and raw job trace),
-   strict structured `android_logcat.txt` tag timestamps with baseline offset isolation,
-   and zero false-pass loopholes.
+   strict structured `android_logcat.txt` tag timestamps with baseline offset isolation;
+   Job 16636168998 raw artifacts, per-file hashes, controller/raw-trace event correlation,
+   native logcat, and terminal UI snapshots independently support D05 acceptance without
+   over-claiming generic zero false-pass loopholes.
 4. **Formal closure**: Issue #104 achieved 5/5 verified criteria and was formally closed
    in GitLab via Note #3880277345 following independent review confirmation.
 
