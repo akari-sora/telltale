@@ -886,19 +886,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// Starts the built-in simulator. Needs no permissions and no hardware, so
   /// it is also what the app falls back to when the user just wants to look
   /// around.
-  Future<bool> connectDemo() async {
-    final ok = await _connect(DemoTransport(), TransportKind.demo);
-    if (!ok) return false;
-    final inFlight = _censusInFlight;
-    if (inFlight != null) {
-      await inFlight;
-    }
-    final eng = _engine;
-    if (eng != null && !eng.supportDiscoveryComplete) {
-      await eng.discoverSupportedPids();
-    }
-    return true;
-  }
+  Future<bool> connectDemo() => _connect(DemoTransport(), TransportKind.demo);
 
   /// Connects an arbitrary transport. Tests only.
   ///
@@ -1810,7 +1798,6 @@ class ObdSession extends Notifier<ObdConnectionState> {
         kind: DtcReadFailure.disconnected,
       );
     }
-    await ensureResponderCensus(deadline: deadline);
     return engine.readDtcs(kind, deadline: deadline);
   }
 
@@ -1822,7 +1809,6 @@ class ObdSession extends Notifier<ObdConnectionState> {
         kind: DtcReadFailure.disconnected,
       );
     }
-    await ensureResponderCensus();
     // One clear at a time, decided here rather than by whoever is on screen.
     //
     // The screen's own guard lived in widget state, so switching tabs while a
