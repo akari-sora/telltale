@@ -66,17 +66,17 @@ PERMITTED_OPEN_SOURCE_LICENSES = frozenset({
 NOTICES_OWNED_PROVENANCE_RECORDS: dict[str, dict[str, Any]] = {
     "kezarjg/etnga-obd": {
         "name": "kezarjg/etnga-obd",
-        "allowed_licenses": frozenset({"CC-BY-4.0", "MIT"}),
+        "required_licenses": frozenset({"CC-BY-4.0", "MIT"}),
         "expected_revision": "817da3ec8ab83bf31f000b0d1c85716280ccd843",
     },
     "kezarjg/open-vehicle-monitoring-system-3": {
         "name": "kezarjg/Open-Vehicle-Monitoring-System-3",
-        "allowed_licenses": frozenset({"MIT"}),
+        "required_licenses": frozenset({"MIT"}),
         "expected_revision": "21474124189f8b6483467c6accfd74381d233bed",
     },
     "nickn17/evdash": {
         "name": "nickn17/evDash",
-        "allowed_licenses": frozenset({"MIT"}),
+        "required_licenses": frozenset({"MIT"}),
         "expected_revision": "c8c1e2d3acd6afa4719fa78b10359cd6708c72b2",
     },
 }
@@ -778,8 +778,8 @@ def validate_provenance_data(
                             f"Notices pinned revision '{pin_rev}' for '{pin_name}' drifts from expected revision '{expected_rev}'",
                         )
                     )
-                allowed_lics = rec.get("allowed_licenses", set())
-                for lic in allowed_lics:
+                req_lics = rec.get("required_licenses", rec.get("allowed_licenses", set()))
+                for lic in req_lics:
                     if lic not in PERMITTED_OPEN_SOURCE_LICENSES or (isinstance(lic_id, str) and lic not in lic_id):
                         errors.append(
                             ValidationError(
@@ -789,14 +789,15 @@ def validate_provenance_data(
                             )
                         )
                 snippet = pin_info.get("snippet", "")
-                if not any(lic in snippet for lic in allowed_lics):
-                    errors.append(
-                        ValidationError(
-                            artifact_id,
-                            "LICENCE_MISSING",
-                            f"Notices-owned record '{pin_name}' does not declare its licence in notices text",
+                for lic in sorted(req_lics):
+                    if lic not in snippet:
+                        errors.append(
+                            ValidationError(
+                                artifact_id,
+                                "LICENCE_MISSING",
+                                f"Notices-owned record '{pin_name}' is missing required licence '{lic}' in notices text",
+                            )
                         )
-                    )
             else:
                 errors.append(
                     ValidationError(

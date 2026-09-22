@@ -698,7 +698,57 @@ class TestValidateProvenance(unittest.TestCase):
             msg=f"Expected SOURCE_PATH_DRIFT, got: {[e.error_code for e in errors3]}",
         )
 
+    def test_canonical_notices_only_pin_missing_dual_license_rejected(self) -> None:
+        """Canonical path: dual-licensed notices-only record missing any required licence is rejected."""
+        notices_path = REPO_ROOT / "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md"
+        notices_text = notices_path.read_text(encoding="utf-8")
+
+        tmp_dir = REPO_ROOT / ".test_tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        try:
+            # 1. Keep MIT, remove CC-BY-4.0
+            mutated1 = notices_text.replace("CC-BY-4.0", "UNSPECIFIED")
+            tmp_file1 = tmp_dir / "mutated_notices1.md"
+            tmp_file1.write_text(mutated1, encoding="utf-8")
+            rel1 = str(tmp_file1.relative_to(REPO_ROOT))
+
+            data1 = copy.deepcopy(self.raw_inventory)
+            data1["artifacts"][0]["source_coverage"]["notices_path"] = rel1
+            data1["artifacts"][0]["source_of_truth_paths"]["notices"] = rel1
+            data1["artifacts"][0]["licence_location"] = rel1
+            errors1 = validate_provenance.validate_provenance_data(
+                data1, REPO_ROOT, scope="production-package"
+            )
+            self.assertTrue(
+                any(e.error_code == "LICENCE_MISSING" for e in errors1),
+                msg=f"Expected LICENCE_MISSING when CC-BY-4.0 removed, got: {[e.error_code for e in errors1]}",
+            )
+
+            # 2. Keep CC-BY-4.0, remove MIT from etnga-obd snippet
+            mutated2 = notices_text.replace("`bin/` MIT;", "`bin/` GPL-3.0;")
+            tmp_file2 = tmp_dir / "mutated_notices2.md"
+            tmp_file2.write_text(mutated2, encoding="utf-8")
+            rel2 = str(tmp_file2.relative_to(REPO_ROOT))
+
+            data2 = copy.deepcopy(self.raw_inventory)
+            data2["artifacts"][0]["source_coverage"]["notices_path"] = rel2
+            data2["artifacts"][0]["source_of_truth_paths"]["notices"] = rel2
+            data2["artifacts"][0]["licence_location"] = rel2
+            errors2 = validate_provenance.validate_provenance_data(
+                data2, REPO_ROOT, scope="production-package"
+            )
+            self.assertTrue(
+                any(e.error_code == "LICENCE_MISSING" for e in errors2),
+                msg=f"Expected LICENCE_MISSING when MIT removed, got: {[e.error_code for e in errors2]}",
+            )
+        finally:
+            for p in tmp_dir.glob("*"):
+                p.unlink()
+            if tmp_dir.exists():
+                tmp_dir.rmdir()
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
