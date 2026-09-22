@@ -270,6 +270,7 @@ void main() {
 
       final session = container.read(obdSessionProvider.notifier);
       await session.connectDemo();
+      await session.ensureResponderCensus();
 
       final supported = await session.engine!.discoverSupportedPids();
       expect(supported, contains(PidLibrary.engineRpm.modeAndPid));
