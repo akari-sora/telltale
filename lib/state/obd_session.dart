@@ -886,7 +886,19 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// Starts the built-in simulator. Needs no permissions and no hardware, so
   /// it is also what the app falls back to when the user just wants to look
   /// around.
-  Future<bool> connectDemo() => _connect(DemoTransport(), TransportKind.demo);
+  Future<bool> connectDemo() async {
+    final ok = await _connect(DemoTransport(), TransportKind.demo);
+    if (!ok) return false;
+    final inFlight = _censusInFlight;
+    if (inFlight != null) {
+      await inFlight;
+    }
+    final eng = _engine;
+    if (eng != null && !eng.supportDiscoveryComplete) {
+      await eng.discoverSupportedPids();
+    }
+    return true;
+  }
 
   /// Connects an arbitrary transport. Tests only.
   ///
@@ -1447,18 +1459,19 @@ class ObdSession extends Notifier<ObdConnectionState> {
             !_awaitingResumeValidation;
       },
       onDisplacedPollingRestored: () {
-        if (!authorityEngine.supportDiscoveryComplete &&
-            _generation == authorityGeneration &&
+        if (_generation == authorityGeneration &&
             identical(_engine, authorityEngine) &&
             _foreground &&
             !_pausedByLifecycle &&
             !_awaitingResumeValidation) {
-          unawaited(authorityEngine.discoverSupportedPids());
+          syncActivePids(ref.read(activePidsProvider));
+          if (!authorityEngine.supportDiscoveryComplete) {
+            unawaited(authorityEngine.discoverSupportedPids());
+          }
         }
       },
     );
 
-    syncActivePids(ref.read(activePidsProvider));
     // A protocol search can take 25 seconds, and the user may well have put
     // the phone down during it. Starting to poll from the background is both
     // rude and unsafe — an OS freeze mid-command splits a request from its
@@ -1506,6 +1519,16 @@ class ObdSession extends Notifier<ObdConnectionState> {
       censusFuture.catchError((_) => null).whenComplete(() {
         if (identical(_censusInFlight, censusFuture)) {
           _censusInFlight = null;
+        }
+        if (_generation == generation &&
+            identical(_engine, engine) &&
+            _foreground &&
+            !_pausedByLifecycle &&
+            !_awaitingResumeValidation) {
+          syncActivePids(ref.read(activePidsProvider));
+          if (!engine.supportDiscoveryComplete) {
+            unawaited(engine.discoverSupportedPids());
+          }
         }
       }),
     );
@@ -1787,6 +1810,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
         kind: DtcReadFailure.disconnected,
       );
     }
+    await ensureResponderCensus(deadline: deadline);
     return engine.readDtcs(kind, deadline: deadline);
   }
 
@@ -1798,6 +1822,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
         kind: DtcReadFailure.disconnected,
       );
     }
+    await ensureResponderCensus();
     // One clear at a time, decided here rather than by whoever is on screen.
     //
     // The screen's own guard lived in widget state, so switching tabs while a
