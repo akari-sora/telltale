@@ -12,7 +12,9 @@ smoke (Demo journey, Wi‑Fi TCP unit path, export, host gates) must also pass
 on free runners. Product code still originates in private `app/` and is
 archive-synced; telltale `.github/` is publish-only. The harness map is
 [`docs/verification/harness-catalog.json`](verification/harness-catalog.json),
-checked by `test/harness_catalog_test.dart`.
+checked by `test/harness_catalog_test.dart`. For the architectural decision on
+native in-process Dart/Flutter transport vs out-of-process sidecar brokers, see
+[`docs/architecture/diagnostic-link-decision.md`](architecture/diagnostic-link-decision.md).
 
 ## Functional matrix (honest)
 
