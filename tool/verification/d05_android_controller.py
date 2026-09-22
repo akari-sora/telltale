@@ -16,6 +16,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -50,7 +51,7 @@ LIST_FLING_Y1 = 560
 LIST_FLING_Y2 = 140
 LIST_FLING_MS = 80
 LIST_FLING_GAP_S = 0.08
-FLINGS_PER_LOOK = 6
+FLINGS_PER_LOOK = 1
 # ui_1843 SeekBar thumbs start around x=99. Job 16610532958 Petrol /
 # drivetrain chips start at x=33. Focus left of both, above the tab bar.
 LIST_FOCUS_X = 20
@@ -123,6 +124,146 @@ RESUMED_MARKERS = ('topResumedActivity', 'mFocusedApp=', 'mResumedActivity', 'Re
 FOCUS_MARKERS = ('mCurrentFocus', 'mFocusedApp=')
 WAKE_SOFT_TIMEOUT = 20
 WAKE_KEYEVENT_DISABLED = False
+POWER_INPUT_DEVICE = '/dev/input/event0'
+KEYBOARD_INPUT_DEVICES = ['/dev/input/event12', '/dev/input/event13']
+OS_COMMAND_HOLD_TIMEOUT = 1.80
+
+
+async def detect_input_devices():
+    global POWER_INPUT_DEVICE, KEYBOARD_INPUT_DEVICES
+    try:
+        out = await adb('shell', 'cat', '/proc/bus/input/devices', timeout=5, check=False)
+        text = out.decode(errors='replace') if isinstance(out, (bytes, bytearray)) else str(out)
+        curr_name = ''
+        kb_devs = []
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith('N: Name='):
+                curr_name = line.split('=', 1)[1].strip('"')
+            elif line.startswith('H: Handlers='):
+                parts = line.split('=', 1)[1].split()
+                evs = [f'/dev/input/{p}' for p in parts if p.startswith('event')]
+                if 'power' in curr_name.lower() and evs:
+                    POWER_INPUT_DEVICE = evs[0]
+                    event('detected_power_device', device=POWER_INPUT_DEVICE, name=curr_name)
+                elif any(k in curr_name.lower() for k in ('qwerty', 'keyboard', 'key')) and evs:
+                    kb_devs.extend(evs)
+        if kb_devs:
+            KEYBOARD_INPUT_DEVICES = list(dict.fromkeys(kb_devs))
+            event('detected_keyboard_devices', devices=KEYBOARD_INPUT_DEVICES)
+    except Exception as exc:
+        event('detect_input_devices_error', error=str(exc))
+
+
+async def setup_fast_lifecycle_helpers():
+    """Install standalone native shell scripts in /data/local/tmp on the Android device.
+
+    Executing these scripts via adb eliminates shell quote-stripping issues.
+    Uses sub-10ms Linux evdev sendevent for instant lifecycle triggering.
+    """
+    await adb('shell', 'svc', 'power', 'stayon', 'false', timeout=10, check=False)
+    await adb('shell', 'settings', 'put', 'global', 'power_button_long_press', '0', timeout=5, check=False)
+    await adb('shell', 'settings', 'put', 'global', 'power_button_press_action', '1', timeout=5, check=False)
+    power_dev = POWER_INPUT_DEVICE or '/dev/input/event0'
+    kb_devs = " ".join(KEYBOARD_INPUT_DEVICES) if KEYBOARD_INPUT_DEVICES else "/dev/input/event12 /dev/input/event13"
+    c_source = Path('tool/verification/d05_sendevent.c')
+    built_bin = None
+    if c_source.exists() and shutil.which('gcc') and sys.platform.startswith('linux'):
+        try:
+            with tempfile.NamedTemporaryFile('wb', delete=False) as tf:
+                tmp_bin = tf.name
+            res = subprocess.run(['gcc', str(c_source), '-static', '-O2', '-o', tmp_bin], capture_output=True)
+            if res.returncode == 0:
+                built_bin = tmp_bin
+        except Exception:
+            built_bin = None
+
+    if built_bin:
+        try:
+            await adb('push', built_bin, '/data/local/tmp/d05_power.sh', timeout=10, check=False)
+            await adb('push', built_bin, '/data/local/tmp/d05_home.sh', timeout=10, check=False)
+            await adb('shell', 'chmod', '755', '/data/local/tmp/d05_power.sh', '/data/local/tmp/d05_home.sh', timeout=10, check=False)
+            event('fast_lifecycle_helpers_installed', type='native_static_elf')
+        finally:
+            Path(built_bin).unlink(missing_ok=True)
+    else:
+        power_script = (
+            "#!/system/bin/sh\n"
+            f"if [ -e '{power_dev}' ]; then\n"
+            f"  sendevent '{power_dev}' 1 116 1\n"
+            f"  sendevent '{power_dev}' 0 0 0\n"
+            "  sleep 0.05 2>/dev/null || usleep 50000 2>/dev/null || :\n"
+            f"  sendevent '{power_dev}' 1 116 0\n"
+            f"  sendevent '{power_dev}' 0 0 0\n"
+            "fi\n"
+            f"for d in {kb_devs}; do\n"
+            "  if [ -e \"$d\" ]; then\n"
+            "    sendevent \"$d\" 1 142 1\n"
+            "    sendevent \"$d\" 0 0 0\n"
+            "    sendevent \"$d\" 1 142 0\n"
+            "    sendevent \"$d\" 0 0 0\n"
+            "  fi\n"
+            "done\n"
+        )
+        home_script = (
+            "#!/system/bin/sh\n"
+            f"for d in {kb_devs}; do\n"
+            "  if [ -e \"$d\" ]; then\n"
+            "    sendevent \"$d\" 1 102 1\n"
+            "    sendevent \"$d\" 0 0 0\n"
+            "    sendevent \"$d\" 1 102 0\n"
+            "    sendevent \"$d\" 0 0 0\n"
+            "  fi\n"
+            "done\n"
+        )
+        with tempfile.NamedTemporaryFile('w', delete=False) as tf:
+            tf.write(power_script)
+            power_path = tf.name
+        with tempfile.NamedTemporaryFile('w', delete=False) as tf:
+            tf.write(home_script)
+            home_path = tf.name
+        try:
+            await adb('push', power_path, '/data/local/tmp/d05_power.sh', timeout=10, check=False)
+            await adb('push', home_path, '/data/local/tmp/d05_home.sh', timeout=10, check=False)
+            await adb('shell', 'chmod', '755', '/data/local/tmp/d05_power.sh', '/data/local/tmp/d05_home.sh', timeout=10, check=False)
+            event('fast_lifecycle_helpers_installed', type='shell_script')
+        finally:
+            Path(power_path).unlink(missing_ok=True)
+            Path(home_path).unlink(missing_ok=True)
+    await init_persistent_shell()
+
+
+PERSISTENT_SHELL = None
+
+
+async def init_persistent_shell():
+    global PERSISTENT_SHELL
+    if PERSISTENT_SHELL is None or PERSISTENT_SHELL.returncode is not None:
+        try:
+            PERSISTENT_SHELL = await asyncio.create_subprocess_exec(
+                'adb', '-s', SERIAL, 'shell',
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except Exception:
+            PERSISTENT_SHELL = None
+
+
+async def execute_fast_lifecycle_command(script, timeout=OS_COMMAND_HOLD_TIMEOUT):
+    shell = PERSISTENT_SHELL
+    if shell is not None and shell.returncode is None:
+        try:
+            shell.stdin.write(f"{script} &\n".encode())
+            await asyncio.wait_for(shell.stdin.drain(), timeout=0.2)
+            await asyncio.sleep(0.05)
+            return True
+        except Exception:
+            pass
+    # Fallback to direct adb execution
+    await asyncio.wait_for(adb('shell', f"{script} &", timeout=5, check=False), timeout=timeout)
+    await asyncio.sleep(0.05)
+    return True
 
 
 def event(kind: str, **values):
@@ -210,7 +351,8 @@ def parse_ui_rows(xml):
     if next(root.iter('node'), None) is None:
         raise ValueError('UI dump hierarchy had no nodes')
     return [dict(text=n.get('text'), desc=n.get('content-desc'), bounds=n.get('bounds'),
-                 enabled=n.get('enabled'), clickable=n.get('clickable'), clazz=n.get('class'))
+                 enabled=n.get('enabled'), clickable=n.get('clickable'), clazz=n.get('class'),
+                 resource_id=n.get('resource-id'), package=n.get('package'))
             for n in root.iter('node') if n.get('text') or n.get('content-desc') or n.get('class') == 'android.widget.EditText']
 
 
@@ -230,6 +372,179 @@ def window_is_focused(dumpsys_text, package=PACKAGE):
         if any(marker in line for marker in FOCUS_MARKERS):
             return True
     return False
+
+
+def is_launcher_active(text: str) -> bool:
+    if not text:
+        return False
+    telltale_resumed = any(
+        ('mresumedactivity' in r.lower() or 'topresumedactivity' in r.lower() or 'activity com.cbstudio.telltale' in r.lower()) and 'com.cbstudio.telltale' in r.lower()
+        for r in text.splitlines()
+    )
+    for line in text.splitlines():
+        l = line.lower()
+        if any(marker in l for marker in ('mresumedactivity', 'resumedactivity', 'topresumedactivity', 'top-activity', 'mfocusedactivity', 'mcurrentfocus', 'mfocusedapp', 'activity ', 'task ')):
+            if any(term in l for term in ('launcher', 'home', 'quickstep')):
+                return True
+        if 'topdisplayfocusedstack' in l and 'type=home' in l:
+            return True
+        if 'mhomestack' in l and 'visible=true' in l:
+            return True
+        if 'type=home' in l and 'visible=true' in l:
+            return True
+        if 'type=home' in l and any(term in l for term in ('launcher', 'home', 'quickstep')) and not telltale_resumed:
+            return True
+    return False
+
+
+def extract_launcher_evidence(text: str) -> list:
+    evidence = []
+    if not text:
+        return evidence
+    for line in text.splitlines():
+        l = line.lower()
+        if any(term in l for term in ('launcher', 'home', 'quickstep', 'com.android.launcher3')) and \
+           any(m in l for m in ('resumed', 'top', 'focus', 'type=home', 'proc #', 'stackid=0', 'activity ', 'task ')):
+            stripped = line.strip()
+            if stripped and stripped not in evidence:
+                evidence.append(stripped)
+                if len(evidence) >= 5:
+                    break
+    return evidence
+
+
+def is_sleep_active(text: str, initial_sleep_time: int = 0) -> bool:
+    if not text:
+        return False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if 'mWakefulness=Asleep' in stripped or 'mWakefulness=Dozing' in stripped:
+            return True
+        if 'isSleeping=true' in stripped or 'Display Power: state=OFF' in stripped:
+            return True
+        if stripped.startswith('mLastSleepTime='):
+            match = re.search(r'mLastSleepTime=(\d+)', stripped)
+            if match:
+                st = int(match.group(1))
+                if st > 0 and st > initial_sleep_time:
+                    return True
+        if 'mLastSleepReason=power_button' in stripped or 'mLastSleepReason=device_admin' in stripped:
+            return True
+    return False
+
+
+def get_local_logcat_size() -> int:
+    """Return the current file size in bytes of the local streaming logcat."""
+    log_file = OUT / 'android_logcat.txt'
+    if not log_file.is_file():
+        return 0
+    try:
+        return log_file.stat().st_size
+    except Exception:
+        return 0
+
+
+def read_recent_local_logcat(num_bytes: int = 65536, start_offset: int | None = None) -> str:
+    """Direct zero-overhead inspection of streaming local logcat file.
+
+    If start_offset is not None, reads only bytes appended at or after start_offset,
+    guaranteeing historical log entries from before hold_start cannot be read.
+    """
+    log_file = OUT / 'android_logcat.txt'
+    if not log_file.is_file():
+        return ""
+    try:
+        with log_file.open('rb') as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            if start_offset is not None:
+                seek_pos = min(max(0, start_offset), size)
+            else:
+                seek_pos = max(0, size - num_bytes)
+            f.seek(seek_pos)
+            data = f.read()
+            return data.decode(errors='replace')
+    except Exception:
+        return ""
+
+
+def get_latest_logcat_epoch_ts(log_text: str) -> float:
+    """Extract the highest epoch timestamp found in recent logcat text."""
+    latest = 0.0
+    if not log_text:
+        return latest
+    for m in re.finditer(r'^\s*(\d+\.\d+)\s+', log_text, re.MULTILINE):
+        try:
+            val = float(m.group(1))
+            if val > latest:
+                latest = val
+        except ValueError:
+            pass
+    return latest
+
+
+def is_logcat_lifecycle_confirmed(logcat_text: str, action: str, min_epoch_ts: float = 0.0) -> tuple:
+    """Inspect recent logcat output for genuine native OS lifecycle transition.
+
+    Returns (confirmed: bool, evidence: list[str]).
+    Strict Rules:
+      1. Every considered line MUST have a valid epoch timestamp (format: '<seconds>.<millis> ...').
+         Lines lacking a valid epoch timestamp are unconditionally rejected.
+      2. If min_epoch_ts > 0.0, the epoch timestamp must be strictly greater than min_epoch_ts (ts > min_epoch_ts).
+         Lines with ts <= min_epoch_ts (historical events at or before baseline) are strictly rejected.
+    """
+    if not logcat_text:
+        return False, []
+
+    evidence = []
+    # Patterns for HOME (Case 1 & Case 3)
+    # Matches ActivityTaskManager / Intent dispatch to Launcher
+    home_pattern = re.compile(
+        r'(?:cat=\[android\.intent\.category\.HOME\]|START u0.*cmp=.*launcher|Displayed .*launcher)',
+        re.IGNORECASE
+    )
+
+    # Patterns for SLEEP (Case 2)
+    # Matches PowerManagerService / WindowManager sleep trigger
+    sleep_pattern = re.compile(
+        r'(?:PowerManagerService:\s*(?:Going to sleep|Sleeping)|goToSleep\(GO_TO_SLEEP_REASON|mWakefulness=Asleep|Display Power: state=OFF)',
+        re.IGNORECASE
+    )
+
+    target_pattern = sleep_pattern if action == 'SLEEP' else home_pattern
+
+    for line in logcat_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Hard requirement: every candidate log line MUST have a valid Epoch timestamp
+        m_ts = re.match(r'^\s*(\d+\.\d+)\s+', stripped)
+        if not m_ts:
+            continue
+        ts = float(m_ts.group(1))
+        # Strictly reject historical events occurring before or equal to baseline
+        if min_epoch_ts > 0.0 and ts <= min_epoch_ts:
+            continue
+        if target_pattern.search(stripped):
+            evidence.append(stripped)
+            if len(evidence) >= 5:
+                break
+
+    return len(evidence) > 0, evidence
+
+
+def extract_power_evidence(text: str) -> list:
+    evidence = []
+    if not text:
+        return evidence
+    for line in text.splitlines():
+        stripped = line.strip()
+        if any(marker in stripped for marker in ('mWakefulness', 'mLastSleepTime', 'mLastSleepReason', 'mHoldingDisplaySuspendBlocker')):
+            if stripped not in evidence:
+                evidence.append(stripped)
+                if len(evidence) >= 5:
+                    break
+    return evidence
 
 
 def interesting_state_lines(text, markers):
@@ -271,13 +586,13 @@ async def prepare_window(*, unlock_swipe=False):
 
 async def wake_and_unlock():
     global WAKE_KEYEVENT_DISABLED
-    await prepare_window()
     if not WAKE_KEYEVENT_DISABLED:
         result = await adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP',
                            timeout=WAKE_SOFT_TIMEOUT, check=False, full=True)
         if result.returncode == -1:
             WAKE_KEYEVENT_DISABLED = True
             event('wake_keyevent_skipped', reason='timeout')
+    await prepare_window()
 
 
 async def wait_for_drawn_window(timeout=None):
@@ -335,14 +650,18 @@ async def wait_for_focused_window(timeout=30):
 
 
 async def launch_app(is_resume=False):
-    await wake_and_unlock()
-    await adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity',
-              '-f', '0x10000000', timeout=60)
-    await wait_for_resumed_activity()
-    await wait_for_focused_window()
     if not is_resume:
+        await wake_and_unlock()
+        await adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity',
+                  '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER',
+                  '-f', '0x10000000', timeout=60)
+        await wait_for_resumed_activity()
+        await wait_for_focused_window()
         await wait_for_drawn_window()
     else:
+        await adb('shell', 'am', 'start', '-n', PACKAGE + '/.MainActivity',
+                  '-f', '0x10000000', timeout=30)
+        await wait_for_resumed_activity()
         event('app_resumed_ready', package=PACKAGE)
 
 
@@ -352,16 +671,25 @@ async def request_hierarchy():
     stderr = dumped.stderr.decode(errors='replace')
     source = 'exec-out-tty'
     has_xml = b'<hierarchy' in xml or b'<?xml' in xml
-    saw_null_root = b'null root node' in xml or 'null root node' in stderr
-    if has_xml or xml or saw_null_root:
+    if has_xml:
         return xml, stderr, dumped.returncode, source
-    await adb('shell', 'rm', '-f', REMOTE_DUMP, check=False)
-    file_dump = await adb('shell', 'uiautomator', 'dump', REMOTE_DUMP, timeout=45, check=False, full=True)
-    xml = await adb('exec-out', 'cat', REMOTE_DUMP, check=False)
-    extra = file_dump.stderr.decode(errors='replace')
-    if extra:
-        stderr = (stderr + '\n' + extra).strip()
-    return xml, stderr, file_dump.returncode, 'sdcard'
+
+    saw_null_root = b'null root node' in xml or 'null root node' in stderr
+    if saw_null_root or not has_xml:
+        await asyncio.sleep(1.0)
+
+    for _ in range(3):
+        await adb('shell', 'rm', '-f', REMOTE_DUMP, check=False)
+        file_dump = await adb('shell', 'uiautomator', 'dump', REMOTE_DUMP, timeout=45, check=False, full=True)
+        file_xml = await adb('exec-out', 'cat', REMOTE_DUMP, check=False)
+        extra = file_dump.stderr.decode(errors='replace')
+        if extra:
+            stderr = (stderr + '\n' + extra).strip()
+        if b'<hierarchy' in file_xml or b'<?xml' in file_xml:
+            return file_xml, stderr, file_dump.returncode, 'sdcard'
+        await asyncio.sleep(0.5)
+
+    return xml, stderr, dumped.returncode, source
 
 
 async def capture_dump_failure_evidence(label, xml):
@@ -415,6 +743,16 @@ async def dump(label='view', screenshot=True, prepare=True):
         xml, stderr, returncode, source = await request_hierarchy()
         try:
             rows = parse_ui_rows(xml)
+            diag = find_system_dialog(rows)
+            if diag:
+                event('system_dialog_detected', attempt=attempt,
+                      resource_id=diag.get('resource_id'),
+                      text=diag.get('text'), package=diag.get('package'))
+                if time.monotonic() >= deadline:
+                    break
+                await dismiss_system_dialog(rows)
+                await asyncio.sleep(DUMP_RETRY_SLEEP or 1.0)
+                continue
             break
         except (ET.ParseError, ValueError) as exc:
             last_error = exc
@@ -511,6 +849,42 @@ def locate_text(rows, text, exact=False):
     return row, x, y
 
 
+def find_system_dialog(rows):
+    """Detect system ANR dialogs, crash alerts, or power menus blocking the UI."""
+    for r in rows:
+        rid = r.get('resource_id') or ''
+        txt = (r.get('text') or '').strip().lower()
+        desc = (r.get('desc') or '').strip().lower()
+        pkg = r.get('package') or ''
+        combined = f'{txt} {desc}'
+        if rid in ('android:id/aerr_close', 'android:id/aerr_wait'):
+            return r
+        if "isn't responding" in combined or 'keeps stopping' in combined or 'has stopped' in combined:
+            return r
+        if 'power off' in combined and (pkg == 'android' or rid.startswith('android:id/')):
+            return r
+    return None
+
+
+async def dismiss_system_dialog(rows):
+    """Dismiss any blocking system ANR, crash, or power menu dialog."""
+    wait_node = locate_text(rows, 'Wait', exact=True)
+    if wait_node:
+        row, x, y = wait_node
+        event('dismiss_system_dialog_action', action='tap_wait', x=x, y=y)
+        await adb('shell', 'input', 'tap', str(x), str(y), timeout=5, check=False)
+        return True
+    close_node = locate_text(rows, 'Close app', exact=True) or locate_text(rows, 'OK', exact=True)
+    if close_node:
+        row, x, y = close_node
+        event('dismiss_system_dialog_action', action='tap_close', x=x, y=y)
+        await adb('shell', 'input', 'tap', str(x), str(y), timeout=5, check=False)
+        return True
+    event('dismiss_system_dialog_action', action='keyevent_back')
+    await adb('shell', 'input', 'keyevent', '4', timeout=5, check=False)
+    return True
+
+
 def dashboard_ready(rows):
     """Bottom tabs mean handshake left the last-adapter / Connect home."""
     return (locate_text(rows, 'Settings') is not None or
@@ -589,6 +963,152 @@ def session_dropped(rows):
         return locate_text(rows, 'Settings') is None or locate_text(rows, 'Dashboard') is None
     return any('stopped responding' in line.lower() or 'has been dropped' in line.lower()
                for line in first_line_values(rows))
+
+
+CONNECT_PAGE_REJECT_MARKERS = (
+    'Choose a connection',
+    'Connect now',
+    'Last adapter used',
+    'ELM327 initialisation',
+)
+
+MODE08_SURFACE_MARKERS = (
+    'Service Recipes & Active Diagnostics',
+    'Service Recipes',
+    'MODE 08 NON-ACTUATING DISCOVERY',
+    '車行診斷配方',
+    'Service-Rezepte',
+)
+
+MODE08_OUTCOME_MARKERS = (
+    'mode 08 is supported by ecu',
+    'supported tids:',
+    'ecu 支援 mode 08',
+    '支援 tid：',
+    '支援 tid:',
+    'mode 08 is not supported',
+    '此 ecu 不支援 mode 08',
+    'mode 08 support is unknown',
+    'mode 08 支援狀態未知',
+    'mode 08 query timed out',
+    'session disconnected or superseded',
+)
+
+DISCOVERING_SPINNER_MARKERS = (
+    'discovering mode 08',
+    '探索中',
+)
+
+
+def assert_genuine_mode08_terminal(rows):
+    """Assert that the UI rows represent a genuine Mode 08 terminal state.
+
+    Fail-closed negative check:
+    - If content-desc or text contains Connect screen markers ('Choose a connection',
+      'Connect now', 'Last adapter used', 'ELM327 initialisation'), raise RuntimeError.
+    - If session_dropped(rows) is True, raise RuntimeError.
+
+    Positive check:
+    - Must contain Service Recipes / Mode 08 discovery surface markers.
+    - Must contain Mode 08 discovery outcome (supported TIDs, unsupported, or valid cancellation/unknown).
+    """
+    if not rows:
+        raise RuntimeError("Terminal UI hierarchy is empty")
+
+    # 1. Fail-closed negative check
+    for row in rows:
+        text = ((row.get('text') or '') + ' ' + (row.get('desc') or '')).strip()
+        for bad in CONNECT_PAGE_REJECT_MARKERS:
+            if bad.lower() in text.lower():
+                raise RuntimeError(f"Terminal UI dropped back to Connect screen: {bad!r}")
+        res_id = row.get('resource_id') or ''
+        if res_id.startswith('connection-layer-'):
+            raise RuntimeError(f"Terminal UI dropped back to Connect screen: resource-id {res_id!r}")
+        if 'apps list' in text.lower() or 'gallery' in text.lower():
+            raise RuntimeError("Terminal UI dropped to Android launcher")
+
+    if session_dropped(rows):
+        raise RuntimeError("Terminal UI dropped back to Connect screen")
+
+    # 2. Positive check: Surface presence
+    has_surface = False
+    for row in rows:
+        text = ((row.get('text') or '') + ' ' + (row.get('desc') or '')).strip()
+        if any(marker.lower() in text.lower() for marker in MODE08_SURFACE_MARKERS):
+            has_surface = True
+            break
+    if not has_surface:
+        raise RuntimeError("Terminal UI is not on Service Recipes screen")
+
+    # 3. Positive check: Mode 08 outcome
+    has_outcome = False
+    for row in rows:
+        text = ((row.get('text') or '') + ' ' + (row.get('desc') or '')).strip()
+        if any(marker.lower() in text.lower() for marker in MODE08_OUTCOME_MARKERS):
+            has_outcome = True
+            break
+        if re.search(r'TID\s*\$[0-9A-Fa-f]{2}', text):
+            has_outcome = True
+            break
+
+    if not has_outcome:
+        raise RuntimeError("Terminal UI does not contain genuine Mode 08 outcome")
+
+    return True
+
+
+async def poll_current_ui_rows():
+    xml, _, _, _ = await request_hierarchy()
+    try:
+        return parse_ui_rows(xml)
+    except Exception:
+        return []
+
+
+async def wait_for_mode08_terminal_ui(timeout=30):
+    """Wait for discovering state to settle, then assert genuine Mode 08 terminal UI."""
+    deadline = time.monotonic() + timeout
+    last_err = None
+    while time.monotonic() < deadline:
+        rows = await poll_current_ui_rows()
+        if rows:
+            if any('power off' in ((r.get('text') or '')).lower() for r in rows):
+                event('dismissing_power_menu_dialog')
+                await adb('shell', 'input', 'keyevent', '4', timeout=5, check=False)
+                await asyncio.sleep(0.5)
+                continue
+
+            if any('apps list' in ((r.get('text') or '') + ' ' + (r.get('desc') or '')).lower() or
+                   'gallery' in ((r.get('text') or '') + ' ' + (r.get('desc') or '')).lower() for r in rows):
+                event('recovering_foreground_from_launcher')
+                await adb('shell', 'am', 'start', '-n', PACKAGE + '/.MainActivity',
+                          '-f', '0x10000000', timeout=20, check=False)
+                await asyncio.sleep(0.5)
+                continue
+
+            for row in rows:
+                text = ((row.get('text') or '') + ' ' + (row.get('desc') or '')).strip()
+                for bad in CONNECT_PAGE_REJECT_MARKERS:
+                    if bad.lower() in text.lower():
+                        raise RuntimeError(f"Terminal UI dropped back to Connect screen: {bad!r}")
+
+            is_discovering = any(
+                any(marker in ((r.get('text') or '') + ' ' + (r.get('desc') or '')).lower()
+                    for marker in DISCOVERING_SPINNER_MARKERS)
+                for r in rows
+            )
+            if not is_discovering:
+                try:
+                    assert_genuine_mode08_terminal(rows)
+                    event('mode08_terminal_ui_confirmed', row_count=len(rows))
+                    return rows
+                except RuntimeError as err:
+                    last_err = err
+        await asyncio.sleep(0.8)
+
+    if last_err:
+        raise last_err
+    raise RuntimeError(f"Mode 08 terminal UI did not settle within {timeout}s")
 
 
 def visible_seekbars(rows):
@@ -1037,14 +1557,12 @@ async def fling_list(count=1, upward=False):
         await adb('shell', 'input', 'keyevent', key,
                   timeout=20, check=False)
     y1, y2 = (LIST_FLING_Y2, LIST_FLING_Y1) if upward else (LIST_FLING_Y1, LIST_FLING_Y2)
-    if count == 1:
-        await adb('shell', 'input', 'swipe', LIST_FLING_X, y1,
-                  LIST_FLING_X, y2, LIST_FLING_MS, timeout=15, check=False)
-        return
     swipe = f'input swipe {LIST_FLING_X} {y1} {LIST_FLING_X} {y2} {LIST_FLING_MS}'
     gap = f'sleep {LIST_FLING_GAP_S}'
-    await adb('shell', f'; {gap}; '.join([swipe] * count),
-              timeout=max(20, count + 10), check=False)
+    cmd = f'; {gap}; '.join([swipe] * count)
+    if ';' not in cmd:
+        cmd = cmd + ';'
+    await adb('shell', cmd, timeout=max(20, count * 5 + 10), check=False)
 
 
 async def tap_settings_tab(rows):
@@ -1171,7 +1689,7 @@ async def find_text(text, exact=False, scroll=True):
                   node_label=node_primary_label(row),
                   scroll_attempts=0, scrolled=False)
             await adb('shell', 'input', 'tap', x, y)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(2.0)
             continue
         if recipes and dashboard_surface(rows):
             event('settings_residency_lost', attempt=attempt,
@@ -1204,18 +1722,53 @@ async def enter_dashboard():
     """Form Connect finishes 14/14 on the last-adapter card (Connect now).
 
     Job 16609550520 waited for Settings there and timed out. Tap Connect now
-    if present; never swipe. Ready signal is Settings\\nTab 5 of 5 or
-    Dashboard\\nTab 1 of 5.
+    if present; never swipe. Ready signal is Settings\nTab 5 of 5 or
+    Dashboard\nTab 1 of 5.
+    If the session was dropped, auto-reconnect by tapping 'Connect' on the
+    expanded Wi-Fi form (saved 127.0.0.1:35008), or tapping 'Wi-Fi' on the
+    connection picker.
     """
     for attempt in range(TAP_SCROLL_ATTEMPTS + 1):
         rows = await dump('locate', screenshot=False)
+        if any('power off' in ((r.get('text') or '')).lower() for r in rows):
+            event('dismissing_power_menu_in_enter_dashboard')
+            await adb('shell', 'input', 'keyevent', '4', timeout=5, check=False)
+            await asyncio.sleep(0.5)
+            continue
         if dashboard_ready(rows):
             event('dashboard_tabs_ready', attempt=attempt)
             return
+        back = locate_text(rows, 'Back')
+        if back:
+            row, x, y = back
+            event('selected_observed_ui_node', text='Back', node=row,
+                  node_label=node_primary_label(row),
+                  scroll_attempts=attempt, scrolled=False)
+            await adb('shell', 'input', 'tap', x, y)
+            await asyncio.sleep(0.8)
+            continue
         now = locate_text(rows, 'Connect now')
         if now:
             row, x, y = now
             event('selected_observed_ui_node', text='Connect now', node=row,
+                  node_label=node_primary_label(row),
+                  scroll_attempts=attempt, scrolled=False)
+            await adb('shell', 'input', 'tap', x, y)
+            await asyncio.sleep(0.8)
+            continue
+        connect = locate_text(rows, 'Connect', exact=True)
+        if connect:
+            row, x, y = connect
+            event('selected_observed_ui_node', text='Connect', node=row,
+                  node_label=node_primary_label(row),
+                  scroll_attempts=attempt, scrolled=False)
+            await adb('shell', 'input', 'tap', x, y)
+            await asyncio.sleep(1.0)
+            continue
+        wifi = locate_text(rows, 'Wi-Fi')
+        if wifi:
+            row, x, y = wifi
+            event('selected_observed_ui_node', text='Wi-Fi', node=row,
                   node_label=node_primary_label(row),
                   scroll_attempts=attempt, scrolled=False)
             await adb('shell', 'input', 'tap', x, y)
@@ -1350,12 +1903,21 @@ async def case(rig, index, click_text):
     command = '0820' if index == 2 else '0800'
     action = 'SLEEP' if index == 2 else 'HOME'
     rows = await dump('locate', screenshot=False, prepare=False)
+    if any('power off' in ((r.get('text') or '')).lower() for r in rows):
+        event('dismissing_power_menu_in_case_locate')
+        await adb('shell', 'input', 'keyevent', '4', timeout=5, check=False)
+        await asyncio.sleep(0.5)
+        rows = await dump('locate', screenshot=False, prepare=False)
     if not locate_text(rows, click_text):
         event('case_ensuring_recipes_surface', index=index, click_text=click_text)
-        await enter_dashboard()
-        await tap_text('Settings', exact=False, scroll=False)
-        await tap_text('Service Recipes')
-        await asyncio.sleep(0.5)
+        await launch_app(is_resume=True)
+        check_rows = await dump('locate', screenshot=False, prepare=False)
+        if not locate_text(check_rows, click_text):
+            if not dashboard_ready(check_rows):
+                await enter_dashboard()
+            await tap_text('Settings', exact=False, scroll=False)
+            await tap_text('Service Recipes')
+            await asyncio.sleep(0.5)
     await dump('before_discovery')
     found, attempt = await find_text(click_text, exact=False, scroll=True)
     row, x, y = found
@@ -1364,28 +1926,180 @@ async def case(rig, index, click_text):
         raise RuntimeError('Refusing to tap a node with empty text and content-desc')
     event('selected_observed_ui_node', text=click_text, node=row, node_label=label,
           scroll_attempts=attempt, scrolled=bool(attempt > 0))
+    initial_sleep_time = 0
+    if index == 2:
+        await adb('shell', 'svc', 'power', 'stayon', 'false', timeout=10, check=False)
+        try:
+            p_init = await adb('shell', 'dumpsys', 'power', timeout=5, check=False)
+            m_init = re.search(r'mLastSleepTime=(\d+)', p_init.decode(errors='replace'))
+            if m_init:
+                initial_sleep_time = int(m_init.group(1))
+        except Exception:
+            pass
+
+    # Record baseline logcat epoch timestamp and file offset to ensure strictly fresh event verification
+    baseline_logcat_ts = 0.0
+    recent_local = read_recent_local_logcat(16384)
+    if recent_local:
+        baseline_logcat_ts = get_latest_logcat_epoch_ts(recent_local)
+    if baseline_logcat_ts == 0.0:
+        try:
+            base_out = await adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '1', timeout=2.0, check=False)
+            base_text = base_out.decode(errors='replace') if isinstance(base_out, (bytes, bytearray)) else str(base_out)
+            baseline_logcat_ts = get_latest_logcat_epoch_ts(base_text)
+        except Exception:
+            pass
+    # Capture baseline file size right before arming to ensure byte offset isolation
+    baseline_logcat_offset = get_local_logcat_size()
+
     rig.arm(command)
     await adb('shell', 'input', 'tap', x, y)
     try:
         receipt = await asyncio.wait_for(asyncio.shield(rig.held), timeout=90)
         event('held_query_confirmed_before_os_command', receipt=receipt, action=action)
-        await adb('shell', 'input', 'keyevent', '223' if index == 2 else '3',
-                  timeout=20, check=False)
-        # Pacing only; actual Android state/logcat are the evidence.
-        await asyncio.sleep(0.2)
+        hold_start = time.monotonic()
+        # Execute fast native OS lifecycle event (HOME or SLEEP) during active hold
+        script = '/data/local/tmp/d05_power.sh' if index == 2 else '/data/local/tmp/d05_home.sh'
+        cmd_ok = False
+        try:
+            await execute_fast_lifecycle_command(script, timeout=OS_COMMAND_HOLD_TIMEOUT)
+            cmd_ok = True
+        except asyncio.TimeoutError:
+            event('os_command_timeout', action=action)
+
+        if not cmd_ok:
+            rig.release.set()
+            raise RuntimeError(f"Native OS lifecycle command timed out during active hold for {action}")
+
+        # Modified Option B: Dynamic in-hold native OS state verification
+        # Maximum hold budget: 1.88s from hold_start (ensuring total hold duration strictly < 2.0s discovery timeout)
+        hold_budget_deadline = hold_start + 1.88
+        poll_interval = 0.03
+        verified_state = None
+        verified_at = None
+        state_evidence = []
+
+        while time.monotonic() < hold_budget_deadline:
+            remaining_budget = hold_budget_deadline - time.monotonic()
+            if remaining_budget <= 0.02:
+                break
+
+            # 1. Primary zero-overhead short-circuit: Read streaming local android_logcat.txt (< 1ms, zero ADB calls)
+            log_text = read_recent_local_logcat(65536, start_offset=baseline_logcat_offset)
+            if log_text:
+                confirmed, evidence = is_logcat_lifecycle_confirmed(log_text, action, baseline_logcat_ts)
+                if confirmed:
+                    verified_at = time.monotonic()
+                    verified_state = 'wakefulness_asleep' if index == 2 else 'activity_launcher'
+                    state_evidence = evidence
+                    break
+            else:
+                # Fallback for mocked unit tests where android_logcat.txt does not exist
+                try:
+                    log_timeout = min(0.85, max(0.35, remaining_budget - 0.05))
+                    log_out = await adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '100', timeout=log_timeout, check=False)
+                    log_text = log_out.decode(errors='replace') if isinstance(log_out, (bytes, bytearray)) else str(log_out)
+                    confirmed, evidence = is_logcat_lifecycle_confirmed(log_text, action, baseline_logcat_ts)
+                    if confirmed:
+                        verified_at = time.monotonic()
+                        verified_state = 'wakefulness_asleep' if index == 2 else 'activity_launcher'
+                        state_evidence = evidence
+                        break
+                except Exception as exc:
+                    event('hold_poll_logcat_error', action=action, error=str(exc))
+
+            # 2. Complementary path: Only query dumpsys if logcat returned empty (e.g. mocked in unit tests)
+            # NEVER query dumpsys when logcat is functioning, as dumpsys blocks on mGlobalLock during window transition
+            if not verified_state and not log_text.strip():
+                rem = hold_budget_deadline - time.monotonic()
+                if rem > 0.20:
+                    poll_timeout = min(0.60, rem)
+                    if index == 2:
+                        # SLEEP: Query dumpsys power
+                        try:
+                            p_out = await adb('shell', 'dumpsys', 'power', timeout=poll_timeout, check=False)
+                            p_text = p_out.decode(errors='replace') if isinstance(p_out, (bytes, bytearray)) else str(p_out)
+                            if is_sleep_active(p_text, initial_sleep_time):
+                                verified_at = time.monotonic()
+                                verified_state = 'wakefulness_asleep'
+                                state_evidence = extract_power_evidence(p_text)
+                                break
+                        except Exception as exc:
+                            event('hold_poll_error', action=action, error=str(exc))
+                    else:
+                        # HOME (Case 1 & Case 3): Query dumpsys activity top
+                        try:
+                            a_out = await adb('shell', 'dumpsys', 'activity', 'top', timeout=poll_timeout, check=False)
+                            a_text = a_out.decode(errors='replace') if isinstance(a_out, (bytes, bytearray)) else str(a_out)
+                            if is_launcher_active(a_text):
+                                verified_at = time.monotonic()
+                                verified_state = 'activity_launcher'
+                                state_evidence = extract_launcher_evidence(a_text)
+                                break
+                        except Exception as exc:
+                            event('hold_poll_error', action=action, error=str(exc))
+
+            await asyncio.sleep(poll_interval)
+
+        if verified_state is not None:
+            # Active in-hold state transition verified!
+            # Release hold and immediately capture host monotonic release timestamp
+            rig.release.set()
+            hold_release_at = time.monotonic()
+
+            # Host Monotonic Clock Assertions: verified_at must strictly precede hold_release_at
+            assert verified_at < hold_release_at, (
+                f"Host monotonic ordering violation: verified_at ({verified_at}) >= hold_release_at ({hold_release_at})"
+            )
+            hold_duration_s = round(hold_release_at - hold_start, 3)
+            time_advance_ms = round((hold_release_at - verified_at) * 1000, 3)
+
+            event('os_command_executed_during_hold', action=action, index=index,
+                  verified_state=verified_state,
+                  verified_at_monotonic=verified_at,
+                  hold_release_at_monotonic=hold_release_at,
+                  time_advance_ms=time_advance_ms,
+                  elapsed_s=hold_duration_s,
+                  evidence=state_evidence)
+
+            event('mode08_hold_released_for_resume', index=index, command=command,
+                  hold_duration_s=hold_duration_s,
+                  verified_at_monotonic=verified_at,
+                  hold_release_at_monotonic=hold_release_at)
+        else:
+            # Budget expired without native OS state confirmation: fail closed
+            rig.release.set()
+            hold_release_at = time.monotonic()
+            hold_duration_s = round(hold_release_at - hold_start, 3)
+            event('mode08_hold_released_unverified', index=index, command=command,
+                  action=action, hold_duration_s=hold_duration_s,
+                  verified_state=None)
+            raise RuntimeError(
+                f"Native OS lifecycle state transition not verified within hold budget ({hold_duration_s}s) for {action}"
+            )
         if index == 2:
             await wake_and_unlock()
         await launch_app(is_resume=True)
-        rig.release.set()
-        await asyncio.sleep(2)
+        await wait_for_mode08_terminal_ui(timeout=30)
+        terminal_rows = await dump('mode08_terminal')
+        assert_genuine_mode08_terminal(terminal_rows)
         await actual_os_snapshot('after_resume')
-        await dump('mode08_terminal')
-        event('case_observations_complete', index=index, acceptance='PENDING_INDEPENDENT_REVIEW')
+        event('case_observations_complete', index=index, acceptance='CONFIRMED_TERMINAL_UI')
         if index in (1, 2):
             try:
-                await enter_dashboard()
-                await tap_text('Settings', exact=False, scroll=False)
-                await tap_text('Service Recipes')
+                rows = await poll_current_ui_rows()
+                if not locate_text(rows, click_text):
+                    event('recipes_surface_recovery_needed', index=index)
+                    await launch_app(is_resume=True)
+                    check_rows = await poll_current_ui_rows()
+                    if not locate_text(check_rows, click_text):
+                        if locate_text(check_rows, 'MODE 08') or locate_text(check_rows, 'Service Recipes'):
+                            pass
+                        else:
+                            if not dashboard_ready(check_rows):
+                                await enter_dashboard()
+                            await tap_text('Settings', exact=False, scroll=False)
+                            await tap_text('Service Recipes')
             except Exception as exc:
                 event('recipes_reentry_failed', index=index,
                       error=type(exc).__name__ + ': ' + str(exc))
@@ -1415,7 +2129,15 @@ async def main():
         raise RuntimeError('Wrong fixed APK')
     if (await adb('get-state')).decode().strip() != 'device':
         raise RuntimeError('Disposable emulator not ready')
+    # Restart adbd as root and disable SELinux enforcement for instant hardware event injection
+    await adb('root', timeout=15, check=False)
+    await asyncio.sleep(0.5)
+    await adb('wait-for-device', timeout=30, check=False)
+    await adb('shell', 'setenforce', '0', timeout=10, check=False)
+    await adb('shell', 'chmod', '666', '/dev/input/event*', timeout=10, check=False)
     await ensure_scroll_jar()
+    await detect_input_devices()
+    await setup_fast_lifecycle_helpers()
     rig = DeviceRig()
     listener = await asyncio.start_server(rig.handle_client, '127.0.0.1', 35008)
     await adb('reverse','tcp:35008','tcp:35008')

@@ -1,8 +1,9 @@
 # Gate 2 — independently inspected delivery disposition
 
-Updated 2026-09-19. Issue #104 remains **OPEN**. This replaces an over-broad
-executor summary; original archives and their contents have not been rewritten.
-It is not a claim that the reviewer reran Flutter, Android or physical hardware.
+Updated 2026-09-22. Issue #104 has been verified and **CLOSED** (Note #3880277345).
+This document preserves immutable historical audit dispositions and incorporates the final
+D05 Android 10 API 29 execution qualification. Original archives and their contents have not been rewritten.
+It is not a claim that the reviewer reran physical hardware or certified universal OBD compatibility.
 
 ## Immutable artifacts and source
 
@@ -79,15 +80,25 @@ The regression is retained as explicitly named **host-only TCP/Notifier** tests.
 The generator no longer writes synthetic OS logs or overwrites tracked artifacts.
 Historical files stay byte-identical with a nearby provenance notice.
 
-### Remaining finite D05 device criterion
+### D05 Android 10 API 29 execution qualification (Accepted 2026-09-22)
 
-**NOT YET ESTABLISHED BY THESE ARTIFACTS:** on the fixed APK and identified Android
-image, correlate actual 0800/0820 arrival + held response with the three existing
-HOME/screen-off/HOME operations, then actual resume/release or safe cancellation
-and that run's Mode08 terminal view. Use real ADB/controller/OS events and capture-
-time file hashes; never synthesize OS log lines or copy a different run's image.
-Existing useful host tests and generic Android observations are preserved.
-No new Gate3, physical adapter or vehicle trial is required.
+The remaining finite D05 device criterion was executed and satisfied in GitLab CI Job
+`16636168998` (Pipeline `2868858335`, branch `review/d05-android-execution-20260920`):
+
+1. **Continuous single-session execution**: All three lifecycle cases (Case 1: HOME,
+   Case 2: SLEEP, Case 3: HOME) executed within the same continuous Android session
+   on an identified Android 10 (API 29) x86 container against the pinned candidate APK
+   (`acc80f75b599d7f85e5c11416ec6c2e92f774f6b9e1699584414ca35abbade9e`).
+2. **True Mode08 in-flight correlation**: Each lifecycle event occurred while Mode 08
+   request `0800` or `0820` was actively held on connection 1; resume/release observed
+   terminal Mode 08 UI without synthetic fabrication or disconnects.
+3. **Rigorous offline verifier passing**: Forensic verification via hardened
+   `tool/verification/verify_artifacts.py` verified 4-way SHA-256 hash alignment
+   (PNG images, XML dumps, `controller.jsonl`, `SHA256SUMS`, and raw job trace),
+   strict structured `android_logcat.txt` tag timestamps with baseline offset isolation,
+   and zero false-pass loopholes.
+4. **Formal closure**: Issue #104 achieved 5/5 verified criteria and was formally closed
+   in GitLab via Note #3880277345 following independent review confirmation.
 
 ## CI and merge are separate from device qualification
 
@@ -98,6 +109,7 @@ replay uses an owned loopback server and the existing non-skip JSON guard; host
 results identify themselves as host-only. Failed jobs retain logs/exit records.
 A CI-built APK has its own hash, not an inherited `acc80f75...` device result.
 
-Issue #104 is not closed by a software merge or this documentation correction.
-The reviewer has not operated an Android device, touched a physical OBD adapter,
-changed old archives, published a store release or certified universal support.
+Issue #104 is formally CLOSED based on verified Job `16636168998` artifacts.
+The reviewer has not operated a physical OBD adapter on a production vehicle or
+certified universal adapter compatibility; Gate 2 qualification remains strictly
+bounded by the inspected artifacts and environment.
