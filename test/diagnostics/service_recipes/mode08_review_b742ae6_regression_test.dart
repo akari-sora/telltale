@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:torque_obd/diagnostics/diagnostic_link.dart';
 import 'package:torque_obd/diagnostics/service_recipes/candidate_matrix.dart';
 import 'package:torque_obd/diagnostics/service_recipes/mode08_codec.dart';
 import 'package:torque_obd/diagnostics/service_recipes/mode08_discovery_service.dart';
@@ -71,6 +72,22 @@ class _TestConnectedCanSession extends ObdSession {
         phase: ConnectionPhase.connected,
         protocol: 'ISO 15765-4 (CAN 11/500)',
       );
+
+  @override
+  Future<T> runDiagnosticExclusive<T>({
+    required String operationName,
+    required Future<T> Function(Object wireOwner) action,
+    DiagnosticCancellation? cancellation,
+    DateTime? deadline,
+  }) async {
+    if (!state.isConnected) {
+      throw const DiagnosticLinkException(
+        kind: DiagnosticFailureKind.retiredOperation,
+        message: 'Mock session disconnected',
+      );
+    }
+    return await action(Object());
+  }
 
   void triggerDisconnect() {
     state = const ObdConnectionState(

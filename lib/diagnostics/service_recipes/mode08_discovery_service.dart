@@ -328,6 +328,44 @@ abstract final class Mode08DiscoveryService {
           perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
           hasAnonymous: hadAnonymousResponses,
         );
+      } on OperationRetiredException catch (e) {
+        if (allSupportedTids.isNotEmpty) {
+          uncompletedBlocks.add(currentBaseTid);
+          return Mode08DiscoveryResult(
+            isSupported: true,
+            supportStatus: EcuSupportStatus.supported,
+            supportedTids: Set.unmodifiable(allSupportedTids),
+            queriedBlocks: List.unmodifiable(queriedBlocks),
+            discoveredAt: now,
+            isComplete: false,
+            unqueriedBlocks: List.unmodifiable(uncompletedBlocks.toList()..sort()),
+            failureReason: 'Discovery operation retired: $e',
+            incompletionReason: Mode08IncompletionReason.sessionDisconnected,
+            failedBlock: currentBaseTid,
+            ecu: primaryEcu,
+            rawMarker: primaryRawMarker,
+            malformedReason: primaryMalformedReason,
+            nrc: primaryNrc,
+            ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
+            perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
+            hasAnonymous: hadAnonymousResponses,
+          );
+        }
+        return Mode08DiscoveryResult.failure(
+          supportStatus: EcuSupportStatus.unknown,
+          reason: 'Discovery operation retired: $e',
+          incompletionReason: Mode08IncompletionReason.sessionDisconnected,
+          failedBlock: currentBaseTid,
+          ecu: primaryEcu,
+          rawMarker: primaryRawMarker,
+          malformedReason: primaryMalformedReason,
+          nrc: primaryNrc,
+          discoveredAt: now,
+          unqueriedBlocks: [currentBaseTid],
+          ecuResults: _buildAggregatedEcuResults(perEcuBlockResults),
+          perEcuBlockResults: _deepUnmodifiablePerEcuBlockResults(perEcuBlockResults),
+          hasAnonymous: hadAnonymousResponses,
+        );
       } on TransportException catch (e) {
         if (allSupportedTids.isNotEmpty) {
           uncompletedBlocks.add(currentBaseTid);

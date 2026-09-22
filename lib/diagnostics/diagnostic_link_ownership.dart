@@ -37,6 +37,18 @@ abstract interface class DiagnosticLinkOwnershipAuthority {
     DateTime? deadline,
   });
 
+  /// Executes [action] with exclusive half-duplex access to the diagnostic link.
+  ///
+  /// Serialized in the same FIFO queue as [runOneShot] (max active = 1).
+  /// Holds link ownership until the returned Future completes, keeping polling
+  /// paused throughout multi-step transactional sequences.
+  Future<T> runExclusive<T>({
+    required String operationName,
+    required Future<T> Function() action,
+    DiagnosticCancellation? cancellation,
+    DateTime? deadline,
+  });
+
   /// Releases resources, revokes pending actions, and prevents future takeovers.
   void dispose();
 
@@ -45,6 +57,9 @@ abstract interface class DiagnosticLinkOwnershipAuthority {
 
   /// Current number of actively running takeover actions (at most 1).
   int get activeTakeovers;
+
+  /// Active diagnostic ownership mode if an action is currently running, or null.
+  DiagnosticOwnershipMode? get activeMode;
 
   /// Number of takeover actions currently waiting in the FIFO queue.
   int get queuedCount;
@@ -70,6 +85,7 @@ class _DiagnosticLinkOwnershipAuthority
   bool _disposed = false;
   bool _hasDisplacedPolling = false;
   int _activeTakeovers = 0;
+  DiagnosticOwnershipMode? _activeMode;
   int _queuedCount = 0;
   int _displacedRestorationCount = 0;
 
@@ -88,6 +104,9 @@ class _DiagnosticLinkOwnershipAuthority
   int get activeTakeovers => _activeTakeovers;
 
   @override
+  DiagnosticOwnershipMode? get activeMode => _activeMode;
+
+  @override
   int get queuedCount => _queuedCount;
 
   @override
@@ -100,6 +119,36 @@ class _DiagnosticLinkOwnershipAuthority
 
   @override
   Future<T> runOneShot<T>({
+    required String operationName,
+    required Future<T> Function() action,
+    DiagnosticCancellation? cancellation,
+    DateTime? deadline,
+  }) =>
+      _runTakeover<T>(
+        mode: DiagnosticOwnershipMode.oneShot,
+        operationName: operationName,
+        action: action,
+        cancellation: cancellation,
+        deadline: deadline,
+      );
+
+  @override
+  Future<T> runExclusive<T>({
+    required String operationName,
+    required Future<T> Function() action,
+    DiagnosticCancellation? cancellation,
+    DateTime? deadline,
+  }) =>
+      _runTakeover<T>(
+        mode: DiagnosticOwnershipMode.exclusive,
+        operationName: operationName,
+        action: action,
+        cancellation: cancellation,
+        deadline: deadline,
+      );
+
+  Future<T> _runTakeover<T>({
+    required DiagnosticOwnershipMode mode,
     required String operationName,
     required Future<T> Function() action,
     DiagnosticCancellation? cancellation,
@@ -184,6 +233,7 @@ class _DiagnosticLinkOwnershipAuthority
       }
 
       _activeTakeovers++;
+      _activeMode = mode;
       bool displaced = false;
       try {
         displaced = pollingIsRunning();
@@ -217,6 +267,7 @@ class _DiagnosticLinkOwnershipAuthority
           // Restoration failure should not mask the original action error.
         } finally {
           _activeTakeovers--;
+          _activeMode = null;
           nextTailCompleter.complete();
         }
       }

@@ -196,12 +196,18 @@ class Mode08DiscoveryNotifier extends Notifier<Mode08DiscoveryState> {
     state = Mode08DiscoveryState.discovering(startedAt: DateTime.now().toUtc());
 
     try {
-      final discoveryResult = await Mode08DiscoveryService.discoverSupportedTids(
-        client: client,
-        timeout: timeout,
-        budget: budget,
+      final discoveryResult =
+          await sessionController.runDiagnosticExclusive<Mode08DiscoveryResult>(
+        operationName: 'mode08Discovery',
         deadline: deadline,
-        isSessionValid: () => !_isSuperseded(token, sessionGeneration, client),
+        action: (wireOwner) => Mode08DiscoveryService.discoverSupportedTids(
+          client: client,
+          timeout: timeout,
+          budget: budget,
+          deadline: deadline,
+          owner: wireOwner,
+          isSessionValid: () => !_isSuperseded(token, sessionGeneration, client),
+        ),
       );
 
       // Verify task was not superseded while discovery was running
