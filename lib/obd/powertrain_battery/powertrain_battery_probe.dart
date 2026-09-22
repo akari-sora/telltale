@@ -7,6 +7,7 @@ import 'dart:developer' as developer;
 import '../../diagnostics/diagnostic_link.dart';
 import '../elm327_client.dart';
 import '../pid/formula_engine.dart';
+import '../transport/obd_transport.dart' show TransportException;
 import 'powertrain_battery_catalog.dart';
 import 'powertrain_battery_profile.dart';
 import 'profile_catalog_validator.dart';
@@ -268,13 +269,30 @@ abstract final class PowertrainBatteryProbe {
 
     try {
       response = await diagnosticLink.send(request);
-    } on DiagnosticLinkException catch (e) {
+    } on DiagnosticLinkException catch (e, stackTrace) {
       switch (e.kind) {
         case DiagnosticFailureKind.responseTimeout:
         case DiagnosticFailureKind.deadlineExpired:
           return transportFailed('experimental probe timed out');
         case DiagnosticFailureKind.transportFailure:
-          return transportFailed('experimental probe transport failed');
+          if (e.cause is TransportException) {
+            return transportFailed('experimental probe transport failed');
+          }
+          _reportDiagnostic(
+            diagnosticSink,
+            e.cause ?? e,
+            e.stackTrace ?? stackTrace,
+            'sendGlobal',
+          );
+          return PowertrainBatteryProbeResult.failure(
+            profileId: profile.id,
+            catalogSha256: catalogSha256,
+            sourceRevision: profile.source.revision,
+            command: command,
+            failure: PowertrainBatteryProbeFailure.internal,
+            detail: 'wire invariant failed; this profile is quarantined',
+            capturedAt: DateTime.now().toUtc(),
+          );
         case DiagnosticFailureKind.unsupportedTarget:
         case DiagnosticFailureKind.capabilityUnavailable:
           return refused(

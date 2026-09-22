@@ -149,6 +149,20 @@ void main() {
         ),
       );
     });
+
+    test('mixed-width construction is permitted by value type, admission decided by link', () {
+      final req11 = DiagnosticCanIdentifier.standard(0x781);
+      final exp29 = DiagnosticCanIdentifier.extended(0x18DAF110);
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: req11,
+        expectedResponderIdentifier: exp29,
+      ) as PhysicalCanDiagnosticTarget;
+
+      expect(target.requestIdentifier.isStandard, isTrue);
+      expect(target.expectedResponderIdentifier.isExtended, isTrue);
+      expect(target.requestIdentifier.value, '781');
+      expect(target.expectedResponderIdentifier.value, '18DAF110');
+    });
   });
 
   group('Elm327DiagnosticLink capability matrix', () {

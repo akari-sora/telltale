@@ -152,12 +152,20 @@ class Elm327DiagnosticLink implements DiagnosticLink {
                 : 'Timed out waiting for response'),
         cause: e,
       );
-    } on TransportException catch (e) {
+    } on TransportException catch (e, stackTrace) {
       throw DiagnosticLinkException(
         kind: DiagnosticFailureKind.transportFailure,
         message: e.message,
         transportIssue: e.issue,
         cause: e,
+        stackTrace: stackTrace,
+      );
+    } catch (e, stackTrace) {
+      throw DiagnosticLinkException(
+        kind: DiagnosticFailureKind.transportFailure,
+        message: e.toString(),
+        cause: e,
+        stackTrace: stackTrace,
       );
     }
 

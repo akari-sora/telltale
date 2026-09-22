@@ -239,8 +239,6 @@ abstract class DiagnosticTarget {
 
   static const DiagnosticTarget wholeVehicleObd = _WholeVehicleObdTarget();
 
-  const factory DiagnosticTarget.physical(int address) = _PhysicalEcuTarget;
-
   const factory DiagnosticTarget.physicalCan({
     required DiagnosticCanIdentifier requestIdentifier,
     required DiagnosticCanIdentifier expectedResponderIdentifier,
@@ -260,26 +258,6 @@ class _WholeVehicleObdTarget extends DiagnosticTarget {
 
   @override
   String toString() => 'DiagnosticTarget.wholeVehicleObd';
-}
-
-class _PhysicalEcuTarget extends DiagnosticTarget {
-  final int address;
-
-  const _PhysicalEcuTarget(this.address);
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _PhysicalEcuTarget &&
-          runtimeType == other.runtimeType &&
-          address == other.address;
-
-  @override
-  int get hashCode => Object.hash(_PhysicalEcuTarget, address);
-
-  @override
-  String toString() =>
-      'DiagnosticTarget.physical(0x${address.toRadixString(16).toUpperCase()})';
 }
 
 class PhysicalCanDiagnosticTarget extends DiagnosticTarget {
@@ -740,12 +718,14 @@ class DiagnosticLinkException implements Exception {
   final String message;
   final TransportIssue? transportIssue;
   final Object? cause;
+  final StackTrace? stackTrace;
 
   const DiagnosticLinkException({
     required this.kind,
     required this.message,
     this.transportIssue,
     this.cause,
+    this.stackTrace,
   });
 
   @override

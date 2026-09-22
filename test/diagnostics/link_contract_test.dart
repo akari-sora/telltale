@@ -3,6 +3,7 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:torque_obd/diagnostics/diagnostic_link.dart';
 import 'package:torque_obd/diagnostics/elm327_diagnostic_link.dart';
+import 'package:torque_obd/obd/addressing.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
 import 'package:torque_obd/obd/polling_engine.dart';
 
@@ -263,8 +264,8 @@ void main() {
   });
 
   group('Elm327DiagnosticLink typed admission failures (wire-zero)', () {
-    test('T-ADM-PHYS: physical target typed refusal throws unsupportedTarget and wire-zero', () async {
-      final client = await _createConnectedClient();
+    test('T-ADM-PHYS: physical target typed refusal on legacy bus throws unsupportedTarget and wire-zero', () async {
+      final client = await _createConnectedClient(protocol: BusProtocol.iso9141);
       final transport = client.transport as FakeElm327;
       final link = Elm327DiagnosticLink(client);
       final logBefore = transport.commandLog.length;
@@ -272,7 +273,10 @@ void main() {
       final request = DiagnosticRequest(
         id: const DiagnosticRequestId('req-phys'),
         pdu: ApplicationPdu(const [0x01, 0x00]),
-        target: const DiagnosticTarget.physical(0x7E0),
+        target: DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x781),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x789),
+        ),
         requiredCapabilities: const {
           DiagnosticCapability.applicationPdu,
           DiagnosticCapability.wholeVehicleObd,
@@ -645,6 +649,45 @@ void main() {
       );
       expect(transport.commandLog.contains('0100'), isTrue);
     });
+
+    test('T-UNEXPECTED-DEFECT: unknown backend defect is wrapped into typed DiagnosticLinkException with cause and stackTrace', () async {
+      final client = _ThrowingBackendDefectClient();
+      final link = Elm327DiagnosticLink(client);
+
+      final request = DiagnosticRequest(
+        id: const DiagnosticRequestId('req-defect'),
+        pdu: ApplicationPdu(const [0x01, 0x00]),
+        target: DiagnosticTarget.wholeVehicleObd,
+        requiredCapabilities: const {
+          DiagnosticCapability.applicationPdu,
+          DiagnosticCapability.wholeVehicleObd,
+        },
+        connectionGeneration: link.connectionGeneration,
+        ownership: const DiagnosticOwnership(mode: DiagnosticOwnershipMode.oneShot),
+      );
+
+      await expectLater(
+        link.send(request),
+        throwsA(
+          isA<DiagnosticLinkException>()
+              .having(
+                (e) => e.kind,
+                'kind',
+                equals(DiagnosticFailureKind.transportFailure),
+              )
+              .having(
+                (e) => e.cause,
+                'cause',
+                isA<StateError>(),
+              )
+              .having(
+                (e) => e.stackTrace,
+                'stackTrace',
+                isNotNull,
+              ),
+        ),
+      );
+    });
   });
 
   group('PollingEngine.discoverResponders() integration', () {
@@ -700,3 +743,23 @@ void main() {
 }
 
 bool _alwaysCancelled() => true;
+
+final class _ThrowingBackendDefectClient extends Elm327Client {
+  _ThrowingBackendDefectClient()
+      : super(FakeElm327(protocol: BusProtocol.can11, ecus: const []));
+
+  @override
+  BusAddressing get addressing => BusAddressing.forProtocolNumber('6');
+
+  @override
+  Future<ObdResponse> sendGlobal(
+    String command, {
+    Duration? timeout,
+    ElmWriteAudit? writeAudit,
+    Object? owner,
+    DateTime? deadline,
+    String? header,
+  }) async {
+    throw StateError('backend invariant violation');
+  }
+}
