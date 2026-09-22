@@ -41,9 +41,11 @@ Rather than manually copying a redundant duplicate list of sources into `invento
 - `assets/powertrain_battery/powertrain_battery_catalog.manifest.json` (catalog integrity manifest).
 
 The validator dynamically derives all source families from owner truth and verifies:
-1. Revisions in notices match authoritative evidence matrix revisions (fail-closed against revision drift);
-2. All distinct owner licenses (`Apache-2.0`, `MIT`, `GPL-3.0`, `GPL-3.0-or-later`, `CC-BY-SA-4.0`, `CC-BY-4.0`, `U.S.-Government-Public-Domain`) are declared in `licence_identifier`;
-3. Any explicitly declared `source_families` tuples match owner truth exactly (detecting unowned sources, revision mismatch, license mismatch, or hash mismatch).
+1. All declared `source_coverage` paths match `source_of_truth_paths`, `catalog_manifest`, and `licence_location` without drift (`SOURCE_PATH_DRIFT`);
+2. Required owner fields (`name`, `url`, `revision`, `license`) are present and valid across all catalog profiles and research rows (`REQUIRED_OWNER_FIELD_MISSING`);
+3. All 15 pinned upstream repositories in notices match authoritative owner revisions (12 in catalog/research) or are validated notices-owned provenance records with immutable 40-hex commits and approved open-source licences;
+4. All distinct owner licenses (`Apache-2.0`, `MIT`, `GPL-3.0`, `GPL-3.0-or-later`, `CC-BY-SA-4.0`, `CC-BY-4.0`, `U.S.-Government-Public-Domain`) are declared in `licence_identifier`;
+5. Any explicitly declared `source_families` tuples match owner truth exactly (detecting unowned sources, revision mismatch, license mismatch, or hash mismatch).
 
 ## CLI & Validation
 

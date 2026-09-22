@@ -531,5 +531,174 @@ class TestValidateProvenance(unittest.TestCase):
         )
 
 
+    # =========================================================================
+    # Canonical Production Path (source_coverage, no source_families) Negatives
+    # =========================================================================
+
+    def test_canonical_catalog_owner_missing_required_field_rejected(self) -> None:
+        """Canonical path: owner catalog source missing required field (e.g. license) is rejected."""
+        matrix_path = REPO_ROOT / "tool/powertrain_evidence/matrix.json"
+        matrix_data = json.loads(matrix_path.read_text(encoding="utf-8"))
+        # Drop 'license' from first catalog profile's source family
+        matrix_data["catalog"]["profiles"][0]["source_families"][0]["license"] = ""
+
+        tmp_dir = REPO_ROOT / ".test_tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        tmp_file = tmp_dir / "mutated_matrix.json"
+        try:
+            tmp_file.write_text(json.dumps(matrix_data), encoding="utf-8")
+            rel_path = str(tmp_file.relative_to(REPO_ROOT))
+            data = copy.deepcopy(self.raw_inventory)
+            data["artifacts"][0]["source_coverage"]["evidence_matrix_path"] = rel_path
+            data["artifacts"][0]["source_of_truth_paths"]["evidence_matrix"] = rel_path
+            errors = validate_provenance.validate_provenance_data(
+                data, REPO_ROOT, scope="production-package"
+            )
+            self.assertTrue(
+                any(e.error_code == "REQUIRED_OWNER_FIELD_MISSING" for e in errors),
+                msg=f"Expected REQUIRED_OWNER_FIELD_MISSING, got: {[e.error_code for e in errors]}",
+            )
+        finally:
+            if tmp_file.exists():
+                tmp_file.unlink()
+            if tmp_dir.exists():
+                tmp_dir.rmdir()
+
+    def test_canonical_catalog_only_notice_revision_drift_rejected(self) -> None:
+        """Canonical path: catalog-only notice pinned revision drift is rejected."""
+        notices_path = REPO_ROOT / "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md"
+        notices_text = notices_path.read_text(encoding="utf-8")
+        # Mutate peternixon/MG-EV-OBD-PID revision (catalog-only pin)
+        mutated_text = notices_text.replace(
+            "2f485fcbffa2259d9e1db92d14483c1bef55dcca",
+            "9999999999999999999999999999999999999999",
+        )
+        self.assertNotEqual(notices_text, mutated_text)
+
+        tmp_dir = REPO_ROOT / ".test_tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        tmp_file = tmp_dir / "mutated_notices.md"
+        try:
+            tmp_file.write_text(mutated_text, encoding="utf-8")
+            rel_path = str(tmp_file.relative_to(REPO_ROOT))
+            data = copy.deepcopy(self.raw_inventory)
+            data["artifacts"][0]["source_coverage"]["notices_path"] = rel_path
+            data["artifacts"][0]["source_of_truth_paths"]["notices"] = rel_path
+            data["artifacts"][0]["licence_location"] = rel_path
+            errors = validate_provenance.validate_provenance_data(
+                data, REPO_ROOT, scope="production-package"
+            )
+            self.assertTrue(
+                any(e.error_code == "REVISION_DRIFT_OR_MISMATCH" for e in errors),
+                msg=f"Expected REVISION_DRIFT_OR_MISMATCH, got: {[e.error_code for e in errors]}",
+            )
+        finally:
+            if tmp_file.exists():
+                tmp_file.unlink()
+            if tmp_dir.exists():
+                tmp_dir.rmdir()
+
+    def test_canonical_notices_only_pin_malformed_rejected(self) -> None:
+        """Canonical path: notices-only pin with malformed revision is rejected."""
+        notices_path = REPO_ROOT / "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md"
+        notices_text = notices_path.read_text(encoding="utf-8")
+        # Mutate kezarjg/etnga-obd revision to a malformed non-hex string
+        mutated_text = notices_text.replace(
+            "817da3ec8ab83bf31f000b0d1c85716280ccd843",
+            "not-a-40-hex-revision",
+        )
+        self.assertNotEqual(notices_text, mutated_text)
+
+        tmp_dir = REPO_ROOT / ".test_tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        tmp_file = tmp_dir / "mutated_notices.md"
+        try:
+            tmp_file.write_text(mutated_text, encoding="utf-8")
+            rel_path = str(tmp_file.relative_to(REPO_ROOT))
+            data = copy.deepcopy(self.raw_inventory)
+            data["artifacts"][0]["source_coverage"]["notices_path"] = rel_path
+            data["artifacts"][0]["source_of_truth_paths"]["notices"] = rel_path
+            data["artifacts"][0]["licence_location"] = rel_path
+            errors = validate_provenance.validate_provenance_data(
+                data, REPO_ROOT, scope="production-package"
+            )
+            self.assertTrue(
+                any(e.error_code == "MALFORMED_REVISION" for e in errors),
+                msg=f"Expected MALFORMED_REVISION, got: {[e.error_code for e in errors]}",
+            )
+        finally:
+            if tmp_file.exists():
+                tmp_file.unlink()
+            if tmp_dir.exists():
+                tmp_dir.rmdir()
+
+    def test_canonical_notices_unowned_pin_rejected(self) -> None:
+        """Canonical path: unowned repository pin injected into notices is rejected."""
+        notices_path = REPO_ROOT / "THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md"
+        notices_text = notices_path.read_text(encoding="utf-8")
+        # Inject an unowned pin into notices
+        injected_pin = "\n- `untrusted/rogue-obd-repo`, pinned at `1111111111111111111111111111111111111111`.\n"
+        mutated_text = notices_text + injected_pin
+
+        tmp_dir = REPO_ROOT / ".test_tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        tmp_file = tmp_dir / "mutated_notices.md"
+        try:
+            tmp_file.write_text(mutated_text, encoding="utf-8")
+            rel_path = str(tmp_file.relative_to(REPO_ROOT))
+            data = copy.deepcopy(self.raw_inventory)
+            data["artifacts"][0]["source_coverage"]["notices_path"] = rel_path
+            data["artifacts"][0]["source_of_truth_paths"]["notices"] = rel_path
+            data["artifacts"][0]["licence_location"] = rel_path
+            errors = validate_provenance.validate_provenance_data(
+                data, REPO_ROOT, scope="production-package"
+            )
+            self.assertTrue(
+                any(e.error_code == "UNOWNED_SOURCE_DETECTED" for e in errors),
+                msg=f"Expected UNOWNED_SOURCE_DETECTED, got: {[e.error_code for e in errors]}",
+            )
+        finally:
+            if tmp_file.exists():
+                tmp_file.unlink()
+            if tmp_dir.exists():
+                tmp_dir.rmdir()
+
+    def test_canonical_source_coverage_path_drift_rejected(self) -> None:
+        """Canonical path: source_coverage path drifting from truth/manifest/licence is rejected."""
+        # 1. notices_path drifts to another existing file (e.g. README.md)
+        data1 = copy.deepcopy(self.raw_inventory)
+        data1["artifacts"][0]["source_coverage"]["notices_path"] = "README.md"
+        errors1 = validate_provenance.validate_provenance_data(
+            data1, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "SOURCE_PATH_DRIFT" for e in errors1),
+            msg=f"Expected SOURCE_PATH_DRIFT, got: {[e.error_code for e in errors1]}",
+        )
+
+        # 2. catalog_path drifts to another existing file (e.g. pubspec.yaml)
+        data2 = copy.deepcopy(self.raw_inventory)
+        data2["artifacts"][0]["source_coverage"]["catalog_path"] = "pubspec.yaml"
+        errors2 = validate_provenance.validate_provenance_data(
+            data2, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "SOURCE_PATH_DRIFT" for e in errors2),
+            msg=f"Expected SOURCE_PATH_DRIFT, got: {[e.error_code for e in errors2]}",
+        )
+
+        # 3. evidence_matrix_path drifts to another existing file
+        data3 = copy.deepcopy(self.raw_inventory)
+        data3["artifacts"][0]["source_coverage"]["evidence_matrix_path"] = "pubspec.yaml"
+        errors3 = validate_provenance.validate_provenance_data(
+            data3, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(
+            any(e.error_code == "SOURCE_PATH_DRIFT" for e in errors3),
+            msg=f"Expected SOURCE_PATH_DRIFT, got: {[e.error_code for e in errors3]}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
+

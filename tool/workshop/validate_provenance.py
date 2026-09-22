@@ -45,10 +45,41 @@ ALLOWED_REVIEWER_STATUS = {"reviewed", "pending", "unreviewed"}
 
 SHA40_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+REVISION_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 WILDCARD_RE = re.compile(r"[\*\?\[\]]")
 
 # Slice 1 finite boundary: exactly one declared artifact class.
 SLICE1_ALLOWED_CLASSES = frozenset({"powertrain-battery-bundled-third-party"})
+
+# Permitted open-source licences for bundled and reference components.
+PERMITTED_OPEN_SOURCE_LICENSES = frozenset({
+    "Apache-2.0",
+    "MIT",
+    "GPL-3.0",
+    "GPL-3.0-or-later",
+    "CC-BY-SA-4.0",
+    "CC-BY-4.0",
+    "U.S.-Government-Public-Domain",
+})
+
+# Pinned upstream repositories in notices not directly participating in matrix rows.
+NOTICES_OWNED_PROVENANCE_RECORDS: dict[str, dict[str, Any]] = {
+    "kezarjg/etnga-obd": {
+        "name": "kezarjg/etnga-obd",
+        "allowed_licenses": frozenset({"CC-BY-4.0", "MIT"}),
+        "expected_revision": "817da3ec8ab83bf31f000b0d1c85716280ccd843",
+    },
+    "kezarjg/open-vehicle-monitoring-system-3": {
+        "name": "kezarjg/Open-Vehicle-Monitoring-System-3",
+        "allowed_licenses": frozenset({"MIT"}),
+        "expected_revision": "21474124189f8b6483467c6accfd74381d233bed",
+    },
+    "nickn17/evdash": {
+        "name": "nickn17/evDash",
+        "allowed_licenses": frozenset({"MIT"}),
+        "expected_revision": "c8c1e2d3acd6afa4719fa78b10359cd6708c72b2",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -516,6 +547,96 @@ def validate_provenance_data(
                 )
             )
 
+        # 7.1 Path consistency and existence check for source_coverage
+        if isinstance(source_coverage, dict):
+            cov_cat = source_coverage.get("catalog_path")
+            cov_man = source_coverage.get("catalog_manifest_path")
+            cov_not = source_coverage.get("notices_path")
+            cov_mat = source_coverage.get("evidence_matrix_path")
+
+            # Check that all declared paths exist on disk
+            for cov_key, cov_path in [
+                ("catalog_path", cov_cat),
+                ("catalog_manifest_path", cov_man),
+                ("notices_path", cov_not),
+                ("evidence_matrix_path", cov_mat),
+            ]:
+                if cov_path is not None:
+                    if not isinstance(cov_path, str) or not (repo_root / cov_path).is_file():
+                        errors.append(
+                            ValidationError(
+                                artifact_id,
+                                "SOURCE_PATH_MISSING",
+                                f"source_coverage path '{cov_key}': '{cov_path}' missing on disk",
+                            )
+                        )
+
+            # Bidirectional consistency check against source_of_truth_paths
+            if isinstance(sot_paths, dict):
+                if cov_cat and "catalog" in sot_paths and cov_cat != sot_paths["catalog"]:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "SOURCE_PATH_DRIFT",
+                            f"source_coverage.catalog_path '{cov_cat}' drifts from source_of_truth_paths.catalog '{sot_paths['catalog']}'",
+                        )
+                    )
+                if cov_man and "manifest" in sot_paths and cov_man != sot_paths["manifest"]:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "SOURCE_PATH_DRIFT",
+                            f"source_coverage.catalog_manifest_path '{cov_man}' drifts from source_of_truth_paths.manifest '{sot_paths['manifest']}'",
+                        )
+                    )
+                if cov_not and "notices" in sot_paths and cov_not != sot_paths["notices"]:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "SOURCE_PATH_DRIFT",
+                            f"source_coverage.notices_path '{cov_not}' drifts from source_of_truth_paths.notices '{sot_paths['notices']}'",
+                        )
+                    )
+                if cov_mat and "evidence_matrix" in sot_paths and cov_mat != sot_paths["evidence_matrix"]:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "SOURCE_PATH_DRIFT",
+                            f"source_coverage.evidence_matrix_path '{cov_mat}' drifts from source_of_truth_paths.evidence_matrix '{sot_paths['evidence_matrix']}'",
+                        )
+                    )
+
+            # Consistency against catalog_manifest
+            if isinstance(catalog_manifest, dict):
+                man_target = catalog_manifest.get("target_file")
+                man_file = catalog_manifest.get("manifest_file")
+                if cov_cat and man_target and cov_cat != man_target:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "SOURCE_PATH_DRIFT",
+                            f"source_coverage.catalog_path '{cov_cat}' drifts from catalog_manifest.target_file '{man_target}'",
+                        )
+                    )
+                if cov_man and man_file and cov_man != man_file:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "SOURCE_PATH_DRIFT",
+                            f"source_coverage.catalog_manifest_path '{cov_man}' drifts from catalog_manifest.manifest_file '{man_file}'",
+                        )
+                    )
+
+            # Consistency against licence_location
+            if lic_loc and cov_not and cov_not != lic_loc:
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "SOURCE_PATH_DRIFT",
+                        f"source_coverage.notices_path '{cov_not}' drifts from licence_location '{lic_loc}'",
+                    )
+                )
+
         # Extract owner truth from matrix and notices
         matrix_rel = (
             source_coverage.get("evidence_matrix_path")
@@ -559,36 +680,31 @@ def validate_provenance_data(
                     )
                 )
 
-        notices_pins: dict[str, dict[str, str]] = {}
-        if notices_rel and (repo_root / notices_rel).is_file():
-            notices_text = (repo_root / notices_rel).read_text(encoding="utf-8")
-            for m in re.finditer(r"-\s*`([^`]+)`(?:\s*\([^)]*\))?,\s*pinned at\s*`([0-9a-f]{40})`", notices_text):
-                repo_name = m.group(1).strip()
-                rev = m.group(2).strip()
-                notices_pins[repo_name.lower()] = {"name": repo_name, "revision": rev}
+        # 7.2 Read required_owner_fields contract and validate owner sources
+        required_owner_fields = ["name", "url", "revision", "license"]
+        if isinstance(source_coverage, dict) and "required_owner_fields" in source_coverage:
+            cfg_fields = source_coverage.get("required_owner_fields")
+            if isinstance(cfg_fields, list) and cfg_fields:
+                required_owner_fields = cfg_fields
 
-        # Validate owner research families
-        for fam_key, src in owner_research.items():
-            s_name = src.get("name")
-            if not s_name:
-                errors.append(
-                    ValidationError(
-                        artifact_id,
-                        "SOURCE_NAME_MISSING",
-                        f"Owner source family '{fam_key}' is missing required field 'name'",
+        # Validate required fields and integrity across BOTH owner_catalog and owner_research
+        all_owner_sources: dict[str, dict[str, Any]] = {}
+        all_owner_sources.update(owner_catalog)
+        all_owner_sources.update(owner_research)
+
+        for fam_key, src in all_owner_sources.items():
+            for req_field in required_owner_fields:
+                val = src.get(req_field)
+                if not val or (isinstance(val, str) and not val.strip()):
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "REQUIRED_OWNER_FIELD_MISSING",
+                            f"Owner source family '{fam_key}' is missing required field '{req_field}'",
+                        )
                     )
-                )
-            s_url = src.get("url")
-            if not s_url:
-                errors.append(
-                    ValidationError(
-                        artifact_id,
-                        "SOURCE_URL_MISSING",
-                        f"Owner source family '{fam_key}' is missing required field 'url'",
-                    )
-                )
             s_rev = src.get("revision")
-            if s_rev and not SHA40_RE.match(s_rev):
+            if s_rev and not REVISION_RE.match(s_rev):
                 errors.append(
                     ValidationError(
                         artifact_id,
@@ -606,18 +722,89 @@ def validate_provenance_data(
                     )
                 )
 
-        # Cross-check notices pins vs research families
+        # 7.3 Extract notices pins and cross-check
+        notices_pins: dict[str, dict[str, Any]] = {}
+        if notices_rel and (repo_root / notices_rel).is_file():
+            notices_text = (repo_root / notices_rel).read_text(encoding="utf-8")
+            pin_pattern = re.compile(
+                r"-\s*`([^`]+)`(?:\s*\([^)]*\))?,\s*pinned at\s*`([^`]+)`([^\n]*(?:\n(?!\s*[-#])[^\n]*)*)",
+                re.MULTILINE,
+            )
+            for m in pin_pattern.finditer(notices_text):
+                repo_name = m.group(1).strip()
+                rev = m.group(2).strip()
+                snippet = m.group(3).strip()
+                notices_pins[repo_name.lower()] = {
+                    "name": repo_name,
+                    "revision": rev,
+                    "snippet": snippet,
+                }
+
+        # Cross-check notices pins vs owner truth (research OR catalog) or notices-owned records
         for pin_key, pin_info in notices_pins.items():
-            if pin_key in owner_research:
-                expected_rev = owner_research[pin_key].get("revision")
-                if expected_rev and pin_info["revision"] != expected_rev:
+            pin_rev = pin_info["revision"]
+            pin_name = pin_info["name"]
+
+            # Validate revision format
+            if not SHA40_RE.match(pin_rev):
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "MALFORMED_REVISION",
+                        f"Notices pinned revision '{pin_rev}' for '{pin_name}' is malformed",
+                    )
+                )
+                continue
+
+            matched_owner = owner_research.get(pin_key) or owner_catalog.get(pin_key)
+            if matched_owner:
+                expected_rev = matched_owner.get("revision")
+                if expected_rev and pin_rev != expected_rev:
                     errors.append(
                         ValidationError(
                             artifact_id,
                             "REVISION_DRIFT_OR_MISMATCH",
-                            f"Notices pinned revision '{pin_info['revision']}' for '{pin_info['name']}' drifts from evidence matrix revision '{expected_rev}'",
+                            f"Notices pinned revision '{pin_rev}' for '{pin_name}' drifts from evidence matrix revision '{expected_rev}'",
                         )
                     )
+            elif pin_key in NOTICES_OWNED_PROVENANCE_RECORDS:
+                rec = NOTICES_OWNED_PROVENANCE_RECORDS[pin_key]
+                expected_rev = rec.get("expected_revision")
+                if expected_rev and pin_rev != expected_rev:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "REVISION_DRIFT_OR_MISMATCH",
+                            f"Notices pinned revision '{pin_rev}' for '{pin_name}' drifts from expected revision '{expected_rev}'",
+                        )
+                    )
+                allowed_lics = rec.get("allowed_licenses", set())
+                for lic in allowed_lics:
+                    if lic not in PERMITTED_OPEN_SOURCE_LICENSES or (isinstance(lic_id, str) and lic not in lic_id):
+                        errors.append(
+                            ValidationError(
+                                artifact_id,
+                                "LICENCE_NOT_PERMITTED",
+                                f"Notices-owned record '{pin_name}' licence '{lic}' is not permitted or declared in licence_identifier",
+                            )
+                        )
+                snippet = pin_info.get("snippet", "")
+                if not any(lic in snippet for lic in allowed_lics):
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "LICENCE_MISSING",
+                            f"Notices-owned record '{pin_name}' does not declare its licence in notices text",
+                        )
+                    )
+            else:
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "UNOWNED_SOURCE_DETECTED",
+                        f"Notices pin '{pin_name}' has no backing owner entry in evidence matrix or approved notices-owned records",
+                    )
+                )
 
         # Cross-check licence_identifier covers all distinct owner licenses
         if isinstance(lic_id, str):
