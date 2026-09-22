@@ -247,6 +247,33 @@ void main() {
         contains('does not claim Mode 08 discovery or freeze-frame execution'),
         reason: 'Ircama loopback evidence must not overclaim Mode 08 discovery or freeze-frame read.',
       );
+
+      // 5. Prohibit the 5 specific cost matrix and candidate overclaim phrases
+      expect(
+        content,
+        isNot(contains('cannot be snooped or injected')),
+        reason: 'ADR must not make unmeasured security claims about local process snooping.',
+      );
+      expect(
+        content,
+        isNot(contains('Runs uniformly across Android, iOS, macOS, Windows, and Linux')),
+        reason: 'ADR must respect platform-support.md status rather than claiming uniform runtime.',
+      );
+      expect(
+        content,
+        isNot(contains('single immutable binary')),
+        reason: 'ADR must not describe Flutter desktop bundle as a single immutable binary.',
+      );
+      expect(
+        content,
+        isNot(contains('Single unified debug console')),
+        reason: 'ADR must not overclaim unified debug console across separate platform logging sinks.',
+      );
+      expect(
+        content,
+        isNot(contains('without kernel drivers or elevated privileges')),
+        reason: 'DoIP permission and interface requirements must remain to be verified by #15.',
+      );
     });
   });
 }
