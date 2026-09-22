@@ -108,6 +108,7 @@ void main() {
       container = await _container();
       session = container.read(obdSessionProvider.notifier);
       await session.connectDemo();
+      await session.ensureResponderCensus();
     });
 
     tearDown(() async {

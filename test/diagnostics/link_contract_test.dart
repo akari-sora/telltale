@@ -581,7 +581,7 @@ void main() {
         commandTimeout: const Duration(milliseconds: 500),
       );
       final transport = client.transport as FakeElm327;
-      transport.slowCommands['0100'] = const Duration(milliseconds: 150);
+      transport.slowCommands['0100'] = const Duration(milliseconds: 300);
       final link = Elm327DiagnosticLink(client);
 
       final request = DiagnosticRequest(
@@ -593,7 +593,7 @@ void main() {
           DiagnosticCapability.wholeVehicleObd,
         },
         connectionGeneration: link.connectionGeneration,
-        deadline: DateTime.now().add(const Duration(milliseconds: 40)),
+        deadline: DateTime.now().add(const Duration(milliseconds: 120)),
         ownership: const DiagnosticOwnership(mode: DiagnosticOwnershipMode.oneShot),
       );
 
