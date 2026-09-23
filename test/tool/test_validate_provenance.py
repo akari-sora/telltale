@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -1118,23 +1119,73 @@ class TestValidateProvenanceSlice2(unittest.TestCase):
         )
         self.assertTrue(any(e.error_code == "INTEGRITY_FILES_INCOMPLETE" for e in errors3))
 
-    def test_s2_m5_unhashed_runner_install_prohibited(self) -> None:
-        """S2-M5: Bare unhashed pip install in claimed runner fails validator check."""
+    def test_s2_m5_runner_contracts(self) -> None:
+        """S2-M5: Hardened runner contract negative controls:
+        1. Deleting --require-hashes -> RED (RUNNER_UNHASHED_INSTALL_PROHIBITED)
+        2. Swapping to undeclared requirements file -> RED (RUNNER_UNDECLARED_REQUIREMENTS)
+        3. Deleting version preflight -> RED (RUNNER_VERSION_PREFLIGHT_MISSING)
+        4. Changing preflight version 3.0.5 to another valid version 3.0.6 -> RED (RUNNER_PREFLIGHT_VERSION_MISMATCH)
+        5. Removing reference to declared lockfile -> RED (RUNNER_LOCKFILE_MISSING)
+        """
+        real_runner_path = REPO_ROOT / "tool/workshop/run_public_oracles.sh"
+        real_text = real_runner_path.read_text(encoding="utf-8")
         tmp_dir = REPO_ROOT / ".test_tmp_runner"
         tmp_dir.mkdir(exist_ok=True)
         try:
-            mutated_runner = tmp_dir / "mutated_runner.sh"
-            mutated_runner.write_text(
-                "#!/usr/bin/env bash\npip install ELM327-emulator==3.0.5\n",
+            # 1. Delete --require-hashes
+            mutated_1 = tmp_dir / "mutated_no_hashes.sh"
+            mutated_1.write_text(real_text.replace("--require-hashes", ""), encoding="utf-8")
+            data1 = copy.deepcopy(self.raw_inventory)
+            self._get_artifact(data1, "ircama-elm327-emulator-test-oracle")["execution_bindings"]["runner_script"] = str(mutated_1.relative_to(REPO_ROOT))
+            errs1 = validate_provenance.validate_provenance_data(data1, REPO_ROOT, scope="test-only")
+            self.assertTrue(any(e.error_code == "RUNNER_UNHASHED_INSTALL_PROHIBITED" for e in errs1))
+
+            # 2. Swap to undeclared requirements file
+            mutated_2 = tmp_dir / "mutated_undeclared_reqs.sh"
+            mutated_2.write_text(
+                real_text.replace(
+                    "$ROOT/tool/ble_test_rig/requirements.lock",
+                    "$ROOT/tool/ble_test_rig/undeclared_unpinned.txt",
+                ),
                 encoding="utf-8",
             )
-            data = copy.deepcopy(self.raw_inventory)
-            ircama = self._get_artifact(data, "ircama-elm327-emulator-test-oracle")
-            ircama["execution_bindings"]["runner_script"] = str(mutated_runner.relative_to(REPO_ROOT))
-            errors = validate_provenance.validate_provenance_data(
-                data, REPO_ROOT, scope="test-only"
+            data2 = copy.deepcopy(self.raw_inventory)
+            self._get_artifact(data2, "ircama-elm327-emulator-test-oracle")["execution_bindings"]["runner_script"] = str(mutated_2.relative_to(REPO_ROOT))
+            errs2 = validate_provenance.validate_provenance_data(data2, REPO_ROOT, scope="test-only")
+            self.assertTrue(any(e.error_code == "RUNNER_UNDECLARED_REQUIREMENTS" for e in errs2))
+
+            # 3. Delete version preflight
+            mutated_3 = tmp_dir / "mutated_no_preflight.sh"
+            mutated_3.write_text(
+                re.sub(r'INSTALLED_ELM_VER=.*?(?=start_elm)', '', real_text, flags=re.DOTALL),
+                encoding="utf-8",
             )
-            self.assertTrue(any(e.error_code == "RUNNER_UNHASHED_INSTALL_PROHIBITED" for e in errors))
+            data3 = copy.deepcopy(self.raw_inventory)
+            self._get_artifact(data3, "ircama-elm327-emulator-test-oracle")["execution_bindings"]["runner_script"] = str(mutated_3.relative_to(REPO_ROOT))
+            errs3 = validate_provenance.validate_provenance_data(data3, REPO_ROOT, scope="test-only")
+            self.assertTrue(any(e.error_code == "RUNNER_VERSION_PREFLIGHT_MISSING" for e in errs3))
+
+            # 4. Change preflight version 3.0.5 to another version 3.0.6
+            mutated_4 = tmp_dir / "mutated_wrong_version.sh"
+            mutated_4.write_text(
+                real_text.replace('"3.0.5"', '"3.0.6"'),
+                encoding="utf-8",
+            )
+            data4 = copy.deepcopy(self.raw_inventory)
+            self._get_artifact(data4, "ircama-elm327-emulator-test-oracle")["execution_bindings"]["runner_script"] = str(mutated_4.relative_to(REPO_ROOT))
+            errs4 = validate_provenance.validate_provenance_data(data4, REPO_ROOT, scope="test-only")
+            self.assertTrue(any(e.error_code == "RUNNER_PREFLIGHT_VERSION_MISMATCH" for e in errs4))
+
+            # 5. Missing declared lockfile
+            mutated_5 = tmp_dir / "mutated_missing_lock.sh"
+            mutated_5.write_text(
+                real_text.replace(".github/requirements/elm327-py314-linux-x86_64.lock", ".github/requirements/other.lock"),
+                encoding="utf-8",
+            )
+            data5 = copy.deepcopy(self.raw_inventory)
+            self._get_artifact(data5, "ircama-elm327-emulator-test-oracle")["execution_bindings"]["runner_script"] = str(mutated_5.relative_to(REPO_ROOT))
+            errs5 = validate_provenance.validate_provenance_data(data5, REPO_ROOT, scope="test-only")
+            self.assertTrue(any(e.error_code == "RUNNER_LOCKFILE_MISSING" for e in errs5))
         finally:
             for p in tmp_dir.glob("*"):
                 p.unlink()
@@ -1144,7 +1195,7 @@ class TestValidateProvenanceSlice2(unittest.TestCase):
     def test_s2_m6_scope_isolation(self) -> None:
         """S2-M6: Fault in test-only breaks test-only and all, but preserves production-package;
         fault in production breaks production and all, but preserves test-only."""
-        # Break test-only (Ircama hash)
+        # 1. Break test-only (Ircama hash)
         data_test_broken = copy.deepcopy(self.raw_inventory)
         ircama = self._get_artifact(data_test_broken, "ircama-elm327-emulator-test-oracle")
         ircama["source"]["artifact_sha256"] = "f" * 64
@@ -1161,7 +1212,34 @@ class TestValidateProvenanceSlice2(unittest.TestCase):
             msg="production-package must stay GREEN when test-only is broken",
         )
 
-        # Break production-package (battery manifest expected_sha256)
+        # 2. Break test-only artifact_class
+        data_test_class_broken = copy.deepcopy(self.raw_inventory)
+        ircama_cls = self._get_artifact(data_test_class_broken, "ircama-elm327-emulator-test-oracle")
+        ircama_cls["artifact_class"] = "corrupted-test-oracle-class"
+
+        errs_to = validate_provenance.validate_provenance_data(data_test_class_broken, REPO_ROOT, scope="test-only")
+        errs_all = validate_provenance.validate_provenance_data(data_test_class_broken, REPO_ROOT, scope="all")
+        errs_prod = validate_provenance.validate_provenance_data(data_test_class_broken, REPO_ROOT, scope="production-package")
+
+        self.assertTrue(any(e.error_code == "ARTIFACT_CLASS_MISMATCH" for e in errs_to))
+        self.assertTrue(any(e.error_code == "ARTIFACT_CLASS_MISMATCH" for e in errs_all))
+        self.assertEqual(errs_prod, [], msg="production-package must stay GREEN when test-only artifact_class is corrupted")
+
+        # 3. Test-only unauthorized ID
+        data_test_unauth_id = copy.deepcopy(self.raw_inventory)
+        chaos = self._get_artifact(data_test_unauth_id, "telltale-chaos-proxy-test-reference")
+        chaos["id"] = "unauthorized-test-chaos-proxy"
+        chaos["artifact_class"] = "unauthorized-test-chaos-proxy"
+
+        errs_to_id = validate_provenance.validate_provenance_data(data_test_unauth_id, REPO_ROOT, scope="test-only")
+        errs_all_id = validate_provenance.validate_provenance_data(data_test_unauth_id, REPO_ROOT, scope="all")
+        errs_prod_id = validate_provenance.validate_provenance_data(data_test_unauth_id, REPO_ROOT, scope="production-package")
+
+        self.assertTrue(any(e.error_code == "UNAUTHORIZED_ARTIFACT_CLASS" for e in errs_to_id))
+        self.assertTrue(any(e.error_code == "UNAUTHORIZED_ARTIFACT_CLASS" for e in errs_all_id))
+        self.assertEqual(errs_prod_id, [], msg="production-package must stay GREEN when test-only has unauthorized ID")
+
+        # 4. Break production-package (battery manifest expected_sha256)
         data_prod_broken = copy.deepcopy(self.raw_inventory)
         battery = self._get_artifact(data_prod_broken, "powertrain-battery-bundled-third-party")
         battery["catalog_manifest"]["expected_sha256"] = "e" * 64
@@ -1177,6 +1255,33 @@ class TestValidateProvenanceSlice2(unittest.TestCase):
             [],
             msg="test-only must stay GREEN when production-package is broken",
         )
+
+        # 5. Break production artifact_class
+        data_prod_class_broken = copy.deepcopy(self.raw_inventory)
+        battery_cls = self._get_artifact(data_prod_class_broken, "powertrain-battery-bundled-third-party")
+        battery_cls["artifact_class"] = "corrupted-battery-class"
+
+        errs_prod_c = validate_provenance.validate_provenance_data(data_prod_class_broken, REPO_ROOT, scope="production-package")
+        errs_all_c = validate_provenance.validate_provenance_data(data_prod_class_broken, REPO_ROOT, scope="all")
+        errs_to_c = validate_provenance.validate_provenance_data(data_prod_class_broken, REPO_ROOT, scope="test-only")
+
+        self.assertTrue(any(e.error_code == "ARTIFACT_CLASS_MISMATCH" for e in errs_prod_c))
+        self.assertTrue(any(e.error_code == "ARTIFACT_CLASS_MISMATCH" for e in errs_all_c))
+        self.assertEqual(errs_to_c, [], msg="test-only must stay GREEN when production artifact_class is corrupted")
+
+        # 6. Production unauthorized ID
+        data_prod_unauth_id = copy.deepcopy(self.raw_inventory)
+        battery_id = self._get_artifact(data_prod_unauth_id, "powertrain-battery-bundled-third-party")
+        battery_id["id"] = "unauthorized-battery-class"
+        battery_id["artifact_class"] = "unauthorized-battery-class"
+
+        errs_prod_i = validate_provenance.validate_provenance_data(data_prod_unauth_id, REPO_ROOT, scope="production-package")
+        errs_all_i = validate_provenance.validate_provenance_data(data_prod_unauth_id, REPO_ROOT, scope="all")
+        errs_to_i = validate_provenance.validate_provenance_data(data_prod_unauth_id, REPO_ROOT, scope="test-only")
+
+        self.assertTrue(any(e.error_code == "UNAUTHORIZED_ARTIFACT_CLASS" for e in errs_prod_i))
+        self.assertTrue(any(e.error_code == "UNAUTHORIZED_ARTIFACT_CLASS" for e in errs_all_i))
+        self.assertEqual(errs_to_i, [], msg="test-only must stay GREEN when production has unauthorized ID")
 
     def test_s2_m7_licence_evidence_missing_or_drift(self) -> None:
         """S2-M7: Missing or drifted licence evidence fails test-only validation."""

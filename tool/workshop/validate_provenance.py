@@ -364,14 +364,108 @@ def _validate_ircama_oracle(
                 errors.append(ValidationError(artifact_id, "EXECUTION_RUNNER_MISSING", f"Execution runner '{runner_script}' missing on disk"))
             else:
                 runner_text = runner_file.read_text(encoding="utf-8", errors="replace")
-                for line in runner_text.splitlines():
-                    if "pip" in line and "install" in line and "ELM327-emulator" in line:
-                        if "--require-hashes" not in line and "-r " not in line:
+                expected_version = item.get("source", {}).get("version", "3.0.5")
+                declared_locks = item.get("source", {}).get("lockfiles", [])
+
+                # Join shell line continuations
+                cmd_lines: list[str] = []
+                current_line = ""
+                for raw_line in runner_text.splitlines():
+                    stripped = raw_line.strip()
+                    if stripped.startswith("#"):
+                        continue
+                    if current_line:
+                        current_line += " " + stripped
+                    else:
+                        current_line = stripped
+                    if current_line.endswith("\\"):
+                        current_line = current_line[:-1].rstrip()
+                    else:
+                        cmd_lines.append(current_line)
+                        current_line = ""
+                if current_line:
+                    cmd_lines.append(current_line)
+
+                allowed_reqs = set(declared_locks) | {
+                    ".github/requirements/elm327-build.lock",
+                    "tool/ble_test_rig/requirements.bootstrap",
+                }
+
+                for cmd in cmd_lines:
+                    if ("pip" in cmd and "install" in cmd) or re.search(r'(?:^|[/\s])pip(?:\d+)?(?:\.exe)?["\']?\s+install\b', cmd):
+                        if "--require-hashes" not in cmd:
                             errors.append(
                                 ValidationError(
                                     artifact_id,
                                     "RUNNER_UNHASHED_INSTALL_PROHIBITED",
-                                    f"Runner '{runner_script}' contains unhashed pip install of ELM327-emulator: '{line.strip()}'",
+                                    f"Runner '{runner_script}' contains unhashed pip install: '{cmd}'",
+                                )
+                            )
+                        # Check referenced requirements files (-r or --requirement)
+                        req_matches = re.findall(r'(?:-r|--requirement)\s+["\']?([^"\';\s]+)["\']?', cmd)
+                        for req_match in req_matches:
+                            norm_req = req_match.replace("$ROOT/", "").replace("${ROOT}/", "")
+                            if norm_req.startswith("./"):
+                                norm_req = norm_req[2:]
+                            if norm_req not in allowed_reqs:
+                                errors.append(
+                                    ValidationError(
+                                        artifact_id,
+                                        "RUNNER_UNDECLARED_REQUIREMENTS",
+                                        f"Runner '{runner_script}' references undeclared requirements file '{norm_req}' (allowed: {sorted(allowed_reqs)})",
+                                    )
+                                )
+
+                # Runner must reference all declared lockfiles
+                for lock in declared_locks:
+                    if lock not in runner_text:
+                        errors.append(
+                            ValidationError(
+                                artifact_id,
+                                "RUNNER_LOCKFILE_MISSING",
+                                f"Runner '{runner_script}' does not reference declared lockfile '{lock}'",
+                            )
+                        )
+
+                # Installed package version preflight check
+                has_version_check = (
+                    "ELM327-emulator" in runner_text
+                    and ("importlib.metadata" in runner_text or "m.version" in runner_text or "version(" in runner_text)
+                )
+                if not has_version_check:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "RUNNER_VERSION_PREFLIGHT_MISSING",
+                            f"Runner '{runner_script}' is missing installed ELM327-emulator version preflight",
+                        )
+                    )
+                else:
+                    version_cmp_match = re.search(
+                        r'INSTALLED_ELM_VER["\']?\s*(!=|==|=)\s*["\']?([0-9A-Za-z_.\-]+)["\']?',
+                        runner_text,
+                    )
+                    if not version_cmp_match:
+                        version_cmp_match = re.search(
+                            r'["\']?([0-9A-Za-z_.\-]+)["\']?\s*(!=|==|=)\s*["\']?\$?INSTALLED_ELM_VER',
+                            runner_text,
+                        )
+                    if not version_cmp_match:
+                        errors.append(
+                            ValidationError(
+                                artifact_id,
+                                "RUNNER_VERSION_PREFLIGHT_MISSING",
+                                f"Runner '{runner_script}' does not check INSTALLED_ELM_VER against exact version",
+                            )
+                        )
+                    else:
+                        preflight_ver = version_cmp_match.group(2) if version_cmp_match.lastindex == 2 else version_cmp_match.group(1)
+                        if preflight_ver != expected_version:
+                            errors.append(
+                                ValidationError(
+                                    artifact_id,
+                                    "RUNNER_PREFLIGHT_VERSION_MISMATCH",
+                                    f"Runner preflight checks version '{preflight_ver}', but inventory requires '{expected_version}'",
                                 )
                             )
 
@@ -844,6 +938,21 @@ def validate_provenance_data(
             )
         seen_ids.add(artifact_id)
 
+        artifact_scope = item.get("scope")
+
+        # Filter by requested scope unless 'all'
+        if scope != "all" and artifact_scope != scope:
+            continue
+
+        if artifact_scope not in ALLOWED_ARTIFACT_SCOPES:
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "INVALID_SCOPE",
+                    f"Scope '{artifact_scope}' is not in allowed scopes {sorted(ALLOWED_ARTIFACT_SCOPES)}",
+                )
+            )
+
         artifact_class = item.get("artifact_class")
         if not isinstance(artifact_class, str) or not artifact_class.strip():
             errors.append(
@@ -859,16 +968,6 @@ def validate_provenance_data(
                     artifact_id,
                     "ARTIFACT_CLASS_MISMATCH",
                     f"Artifact class '{artifact_class}' does not match artifact id '{artifact_id}'",
-                )
-            )
-
-        artifact_scope = item.get("scope")
-        if artifact_scope not in ALLOWED_ARTIFACT_SCOPES:
-            errors.append(
-                ValidationError(
-                    artifact_id,
-                    "INVALID_SCOPE",
-                    f"Scope '{artifact_scope}' is not in allowed scopes {sorted(ALLOWED_ARTIFACT_SCOPES)}",
                 )
             )
 
@@ -892,10 +991,6 @@ def validate_provenance_data(
                     f"Artifact class '{artifact_id}' is not permitted for scope '{artifact_scope}' (allowed: {sorted(SCOPE_ALLOWED_CLASSES[artifact_scope])})",
                 )
             )
-
-        # Filter by requested scope unless 'all'
-        if scope != "all" and artifact_scope != scope:
-            continue
 
         if artifact_scope == "test-only":
             _validate_test_only_artifact(
