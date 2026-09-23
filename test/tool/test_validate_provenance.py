@@ -915,6 +915,423 @@ class TestValidateProvenance(unittest.TestCase):
                 tmp_dir.rmdir()
 
 
+
+
+class TestValidateProvenanceSlice2(unittest.TestCase):
+    """Slice 2 tests: Test-only oracle & reference provenance, lockfile validation, and mutations."""
+
+    def setUp(self) -> None:
+        self.inventory_path = REPO_ROOT / "docs/provenance/inventory.json"
+        self.raw_inventory = json.loads(
+            self.inventory_path.read_text(encoding="utf-8")
+        )
+
+    def _get_artifact(self, data: dict, art_id: str) -> dict:
+        for a in data["artifacts"]:
+            if a.get("id") == art_id:
+                return a
+        raise KeyError(f"Artifact not found: {art_id}")
+
+    # =========================================================================
+    # S2 Scope & Schema Tests
+    # =========================================================================
+
+    def test_canonical_test_only_scope_passes(self) -> None:
+        """S2-A4: Canonical inventory passes under --scope test-only."""
+        errors = validate_provenance.validate_provenance_data(
+            self.raw_inventory, REPO_ROOT, scope="test-only"
+        )
+        self.assertEqual(errors, [])
+
+    def test_canonical_all_scope_passes(self) -> None:
+        """S2-A1: Canonical inventory passes under --scope all."""
+        errors = validate_provenance.validate_provenance_data(
+            self.raw_inventory, REPO_ROOT, scope="all"
+        )
+        self.assertEqual(errors, [])
+
+    def test_cli_test_only_and_all_scopes(self) -> None:
+        """S2-A3, S2-A4: CLI returns 0 for test-only and all scopes."""
+        for sc in ("test-only", "all"):
+            cmd = [
+                sys.executable,
+                str(TOOL_DIR / "validate_provenance.py"),
+                "--scope",
+                sc,
+                "--inventory",
+                str(self.inventory_path),
+                "--repo-root",
+                str(REPO_ROOT),
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, msg=f"CLI failed for scope {sc}: {res.stderr}")
+            self.assertIn("[PASS]", res.stdout)
+
+    def test_unknown_scope_rejected(self) -> None:
+        """Unknown scope argument must be rejected."""
+        errors = validate_provenance.validate_provenance_data(
+            self.raw_inventory, REPO_ROOT, scope="invalid-scope"
+        )
+        self.assertTrue(any(e.error_code == "INVALID_SCOPE" for e in errors))
+
+    def test_duplicate_artifact_id_across_scopes_rejected(self) -> None:
+        """Duplicate artifact ID across scopes must fail closed."""
+        data = copy.deepcopy(self.raw_inventory)
+        dup = copy.deepcopy(data["artifacts"][0])
+        dup["scope"] = "test-only"
+        data["artifacts"].append(dup)
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="all"
+        )
+        self.assertTrue(any(e.error_code == "DUPLICATE_ARTIFACT_ID" for e in errors))
+
+    def test_production_artifact_in_test_only_class_set_rejected(self) -> None:
+        """Production artifact assigned to test-only class set is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        art = self._get_artifact(data, "powertrain-battery-bundled-third-party")
+        art["id"] = "ircama-elm327-emulator-test-oracle"
+        art["artifact_class"] = "ircama-elm327-emulator-test-oracle"
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="production-package"
+        )
+        self.assertTrue(any(e.error_code == "UNAUTHORIZED_ARTIFACT_CLASS" for e in errors))
+
+    def test_test_only_artifact_in_production_class_set_rejected(self) -> None:
+        """Test-only artifact assigned to production class set is rejected."""
+        data = copy.deepcopy(self.raw_inventory)
+        art = self._get_artifact(data, "ircama-elm327-emulator-test-oracle")
+        art["id"] = "powertrain-battery-bundled-third-party"
+        art["artifact_class"] = "powertrain-battery-bundled-third-party"
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "UNAUTHORIZED_ARTIFACT_CLASS" for e in errors))
+
+    # =========================================================================
+    # S2 Mutation Tests (S2-M1 to S2-M7)
+    # =========================================================================
+
+    def test_s2_m1_ircama_version_and_hash_drift(self) -> None:
+        """S2-M1: Ircama version or hash drift causes test-only RED, production GREEN."""
+        # Version drift
+        data_ver = copy.deepcopy(self.raw_inventory)
+        ircama = self._get_artifact(data_ver, "ircama-elm327-emulator-test-oracle")
+        ircama["source"]["version"] = "3.0.4"
+        errors_test = validate_provenance.validate_provenance_data(
+            data_ver, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "LOCKFILE_VERSION_DRIFT" for e in errors_test))
+        errors_prod = validate_provenance.validate_provenance_data(
+            data_ver, REPO_ROOT, scope="production-package"
+        )
+        self.assertEqual(errors_prod, [], msg="Production package must remain GREEN on test-only drift")
+
+        # Hash drift
+        data_hash = copy.deepcopy(self.raw_inventory)
+        ircama_h = self._get_artifact(data_hash, "ircama-elm327-emulator-test-oracle")
+        ircama_h["source"]["artifact_sha256"] = "0" * 64
+        errors_test_h = validate_provenance.validate_provenance_data(
+            data_hash, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "LOCKFILE_HASH_DRIFT" for e in errors_test_h))
+        errors_prod_h = validate_provenance.validate_provenance_data(
+            data_hash, REPO_ROOT, scope="production-package"
+        )
+        self.assertEqual(errors_prod_h, [])
+
+    def test_s2_m2_test_only_role_and_package_escalation(self) -> None:
+        """S2-M2: Test-only artifact role or package escalation must fail."""
+        data_role = copy.deepcopy(self.raw_inventory)
+        ircama = self._get_artifact(data_role, "ircama-elm327-emulator-test-oracle")
+        ircama["role"] = "runtime"
+        errors = validate_provenance.validate_provenance_data(
+            data_role, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "TEST_ONLY_ROLE_ESCALATION" for e in errors))
+
+        data_pkg = copy.deepcopy(self.raw_inventory)
+        ircama2 = self._get_artifact(data_pkg, "ircama-elm327-emulator-test-oracle")
+        ircama2["package_policy"]["app_package"] = "allowed"
+        errors2 = validate_provenance.validate_provenance_data(
+            data_pkg, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "PACKAGE_POLICY_INVALID" for e in errors2))
+
+        data_chan = copy.deepcopy(self.raw_inventory)
+        ircama3 = self._get_artifact(data_chan, "ircama-elm327-emulator-test-oracle")
+        ircama3["distribution_channel"] = "app-package"
+        errors3 = validate_provenance.validate_provenance_data(
+            data_chan, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "DISTRIBUTION_CHANNEL_INVALID" for e in errors3))
+
+    def test_s2_m3_independence_laundering(self) -> None:
+        """S2-M3: Project-owned references cannot be classified as independent-third-party-oracle."""
+        data_chaos = copy.deepcopy(self.raw_inventory)
+        chaos = self._get_artifact(data_chaos, "telltale-chaos-proxy-test-reference")
+        chaos["independence"] = "independent-third-party-oracle"
+        errors = validate_provenance.validate_provenance_data(
+            data_chaos, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "INDEPENDENCE_LAUNDERING" for e in errors))
+
+        data_freeze = copy.deepcopy(self.raw_inventory)
+        freeze = self._get_artifact(data_freeze, "telltale-freeze-frame-reference")
+        freeze["ownership"] = "third-party"
+        errors2 = validate_provenance.validate_provenance_data(
+            data_freeze, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "OWNERSHIP_MISCLASSIFICATION" for e in errors2))
+
+        data_mode08 = copy.deepcopy(self.raw_inventory)
+        mode08 = self._get_artifact(data_mode08, "telltale-mode08-replay-reference")
+        mode08["ownership"] = "third-party"
+        errors3 = validate_provenance.validate_provenance_data(
+            data_mode08, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "OWNERSHIP_MISCLASSIFICATION" for e in errors3))
+
+    def test_s2_m4_project_owned_integrity_bypass(self) -> None:
+        """S2-M4: Project-owned reference / fixture hash drift must fail."""
+        data_ff = copy.deepcopy(self.raw_inventory)
+        ff = self._get_artifact(data_ff, "telltale-freeze-frame-reference")
+        ff["project_source"]["integrity_files"][0]["sha256"] = "1" * 64
+        errors = validate_provenance.validate_provenance_data(
+            data_ff, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "INTEGRITY_HASH_MISMATCH" for e in errors))
+
+        data_m08 = copy.deepcopy(self.raw_inventory)
+        m08 = self._get_artifact(data_m08, "telltale-mode08-replay-reference")
+        m08["project_source"]["integrity_files"][1]["sha256"] = "2" * 64
+        errors2 = validate_provenance.validate_provenance_data(
+            data_m08, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "INTEGRITY_HASH_MISMATCH" for e in errors2))
+
+        # Missing fixtures file from mode08 integrity files
+        data_m08_inc = copy.deepcopy(self.raw_inventory)
+        m08_inc = self._get_artifact(data_m08_inc, "telltale-mode08-replay-reference")
+        m08_inc["project_source"]["integrity_files"] = [m08_inc["project_source"]["integrity_files"][0]]
+        errors3 = validate_provenance.validate_provenance_data(
+            data_m08_inc, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "INTEGRITY_FILES_INCOMPLETE" for e in errors3))
+
+    def test_s2_m5_unhashed_runner_install_prohibited(self) -> None:
+        """S2-M5: Bare unhashed pip install in claimed runner fails validator check."""
+        tmp_dir = REPO_ROOT / ".test_tmp_runner"
+        tmp_dir.mkdir(exist_ok=True)
+        try:
+            mutated_runner = tmp_dir / "mutated_runner.sh"
+            mutated_runner.write_text(
+                "#!/usr/bin/env bash\npip install ELM327-emulator==3.0.5\n",
+                encoding="utf-8",
+            )
+            data = copy.deepcopy(self.raw_inventory)
+            ircama = self._get_artifact(data, "ircama-elm327-emulator-test-oracle")
+            ircama["execution_bindings"]["runner_script"] = str(mutated_runner.relative_to(REPO_ROOT))
+            errors = validate_provenance.validate_provenance_data(
+                data, REPO_ROOT, scope="test-only"
+            )
+            self.assertTrue(any(e.error_code == "RUNNER_UNHASHED_INSTALL_PROHIBITED" for e in errors))
+        finally:
+            for p in tmp_dir.glob("*"):
+                p.unlink()
+            if tmp_dir.exists():
+                tmp_dir.rmdir()
+
+    def test_s2_m6_scope_isolation(self) -> None:
+        """S2-M6: Fault in test-only breaks test-only and all, but preserves production-package;
+        fault in production breaks production and all, but preserves test-only."""
+        # Break test-only (Ircama hash)
+        data_test_broken = copy.deepcopy(self.raw_inventory)
+        ircama = self._get_artifact(data_test_broken, "ircama-elm327-emulator-test-oracle")
+        ircama["source"]["artifact_sha256"] = "f" * 64
+
+        self.assertTrue(
+            any(e.error_code == "LOCKFILE_HASH_DRIFT" for e in validate_provenance.validate_provenance_data(data_test_broken, REPO_ROOT, scope="test-only"))
+        )
+        self.assertTrue(
+            any(e.error_code == "LOCKFILE_HASH_DRIFT" for e in validate_provenance.validate_provenance_data(data_test_broken, REPO_ROOT, scope="all"))
+        )
+        self.assertEqual(
+            validate_provenance.validate_provenance_data(data_test_broken, REPO_ROOT, scope="production-package"),
+            [],
+            msg="production-package must stay GREEN when test-only is broken",
+        )
+
+        # Break production-package (battery manifest expected_sha256)
+        data_prod_broken = copy.deepcopy(self.raw_inventory)
+        battery = self._get_artifact(data_prod_broken, "powertrain-battery-bundled-third-party")
+        battery["catalog_manifest"]["expected_sha256"] = "e" * 64
+
+        self.assertTrue(
+            any(e.error_code == "CATALOG_SHA256_MISMATCH" for e in validate_provenance.validate_provenance_data(data_prod_broken, REPO_ROOT, scope="production-package"))
+        )
+        self.assertTrue(
+            any(e.error_code == "CATALOG_SHA256_MISMATCH" for e in validate_provenance.validate_provenance_data(data_prod_broken, REPO_ROOT, scope="all"))
+        )
+        self.assertEqual(
+            validate_provenance.validate_provenance_data(data_prod_broken, REPO_ROOT, scope="test-only"),
+            [],
+            msg="test-only must stay GREEN when production-package is broken",
+        )
+
+    def test_s2_m7_licence_evidence_missing_or_drift(self) -> None:
+        """S2-M7: Missing or drifted licence evidence fails test-only validation."""
+        # Missing file
+        data_missing = copy.deepcopy(self.raw_inventory)
+        ircama = self._get_artifact(data_missing, "ircama-elm327-emulator-test-oracle")
+        ircama["licence_evidence"]["local_evidence_path"] = "nonexistent/LICENSE"
+        errors = validate_provenance.validate_provenance_data(
+            data_missing, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "LICENCE_EVIDENCE_MISSING" for e in errors))
+
+        # Hash drift
+        data_drift = copy.deepcopy(self.raw_inventory)
+        ircama2 = self._get_artifact(data_drift, "ircama-elm327-emulator-test-oracle")
+        ircama2["licence_evidence"]["source_sha256"] = "3" * 64
+        errors2 = validate_provenance.validate_provenance_data(
+            data_drift, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "LICENCE_EVIDENCE_HASH_DRIFT" for e in errors2))
+
+    # =========================================================================
+    # Additional Negative & Guard Tests
+    # =========================================================================
+
+    def test_ircama_lockfile_floating_spec_rejected(self) -> None:
+        """Lockfile containing range or floating spec for Ircama is rejected."""
+        tmp_dir = REPO_ROOT / ".test_tmp_lock"
+        tmp_dir.mkdir(exist_ok=True)
+        try:
+            mutated_lock = tmp_dir / "mutated_elm.lock"
+            mutated_lock.write_text(
+                "ELM327-emulator>=3.0.5 --hash=sha256:c4527894abd613f36c87ecba47b6b4ea91fd2b123509fd71d9e49ab41e656d87\n",
+                encoding="utf-8",
+            )
+            data = copy.deepcopy(self.raw_inventory)
+            ircama = self._get_artifact(data, "ircama-elm327-emulator-test-oracle")
+            ircama["source"]["lockfiles"] = [str(mutated_lock.relative_to(REPO_ROOT))]
+            errors = validate_provenance.validate_provenance_data(
+                data, REPO_ROOT, scope="test-only"
+            )
+            self.assertTrue(any(e.error_code == "LOCKFILE_FLOATING_SPEC" for e in errors))
+        finally:
+            for p in tmp_dir.glob("*"):
+                p.unlink()
+            if tmp_dir.exists():
+                tmp_dir.rmdir()
+
+    def test_freeze_frame_and_mode08_identity_banners_enforced(self) -> None:
+        """Identity banners for freeze-frame and Mode08 cannot be relabelled as Ircama."""
+        data_ff = copy.deepcopy(self.raw_inventory)
+        ff = self._get_artifact(data_ff, "telltale-freeze-frame-reference")
+        ff["project_source"]["identity_banner"] = "Ircama ELM327 Emulator"
+        errors = validate_provenance.validate_provenance_data(
+            data_ff, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "IDENTITY_BANNER_MISMATCH" for e in errors))
+
+        data_m08 = copy.deepcopy(self.raw_inventory)
+        m08 = self._get_artifact(data_m08, "telltale-mode08-replay-reference")
+        m08["project_source"]["identity_banner"] = "Ircama ELM327 Emulator"
+        errors2 = validate_provenance.validate_provenance_data(
+            data_m08, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "IDENTITY_BANNER_MISMATCH" for e in errors2))
+
+    def test_unresolved_decision_rejected(self) -> None:
+        """Unresolved ('unknown') distribution or commercial decisions fail closed."""
+        data = copy.deepcopy(self.raw_inventory)
+        ircama = self._get_artifact(data, "ircama-elm327-emulator-test-oracle")
+        ircama["distribution_decision"] = "unknown"
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "DECISION_UNRESOLVED" for e in errors))
+
+        data2 = copy.deepcopy(self.raw_inventory)
+        ircama2 = self._get_artifact(data2, "ircama-elm327-emulator-test-oracle")
+        ircama2["commercial_use_decision"] = "unknown"
+        errors2 = validate_provenance.validate_provenance_data(
+            data2, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "DECISION_UNRESOLVED" for e in errors2))
+
+    def test_package_isolation_pubspec_and_registry_leak(self) -> None:
+        """Test-only assets leaking into pubspec assets or Dart licence registry fail."""
+        data = copy.deepcopy(self.raw_inventory)
+        # Mock pubspec containing test-only asset
+        errors = validate_provenance.validate_provenance_data(
+            data,
+            REPO_ROOT,
+            scope="test-only",
+        )
+        self.assertEqual(errors, [])
+
+        # Intentionally inject test-only asset into pubspec assets mock
+        pubspec_leaked = {"tool/obd_test_rig/chaos_proxy.py"}
+        dart_leaked = {"docs/provenance/upstream/ELM327-emulator-3.0.5.LICENSE"}
+        errs_pub = []
+        validate_provenance._check_test_only_package_isolation(
+            "telltale-chaos-proxy-test-reference",
+            self._get_artifact(data, "telltale-chaos-proxy-test-reference"),
+            pubspec_leaked,
+            set(),
+            errs_pub,
+        )
+        self.assertTrue(any(e.error_code == "TEST_ONLY_ASSET_IN_PUBSPEC" for e in errs_pub))
+
+        errs_reg = []
+        validate_provenance._check_test_only_package_isolation(
+            "ircama-elm327-emulator-test-oracle",
+            self._get_artifact(data, "ircama-elm327-emulator-test-oracle"),
+            set(),
+            dart_leaked,
+            errs_reg,
+        )
+        self.assertTrue(any(e.error_code == "TEST_ONLY_ASSET_IN_REGISTRY" for e in errs_reg))
+
+    def test_execution_bindings_flags_missing(self) -> None:
+        """Required oracle execution flags missing from execution_bindings must fail."""
+        data = copy.deepcopy(self.raw_inventory)
+        ircama = self._get_artifact(data, "ircama-elm327-emulator-test-oracle")
+        ircama["execution_bindings"]["required_flags"] = []
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "EXECUTION_BINDING_FLAG_MISSING" for e in errors))
+
+        data2 = copy.deepcopy(self.raw_inventory)
+        m08 = self._get_artifact(data2, "telltale-mode08-replay-reference")
+        m08["execution_bindings"]["required_flags"] = []
+        errors2 = validate_provenance.validate_provenance_data(
+            data2, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "EXECUTION_BINDING_FLAG_MISSING" for e in errors2))
+
+    def test_missing_integrity_or_test_path_rejected(self) -> None:
+        """Nonexistent integrity files or test paths must fail."""
+        data = copy.deepcopy(self.raw_inventory)
+        chaos = self._get_artifact(data, "telltale-chaos-proxy-test-reference")
+        chaos["project_source"]["integrity_files"][0]["path"] = "tool/missing_chaos.py"
+        errors = validate_provenance.validate_provenance_data(
+            data, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "INTEGRITY_FILE_MISSING" for e in errors))
+
+        data2 = copy.deepcopy(self.raw_inventory)
+        ff = self._get_artifact(data2, "telltale-freeze-frame-reference")
+        ff["execution_bindings"]["test_paths"] = ["test/missing_oracle_test.dart"]
+        errors2 = validate_provenance.validate_provenance_data(
+            data2, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "EXECUTION_TEST_PATH_MISSING" for e in errors2))
+
+
 if __name__ == "__main__":
     unittest.main()
 

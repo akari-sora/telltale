@@ -91,9 +91,18 @@ trap cleanup EXIT
 
 if [[ -z "${ELM_PYTHON:-}" && ! -x "$VENV/bin/python" ]]; then
   "$PYTHON" -m venv "$VENV"
-  "$VENV/bin/pip" install -q setuptools==80.10.2 wheel==0.45.1
-  env -u GITHUB_RUN_NUMBER "$VENV/bin/pip" install -q --no-build-isolation \
-    --no-cache-dir ELM327-emulator==3.0.5
+  if [[ "$(uname -s)" == "Darwin" && -f "$ROOT/tool/ble_test_rig/requirements.lock" ]]; then
+    "$VENV/bin/pip" install --quiet --require-hashes -r "$ROOT/tool/ble_test_rig/requirements.bootstrap"
+    env -u GITHUB_RUN_NUMBER "$VENV/bin/pip" install --quiet --require-hashes \
+      --no-build-isolation -r "$ROOT/tool/ble_test_rig/requirements.lock"
+  elif [[ -f "$ROOT/.github/requirements/elm327-py314-linux-x86_64.lock" ]]; then
+    "$VENV/bin/pip" install --quiet --require-hashes -r "$ROOT/.github/requirements/elm327-build.lock"
+    env -u GITHUB_RUN_NUMBER "$VENV/bin/pip" install --quiet --require-hashes \
+      --no-build-isolation -r "$ROOT/.github/requirements/elm327-py314-linux-x86_64.lock"
+  else
+    echo "Refusing: cannot self-bootstrap without platform lockfile. Supply verified ELM_PYTHON." >&2
+    exit 1
+  fi
   "$VENV/bin/pip" check
 fi
 
@@ -110,11 +119,26 @@ wait_listen() {
 
 ELM_BIN="${ELM_PYTHON:-$VENV/bin/python}"
 
+if [[ ! -x "$ELM_BIN" ]]; then
+  echo "Refusing: ELM python is not executable at $ELM_BIN" >&2
+  exit 1
+fi
+
+INSTALLED_ELM_VER="$("$ELM_BIN" -c "
+try:
+    import importlib.metadata as m
+    print(m.version('ELM327-emulator'))
+except Exception:
+    import sys
+    sys.exit(1)
+" 2>/dev/null || true)"
+
+if [[ "$INSTALLED_ELM_VER" != "3.0.5" ]]; then
+  echo "Refusing: ELM327-emulator version in $ELM_BIN must be exactly 3.0.5 (got '$INSTALLED_ELM_VER')" >&2
+  exit 1
+fi
+
 start_elm() {
-  if [[ ! -x "$ELM_BIN" ]]; then
-    echo "Refusing: ELM python is not executable at $ELM_BIN" >&2
-    exit 1
-  fi
   ELM_PID_DIR="$STATE/elm"
   mkdir -m 700 "$ELM_PID_DIR"
   daemon=()

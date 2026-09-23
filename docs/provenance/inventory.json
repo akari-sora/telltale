@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "inventory_date": "2026-09-22",
-  "description": "Canonical cross-cutting provenance inventory for public and packaged artifacts.",
+  "inventory_date": "2026-09-24",
+  "description": "Canonical cross-cutting provenance inventory for public, packaged, and reference artifacts.",
   "artifacts": [
     {
       "id": "powertrain-battery-bundled-third-party",
@@ -60,6 +60,176 @@
           "url",
           "revision",
           "license"
+        ]
+      }
+    },
+    {
+      "id": "ircama-elm327-emulator-test-oracle",
+      "artifact_class": "ircama-elm327-emulator-test-oracle",
+      "scope": "test-only",
+      "role": "test-only",
+      "title": "Ircama ELM327 Emulator Independent Test Oracle",
+      "ownership": "third-party",
+      "independence": "independent-third-party-oracle",
+      "owning_issues": [11],
+      "distribution_channel": "external-fetch-only",
+      "distribution_decision": "not_distributed",
+      "commercial_use_decision": "restricted",
+      "commercial_use_rationale": "CC-BY-NC-SA-4.0 restricts commercial exploitation. Permitted test-only use as an external ephemeral loopback oracle in development/CI without copying, modifying, bundling, or distributing upstream code in the application package.",
+      "reviewer_status": "reviewed",
+      "package_policy": {
+        "app_package": "forbidden"
+      },
+      "remediation": {
+        "on_rights_revocation": "Disable or replace Ircama test suite execution with project-owned fake_elm327 or hardware rig; product runtime, generic OBD, and production packaging remain unaffected.",
+        "on_integrity_failure": "Refuse oracle test execution until package hash and lockfiles are reconciled with reviewed upstream release."
+      },
+      "source": {
+        "kind": "python-package",
+        "package_name": "ELM327-emulator",
+        "version": "3.0.5",
+        "artifact_sha256": "c4527894abd613f36c87ecba47b6b4ea91fd2b123509fd71d9e49ab41e656d87",
+        "repository_url": "https://github.com/Ircama/ELM327-emulator",
+        "lockfiles": [
+          ".github/requirements/elm327-py314-linux-x86_64.lock",
+          "tool/ble_test_rig/requirements.lock"
+        ]
+      },
+      "licence_evidence": {
+        "identifier": "CC-BY-NC-SA-4.0",
+        "local_evidence_path": "docs/provenance/upstream/ELM327-emulator-3.0.5.LICENSE",
+        "source_locator": "elm327_emulator-3.0.5/LICENSE",
+        "source_sha256": "1349a4b6148492b44f629e64eed676612e234fe9a839e4f3b277c1482c8849f1"
+      },
+      "execution_bindings": {
+        "runner_script": "tool/workshop/run_public_oracles.sh",
+        "test_paths": [
+          "test/emulator_integration_test.dart"
+        ],
+        "required_flags": [
+          "ELM_ORACLE_REQUIRED=true"
+        ]
+      }
+    },
+    {
+      "id": "telltale-chaos-proxy-test-reference",
+      "artifact_class": "telltale-chaos-proxy-test-reference",
+      "scope": "test-only",
+      "role": "test-only",
+      "title": "Telltale Chaos Proxy Fault Injector Test Reference",
+      "ownership": "project-owned",
+      "independence": "project-owned-fault-injector",
+      "owning_issues": [11],
+      "distribution_channel": "source-repository",
+      "distribution_decision": "approved",
+      "commercial_use_decision": "allowed",
+      "commercial_use_rationale": "Project-owned test fault injection proxy maintained under repository GPL-3.0 licence for test verification.",
+      "reviewer_status": "reviewed",
+      "package_policy": {
+        "app_package": "forbidden"
+      },
+      "remediation": {
+        "on_rights_revocation": "Remove or replace chaos proxy reference script; product runtime and production packaging remain unaffected.",
+        "on_integrity_failure": "Restore modified script from git history or update pinned SHA-256 digest upon reviewed modification."
+      },
+      "project_source": {
+        "licence_location": "LICENSE",
+        "integrity_files": [
+          {
+            "path": "tool/obd_test_rig/chaos_proxy.py",
+            "sha256": "6f8638de1e335bdde6f8c30f4b2d674b4abb325dcdd8181ca0f100b553ddde09"
+          }
+        ]
+      },
+      "execution_bindings": {
+        "runner_script": "tool/workshop/run_public_oracles.sh",
+        "test_paths": [
+          "test/chaos_oracle_test.dart",
+          "test/chaos_poll_oracle_test.dart"
+        ]
+      }
+    },
+    {
+      "id": "telltale-freeze-frame-reference",
+      "artifact_class": "telltale-freeze-frame-reference",
+      "scope": "test-only",
+      "role": "test-only",
+      "title": "Telltale Freeze-Frame Reference Oracle",
+      "ownership": "project-owned",
+      "independence": "project-owned-reference",
+      "owning_issues": [11],
+      "distribution_channel": "source-repository",
+      "distribution_decision": "approved",
+      "commercial_use_decision": "allowed",
+      "commercial_use_rationale": "Project-owned test reference server maintained under repository GPL-3.0 licence for freeze-frame test verification.",
+      "reviewer_status": "reviewed",
+      "package_policy": {
+        "app_package": "forbidden"
+      },
+      "remediation": {
+        "on_rights_revocation": "Remove or replace freeze-frame reference script; product runtime and production packaging remain unaffected.",
+        "on_integrity_failure": "Restore modified script from git history or update pinned SHA-256 digest upon reviewed modification."
+      },
+      "project_source": {
+        "licence_location": "LICENSE",
+        "identity_banner": "Telltale Freeze-Frame Reference",
+        "integrity_files": [
+          {
+            "path": "tool/obd_test_rig/freeze_frame_reference.py",
+            "sha256": "1f8e5f7b93f499710d8b2bf5225aae6be1696117ecd2e9b4e06fa13891aba807"
+          }
+        ]
+      },
+      "execution_bindings": {
+        "runner_script": "tool/workshop/run_public_oracles.sh",
+        "test_paths": [
+          "test/freeze_frame_oracle_test.dart"
+        ]
+      }
+    },
+    {
+      "id": "telltale-mode08-replay-reference",
+      "artifact_class": "telltale-mode08-replay-reference",
+      "scope": "test-only",
+      "role": "test-only",
+      "title": "Telltale Mode 08 Replay Reference Server & Fixtures",
+      "ownership": "project-owned",
+      "independence": "project-owned-reference",
+      "owning_issues": [11],
+      "distribution_channel": "source-repository",
+      "distribution_decision": "approved",
+      "commercial_use_decision": "allowed",
+      "commercial_use_rationale": "Project-owned Mode 08 replay reference server and synthetic fixtures under repository GPL-3.0 licence.",
+      "reviewer_status": "reviewed",
+      "package_policy": {
+        "app_package": "forbidden"
+      },
+      "remediation": {
+        "on_rights_revocation": "Remove or replace Mode 08 reference server and fixtures; product runtime and production packaging remain unaffected.",
+        "on_integrity_failure": "Restore modified server or fixtures from git history or update pinned SHA-256 digests upon reviewed modification."
+      },
+      "project_source": {
+        "licence_location": "LICENSE",
+        "identity_banner": "Telltale Mode 08 Replay Reference",
+        "integrity_files": [
+          {
+            "path": "tool/obd_test_rig/mode08_replay_reference.py",
+            "sha256": "4cdc34b4091c910c2315647a081c0ff950f3c59d876b21788454fe4a19ecfdae"
+          },
+          {
+            "path": "tool/obd_test_rig/mode08_replay_fixtures.json",
+            "sha256": "e0a10d417983d02db39a9b0088e15fb6a947b542370f0fddd2b77c7bd02fc136"
+          }
+        ]
+      },
+      "execution_bindings": {
+        "runner_script": "tool/ci/run_mode08_required.py",
+        "test_paths": [
+          "test/diagnostics/service_recipes/mode08_replay_oracle_test.dart",
+          "test/diagnostics/service_recipes/mode08_d05_supplement_test.dart"
+        ],
+        "required_flags": [
+          "MODE08_ORACLE_REQUIRED=true"
         ]
       }
     }
