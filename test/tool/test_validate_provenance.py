@@ -1283,6 +1283,76 @@ class TestValidateProvenanceSlice2(unittest.TestCase):
         self.assertTrue(any(e.error_code == "UNAUTHORIZED_ARTIFACT_CLASS" for e in errs_all_i))
         self.assertEqual(errs_to_i, [], msg="test-only must stay GREEN when production has unauthorized ID")
 
+    def test_s2_m6_negative_battery_scope_to_test_only(self) -> None:
+        """S2-M6 Negative 1: Battery scope changed to test-only:
+        production-package RED (REQUIRED_ARTIFACT_CLASS_MISSING)
+        test-only RED (UNAUTHORIZED_ARTIFACT_CLASS)
+        all RED."""
+        data = copy.deepcopy(self.raw_inventory)
+        battery = self._get_artifact(data, "powertrain-battery-bundled-third-party")
+        battery["scope"] = "test-only"
+
+        errs_prod = validate_provenance.validate_provenance_data(data, REPO_ROOT, scope="production-package")
+        errs_to = validate_provenance.validate_provenance_data(data, REPO_ROOT, scope="test-only")
+        errs_all = validate_provenance.validate_provenance_data(data, REPO_ROOT, scope="all")
+
+        self.assertTrue(any(e.error_code == "REQUIRED_ARTIFACT_CLASS_MISSING" for e in errs_prod), msg="production-package must fail missing required class")
+        self.assertTrue(any(e.error_code == "UNAUTHORIZED_ARTIFACT_CLASS" for e in errs_to), msg="test-only must reject unauthorized battery class")
+        self.assertTrue(len(errs_all) > 0, msg="all scope must be RED")
+
+    def test_s2_m6_negative_ircama_scope_to_production(self) -> None:
+        """S2-M6 Negative 2: Ircama scope changed to production-package:
+        test-only RED (REQUIRED_ARTIFACT_CLASS_MISSING)
+        production-package RED (UNAUTHORIZED_ARTIFACT_CLASS)
+        all RED."""
+        data = copy.deepcopy(self.raw_inventory)
+        ircama = self._get_artifact(data, "ircama-elm327-emulator-test-oracle")
+        ircama["scope"] = "production-package"
+
+        errs_to = validate_provenance.validate_provenance_data(data, REPO_ROOT, scope="test-only")
+        errs_prod = validate_provenance.validate_provenance_data(data, REPO_ROOT, scope="production-package")
+        errs_all = validate_provenance.validate_provenance_data(data, REPO_ROOT, scope="all")
+
+        self.assertTrue(any(e.error_code == "REQUIRED_ARTIFACT_CLASS_MISSING" for e in errs_to), msg="test-only must fail missing required Ircama class")
+        self.assertTrue(any(e.error_code == "UNAUTHORIZED_ARTIFACT_CLASS" for e in errs_prod), msg="production-package must reject unauthorized test-only class")
+        self.assertTrue(len(errs_all) > 0, msg="all scope must be RED")
+
+    def test_s2_m6_negative_scope_invalid_or_empty(self) -> None:
+        """S2-M6 Negative 3: Scope invalid, typo, or empty:
+        All requested scopes safely fail RED (INVALID_SCOPE)."""
+        for bad_scope in ("", "typo", None, "invalid-scope"):
+            data = copy.deepcopy(self.raw_inventory)
+            art = self._get_artifact(data, "ircama-elm327-emulator-test-oracle")
+            if bad_scope is None:
+                art.pop("scope", None)
+            else:
+                art["scope"] = bad_scope
+
+            for req_scope in ("production-package", "test-only", "all"):
+                errs = validate_provenance.validate_provenance_data(data, REPO_ROOT, scope=req_scope)
+                self.assertTrue(
+                    any(e.error_code == "INVALID_SCOPE" for e in errs),
+                    msg=f"Requested scope '{req_scope}' must fail RED with INVALID_SCOPE when artifact scope is '{bad_scope}'",
+                )
+
+    def test_s2_m6_negative_test_only_id_wildcard(self) -> None:
+        """S2-M6 Negative 4: Wildcard in test-only ID:
+        test-only RED (WILDCARD_ARTIFACT_ID)
+        all RED (WILDCARD_ARTIFACT_ID)
+        production-package GREEN."""
+        data = copy.deepcopy(self.raw_inventory)
+        chaos = self._get_artifact(data, "telltale-chaos-proxy-test-reference")
+        chaos["id"] = "telltale-chaos*"
+        chaos["artifact_class"] = "telltale-chaos*"
+
+        errs_prod = validate_provenance.validate_provenance_data(data, REPO_ROOT, scope="production-package")
+        errs_to = validate_provenance.validate_provenance_data(data, REPO_ROOT, scope="test-only")
+        errs_all = validate_provenance.validate_provenance_data(data, REPO_ROOT, scope="all")
+
+        self.assertEqual(errs_prod, [], msg="production-package must stay GREEN when wildcard is in test-only artifact ID")
+        self.assertTrue(any(e.error_code == "WILDCARD_ARTIFACT_ID" for e in errs_to), msg="test-only must fail RED on wildcard ID")
+        self.assertTrue(any(e.error_code == "WILDCARD_ARTIFACT_ID" for e in errs_all), msg="all scope must fail RED on wildcard ID")
+
     def test_s2_m7_licence_evidence_missing_or_drift(self) -> None:
         """S2-M7: Missing or drifted licence evidence fails test-only validation."""
         # Missing file

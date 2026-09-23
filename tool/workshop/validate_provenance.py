@@ -74,6 +74,7 @@ ALL_ALLOWED_CLASSES = (
     SCOPE_ALLOWED_CLASSES["production-package"]
     | SCOPE_ALLOWED_CLASSES["test-only"]
 )
+REQUIRED_SCOPE_CLASSES = SCOPE_ALLOWED_CLASSES
 # Backwards compatibility alias for Slice 1 tests
 SLICE1_ALLOWED_CLASSES = SCOPE_ALLOWED_CLASSES["production-package"]
 
@@ -895,6 +896,8 @@ def validate_provenance_data(
     dart_license_assets = parse_dart_license_assets(dart_license_path)
 
     seen_ids: set[str] = set()
+    seen_production_classes: set[str] = set()
+    seen_test_only_classes: set[str] = set()
 
     for item in artifacts:
         if not isinstance(item, dict):
@@ -918,16 +921,6 @@ def validate_provenance_data(
             )
             continue
 
-        # Wildcard protection
-        if WILDCARD_RE.search(artifact_id):
-            errors.append(
-                ValidationError(
-                    artifact_id,
-                    "WILDCARD_ARTIFACT_ID",
-                    f"Artifact ID '{artifact_id}' contains wildcard characters; exact IDs required",
-                )
-            )
-
         if artifact_id in seen_ids:
             errors.append(
                 ValidationError(
@@ -939,17 +932,31 @@ def validate_provenance_data(
         seen_ids.add(artifact_id)
 
         artifact_scope = item.get("scope")
-
-        # Filter by requested scope unless 'all'
-        if scope != "all" and artifact_scope != scope:
-            continue
-
         if artifact_scope not in ALLOWED_ARTIFACT_SCOPES:
             errors.append(
                 ValidationError(
                     artifact_id,
                     "INVALID_SCOPE",
                     f"Scope '{artifact_scope}' is not in allowed scopes {sorted(ALLOWED_ARTIFACT_SCOPES)}",
+                )
+            )
+        else:
+            if artifact_scope == "production-package":
+                seen_production_classes.add(artifact_id)
+            elif artifact_scope == "test-only":
+                seen_test_only_classes.add(artifact_id)
+
+        # Filter by requested scope unless 'all'
+        if scope != "all" and artifact_scope != scope:
+            continue
+
+        # Wildcard protection (scoped)
+        if WILDCARD_RE.search(artifact_id):
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "WILDCARD_ARTIFACT_ID",
+                    f"Artifact ID '{artifact_id}' contains wildcard characters; exact IDs required",
                 )
             )
 
@@ -1739,6 +1746,29 @@ def validate_provenance_data(
                                 f"Required owner research source '{res_src.get('name')}' is missing from declared source families",
                             )
                         )
+
+    # 4. Scope required-class completeness
+    if scope in ("production-package", "all"):
+        for req_id in sorted(REQUIRED_SCOPE_CLASSES["production-package"]):
+            if req_id not in seen_production_classes:
+                errors.append(
+                    ValidationError(
+                        req_id,
+                        "REQUIRED_ARTIFACT_CLASS_MISSING",
+                        f"Required production-package artifact class '{req_id}' is missing from inventory",
+                    )
+                )
+
+    if scope in ("test-only", "all"):
+        for req_id in sorted(REQUIRED_SCOPE_CLASSES["test-only"]):
+            if req_id not in seen_test_only_classes:
+                errors.append(
+                    ValidationError(
+                        req_id,
+                        "REQUIRED_ARTIFACT_CLASS_MISSING",
+                        f"Required test-only artifact class '{req_id}' is missing from inventory",
+                    )
+                )
 
     return sorted(errors, key=lambda e: (e.artifact_id, e.error_code, e.message))
 
