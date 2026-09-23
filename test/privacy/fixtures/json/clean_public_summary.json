@@ -1,0 +1,20 @@
+{
+  "title": "Telltale Public Summary Positive Control",
+  "version": "1.0.0",
+  "build": {
+    "git_commit": "f9872343b5e73f891f6fdcd1453dc56ed3b7632c",
+    "sha256": "601a420423969540485a5ec43dc953488f3d8762aabbccddeeff001122334455"
+  },
+  "benchmark_summary": {
+    "test_id": "TC-101",
+    "banner": "Telltale Freeze-Frame Reference",
+    "endpoint": "127.0.0.1",
+    "protocol": "ISO 15765-4 CAN 11/500",
+    "ecu_id": "7E8",
+    "dtc_code": "P0300",
+    "total_frames": 42,
+    "error_count": 0,
+    "run_id": "a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d",
+    "timestamp": "2026-09-24T00:00:00Z"
+  }
+}

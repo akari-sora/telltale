@@ -1,0 +1,6 @@
+{
+  "test_id": "TC-DIRTY-VIN",
+  "vehicle": {
+    "vin": "TELLTALE0TEST0001"
+  }
+}

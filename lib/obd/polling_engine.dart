@@ -810,6 +810,30 @@ class PollingEngine {
     });
   }
 
+  /// Waits out a census that has already started. Does not start one.
+  ///
+  /// Connect fires the census without awaiting it, and [_censusAttempted] is
+  /// set when that exchange begins, not when it ends. A fault-code read that
+  /// then sees [_responders] still null is looking at an unfinished census,
+  /// not at one that came back empty. Only the empty result means coverage is
+  /// unknown. Joining keeps that refusal for a finished census and does not
+  /// turn "still asking" into a whole-vehicle failure.
+  Future<void> _joinInFlightResponderCensus(DateTime? deadline) async {
+    final running = _censusInFlight;
+    if (running == null) return;
+    if (deadline == null) {
+      await running;
+      return;
+    }
+    final left = deadline.difference(DateTime.now());
+    if (left <= Duration.zero) return;
+    try {
+      await running.timeout(left);
+    } on TimeoutException {
+      // This read stops waiting. The census keeps running for its starter.
+    }
+  }
+
   Future<Set<String>?> _discoverRespondersOnce(DateTime? deadline) async {
     // One policy, every consumer. J1939 was refused here and an *unidentified*
     // bus was not, so a protocol B slot whose PP 2C could not be read had its
@@ -1365,6 +1389,11 @@ class PollingEngine {
     // Captured, not sampled. Re-checked before every attempt, so a retry that
     // slept across an interruption does not resume on the other side of it.
     final owner = lifecycleEpoch?.call();
+    // Before any Mode 03/07/0A traffic. An in-flight census and this read
+    // share the adapter; judging coverage in the gap refuses a demo (and a
+    // real car) whose census simply has not landed yet.
+    await _joinInFlightResponderCensus(deadline);
+    _requireStillOwned(owner);
     // What *this* read could not account for, accumulated across its retries.
     //
     // Not a reset of the stored set at entry, which is where this started. A
@@ -1536,6 +1565,17 @@ class PollingEngine {
       return result;
     }
 
+    /// Joins a census that started during this read, then applies [finish].
+    ///
+    /// [finish] is synchronous and its refusals have to stay inside the
+    /// attempt's `on DtcReadException` handler, so this is awaited at every
+    /// successful return.
+    Future<List<Dtc>> covered(Set<String> heard, Iterable<Dtc> codes) async {
+      await _joinInFlightResponderCensus(deadline);
+      _requireStillOwned(owner);
+      return finish(heard, codes);
+    }
+
     final owed = <String>{};
     // Cumulative, and the counterpart to `found`. A controller that has given
     // a terminal answer during this logical read has answered, full stop — and
@@ -1592,7 +1632,7 @@ class PollingEngine {
           // transmission holding P0715 that simply never replies would leave
           // the engine's `43 00` standing as the whole vehicle's result.
           //
-          return finish(finished, found.values);
+          return await covered(finished, found.values);
         }
         throw DtcReadException(
           '${owed.length} controller(s) promised a later reply and never delivered it. '
@@ -1621,7 +1661,7 @@ class PollingEngine {
         // answer to — and on the third pass a vehicle that had answered
         // everything reported the PID unsupported instead.
         if (e.kind == DtcReadFailure.pending && owed.isEmpty) {
-          return finish(finished, found.values);
+          return await covered(finished, found.values);
         }
         // Ask the silent ones by name, once, before giving up on them.
         //
@@ -1658,7 +1698,7 @@ class PollingEngine {
             finished.addAll(reached);
             owed.removeAll(reached);
             final stillSilent = e.silentSources.difference(reached);
-            if (stillSilent.isEmpty) return finish(finished, found.values);
+            if (stillSilent.isEmpty) return await covered(finished, found.values);
           }
         }
         final outOfTime =
@@ -2495,6 +2535,19 @@ class PollingEngine {
       bytes.length == 1 && bytes.first == 0x44;
 
   Future<ClearOutcome> clearDtcs() async {
+    // Taken before any await. `await` yields even when the census future is
+    // already complete, and the caller can background and resume in that
+    // gap. Sampling the epoch afterwards treats coming back as a new
+    // authorisation for a clear the user already walked away from. Mode 04
+    // is then sent under the resumed epoch. The lease is this one, and
+    // `sendGlobal` retires it at the write if it has expired.
+    final owner = lifecycleEpoch?.call();
+    _requireStillOwned(owner);
+    // Same gap as the read: a clear started while the connect census is still
+    // on the wire must not treat that as "we asked who is on the vehicle and
+    // learned nothing". Mode 04 is not sent until that exchange has finished
+    // or was never started. The wait does not take a new lease.
+    await _joinInFlightResponderCensus(null);
     // Set for the same reason the read sets it, and it was missing here: the
     // clear's own reply goes through the same ambiguity, and without this a
     // bare `7E8` acknowledging the clear would be an open question instead of
@@ -2516,8 +2569,6 @@ class PollingEngine {
     // has no Mode 04, and an undetermined one cannot be shown to have carried
     // the request at all.
     _requireObd2Bus('fault codes');
-    final owner = lifecycleEpoch?.call();
-    _requireStillOwned(owner);
     final ObdResponse response;
     final clearAudit = client.beginWriteAudit();
     try {

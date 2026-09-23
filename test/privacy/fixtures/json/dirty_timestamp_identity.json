@@ -1,0 +1,7 @@
+{
+  "test_id": "TC-DIRTY-TIMESTAMP-ID",
+  "event": {
+    "timestamp": "2026-09-24T00:00:00Z",
+    "vin": "TELLTALE0TEST0001"
+  }
+}

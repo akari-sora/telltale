@@ -1877,6 +1877,22 @@ class ObdSession extends Notifier<ObdConnectionState> {
         kind: DtcReadFailure.disconnected,
       );
     }
+    // The scan already waits. A direct read — the demo lifecycle, a screen
+    // that does not go through [DtcScanNotifier] — did not, so it could run
+    // while the census fired at connect was still queued or on the wire.
+    // `PollingEngine.readDtcs` then refused the list as unknown coverage.
+    // That refusal stays for a census that finished without naming anyone.
+    try {
+      await ensureResponderCensus(deadline: deadline);
+    } on Object {
+      // A census that cannot be taken is not itself a DTC result.
+    }
+    if (!identical(_engine, engine)) {
+      throw const DtcReadException(
+        'The connection is down',
+        kind: DtcReadFailure.disconnected,
+      );
+    }
     return engine.readDtcs(kind, deadline: deadline);
   }
 
@@ -1907,6 +1923,16 @@ class ObdSession extends Notifier<ObdConnectionState> {
     }
     _clearInFlight = true;
     try {
+      if (!identical(_engine, engine)) {
+        throw const DtcReadException(
+          'The connection is down',
+          kind: DtcReadFailure.disconnected,
+        );
+      }
+      // The engine takes the lifecycle lease before it waits for an in-flight
+      // census. Awaiting the census here first would sample that lease only
+      // after a background and resume, and the clear the user abandoned
+      // would go out under the new epoch.
       return await engine.clearDtcs();
     } finally {
       _clearInFlight = false;

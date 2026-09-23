@@ -114,20 +114,92 @@ def _dir_lease_targets(dirs: list[str]) -> list[tuple[str, bool]]:
     return sorted(mode.items(), key=lambda item: item[0])
 
 
-def _acquire_lease(path: Path, task_id: str, *, exclusive: bool = True) -> int:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o644)
+def _lease_open_flags(extra: int = 0) -> int:
+    return extra | os.O_RDWR | getattr(os, "O_CLOEXEC", 0)
+
+
+def _open_lease(path: Path, flags: int, mode: int | None = None) -> int:
+    if mode is None:
+        fd = os.open(str(path), flags)
+    else:
+        fd = os.open(str(path), flags, mode)
+    os.set_inheritable(fd, False)
+    return fd
+
+
+def _write_lease_payload(fd: int, task_id: str) -> None:
+    payload = json.dumps({"task": task_id, "pid": os.getpid()}).encode("utf-8")
+    os.lseek(fd, 0, os.SEEK_SET)
+    os.ftruncate(fd, 0)
+    os.write(fd, payload)
+    os.fsync(fd)
+
+
+def _unlink_quiet(path: Path) -> None:
     try:
-        flag = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-        fcntl.flock(fd, flag | fcntl.LOCK_NB)
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def _lock_lease_fd(fd: int, task_id: str, lock_op: int, *, exclusive: bool) -> None:
+    try:
+        fcntl.flock(fd, lock_op)
     except BlockingIOError as exc:
-        os.close(fd)
         raise RunnerError(f"{task_id}: lease held") from exc
     if exclusive:
-        os.lseek(fd, 0, os.SEEK_SET)
-        os.ftruncate(fd, 0)
-        os.write(fd, json.dumps({"task": task_id, "pid": os.getpid()}).encode("utf-8"))
-    return fd
+        _write_lease_payload(fd, task_id)
+
+
+def _publish_new_lease(
+    path: Path, task_id: str, lock_op: int, *, exclusive: bool
+) -> int | None:
+    """Lock a private inode, then link it to ``path``.
+
+    ``open(O_CREAT)`` on the public path makes the file visible before
+    ``flock``. Same-task collision waits on that path and would start the
+    second process in the gap, so the loser can take the lock and exit 0.
+    ``link`` publishes the inode only after the lock is held, and it fails
+    if ``path`` already exists so a held lease is not replaced.
+    """
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    fd = _open_lease(tmp, _lease_open_flags(os.O_CREAT | os.O_EXCL), 0o644)
+    linked = False
+    try:
+        _lock_lease_fd(fd, task_id, lock_op, exclusive=exclusive)
+        try:
+            os.link(tmp, path)
+        except FileExistsError:
+            return None
+        linked = True
+        return fd
+    finally:
+        if not linked:
+            os.close(fd)
+        _unlink_quiet(tmp)
+
+
+def _acquire_lease(path: Path, task_id: str, *, exclusive: bool = True) -> int:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flag = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+    lock_op = flag | fcntl.LOCK_NB
+    for _attempt in range(16):
+        try:
+            fd = _open_lease(path, _lease_open_flags())
+        except FileNotFoundError:
+            published = _publish_new_lease(
+                path, task_id, lock_op, exclusive=exclusive
+            )
+            if published is None:
+                continue
+            return published
+        try:
+            _lock_lease_fd(fd, task_id, lock_op, exclusive=exclusive)
+        except RunnerError:
+            os.close(fd)
+            raise
+        return fd
+    raise RunnerError(f"{task_id}: lease held")
 
 
 def _release_lease(fd: int | None, path: Path) -> None:
@@ -783,12 +855,14 @@ def run_task(
     dir_leases: list[tuple[int, Path]] = []
     try:
         if not dry_run:
-            lease_fd = _acquire_lease(lease_path, task_id)
+            # Directory locks first. Collision tests treat lease.json
+            # appearing as "every conflicting lease is already held".
             for rel, exclusive in _dir_lease_targets(_task_writable_dirs(task)):
                 path = _dir_lease_path(original_root, rel)
                 dir_leases.append(
                     (_acquire_lease(path, task_id, exclusive=exclusive), path)
                 )
+            lease_fd = _acquire_lease(lease_path, task_id)
         if resume_handoff is not None:
             git_root = _git_toplevel(cwd)
             prev_wt_raw = resume_handoff.get("worktree")
@@ -985,9 +1059,9 @@ def run_task(
         _write_handoff(handoff_dest, payload)
         return 0 if completed else 1
     finally:
+        _release_lease(lease_fd, lease_path)
         for fd, path in reversed(dir_leases):
             _release_lease(fd, path)
-        _release_lease(lease_fd, lease_path)
 
 
 def main(argv: list[str]) -> int:
