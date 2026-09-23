@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Any
 
 SUPPORTED_SCHEMA_VERSIONS = {1}
-ALLOWED_SCOPES = {"production-package", "all"}
+ALLOWED_SCOPES = {"production-package", "test-only", "all"}
+ALLOWED_ARTIFACT_SCOPES = {"production-package", "test-only"}
 ALLOWED_ROLES = {"runtime", "bundled", "test-only"}
 ALLOWED_DISTRIBUTION_DECISIONS = {
     "approved",
@@ -42,14 +43,40 @@ ALLOWED_COMMERCIAL_DECISIONS = {
     "not_applicable",
 }
 ALLOWED_REVIEWER_STATUS = {"reviewed", "pending", "unreviewed"}
+ALLOWED_OWNERSHIP = {"third-party", "project-owned"}
+ALLOWED_INDEPENDENCE = {
+    "independent-third-party-oracle",
+    "project-owned-fault-injector",
+    "project-owned-reference",
+}
+ALLOWED_DISTRIBUTION_CHANNELS = {
+    "external-fetch-only",
+    "source-repository",
+    "app-package",
+}
 
 SHA40_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 REVISION_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 WILDCARD_RE = re.compile(r"[\*\?\[\]]")
 
-# Slice 1 finite boundary: exactly one declared artifact class.
-SLICE1_ALLOWED_CLASSES = frozenset({"powertrain-battery-bundled-third-party"})
+# Scoped allowed classes
+SCOPE_ALLOWED_CLASSES = {
+    "production-package": frozenset({"powertrain-battery-bundled-third-party"}),
+    "test-only": frozenset({
+        "ircama-elm327-emulator-test-oracle",
+        "telltale-chaos-proxy-test-reference",
+        "telltale-freeze-frame-reference",
+        "telltale-mode08-replay-reference",
+    }),
+}
+ALL_ALLOWED_CLASSES = (
+    SCOPE_ALLOWED_CLASSES["production-package"]
+    | SCOPE_ALLOWED_CLASSES["test-only"]
+)
+REQUIRED_SCOPE_CLASSES = SCOPE_ALLOWED_CLASSES
+# Backwards compatibility alias for Slice 1 tests
+SLICE1_ALLOWED_CLASSES = SCOPE_ALLOWED_CLASSES["production-package"]
 
 # Permitted open-source licences for bundled and reference components.
 PERMITTED_OPEN_SOURCE_LICENSES = frozenset({
@@ -161,6 +188,664 @@ def _check_no_absolute_paths(
     _scan(record.get("runtime_licence_registry_assets"), "runtime_licence_registry_assets")
 
 
+
+def _parse_lockfile_package_entry(
+    lock_text: str, package_name: str
+) -> tuple[str | None, str | None, list[str]]:
+    """Parses lockfile for a package entry.
+    Returns (op, version, list_of_hashes).
+    If package not found, returns (None, None, []).
+    """
+    lines = lock_text.splitlines()
+    joined_entries: list[str] = []
+    current = ""
+    for line in lines:
+        line_str = line.strip()
+        if not line_str or line_str.startswith("#"):
+            continue
+        if current:
+            current += " " + line_str
+        else:
+            current = line_str
+        if current.endswith("\\"):
+            current = current[:-1].strip()
+        else:
+            joined_entries.append(current)
+            current = ""
+    if current:
+        joined_entries.append(current)
+
+    pattern = re.compile(rf"^{re.escape(package_name)}([><=~!*]+)([^\s\\]+)", re.IGNORECASE)
+    for entry in joined_entries:
+        m = pattern.match(entry)
+        if m:
+            op = m.group(1)
+            ver = m.group(2)
+            hashes = re.findall(r"--hash=(?:sha256:)?([0-9a-fA-F]{64})", entry)
+            return op, ver, hashes
+    return None, None, []
+
+
+def _check_test_only_package_isolation(
+    artifact_id: str,
+    record: dict[str, Any],
+    pubspec_assets: set[str],
+    dart_license_assets: set[str],
+    errors: list[ValidationError],
+) -> None:
+    """Verifies that no test-only files or assets leak into pubspec.yaml or runtime licence registry."""
+    def _scan(val: Any) -> None:
+        if isinstance(val, str):
+            clean_val = val.strip()
+            if clean_val:
+                if clean_val in pubspec_assets:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "TEST_ONLY_ASSET_IN_PUBSPEC",
+                            f"Test-only asset '{clean_val}' is forbidden from pubspec.yaml assets",
+                        )
+                    )
+                if clean_val in dart_license_assets:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "TEST_ONLY_ASSET_IN_REGISTRY",
+                            f"Test-only asset '{clean_val}' is forbidden from runtime licence registry",
+                        )
+                    )
+        elif isinstance(val, list):
+            for item in val:
+                _scan(item)
+        elif isinstance(val, dict):
+            for item in val.values():
+                _scan(item)
+
+    _scan(record.get("source"))
+    _scan(record.get("project_source"))
+    _scan(record.get("licence_evidence"))
+    _scan(record.get("execution_bindings"))
+
+
+def _validate_ircama_oracle(
+    artifact_id: str,
+    item: dict[str, Any],
+    repo_root: Path,
+    errors: list[ValidationError],
+) -> None:
+    """Validates third-party Ircama oracle package hashes, lockfiles, and licence evidence."""
+    source = item.get("source")
+    if not isinstance(source, dict):
+        errors.append(ValidationError(artifact_id, "SOURCE_SPEC_MISSING", "'source' object is required for Ircama"))
+        return
+
+    kind = source.get("kind")
+    if kind != "python-package":
+        errors.append(ValidationError(artifact_id, "SOURCE_KIND_INVALID", f"Source kind must be 'python-package', got '{kind}'"))
+
+    pkg_name = source.get("package_name")
+    if pkg_name != "ELM327-emulator":
+        errors.append(ValidationError(artifact_id, "PACKAGE_NAME_MISMATCH", f"package_name must be 'ELM327-emulator', got '{pkg_name}'"))
+
+    ver = source.get("version")
+    if not isinstance(ver, str) or not ver.strip():
+        errors.append(ValidationError(artifact_id, "VERSION_MISSING", "version is required and must be non-empty"))
+
+    sha = source.get("artifact_sha256")
+    if not isinstance(sha, str) or not SHA256_RE.match(sha):
+        errors.append(ValidationError(artifact_id, "SHA256_INVALID", f"artifact_sha256 '{sha}' must be a 64-char hex string"))
+
+    lockfiles = source.get("lockfiles")
+    if not isinstance(lockfiles, list) or not lockfiles:
+        errors.append(ValidationError(artifact_id, "LOCKFILES_SPEC_MISSING", "'lockfiles' must be a non-empty list of file paths"))
+    else:
+        for lock_rel in lockfiles:
+            if not isinstance(lock_rel, str) or not lock_rel.strip():
+                errors.append(ValidationError(artifact_id, "LOCKFILE_PATH_INVALID", f"Invalid lockfile path '{lock_rel}'"))
+                continue
+            lock_path = repo_root / lock_rel
+            if not lock_path.is_file():
+                errors.append(ValidationError(artifact_id, "LOCKFILE_MISSING", f"Lockfile '{lock_rel}' missing on disk"))
+                continue
+
+            lock_text = lock_path.read_text(encoding="utf-8", errors="replace")
+            op, lock_ver, lock_hashes = _parse_lockfile_package_entry(lock_text, pkg_name or "ELM327-emulator")
+            if op is None:
+                errors.append(ValidationError(artifact_id, "LOCKFILE_PACKAGE_MISSING", f"Lockfile '{lock_rel}' does not contain package '{pkg_name}'"))
+            else:
+                if op != "==":
+                    errors.append(ValidationError(artifact_id, "LOCKFILE_FLOATING_SPEC", f"Lockfile '{lock_rel}' uses floating/range spec '{op}' for {pkg_name}; exact '==' pin required"))
+                if ver and lock_ver != ver:
+                    errors.append(ValidationError(artifact_id, "LOCKFILE_VERSION_DRIFT", f"Lockfile '{lock_rel}' specifies version '{lock_ver}', expected '{ver}'"))
+                if not lock_hashes:
+                    errors.append(ValidationError(artifact_id, "LOCKFILE_HASH_MISSING", f"Lockfile '{lock_rel}' missing hash for {pkg_name}"))
+                elif sha and not any(h.lower() == sha.lower() for h in lock_hashes):
+                    errors.append(ValidationError(artifact_id, "LOCKFILE_HASH_DRIFT", f"Lockfile '{lock_rel}' hash '{lock_hashes[0]}' does not match expected '{sha}'"))
+
+    # Licence evidence validation
+    lic_ev = item.get("licence_evidence")
+    if not isinstance(lic_ev, dict):
+        errors.append(ValidationError(artifact_id, "LICENCE_EVIDENCE_SPEC_MISSING", "'licence_evidence' object is required"))
+    else:
+        ident = lic_ev.get("identifier")
+        if not isinstance(ident, str) or not ident.strip():
+            errors.append(ValidationError(artifact_id, "LICENCE_IDENTIFIER_MISSING", "'licence_evidence.identifier' is required"))
+
+        loc_path_str = lic_ev.get("local_evidence_path")
+        if not isinstance(loc_path_str, str) or not loc_path_str.strip():
+            errors.append(ValidationError(artifact_id, "LICENCE_EVIDENCE_PATH_MISSING", "'licence_evidence.local_evidence_path' is required"))
+        else:
+            evidence_file = repo_root / loc_path_str
+            if not evidence_file.is_file():
+                errors.append(ValidationError(artifact_id, "LICENCE_EVIDENCE_MISSING", f"Licence evidence file '{loc_path_str}' missing on disk"))
+            else:
+                ev_bytes = evidence_file.read_bytes()
+                actual_sha = hashlib.sha256(ev_bytes).hexdigest()
+                expected_sha = lic_ev.get("source_sha256")
+                if not isinstance(expected_sha, str) or not SHA256_RE.match(expected_sha):
+                    errors.append(ValidationError(artifact_id, "SHA256_INVALID", f"source_sha256 '{expected_sha}' must be a 64-char hex string"))
+                elif actual_sha.lower() != expected_sha.lower():
+                    errors.append(ValidationError(artifact_id, "LICENCE_EVIDENCE_HASH_DRIFT", f"Licence evidence file '{loc_path_str}' hash drift: got {actual_sha}, expected {expected_sha}"))
+
+                ev_text = ev_bytes.decode("utf-8", errors="replace")
+                if ident and not (_matches_licence_token(ident, ev_text) or "Attribution-NonCommercial-ShareAlike 4.0" in ev_text):
+                    errors.append(ValidationError(artifact_id, "LICENCE_EVIDENCE_CONTENT_MISMATCH", f"Licence evidence file '{loc_path_str}' does not contain expected licence identifier '{ident}'"))
+
+    # Execution bindings validation
+    exec_bind = item.get("execution_bindings")
+    if not isinstance(exec_bind, dict):
+        errors.append(ValidationError(artifact_id, "EXECUTION_BINDINGS_MISSING", "'execution_bindings' object is required"))
+    else:
+        runner_script = exec_bind.get("runner_script")
+        if not isinstance(runner_script, str) or not runner_script.strip():
+            errors.append(ValidationError(artifact_id, "EXECUTION_RUNNER_MISSING", "'runner_script' is required"))
+        else:
+            runner_file = repo_root / runner_script
+            if not runner_file.is_file():
+                errors.append(ValidationError(artifact_id, "EXECUTION_RUNNER_MISSING", f"Execution runner '{runner_script}' missing on disk"))
+            else:
+                runner_text = runner_file.read_text(encoding="utf-8", errors="replace")
+                expected_version = item.get("source", {}).get("version", "3.0.5")
+                declared_locks = item.get("source", {}).get("lockfiles", [])
+
+                # Join shell line continuations
+                cmd_lines: list[str] = []
+                current_line = ""
+                for raw_line in runner_text.splitlines():
+                    stripped = raw_line.strip()
+                    if stripped.startswith("#"):
+                        continue
+                    if current_line:
+                        current_line += " " + stripped
+                    else:
+                        current_line = stripped
+                    if current_line.endswith("\\"):
+                        current_line = current_line[:-1].rstrip()
+                    else:
+                        cmd_lines.append(current_line)
+                        current_line = ""
+                if current_line:
+                    cmd_lines.append(current_line)
+
+                allowed_reqs = set(declared_locks) | {
+                    ".github/requirements/elm327-build.lock",
+                    "tool/ble_test_rig/requirements.bootstrap",
+                }
+
+                for cmd in cmd_lines:
+                    if ("pip" in cmd and "install" in cmd) or re.search(r'(?:^|[/\s])pip(?:\d+)?(?:\.exe)?["\']?\s+install\b', cmd):
+                        if "--require-hashes" not in cmd:
+                            errors.append(
+                                ValidationError(
+                                    artifact_id,
+                                    "RUNNER_UNHASHED_INSTALL_PROHIBITED",
+                                    f"Runner '{runner_script}' contains unhashed pip install: '{cmd}'",
+                                )
+                            )
+                        # Check referenced requirements files (-r or --requirement)
+                        req_matches = re.findall(r'(?:-r|--requirement)\s+["\']?([^"\';\s]+)["\']?', cmd)
+                        for req_match in req_matches:
+                            norm_req = req_match.replace("$ROOT/", "").replace("${ROOT}/", "")
+                            if norm_req.startswith("./"):
+                                norm_req = norm_req[2:]
+                            if norm_req not in allowed_reqs:
+                                errors.append(
+                                    ValidationError(
+                                        artifact_id,
+                                        "RUNNER_UNDECLARED_REQUIREMENTS",
+                                        f"Runner '{runner_script}' references undeclared requirements file '{norm_req}' (allowed: {sorted(allowed_reqs)})",
+                                    )
+                                )
+
+                # Runner must reference all declared lockfiles
+                for lock in declared_locks:
+                    if lock not in runner_text:
+                        errors.append(
+                            ValidationError(
+                                artifact_id,
+                                "RUNNER_LOCKFILE_MISSING",
+                                f"Runner '{runner_script}' does not reference declared lockfile '{lock}'",
+                            )
+                        )
+
+                # Installed package version preflight check
+                has_version_check = (
+                    "ELM327-emulator" in runner_text
+                    and ("importlib.metadata" in runner_text or "m.version" in runner_text or "version(" in runner_text)
+                )
+                if not has_version_check:
+                    errors.append(
+                        ValidationError(
+                            artifact_id,
+                            "RUNNER_VERSION_PREFLIGHT_MISSING",
+                            f"Runner '{runner_script}' is missing installed ELM327-emulator version preflight",
+                        )
+                    )
+                else:
+                    version_cmp_match = re.search(
+                        r'INSTALLED_ELM_VER["\']?\s*(!=|==|=)\s*["\']?([0-9A-Za-z_.\-]+)["\']?',
+                        runner_text,
+                    )
+                    if not version_cmp_match:
+                        version_cmp_match = re.search(
+                            r'["\']?([0-9A-Za-z_.\-]+)["\']?\s*(!=|==|=)\s*["\']?\$?INSTALLED_ELM_VER',
+                            runner_text,
+                        )
+                    if not version_cmp_match:
+                        errors.append(
+                            ValidationError(
+                                artifact_id,
+                                "RUNNER_VERSION_PREFLIGHT_MISSING",
+                                f"Runner '{runner_script}' does not check INSTALLED_ELM_VER against exact version",
+                            )
+                        )
+                    else:
+                        preflight_ver = version_cmp_match.group(2) if version_cmp_match.lastindex == 2 else version_cmp_match.group(1)
+                        if preflight_ver != expected_version:
+                            errors.append(
+                                ValidationError(
+                                    artifact_id,
+                                    "RUNNER_PREFLIGHT_VERSION_MISMATCH",
+                                    f"Runner preflight checks version '{preflight_ver}', but inventory requires '{expected_version}'",
+                                )
+                            )
+
+        test_paths = exec_bind.get("test_paths")
+        if not isinstance(test_paths, list) or not test_paths:
+            errors.append(ValidationError(artifact_id, "EXECUTION_TEST_PATHS_MISSING", "'test_paths' must be a non-empty list of test files"))
+        else:
+            for tp in test_paths:
+                if not isinstance(tp, str) or not (repo_root / tp).is_file():
+                    errors.append(ValidationError(artifact_id, "EXECUTION_TEST_PATH_MISSING", f"Test path '{tp}' missing on disk"))
+
+        req_flags = exec_bind.get("required_flags")
+        if not isinstance(req_flags, list) or "ELM_ORACLE_REQUIRED=true" not in req_flags:
+            errors.append(ValidationError(artifact_id, "EXECUTION_BINDING_FLAG_MISSING", "'required_flags' must include 'ELM_ORACLE_REQUIRED=true'"))
+
+
+def _validate_project_reference(
+    artifact_id: str,
+    item: dict[str, Any],
+    repo_root: Path,
+    errors: list[ValidationError],
+) -> None:
+    """Validates project-owned reference or fault-injector hashes and identity banners."""
+    proj_source = item.get("project_source")
+    if not isinstance(proj_source, dict):
+        errors.append(ValidationError(artifact_id, "PROJECT_SOURCE_SPEC_MISSING", "'project_source' object is required"))
+        return
+
+    lic_loc = proj_source.get("licence_location")
+    if not isinstance(lic_loc, str) or not (repo_root / lic_loc).is_file():
+        errors.append(ValidationError(artifact_id, "LICENCE_LOCATION_MISSING", f"Project reference licence_location '{lic_loc}' missing on disk"))
+
+    integrity_files = proj_source.get("integrity_files")
+    if not isinstance(integrity_files, list) or not integrity_files:
+        errors.append(ValidationError(artifact_id, "INTEGRITY_FILES_SPEC_MISSING", "'integrity_files' must be a non-empty list"))
+    else:
+        declared_paths: set[str] = set()
+        for entry in integrity_files:
+            if not isinstance(entry, dict):
+                errors.append(ValidationError(artifact_id, "INTEGRITY_ENTRY_INVALID", "Integrity file entry must be an object"))
+                continue
+            path_str = entry.get("path")
+            expected_sha = entry.get("sha256")
+            if not isinstance(path_str, str) or not path_str.strip():
+                errors.append(ValidationError(artifact_id, "INTEGRITY_PATH_INVALID", "Integrity file path must be non-empty string"))
+                continue
+            declared_paths.add(path_str)
+            file_disk = repo_root / path_str
+            if not file_disk.is_file():
+                errors.append(ValidationError(artifact_id, "INTEGRITY_FILE_MISSING", f"Integrity file '{path_str}' missing on disk"))
+                continue
+            if not isinstance(expected_sha, str) or not SHA256_RE.match(expected_sha):
+                errors.append(ValidationError(artifact_id, "SHA256_INVALID", f"Integrity sha256 '{expected_sha}' must be 64-char hex string"))
+                continue
+            actual_sha = hashlib.sha256(file_disk.read_bytes()).hexdigest()
+            if actual_sha.lower() != expected_sha.lower():
+                errors.append(ValidationError(artifact_id, "INTEGRITY_HASH_MISMATCH", f"Integrity file '{path_str}' SHA-256 drift: got {actual_sha}, expected {expected_sha}"))
+
+        if artifact_id == "telltale-mode08-replay-reference":
+            required_m08 = {
+                "tool/obd_test_rig/mode08_replay_reference.py",
+                "tool/obd_test_rig/mode08_replay_fixtures.json",
+            }
+            if not required_m08.issubset(declared_paths):
+                errors.append(ValidationError(artifact_id, "INTEGRITY_FILES_INCOMPLETE", f"Mode08 reference integrity_files must contain both {sorted(required_m08)}"))
+
+    # Identity banner validation
+    if artifact_id == "telltale-freeze-frame-reference":
+        expected_banner = "Telltale Freeze-Frame Reference"
+        declared_banner = proj_source.get("identity_banner")
+        if declared_banner != expected_banner:
+            errors.append(ValidationError(artifact_id, "IDENTITY_BANNER_MISMATCH", f"Freeze-frame identity banner must be '{expected_banner}', got '{declared_banner}'"))
+        ff_file = repo_root / "tool/obd_test_rig/freeze_frame_reference.py"
+        if ff_file.is_file():
+            ff_text = ff_file.read_text(encoding="utf-8", errors="replace")
+            if f'IDENTITY = "{expected_banner}"' not in ff_text:
+                errors.append(ValidationError(artifact_id, "IDENTITY_BANNER_MISMATCH", f"Freeze-frame reference script must define IDENTITY = '{expected_banner}'"))
+    elif artifact_id == "telltale-mode08-replay-reference":
+        expected_banner = "Telltale Mode 08 Replay Reference"
+        declared_banner = proj_source.get("identity_banner")
+        if declared_banner != expected_banner:
+            errors.append(ValidationError(artifact_id, "IDENTITY_BANNER_MISMATCH", f"Mode08 identity banner must be '{expected_banner}', got '{declared_banner}'"))
+        m08_file = repo_root / "tool/obd_test_rig/mode08_replay_reference.py"
+        if m08_file.is_file():
+            m08_text = m08_file.read_text(encoding="utf-8", errors="replace")
+            if f'IDENTITY = "{expected_banner}"' not in m08_text:
+                errors.append(ValidationError(artifact_id, "IDENTITY_BANNER_MISMATCH", f"Mode08 reference script must define IDENTITY = '{expected_banner}'"))
+
+    # Execution bindings validation
+    exec_bind = item.get("execution_bindings")
+    if not isinstance(exec_bind, dict):
+        errors.append(ValidationError(artifact_id, "EXECUTION_BINDINGS_MISSING", "'execution_bindings' object is required"))
+    else:
+        runner_script = exec_bind.get("runner_script")
+        if not isinstance(runner_script, str) or not (repo_root / runner_script).is_file():
+            errors.append(ValidationError(artifact_id, "EXECUTION_RUNNER_MISSING", f"Execution runner '{runner_script}' missing on disk"))
+
+        test_paths = exec_bind.get("test_paths")
+        if not isinstance(test_paths, list) or not test_paths:
+            errors.append(ValidationError(artifact_id, "EXECUTION_TEST_PATHS_MISSING", "'test_paths' must be a non-empty list of test files"))
+        else:
+            for tp in test_paths:
+                if not isinstance(tp, str) or not (repo_root / tp).is_file():
+                    errors.append(ValidationError(artifact_id, "EXECUTION_TEST_PATH_MISSING", f"Test path '{tp}' missing on disk"))
+
+        if artifact_id == "telltale-mode08-replay-reference":
+            req_flags = exec_bind.get("required_flags")
+            if not isinstance(req_flags, list) or "MODE08_ORACLE_REQUIRED=true" not in req_flags:
+                errors.append(ValidationError(artifact_id, "EXECUTION_BINDING_FLAG_MISSING", "'required_flags' must include 'MODE08_ORACLE_REQUIRED=true'"))
+
+
+def _validate_test_only_artifact(
+    artifact_id: str,
+    item: dict[str, Any],
+    repo_root: Path,
+    pubspec_assets: set[str],
+    dart_license_assets: set[str],
+    errors: list[ValidationError],
+) -> None:
+    """Validates a test-only oracle or reference artifact record (Slice 2)."""
+    # 1. Role validation & escalation check
+    role = item.get("role")
+    if role in ("runtime", "bundled"):
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "TEST_ONLY_ROLE_ESCALATION",
+                f"Test-only artifact '{artifact_id}' cannot have role '{role}'",
+            )
+        )
+    elif role != "test-only":
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "INVALID_ROLE",
+                f"Role '{role}' is not in allowed roles {sorted(ALLOWED_ROLES)}",
+            )
+        )
+
+    # 2. Package policy
+    pkg_policy = item.get("package_policy")
+    if not isinstance(pkg_policy, dict) or pkg_policy.get("app_package") != "forbidden":
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "PACKAGE_POLICY_INVALID",
+                "package_policy.app_package must be 'forbidden' for test-only artifacts",
+            )
+        )
+
+    # 3. Distribution channel
+    dist_channel = item.get("distribution_channel")
+    if dist_channel not in ALLOWED_DISTRIBUTION_CHANNELS:
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "INVALID_DISTRIBUTION_CHANNEL_ENUM",
+                f"Distribution channel '{dist_channel}' is not in {sorted(ALLOWED_DISTRIBUTION_CHANNELS)}",
+            )
+        )
+    elif dist_channel == "app-package":
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "DISTRIBUTION_CHANNEL_INVALID",
+                f"Test-only artifact '{artifact_id}' cannot have distribution_channel 'app-package'",
+            )
+        )
+
+    # 4. Ownership & Independence
+    ownership = item.get("ownership")
+    if ownership not in ALLOWED_OWNERSHIP:
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "INVALID_OWNERSHIP_ENUM",
+                f"Ownership '{ownership}' is not in {sorted(ALLOWED_OWNERSHIP)}",
+            )
+        )
+
+    independence = item.get("independence")
+    if independence not in ALLOWED_INDEPENDENCE:
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "INVALID_INDEPENDENCE_ENUM",
+                f"Independence '{independence}' is not in {sorted(ALLOWED_INDEPENDENCE)}",
+            )
+        )
+
+    # Cross-check ownership & independence
+    if ownership == "project-owned" and independence == "independent-third-party-oracle":
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "INDEPENDENCE_LAUNDERING",
+                f"Project-owned artifact '{artifact_id}' cannot be classified as independent-third-party-oracle",
+            )
+        )
+
+    if artifact_id == "ircama-elm327-emulator-test-oracle":
+        if ownership != "third-party":
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "OWNERSHIP_MISCLASSIFICATION",
+                    f"Ircama test oracle must have ownership 'third-party', got '{ownership}'",
+                )
+            )
+        if independence != "independent-third-party-oracle":
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "INDEPENDENCE_MISCLASSIFICATION",
+                    f"Ircama test oracle must have independence 'independent-third-party-oracle', got '{independence}'",
+                )
+            )
+        if dist_channel != "external-fetch-only":
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "DISTRIBUTION_CHANNEL_INVALID",
+                    f"Ircama must have distribution_channel 'external-fetch-only', got '{dist_channel}'",
+                )
+            )
+    elif artifact_id in (
+        "telltale-chaos-proxy-test-reference",
+        "telltale-freeze-frame-reference",
+        "telltale-mode08-replay-reference",
+    ):
+        if ownership != "project-owned":
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "OWNERSHIP_MISCLASSIFICATION",
+                    f"Project reference '{artifact_id}' must have ownership 'project-owned', got '{ownership}'",
+                )
+            )
+        if artifact_id == "telltale-chaos-proxy-test-reference":
+            if independence != "project-owned-fault-injector":
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "INDEPENDENCE_MISCLASSIFICATION",
+                        f"Chaos proxy must have independence 'project-owned-fault-injector', got '{independence}'",
+                    )
+                )
+        elif independence != "project-owned-reference":
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "INDEPENDENCE_MISCLASSIFICATION",
+                    f"Reference '{artifact_id}' must have independence 'project-owned-reference', got '{independence}'",
+                )
+            )
+        if dist_channel != "source-repository":
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "DISTRIBUTION_CHANNEL_INVALID",
+                    f"Project reference must have distribution_channel 'source-repository', got '{dist_channel}'",
+                )
+            )
+
+    # 5. Decisions & Reviewer status
+    dist_decision = item.get("distribution_decision")
+    if dist_decision not in ALLOWED_DISTRIBUTION_DECISIONS:
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "INVALID_DECISION_ENUM",
+                f"Distribution decision '{dist_decision}' is not in {sorted(ALLOWED_DISTRIBUTION_DECISIONS)}",
+            )
+        )
+    elif dist_decision == "unknown":
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "DECISION_UNRESOLVED",
+                f"Distribution decision for '{artifact_id}' is unresolved ('unknown')",
+            )
+        )
+
+    comm_decision = item.get("commercial_use_decision")
+    if comm_decision not in ALLOWED_COMMERCIAL_DECISIONS:
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "INVALID_COMMERCIAL_ENUM",
+                f"Commercial use decision '{comm_decision}' is not in {sorted(ALLOWED_COMMERCIAL_DECISIONS)}",
+            )
+        )
+    elif comm_decision == "unknown":
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "DECISION_UNRESOLVED",
+                f"Commercial use decision for '{artifact_id}' is unresolved ('unknown')",
+            )
+        )
+
+    comm_rationale = item.get("commercial_use_rationale")
+    if not isinstance(comm_rationale, str) or not comm_rationale.strip():
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "COMMERCIAL_RATIONALE_MISSING",
+                "'commercial_use_rationale' is required and cannot be empty",
+            )
+        )
+
+    reviewer = item.get("reviewer_status")
+    if reviewer not in ALLOWED_REVIEWER_STATUS:
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "INVALID_REVIEWER_ENUM",
+                f"Reviewer status '{reviewer}' is not in {sorted(ALLOWED_REVIEWER_STATUS)}",
+            )
+        )
+    elif reviewer != "reviewed":
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "REVIEWER_STATUS_INVALID",
+                f"Reviewer status '{reviewer}' is not reviewed for test-only artifact",
+            )
+        )
+
+    owning_issues = item.get("owning_issues")
+    if (
+        not isinstance(owning_issues, list)
+        or not owning_issues
+        or not all(type(x) is int and not isinstance(x, bool) and x > 0 for x in owning_issues)
+    ):
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "OWNING_ISSUES_MISSING",
+                "'owning_issues' must be a non-empty list of positive issue integers",
+            )
+        )
+
+    remediation = item.get("remediation")
+    if not isinstance(remediation, dict):
+        errors.append(
+            ValidationError(
+                artifact_id,
+                "REMEDIATION_MISSING",
+                "Remediation guidance is required and must be an object",
+            )
+        )
+    else:
+        for rem_key in ("on_rights_revocation", "on_integrity_failure"):
+            val = remediation.get(rem_key)
+            if not isinstance(val, str) or not val.strip():
+                errors.append(
+                    ValidationError(
+                        artifact_id,
+                        "REMEDIATION_MISSING",
+                        f"Remediation guidance requires non-empty '{rem_key}' string",
+                    )
+                )
+
+    # 6. Absolute path protection & Package isolation
+    _check_no_absolute_paths(artifact_id, item, errors)
+    _check_test_only_package_isolation(artifact_id, item, pubspec_assets, dart_license_assets, errors)
+
+    # 7. Class-specific source & integrity validation
+    if artifact_id == "ircama-elm327-emulator-test-oracle":
+        _validate_ircama_oracle(artifact_id, item, repo_root, errors)
+    elif artifact_id in (
+        "telltale-chaos-proxy-test-reference",
+        "telltale-freeze-frame-reference",
+        "telltale-mode08-replay-reference",
+    ):
+        _validate_project_reference(artifact_id, item, repo_root, errors)
+
+
 def validate_provenance_data(
     data: dict[str, Any],
     repo_root: Path,
@@ -168,6 +853,16 @@ def validate_provenance_data(
 ) -> list[ValidationError]:
     """Validates inventory dictionary against rules and repository tree."""
     errors: list[ValidationError] = []
+
+    if scope not in ALLOWED_SCOPES:
+        errors.append(
+            ValidationError(
+                "<inventory>",
+                "INVALID_SCOPE",
+                f"Requested scope '{scope}' is not in allowed scopes {sorted(ALLOWED_SCOPES)}",
+            )
+        )
+        return errors
 
     # 1. Top-level schema version
     schema_ver = data.get("schema_version")
@@ -201,6 +896,8 @@ def validate_provenance_data(
     dart_license_assets = parse_dart_license_assets(dart_license_path)
 
     seen_ids: set[str] = set()
+    seen_production_classes: set[str] = set()
+    seen_test_only_classes: set[str] = set()
 
     for item in artifacts:
         if not isinstance(item, dict):
@@ -224,16 +921,6 @@ def validate_provenance_data(
             )
             continue
 
-        # Wildcard protection
-        if WILDCARD_RE.search(artifact_id):
-            errors.append(
-                ValidationError(
-                    artifact_id,
-                    "WILDCARD_ARTIFACT_ID",
-                    f"Artifact ID '{artifact_id}' contains wildcard characters; exact IDs required",
-                )
-            )
-
         if artifact_id in seen_ids:
             errors.append(
                 ValidationError(
@@ -243,6 +930,35 @@ def validate_provenance_data(
                 )
             )
         seen_ids.add(artifact_id)
+
+        artifact_scope = item.get("scope")
+        if artifact_scope not in ALLOWED_ARTIFACT_SCOPES:
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "INVALID_SCOPE",
+                    f"Scope '{artifact_scope}' is not in allowed scopes {sorted(ALLOWED_ARTIFACT_SCOPES)}",
+                )
+            )
+        else:
+            if artifact_scope == "production-package":
+                seen_production_classes.add(artifact_id)
+            elif artifact_scope == "test-only":
+                seen_test_only_classes.add(artifact_id)
+
+        # Filter by requested scope unless 'all'
+        if scope != "all" and artifact_scope != scope:
+            continue
+
+        # Wildcard protection (scoped)
+        if WILDCARD_RE.search(artifact_id):
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "WILDCARD_ARTIFACT_ID",
+                    f"Artifact ID '{artifact_id}' contains wildcard characters; exact IDs required",
+                )
+            )
 
         artifact_class = item.get("artifact_class")
         if not isinstance(artifact_class, str) or not artifact_class.strip():
@@ -262,29 +978,32 @@ def validate_provenance_data(
                 )
             )
 
-        artifact_scope = item.get("scope")
-        if artifact_scope not in ALLOWED_SCOPES:
-            errors.append(
-                ValidationError(
-                    artifact_id,
-                    "INVALID_SCOPE",
-                    f"Scope '{artifact_scope}' is not in allowed scopes {sorted(ALLOWED_SCOPES)}",
-                )
-            )
-
-        # Filter by requested scope unless 'all'
-        if scope != "all" and artifact_scope != scope:
-            continue
-
-        # Finite Slice 1 gate: only declared artifact class permitted
-        if artifact_id not in SLICE1_ALLOWED_CLASSES:
+        if artifact_id not in ALL_ALLOWED_CLASSES:
             errors.append(
                 ValidationError(
                     artifact_id,
                     "UNAUTHORIZED_ARTIFACT_CLASS",
-                    f"Artifact class '{artifact_id}' is not permitted in Slice 1 (allowed: {sorted(SLICE1_ALLOWED_CLASSES)})",
+                    f"Artifact class '{artifact_id}' is not in allowed classes {sorted(ALL_ALLOWED_CLASSES)}",
                 )
             )
+
+        if (
+            artifact_scope in SCOPE_ALLOWED_CLASSES
+            and artifact_id not in SCOPE_ALLOWED_CLASSES[artifact_scope]
+        ):
+            errors.append(
+                ValidationError(
+                    artifact_id,
+                    "UNAUTHORIZED_ARTIFACT_CLASS",
+                    f"Artifact class '{artifact_id}' is not permitted for scope '{artifact_scope}' (allowed: {sorted(SCOPE_ALLOWED_CLASSES[artifact_scope])})",
+                )
+            )
+
+        if artifact_scope == "test-only":
+            _validate_test_only_artifact(
+                artifact_id, item, repo_root, pubspec_assets, dart_license_assets, errors
+            )
+            continue
 
         role = item.get("role")
         if role not in ALLOWED_ROLES:
@@ -1028,6 +1747,29 @@ def validate_provenance_data(
                             )
                         )
 
+    # 4. Scope required-class completeness
+    if scope in ("production-package", "all"):
+        for req_id in sorted(REQUIRED_SCOPE_CLASSES["production-package"]):
+            if req_id not in seen_production_classes:
+                errors.append(
+                    ValidationError(
+                        req_id,
+                        "REQUIRED_ARTIFACT_CLASS_MISSING",
+                        f"Required production-package artifact class '{req_id}' is missing from inventory",
+                    )
+                )
+
+    if scope in ("test-only", "all"):
+        for req_id in sorted(REQUIRED_SCOPE_CLASSES["test-only"]):
+            if req_id not in seen_test_only_classes:
+                errors.append(
+                    ValidationError(
+                        req_id,
+                        "REQUIRED_ARTIFACT_CLASS_MISSING",
+                        f"Required test-only artifact class '{req_id}' is missing from inventory",
+                    )
+                )
+
     return sorted(errors, key=lambda e: (e.artifact_id, e.error_code, e.message))
 
 
@@ -1040,7 +1782,11 @@ def format_report_text(
     lines: list[str] = []
     if not errors:
         lines.append(f"[PASS] Provenance inventory validation succeeded for scope: {scope}")
-        artifacts = data.get("artifacts", [])
+        all_artifacts = data.get("artifacts", [])
+        artifacts = [
+            art for art in all_artifacts
+            if scope == "all" or art.get("scope") == scope
+        ]
         lines.append(f"Artifact classes validated: {len(artifacts)}")
         for art in artifacts:
             art_id = art.get("id")
@@ -1051,20 +1797,28 @@ def format_report_text(
                 f"  • {art_id} (scope: {art.get('scope')}, role: {role}, status: {status}, reviewer: {reviewer})"
             )
             sot = art.get("source_of_truth_paths", {})
-            lines.append(f"    - Source truth paths: {len(sot)} verified")
+            if sot:
+                lines.append(f"    - Source truth paths: {len(sot)} verified")
             manifest = art.get("catalog_manifest", {})
             if manifest:
                 lines.append(
                     f"    - Catalog manifest: verified (sha256: {manifest.get('expected_sha256')[:8]}..., size: {manifest.get('expected_size_bytes')} bytes)"
                 )
             pkg_assets = art.get("required_package_assets", [])
-            lines.append(f"    - Package assets: {len(pkg_assets)} verified in pubspec.yaml")
+            if pkg_assets:
+                lines.append(f"    - Package assets: {len(pkg_assets)} verified in pubspec.yaml")
             srcs = art.get("source_families")
             cov = art.get("source_coverage")
             if cov:
                 lines.append("    - Source coverage: verified against owner truth (matrix.json + notices)")
             elif srcs:
                 lines.append(f"    - Upstream source families: {len(srcs)} verified against owner truth")
+            src = art.get("source")
+            if src:
+                lines.append(f"    - Upstream source: {src.get('package_name')}=={src.get('version')} (sha256: {src.get('artifact_sha256')[:8]}...) verified in {len(src.get('lockfiles', []))} lockfiles")
+            proj_src = art.get("project_source")
+            if proj_src:
+                lines.append(f"    - Project reference integrity: {len(proj_src.get('integrity_files', []))} file(s) verified")
     else:
         lines.append(f"[FAIL] Provenance inventory validation failed with {len(errors)} error(s) for scope: {scope}")
         for err in errors:
@@ -1077,7 +1831,7 @@ def main() -> int:
     parser.add_argument(
         "--scope",
         default="production-package",
-        choices=["production-package", "all"],
+        choices=["production-package", "test-only", "all"],
         help="Release scope to validate (default: production-package)",
     )
     parser.add_argument(
