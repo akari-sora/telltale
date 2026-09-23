@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -684,6 +685,21 @@ class TestPublicArtifactGuardAcceptance(unittest.TestCase):
 
         _, e_uuid_obj = self.guard.scan_content(json.dumps({"deviceUuid": {"nested": "value"}}), "json")
         self.assertTrue(any(e.code == "schema.invalid_identity_type" for e in e_uuid_obj))
+
+        # CLI exit code 2 on schema error (G11)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
+            tf.write(json.dumps({"segments": {"0": {"seq": 0, "payload": "TELLTALE0"}}}))
+            tf_path = tf.name
+        try:
+            cli_res = subprocess.run(
+                [sys.executable, str(TOOL_DIR / "public_artifact_guard.py"), "check", "--classification", "public-summary", "--format", "json", tf_path],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(cli_res.returncode, 2)
+            self.assertIn("schema.invalid_segments", cli_res.stderr)
+        finally:
+            os.unlink(tf_path)
 
     def test_s3_json_segment_container_null_and_invalid_payload_fail_closed(self) -> None:
 

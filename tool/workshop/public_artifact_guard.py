@@ -1580,7 +1580,7 @@ def main(argv: list[str] | None = None) -> int:
             print(report, file=sys.stderr)
 
         if result.errors and not result.findings:
-            return 2 if any(e.code.startswith("error.") for e in result.errors) else 1
+            return 2 if any(e.code.startswith(("error.", "schema.")) for e in result.errors) else 1
         return 1
 
     return 2
