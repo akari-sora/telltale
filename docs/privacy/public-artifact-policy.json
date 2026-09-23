@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_version": 1,
+  "policy_id": "ws07-public-artifact-privacy-policy",
+  "title": "Public Artifact Privacy & Redaction Policy",
+  "version": "1.0.0",
+  "description": "Fail-closed governance policy defining public publication boundaries, classification models, detection categories, and finding sanitization contracts for diagnostic artifacts and evidence summaries (Issue #11, WS-07 Slice 3).",
+  "classifications": {
+    "private-raw": {
+      "description": "Raw, un-sanitized internal or device diagnostic captures (e.g. real-vehicle transcripts, raw logs, raw dumps). May contain raw VIN, MAC, UUID, paths. Strictly forbidden from public distribution or external publication. Must remain byte-truthful and immutable.",
+      "publishable": false,
+      "mutable": false
+    },
+    "public-summary": {
+      "description": "Publication candidate derived from allowlisted fields and validated summaries. Must contain zero sensitive findings when evaluated by public_artifact_guard. Safe for public release, bug reports, and CI artifacts.",
+      "publishable": true,
+      "mutable": false
+    },
+    "synthetic-canary": {
+      "description": "Test-only fixtures containing synthetic, non-real sensitive identifiers (e.g. synthetic VIN, MAC, UUID, customer IDs, GPS, user paths). Used exclusively to verify that the privacy guard detects leaks. Strictly forbidden from public distribution.",
+      "publishable": false,
+      "mutable": false
+    }
+  },
+  "supported_formats": [
+    "json",
+    "csv",
+    "log",
+    "segments"
+  ],
+  "max_input_bytes": 10485760,
+  "rule_categories": {
+    "vehicle.vin.plain": "Plain 17-character VIN in explicit vehicle or VIN context",
+    "vehicle.vin.fragmented": "VIN split across ordered sequence/segment payload fragments",
+    "vehicle.vin.hex_ascii": "17-character VIN encoded as hex ASCII string (contiguous or segmented)",
+    "device.mac": "Hardware MAC address in standard colon or hyphen notation",
+    "device.uuid": "UUID in explicit device/hardware/adapter/peripheral context",
+    "device.serial": "Hardware/device serial number in explicit device context",
+    "subject.plate_or_customer_id": "License plate, customer ID, client ID, or vehicle owner identifier",
+    "location.gps": "Geographic coordinates (latitude and longitude) present in the same record",
+    "host.user_path": "User-home absolute filesystem paths on macOS, Linux, or Windows",
+    "correlation.timestamp_with_identity": "Timestamp correlated with an identity (VIN, device, customer, MAC) in the same logical record"
+  },
+  "allowlist_rules": {
+    "dtc_codes": "Standard OBD-II Diagnostic Trouble Codes (e.g. P0300, U0100, B1234, C0040)",
+    "ecu_identifiers": "Standard OBD-II ECU CAN IDs and hex addresses (e.g. 7E8, 7E0, 0x7E8)",
+    "protocol_labels": "Industry standard OBD/CAN protocol names (e.g. ISO 15765-4 CAN 11/500)",
+    "git_hashes": "40-hex Git commit SHA or 64-hex SHA-256 digests",
+    "test_identifiers": "Test case and scenario labels (e.g. TC-101, S3-M1)",
+    "aggregate_metrics": "Numeric aggregate counts and statistics without personal context",
+    "loopback_addresses": "Local loopback network hosts (e.g. 127.0.0.1, localhost)",
+    "project_banners": "Project-owned titles, headers, and copyright notices",
+    "isolated_timestamps": "Timestamps without an accompanying identity in the same record"
+  }
+}

@@ -1,0 +1,4 @@
+[
+  {"seq": 0, "payload": "PAYLOAD_ZERO"},
+  {"seq": 2, "payload": "PAYLOAD_GAP_TWO"}
+]

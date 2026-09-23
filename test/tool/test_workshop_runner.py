@@ -2322,6 +2322,47 @@ class ResumeAndCollisionRunnerTest(unittest.TestCase):
             self.assertIn("cannot be the same file as --resume-from", str(ctx.exception))
             self.assertEqual(orig_bytes, handoff_failed.read_bytes())
 
+    def test_new_lease_path_is_visible_only_after_exclusive_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            path = tmp / "lease.json"
+            real_link = os.link
+            state: list[str] = []
+
+            def checking_link(src, dst, *, follow_symlinks=True):
+                del follow_symlinks
+                probe = os.open(src, os.O_RDWR)
+                try:
+                    try:
+                        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        state.append("held")
+                    else:
+                        fcntl.flock(probe, fcntl.LOCK_UN)
+                        state.append("unlocked")
+                finally:
+                    os.close(probe)
+                self.assertFalse(Path(dst).exists())
+                return real_link(src, dst)
+
+            os.link = checking_link
+            try:
+                fd = run_task._acquire_lease(path, "WS-01")
+            finally:
+                os.link = real_link
+            self.assertEqual(state, ["held"])
+            self.assertTrue(path.is_file())
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["task"], "WS-01")
+            self.assertEqual(payload["pid"], os.getpid())
+            self.assertEqual([item.name for item in tmp.iterdir()], ["lease.json"])
+            with self.assertRaises(run_task.RunnerError) as ctx:
+                run_task._acquire_lease(path, "WS-01")
+            self.assertIn("lease held", str(ctx.exception))
+            run_task._release_lease(fd, path)
+            again = run_task._acquire_lease(path, "WS-01")
+            run_task._release_lease(again, path)
+
     def test_real_same_task_subprocess_lease_collision(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)

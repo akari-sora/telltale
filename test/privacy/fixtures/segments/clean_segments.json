@@ -1,0 +1,4 @@
+[
+  {"seq": 0, "payload": "FRAME_PART_A"},
+  {"seq": 1, "payload": "FRAME_PART_B"}
+]

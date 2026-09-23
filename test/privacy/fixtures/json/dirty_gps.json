@@ -1,0 +1,7 @@
+{
+  "test_id": "TC-DIRTY-GPS",
+  "telemetry": {
+    "lat": 37.7749,
+    "lon": -122.4194
+  }
+}
