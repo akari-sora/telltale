@@ -52,47 +52,91 @@
   <a href="#en" hreflang="en">English</a>
 </nav>
 
+<section id="zh-policy" lang="zh-Hant">
 <h1 id="zh">Telltale 隱私權政策</h1>
-<p class="sub">最後更新：2026 年 9 月 6 日</p>
+<p class="sub">最後更新：2026 年 9 月 24 日</p>
 
 <p class="lede"><strong>Telltale 本身不收集資料，也不會主動上傳資料。</strong>
 沒有帳號、沒有廣告、沒有分析、沒有當機回報服務。App 唯一自己建立的連線是你設定的
 ELM327 轉接器。推薦轉接器連結只有在你點下去時，才會交給系統開啟蝦皮或瀏覽器。</p>
 
 <h2>我們收集哪些資料</h2>
-<p><strong>沒有。</strong>Telltale 不會收集個人資料，也不會把任何資料傳送到我們或第三方的
-伺服器。我們沒有伺服器。</p>
+<!-- claim: CLAIM-DEVELOPER-NO-COLLECTION -->
+<div data-claim-id="CLAIM-DEVELOPER-NO-COLLECTION">
+<p><strong>沒有。</strong> Telltale 不會收集個人資料，也不會把任何資料傳送到我們或第三方的伺服器。 我們沒有伺服器。Telltale 本身不收集資料，也不會主動上傳資料。</p>
+</div>
 
 <h2>App 在你裝置上儲存哪些東西</h2>
-<p>以下內容會寫入 App 的私有儲存空間，不會傳送到我們的伺服器：</p>
+<!-- claim: CLAIM-LOCAL-STORAGE-PARTITION -->
+<div data-claim-id="CLAIM-LOCAL-STORAGE-PARTITION">
+<p>以下內容會寫入 App 的私有儲存空間，依功能獨立分區存放，不會傳送到我們的伺服器：</p>
 <div class="wrap">
 <table>
-  <tr><th>內容</th><th>為什麼</th></tr>
-  <tr><td>你的車輛設定（排氣量、車重、風阻係數與逐欄來源等）</td><td>推算馬力與油耗需要；來源資訊用來避免把預設值說成官方規格</td></tr>
-  <tr><td>你自訂的 PID 定義</td><td>這是你寫的東西</td></tr>
-  <tr><td>上次使用的轉接器與 Wi-Fi 位址</td><td>下次不用再找一遍</td></tr>
-  <tr><td>介面設定（深色／淺色、儀表樣式）</td><td>記住你的選擇</td></tr>
-  <tr><td>診斷紀錄（最後一次連線）</td><td>連不上時可以匯出給人看</td></tr>
+  <tr><th>內容</th><th>分區與位置</th><th>為什麼</th></tr>
+  <tr><td>你的車輛設定（排氣量、車重、風阻係數與逐欄來源等）</td><td><code>SharedPreferences</code></td><td>推算馬力與油耗需要；來源資訊用來避免把預設值說成官方規格</td></tr>
+  <tr><td>你自訂的 PID 定義</td><td><code>SharedPreferences</code></td><td>這是你寫的東西</td></tr>
+  <tr><td>上次使用的轉接器與 Wi-Fi 位址</td><td><code>SharedPreferences</code></td><td>下次不用再找一遍</td></tr>
+  <tr><td>介面設定（深色／淺色、儀表樣式）</td><td><code>SharedPreferences</code></td><td>記住你的選擇</td></tr>
+  <tr><td>診斷紀錄（最後一次連線快照）</td><td><code>Documents/last-session.log</code></td><td>連不上時可以匯出給人看</td></tr>
+  <tr><td>遙測工作階段歷史</td><td><code>Documents/telltale-telemetry/</code></td><td>本機重播、檢視時間軸，或手動匯出 CSV／JSON</td></tr>
+  <tr><td>分享暫存檔案與租約紀錄</td><td><code>Caches/telltale-app-shares/</code></td><td>匯出時供系統分享面板讀取之暫存副本</td></tr>
 </table>
 </div>
+</div>
+
+<!-- claim: CLAIM-DIAGNOSTIC-RAW-BYTES -->
+<div data-claim-id="CLAIM-DIAGNOSTIC-RAW-BYTES">
 <p><strong>診斷紀錄</strong>值得特別說明：它記錄 App 與轉接器之間往返的原始位元組，包括車輛
-回報的 VIN 與故障碼。App 不會自行上傳；只有你按下「匯出」時，才會交給你選擇的其他
-App。</p>
+回報的 VIN 與故障碼，儲存於 Documents/last-session.log。App 僅保留最近一次連線的本機快照，不會自行上傳；只有你按下「匯出」時，
+才會交給你選擇的其他 App。</p>
+</div>
+
+<!-- claim: CLAIM-TELEMETRY-NDJSON -->
+<div data-claim-id="CLAIM-TELEMETRY-NDJSON">
+<p><strong>遙測工作階段</strong>記錄行車時的數值時間軸（<code>.ndjson</code> 格式），儲存於本機 Documents/telltale-telemetry/ 目錄。
+你可以在 App 的遙測紀錄中檢視、手動刪除單筆紀錄，或匯出為 CSV／JSON 檔案。匯出時，結構化欄位會自動排除車輛識別碼（VIN）、GPS 定位座標與使用者帳號；但請注意，自訂訊號名稱、公式、單位與備註是由使用者自行編寫，將依原文保留在匯出檔案中，不會進行自動文字遮蔽。</p>
+</div>
+
+<!-- claim: CLAIM-SHARE-CACHE-LIFECYCLE -->
+<div data-claim-id="CLAIM-SHARE-CACHE-LIFECYCLE">
+<p><strong>分享暫存檔案</strong>存放於 App 快取目錄（<code>telltale-app-shares/</code>）。暫存檔於匯出產生時標記
+15 分鐘可清理與 24 小時到期時間戳記。App 於每次啟動及進入分享流程時會檢查並清理過期租約；
+這是本機啟動時的維護程序，非作業系統背景排程保證。</p>
+</div>
+
+<!-- claim: CLAIM-USER-CONTROLLED-SHARE -->
+<div data-claim-id="CLAIM-USER-CONTROLLED-SHARE">
+<p><strong>使用者主動分享與匯出</strong>：App 提供五種正式匯出（原始診斷紀錄、復原診斷紀錄、遙測 CSV、
+遙測 JSON、PID CSV）。所有分享均須由使用者主動觸發，未操作前零外傳（零 handoff）。
+檔案交給系統分享面板後，接收端 App 如何處理依該 App 政策辦理。在 Telltale 內刪除本機檔案，
+無法召回或刪除已交付給外部 App 的副本。</p>
+</div>
+
+<!-- claim: CLAIM-OS-BACKUP-BEHAVIOR -->
+<div data-claim-id="CLAIM-OS-BACKUP-BEHAVIOR">
 <p>Android、iOS 或 macOS 的作業系統備份可能依你的裝置與雲端備份設定，複製 App 的
-私有資料。解除安裝會移除裝置上的本機副本，但不一定會刪除作業系統先前建立的備份。
-若不希望備份這些資料，請在裝置設定中停用 Telltale 或整台裝置的備份。</p>
+私有資料（例如 Documents 與 SharedPreferences；快取目錄通常會被系統排除）。解除安裝會移除裝置上的本機副本，
+但不一定會刪除作業系統先前建立的雲端或裝置間移轉（D2D）備份。若不希望備份這些資料，請在裝置設定中停用 Telltale 或整台裝置的備份。</p>
+</div>
 
 <h2>網路連線</h2>
-<p>Telltale 需要 <code>INTERNET</code> 權限，但<strong>不用來連上網際網路</strong>。它只用來對
-Wi-Fi 型 ELM327 轉接器開啟一條 TCP 連線 —— 那是一個區域位址（通常是
-<code>192.168.0.10:35000</code>），Android 沒有更精確的權限可以表達「只連本地」。</p>
-<p>App 不會自己對網際網路發出要求。連線與設定頁的推薦轉接器是維護者的推廣分潤
-連結：只有你點下去時，系統才會開啟蝦皮或瀏覽器，站台政策歸該賣場。
+<!-- claim: CLAIM-NETWORK-ADAPTER-ONLY -->
+<div data-claim-id="CLAIM-NETWORK-ADAPTER-ONLY">
+<p>Telltale 需要 <code>INTERNET</code> 權限，用以對使用者設定之 Wi-Fi 型 ELM327 轉接器端點（通常為區域網路位址如
+<code>192.168.0.10:35000</code>）建立 TCP Socket 連線。App 沒有內建開發者資料收集或遙測上傳服務；轉接器連線目的地由使用者自行設定，Android 系統並無更細緻之權限以限制 Socket 僅能連線至特定私網位址。</p>
+</div>
+
+<!-- claim: CLAIM-EXTERNAL-AFFILIATE-LINKS -->
+<div data-claim-id="CLAIM-EXTERNAL-AFFILIATE-LINKS">
+<p>連線與設定頁的推薦轉接器是維護者的推廣分潤連結：只有你點下去時，系統才會開啟蝦皮或瀏覽器，
+站台政策歸該賣場。點擊外部連結時絕不附加車輛 VIN、診斷紀錄、裝置識別碼或任何個人資料。
 其餘功能可以在飛航模式下（開著藍牙）完整使用。</p>
-<p>官方車型目錄與來源 manifest 已包在 App 內；只有維護者更新原始碼快照的工具會下載
-官方公開資料，安裝在手機上的 App 不會送出 VIN 或車型搜尋。</p>
+<p>官方車型目錄與字型等資源已完整打包於 App 內，安裝在手機上的 App 採完全離線運作，不會在執行階段發送聯網查詢或下載目錄。僅有開發維護者於開發機上執行的目錄更新工具（<code>tool/update_us_vehicle_catalog.py</code>）會自公開政府機關來源下載公開車型資料，與使用者手機上的 App 完全隔離。</p>
+</div>
 
 <h2>權限說明</h2>
+<!-- claim: CLAIM-PERMISSIONS-MINIMAL -->
+<div data-claim-id="CLAIM-PERMISSIONS-MINIMAL">
 <div class="wrap">
 <table>
   <tr><th>權限</th><th>用途</th></tr>
@@ -100,22 +144,22 @@ Wi-Fi 型 ELM327 轉接器開啟一條 TCP 連線 —— 那是一個區域位�
   <tr><td><code>BLUETOOTH_SCAN</code></td><td>搜尋尚未配對的 BLE 轉接器（宣告 <code>neverForLocation</code>）</td></tr>
   <tr><td><code>BLUETOOTH</code> / <code>BLUETOOTH_ADMIN</code></td><td>Android 11 以下的等效權限</td></tr>
   <tr><td><code>ACCESS_FINE_LOCATION</code> / <code>ACCESS_COARSE_LOCATION</code></td>
-      <td><strong>僅限 Android 11 以下</strong>（<code>maxSdkVersion="30"</code>）。舊版 Android 把 BLE
-      掃描歸在位置權限底下，這是系統規定，不是我們要你的位置。App 不讀取、不儲存、不傳送
-      任何位置資訊</td></tr>
+      <td><strong>僅限 Android 11 以下</strong>（<code>maxSdkVersion="30"</code>）。舊版 Android 把 BLE 掃描歸在位置權限底下，這是系統規定，不是我們要你的位置。App 不讀取、不儲存、不傳送任何位置資訊</td></tr>
   <tr><td><code>INTERNET</code> / <code>ACCESS_NETWORK_STATE</code></td><td>連線 Wi-Fi 型轉接器（見上）</td></tr>
 </table>
 </div>
-<p><code>BLUETOOTH_ADVERTISE</code> 在本 App 的資訊清單中以 <code>tools:node="remove"</code>
-明確移除。這個 App 只當客戶端 —— 它連到轉接器，從不讓手機自己變成可被發現的裝置。移除而非
-單純不寫，是因為 Android 的資訊清單以聯集合併：只要任何一個相依套件宣告了它，不寫就等於
-預設帶上。（2026-08-18 實測合併後的資訊清單：目前沒有任何相依套件宣告它，所以這是保險
-而不是修正。）</p>
+<p><code>BLUETOOTH_ADVERTISE</code> 在本 App 的資訊清單中以 <code>tools:node="remove"</code> 明確移除。這個 App
+只當客戶端 —— 它連到轉接器，從不讓手機自己變成可被發現的裝置。移除而非單純不寫，是因為
+Android 的資訊清單以聯集合併：只要任何一個相依套件宣告了它，不寫就等於預設帶上。
+（2026-08-18 實測合併後的資訊清單：目前沒有任何相依套件宣告它，所以這是保險而不是修正。）</p>
+</div>
 
 <h2>第三方服務</h2>
-<p><strong>沒有。</strong>App 沒有整合任何分析、廣告、當機回報或行銷 SDK。你可以在
-<a href="https://github.com/aa22396584/telltale">原始碼</a>的 <code>pubspec.yaml</code>
-裡自行確認相依套件清單。</p>
+<!-- claim: CLAIM-NO-THIRD-PARTY-SDKS -->
+<div data-claim-id="CLAIM-NO-THIRD-PARTY-SDKS">
+<p><strong>沒有。</strong> App 沒有整合任何分析、廣告、當機回報或行銷 SDK。你可以在
+<a href="https://github.com/aa22396584/telltale">原始碼</a> 的 <code>pubspec.yaml</code> 裡自行確認相依套件清單。</p>
+</div>
 
 <h2>兒童</h2>
 <p>本 App 不針對兒童設計，也不會在知情的情況下收集兒童資料 —— 事實上它不收集任何人的資料。</p>
@@ -124,20 +168,25 @@ Wi-Fi 型 ELM327 轉接器開啟一條 TCP 連線 —— 那是一個區域位�
 <p>Google Play 處理所有付款。我們看不到你的付款資訊。退款依 Google Play 的政策辦理。</p>
 
 <h2>開放原始碼</h2>
+<!-- claim: CLAIM-OPEN-SOURCE-VERIFIABLE -->
+<div data-claim-id="CLAIM-OPEN-SOURCE-VERIFIABLE">
 <p>Telltale 以 GPL-3.0 授權開放原始碼。本政策所述的每一項，你都可以在
-<a href="https://github.com/aa22396584/telltale">原始碼</a>中自行驗證 —— 這比任何一份隱私權政策的
-文字都更值得相信。</p>
+<a href="https://github.com/aa22396584/telltale">原始碼</a> 中自行驗證 —— 這比任何一份隱私權
+政策的文字都更值得相信。</p>
+</div>
 
 <h2>變更</h2>
 <p>本政策若有變更，會更新本頁的日期並在 GitHub 的版本紀錄中留下完整差異。</p>
 
 <h2>聯絡</h2>
 <p>有疑問請開 issue：<a href="https://github.com/aa22396584/telltale/issues">github.com/aa22396584/telltale/issues</a></p>
+</section>
 
 <hr>
 
-<h1 id="en" lang="en">Telltale Privacy Policy</h1>
-<p class="sub">Last updated: 6 September 2026</p>
+<section id="en-policy" lang="en">
+<h1 id="en">Telltale Privacy Policy</h1>
+<p class="sub">Last updated: 24 September 2026</p>
 
 <p class="lede"><strong>Telltale itself collects nothing and proactively uploads nothing.</strong>
 There are no accounts, ads, analytics, or crash reporting. The only connection the app
@@ -145,42 +194,75 @@ itself initiates is to the ELM327 adapter you configure. Recommended-adapter
 links open Shopee or a browser only after you tap them.</p>
 
 <h2>What we collect</h2>
-<p><strong>Nothing.</strong> Telltale does not collect personal data, and does not send any
+<!-- claim: CLAIM-DEVELOPER-NO-COLLECTION -->
+<div data-claim-id="CLAIM-DEVELOPER-NO-COLLECTION">
+<p><strong>Nothing.</strong> Telltale collects nothing and does not collect personal data, and does not send any
 data to our servers or to third parties. We have no servers.</p>
+</div>
 
 <h2>What the app stores on your device</h2>
-<p>The following are written to the app's private storage and are not sent to our
-servers:</p>
+<!-- claim: CLAIM-LOCAL-STORAGE-PARTITION -->
+<div data-claim-id="CLAIM-LOCAL-STORAGE-PARTITION">
+<p>The following are written to the app's private storage, strictly segregated across functional partitions, and are not sent to our servers:</p>
 <div class="wrap">
 <table>
-  <tr><th>What</th><th>Why</th></tr>
-  <tr><td>Your vehicle profile (displacement, mass, drag coefficient, and the per-field source of each)</td><td>Estimating power and fuel use needs them; the source references exist so a default is never presented as a manufacturer specification</td></tr>
-  <tr><td>Your custom PID definitions</td><td>You wrote them</td></tr>
-  <tr><td>The last adapter and Wi-Fi address used</td><td>So you do not have to find it again</td></tr>
-  <tr><td>Interface preferences (dark/light, gauge skin)</td><td>To remember what you chose</td></tr>
-  <tr><td>The diagnostic transcript (most recent session)</td><td>So you can export it for someone to read when a connection fails</td></tr>
+  <tr><th>What</th><th>Partition & Location</th><th>Why</th></tr>
+  <tr><td>Your vehicle profile (displacement, mass, drag coefficient, and the per-field source of each)</td><td><code>SharedPreferences</code></td><td>Estimating power and fuel use needs them; the source references exist so a default is never presented as a manufacturer specification</td></tr>
+  <tr><td>Your custom PID definitions</td><td><code>SharedPreferences</code></td><td>You wrote them</td></tr>
+  <tr><td>The last adapter and Wi-Fi address used</td><td><code>SharedPreferences</code></td><td>So you do not have to find it again</td></tr>
+  <tr><td>Interface preferences (dark/light, gauge skin)</td><td><code>SharedPreferences</code></td><td>To remember what you chose</td></tr>
+  <tr><td>The diagnostic transcript (most recent session snapshot)</td><td><code>Documents/last-session.log</code></td><td>So you can export it for someone to read when a connection fails</td></tr>
+  <tr><td>Telemetry session history</td><td><code>Documents/telltale-telemetry/</code></td><td>For local replay, timeline inspection, or manual export to CSV/JSON</td></tr>
+  <tr><td>Share cache staging & lease ledger</td><td><code>Caches/telltale-app-shares/</code></td><td>Temporary staging copies read by system share sheet during export</td></tr>
 </table>
 </div>
+</div>
+
+<!-- claim: CLAIM-DIAGNOSTIC-RAW-BYTES -->
+<div data-claim-id="CLAIM-DIAGNOSTIC-RAW-BYTES">
 <p>The <strong>diagnostic transcript</strong> records the raw bytes exchanged with the
-adapter, including the VIN and fault codes the vehicle reports. The app never uploads it on
-its own; pressing Export hands it to another app that you choose.</p>
-<p>Android, iOS, or macOS system backup may copy the app's private data according to your
-device and cloud-backup settings. Uninstalling removes the local copy from the device, but
-may not erase a backup the operating system already made. Disable backup for Telltale or the
-device if you do not want this data backed up.</p>
+adapter, including the VIN and fault codes the vehicle reports, stored locally in Documents/last-session.log. The app retains only the most recent session snapshot locally and never uploads it on its own; pressing Export hands it to another app that you choose.</p>
+</div>
+
+<!-- claim: CLAIM-TELEMETRY-NDJSON -->
+<div data-claim-id="CLAIM-TELEMETRY-NDJSON">
+<p><strong>Telemetry sessions</strong> store numerical signal timeseries (<code>.ndjson</code> format) in local Documents/telltale-telemetry/ storage.
+You can review sessions in the app, delete individual records, or export CSV/JSON files where structured fields exclude VIN, GPS coordinates, and user accounts; please note that user-authored signal names, equations, units, and notes are preserved in the export as written without automatic text redaction.</p>
+</div>
+
+<!-- claim: CLAIM-SHARE-CACHE-LIFECYCLE -->
+<div data-claim-id="CLAIM-SHARE-CACHE-LIFECYCLE">
+<p><strong>Share staging artifacts</strong> reside in the application cache directory (<code>telltale-app-shares/</code>). Staged files
+carry 15-minute cleanup-eligible and 24-hour cleanup-due timestamps upon creation. The app audits and purges eligible staging files upon startup and during share flow entry; this is a local app startup routine, not an OS background daemon guarantee.</p>
+</div>
+
+<!-- claim: CLAIM-USER-CONTROLLED-SHARE -->
+<div data-claim-id="CLAIM-USER-CONTROLLED-SHARE">
+<p><strong>User-initiated export and sharing</strong>: The app provides five formal export channels (raw transcript, recovered transcript, telemetry CSV, telemetry JSON, PID CSV). All exports require explicit user initiation, with zero pre-action handoff. Once handed to the system share sheet, data is governed by the recipient app's policies. Deleting files locally within Telltale cannot recall or erase copies already delivered to external apps.</p>
+</div>
+
+<!-- claim: CLAIM-OS-BACKUP-BEHAVIOR -->
+<div data-claim-id="CLAIM-OS-BACKUP-BEHAVIOR">
+<p>Android, iOS, or macOS system backup may copy the app's private data (such as Documents and SharedPreferences; cache folders are typically excluded by the OS) according to your device and cloud-backup settings. Uninstalling removes the local copy from the device, but may not erase a cloud or device-to-device (D2D) backup the operating system already made. Disable backup for Telltale or the device in system settings if you do not want this data backed up.</p>
+</div>
 
 <h2>Network access</h2>
-<p>The <code>INTERNET</code> permission is not used to reach the internet. It opens a TCP
-connection to a Wi-Fi ELM327 adapter on a local address — Android has no narrower permission
-for "local network only". The app does not itself make other network requests.
-Recommended-adapter links on Connect and Settings are maintainer affiliate listings:
+<!-- claim: CLAIM-NETWORK-ADAPTER-ONLY -->
+<div data-claim-id="CLAIM-NETWORK-ADAPTER-ONLY">
+<p>The <code>INTERNET</code> permission is used to establish a TCP socket connection to a user-configured Wi-Fi ELM327 adapter endpoint (typically a local network address like <code>192.168.0.10:35000</code>). The app has no built-in developer data collection or telemetry upload services; adapter connection destination endpoints depend on user settings, as Android has no narrower permission to restrict socket operations strictly to local subnets.</p>
+</div>
+
+<!-- claim: CLAIM-EXTERNAL-AFFILIATE-LINKS -->
+<div data-claim-id="CLAIM-EXTERNAL-AFFILIATE-LINKS">
+<p>Recommended-adapter links on Connect and Settings are maintainer affiliate listings:
 they open Shopee or a browser only after you tap them, and that store's policy applies
-there. Everything else works fully in aeroplane mode with Bluetooth on.</p>
-<p>The official vehicle catalog and its source manifest are bundled with the app. Only the
-maintainer's source-update tool downloads the public official data; the installed app does
-not transmit a VIN or vehicle search.</p>
+there. Clicking external links never appends VIN, telemetry, device identifiers, or personal data. Everything else works fully in aeroplane mode with Bluetooth on.</p>
+<p>The official vehicle catalog and fonts are bundled directly with the app; the installed mobile app operates strictly offline without issuing network queries or downloading catalogs at runtime. Only the maintainer's source-update tool (<code>tool/update_us_vehicle_catalog.py</code>) running on developer machines downloads public official catalog data, completely isolated from user devices.</p>
+</div>
 
 <h2>Permissions</h2>
+<!-- claim: CLAIM-PERMISSIONS-MINIMAL -->
+<div data-claim-id="CLAIM-PERMISSIONS-MINIMAL">
 <div class="wrap">
 <table>
   <tr><th>Permission</th><th>What it is for</th></tr>
@@ -195,34 +277,43 @@ not transmit a VIN or vehicle search.</p>
 </table>
 </div>
 <p><code>BLUETOOTH_ADVERTISE</code> is explicitly removed from this app's manifest with
-<code>tools:node="remove"</code>. This app is a client — it connects to an adapter and never makes
-your phone discoverable. Removed rather than merely omitted, because Android merges manifests by
-union: one dependency declaring it would be enough to ship it. (Checked against the merged manifest
-on 2026-08-18: no current dependency declares it, so this is insurance rather than a correction.)</p>
+<code>tools:node="remove"</code>. This app is a client — it connects to an adapter and never
+makes your phone discoverable. Removed rather than merely omitted, because Android
+merges manifests by union: one dependency declaring it would be enough to ship it.
+(Checked against the merged manifest on 2026-08-18: no current dependency declares
+it, so this is insurance rather than a correction.)</p>
+</div>
 
 <h2>Third-party services</h2>
-<p>None. No analytics, advertising, crash reporting or marketing SDKs. You can verify this
-yourself in <code>pubspec.yaml</code> in the
+<!-- claim: CLAIM-NO-THIRD-PARTY-SDKS -->
+<div data-claim-id="CLAIM-NO-THIRD-PARTY-SDKS">
+<p>None. No analytics, advertising, crash reporting or marketing SDKs. You can
+verify this yourself in <code>pubspec.yaml</code> in the
 <a href="https://github.com/aa22396584/telltale">source</a>.</p>
+</div>
 
 <h2>Children</h2>
-<p>This app is not directed at children and does not knowingly collect data from them — in
-fact it collects data from no one.</p>
+<p>This app is not directed at children and does not knowingly collect data from
+them — in fact it collects data from no one.</p>
 
 <h2>Payment and refunds</h2>
-<p>Google Play handles all payments. We never see your payment details. Refunds follow
-Google Play's policy.</p>
+<p>Google Play handles all payments. We never see your payment details. Refunds
+follow Google Play's policy.</p>
 
 <h2>Open source</h2>
-<p>Telltale is GPL-3.0. Every claim in this policy is verifiable in the source, which is
-worth more than the policy text.</p>
+<!-- claim: CLAIM-OPEN-SOURCE-VERIFIABLE -->
+<div data-claim-id="CLAIM-OPEN-SOURCE-VERIFIABLE">
+<p>Telltale is GPL-3.0. Every claim in this policy is verifiable in the source,
+which is worth more than the policy text.</p>
+</div>
 
 <h2>Changes</h2>
-<p>If this policy changes, the date on this page changes with it and the full diff stays in the
-GitHub history.</p>
+<p>If this policy changes, the date on this page changes with it and the full diff
+stays in the GitHub history.</p>
 
 <h2>Contact</h2>
 <p><a href="https://github.com/aa22396584/telltale/issues">github.com/aa22396584/telltale/issues</a></p>
+</section>
 
 <hr>
 <footer>Telltale — 車輛即時遙測 · <a href="https://github.com/aa22396584/telltale">原始碼 (GPL-3.0)</a></footer>

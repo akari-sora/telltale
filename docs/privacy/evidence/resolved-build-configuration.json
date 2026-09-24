@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "record_id": "ws07-s4-resolved-build-configuration",
+  "purpose": "Immutable build toolchain and resolved configuration evidence for TellTale WS-07 Slice 4",
+  "candidate_identity": {
+    "parent_verified_head": "22cea7b4417d199d5b64ddc7024d8eb04960e7de",
+    "parent_tree": "69fdd606091427e5e4899f9ac8106e26fc2c064e",
+    "base_sha": "4c7d0b5a57ea95f612e591e3203db6095de0b218",
+    "lib_tree_sha": "45c11f2c0d9702c712fe13bd2c0a49fa8a69951e",
+    "unmodified_lib_contract": true
+  },
+  "toolchain": {
+    "flutter_version": "3.47.0",
+    "flutter_channel": "stable",
+    "flutter_framework_revision": "4cf2416426",
+    "flutter_framework_date": "2026-08-11 11:53:49 -0700",
+    "flutter_engine_hash": "59d54a2b2896a6bbf356c94b7fac7b9e235bdacd",
+    "flutter_engine_revision": "5f77625673",
+    "dart_version": "3.13.0",
+    "agp_version": "9.1.0",
+    "agp_declaration_source": "android/settings.gradle.kts: id(\"com.android.application\") version \"9.1.0\" apply false",
+    "gradle_version": "9.3.1",
+    "gradle_wrapper_distribution": "gradle-9.3.1-all.zip",
+    "compile_sdk_version": 36,
+    "min_sdk_version": 24,
+    "target_sdk_version": 36,
+    "application_id": "com.cbstudio.telltale",
+    "ndk_version": "27.0.12077973",
+    "java_runtime": "OpenJDK Runtime Environment (build 21.0.6+7-Ubuntu-124.04.1)"
+  },
+  "build_executions": {
+    "field_release": {
+      "variant": "fieldRelease",
+      "command": "flutter build apk --release --flavor field --split-per-abi -PallowUnsignedRelease=true",
+      "exit_code": 0,
+      "allow_unsigned_release": true,
+      "artifacts": {
+        "merged_manifest": {
+          "file": "field-release-merged-manifest.xml",
+          "relative_repo_path": "docs/privacy/evidence/field-release-merged-manifest.xml",
+          "size_bytes": 8382,
+          "sha256": "2576996797a7318e7305638fbc5e9f2092dfcc7749b5f654709292c34a1c1bcc"
+        },
+        "merger_blame_report": {
+          "file": "field-release-manifest-merger-blame-report.txt",
+          "relative_repo_path": "docs/privacy/evidence/field-release-manifest-merger-blame-report.txt",
+          "raw_verified_size_bytes": 26786,
+          "raw_verified_sha256": "c309e7b9eaed3cdc7507f3ae7e351c93acdc1e121bfbde14b30c9bd5716d8996",
+          "sanitization_transform": "Replaced user home paths with <REPO_ROOT> and <GRADLE_USER_HOME> placeholders",
+          "sanitized_public_size_bytes": 23766,
+          "sanitized_public_sha256": "ec55183ad4bdc463e550abd317b21290c4e7d66ad38e6855a22ca3789cd60b3a"
+        }
+      }
+    },
+    "field_debug": {
+      "variant": "fieldDebug",
+      "command": "flutter build apk --debug --flavor field --split-per-abi",
+      "exit_code": 0,
+      "artifacts": {
+        "merged_manifest": {
+          "file": "field-debug-merged-manifest.xml",
+          "relative_repo_path": "docs/privacy/evidence/field-debug-merged-manifest.xml",
+          "size_bytes": 8555,
+          "sha256": "9347e5df2068fd1529f9c977d1f00831f8f89e4204c003399a866facdc979086"
+        },
+        "merger_blame_report": {
+          "file": "field-debug-manifest-merger-blame-report.txt",
+          "relative_repo_path": "docs/privacy/evidence/field-debug-manifest-merger-blame-report.txt",
+          "raw_verified_size_bytes": 24405,
+          "raw_verified_sha256": "a584024c18979bd96f25353be7bf00c8bac020130813cafa416bad322beb47ad",
+          "sanitization_transform": "Replaced user home paths with <REPO_ROOT> and <GRADLE_USER_HOME> placeholders",
+          "sanitized_public_size_bytes": 22225,
+          "sanitized_public_sha256": "4f86f2c210f3e5d5e29edec896509a62064a7b602b251c592f696c8f9adebd65"
+        }
+      }
+    }
+  }
+}

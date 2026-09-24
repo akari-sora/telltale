@@ -1,0 +1,947 @@
+{
+  "schema_version": 1,
+  "contract_id": "ws07-privacy-data-flow-contract",
+  "audited_base_sha": "4c7d0b5a57ea95f612e591e3203db6095de0b218",
+  "policy_ref": "docs/privacy/public-artifact-policy.json",
+  "policy_documents": [
+    "PRIVACY.md",
+    "docs/privacy.html"
+  ],
+  "claims": {
+    "CLAIM-DEVELOPER-NO-COLLECTION": "The developer does not collect personal data, operates no remote backend servers, and requires no user accounts.",
+    "CLAIM-LOCAL-STORAGE-PARTITION": "All app data is strictly written to local private device storage, segregated across SharedPreferences, Documents, and Application Cache.",
+    "CLAIM-DIAGNOSTIC-RAW-BYTES": "Diagnostic transcript records raw OBD-II protocol exchanges including reported VIN and DTCs, stored in Documents/last-session.log, exported only upon explicit user request.",
+    "CLAIM-TELEMETRY-NDJSON": "Telemetry sessions are stored locally in Documents/telltale-telemetry/<id>.ndjson; user may inspect, replay, export (CSV/JSON), or delete records locally. Structured fields exclude VIN, GPS, accounts; user-authored labels and notes are preserved.",
+    "CLAIM-SHARE-CACHE-LIFECYCLE": "Staged share artifacts reside in Application Cache/telltale-app-shares/ with 15-minute eligibility and 24-hour due timestamps, cleaned during app launch and share flows.",
+    "CLAIM-USER-CONTROLLED-SHARE": "Five formal export types (rawTranscript, recoveredTranscript, telemetryCsv, telemetryJson, pidCsv) require explicit user action. Zero pre-action handoff. Local deletion cannot recall copies handed to external apps.",
+    "CLAIM-NETWORK-ADAPTER-ONLY": "INTERNET permission is utilized solely for opening a TCP socket to a user-configured Wi-Fi adapter (typically local 192.168.0.10:35000); destination endpoints depend on user settings; app has no built-in developer data collection or telemetry upload services.",
+    "CLAIM-EXTERNAL-AFFILIATE-LINKS": "Recommended adapter links are affiliate listings opened via system launcher only upon explicit tap; zero telemetry, VIN, or device identity appended.",
+    "CLAIM-PERMISSIONS-MINIMAL": "Declares only required permissions: BLUETOOTH_CONNECT, BLUETOOTH_SCAN (neverForLocation), legacy location (Android <=30), and INTERNET (Wi-Fi adapter). BLUETOOTH_ADVERTISE is stripped.",
+    "CLAIM-NO-THIRD-PARTY-SDKS": "App contains zero analytics, advertising, crash reporting, or user tracking SDKs.",
+    "CLAIM-OS-BACKUP-BEHAVIOR": "Operating system backups (Android Cloud/D2D, iOS/macOS system backups) may copy app private files depending on user device settings. Uninstalling removes local files but not preexisting OS backups.",
+    "CLAIM-OPEN-SOURCE-VERIFIABLE": "Telltale is licensed under GPL-3.0; all privacy declarations are fully verifiable in public source code."
+  },
+  "claim_parity_rules": {
+    "CLAIM-DEVELOPER-NO-COLLECTION": {
+      "required_keywords": {
+        "zh": [
+          "不收集資料",
+          "沒有伺服器"
+        ],
+        "en": [
+          "collects nothing",
+          "no servers"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "自動上傳至",
+          "會自動上傳",
+          "主動上傳至",
+          "上傳雲端",
+          "上傳至伺服器"
+        ],
+        "en": [
+          "upload to cloud",
+          "uploads to cloud",
+          "cloud sync",
+          "automatically upload",
+          "automatically uploads",
+          "upload to server",
+          "uploads to server",
+          "upload to our servers"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "1b8a5db151868cb26c1cd660b988131c99f98a9b70d9b84c4a86fef954603c74",
+        "en": "218312ad56a1f19c7a0b8e03a123493dd05481dcd052e2cffb0ab6ec41d75a6a"
+      },
+      "canonical_claim_digest": "dc21680d4e50e24d7075fb64a5ab469412a3e9c1b4795c9b7c2decde61ef85b7"
+    },
+    "CLAIM-LOCAL-STORAGE-PARTITION": {
+      "required_keywords": {
+        "zh": [
+          "SharedPreferences",
+          "Documents",
+          "Caches"
+        ],
+        "en": [
+          "SharedPreferences",
+          "Documents",
+          "Caches"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "雲端資料庫",
+          "遠端備份同步"
+        ],
+        "en": [
+          "cloud database",
+          "remote sync storage"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "9ffbc6c6df84219027aa69ec85a09602dcdcf4a6fc822ddfbcd521b1697d778f",
+        "en": "7c534fe0a18609e875054cc2c6fa32d2e5e15189916e1931057338b2e4f6fec6"
+      },
+      "canonical_claim_digest": "77173901efb5603170af289655d1b9cfa33937dd79d2220b7e5674c6de264086"
+    },
+    "CLAIM-DIAGNOSTIC-RAW-BYTES": {
+      "required_keywords": {
+        "zh": [
+          "last-session.log",
+          "VIN"
+        ],
+        "en": [
+          "last-session.log",
+          "VIN"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "自動上傳診斷",
+          "雲端分析VIN"
+        ],
+        "en": [
+          "automatically upload diagnostic",
+          "cloud vin analysis"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "e26a8e8b3214b92cf37625e1238095b03fd2446c2f7d6dde82b7d2ee5136c319",
+        "en": "c57347bd77463de720205e7673908ae1f04904e1947b3590174a00e8309f231b"
+      },
+      "canonical_claim_digest": "cbe9eaf43c20db040610bcb1ddcc2eda04ff951ccfb2a48ef82a119fc26f098a"
+    },
+    "CLAIM-TELEMETRY-NDJSON": {
+      "required_keywords": {
+        "zh": [
+          "telltale-telemetry/",
+          "ndjson"
+        ],
+        "en": [
+          "telltale-telemetry/",
+          "ndjson"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "保證完全去識別",
+          "自動遮蔽所有自訂文字"
+        ],
+        "en": [
+          "guaranteed complete de-identification",
+          "automatic redaction of user text"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "7850643c8eb25770136f621f53f1de4d13227856bb063a767abc5e1c14b2606c",
+        "en": "3c628147b651cf327e4b4b00f268563712204a30561ca1419ac654dfca91f4c6"
+      },
+      "canonical_claim_digest": "c5be43ac8ac30b0a3c6526657377b5ab06e31929aa15912aa55293e45a9d9fbb"
+    },
+    "CLAIM-SHARE-CACHE-LIFECYCLE": {
+      "required_keywords": {
+        "zh": [
+          "15 分鐘",
+          "24 小時",
+          "telltale-app-shares/"
+        ],
+        "en": [
+          "15-minute",
+          "24-hour",
+          "telltale-app-shares/"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "24小時必定刪除",
+          "24 小時必定刪除",
+          "24小時內必定刪除",
+          "24 小時內必定刪除",
+          "必定刪除",
+          "背景排程必定刪除"
+        ],
+        "en": [
+          "guaranteed deletion within 24",
+          "strictly deleted within 24",
+          "mandatory 24-hour deletion"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "3aa842518edb8705ec8519b13375e638c9520e5dc91102d80965b2d3e180bc62",
+        "en": "b182e7064ae0f32fcae8f95bc0b36723308837f6bac2522e854ff845dde53a04"
+      },
+      "canonical_claim_digest": "756e71039bb55535c7e447ea2fab4df5e87ea4b398995469a07949ba83490aa5"
+    },
+    "CLAIM-USER-CONTROLLED-SHARE": {
+      "required_keywords": {
+        "zh": [
+          "五種正式匯出",
+          "無法召回"
+        ],
+        "en": [
+          "five formal export",
+          "cannot recall"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "保證召回外部",
+          "承諾召回外部",
+          "刪除已交付副本"
+        ],
+        "en": [
+          "can recall external copies",
+          "guarantees recall of external copies",
+          "revoke delivered copies"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "b148454472aa5476d7907fbe0cac84b76005b94bf9faec4957b3115484635794",
+        "en": "2cc8b00f68f60ab0aab7fb50ff0f2ed77de7e7bec2140bfdd64655e52b98a109"
+      },
+      "canonical_claim_digest": "2e865c79fa893f922a55f5e309b693769f042d339db03e44870f9db7798696a3"
+    },
+    "CLAIM-NETWORK-ADAPTER-ONLY": {
+      "required_keywords": {
+        "zh": [
+          "INTERNET",
+          "192.168.0.10:35000"
+        ],
+        "en": [
+          "INTERNET",
+          "192.168.0.10:35000"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "INTERNET 絕不連網際網路",
+          "全域禁止公網連線"
+        ],
+        "en": [
+          "never connects to any network",
+          "global socket restriction"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "0e9d4c1ef17dfdd5889668bf238549b195525797cc1aa736e94efffecbd4125c",
+        "en": "5d29cb680cf1feefefe6a3197f90630aee46b87643f578af63ba1eabfcc06a78"
+      },
+      "canonical_claim_digest": "5c9d057018e9d3d59668d254cdeb79937f09b093929256a9c12f8c074eec8ce5"
+    },
+    "CLAIM-EXTERNAL-AFFILIATE-LINKS": {
+      "required_keywords": {
+        "zh": [
+          "分潤",
+          "點下去時"
+        ],
+        "en": [
+          "affiliate",
+          "tap"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "附帶VIN",
+          "傳送遙測至賣場"
+        ],
+        "en": [
+          "append vin",
+          "send telemetry to store"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "5766d76f351dfd64a9329e018c95872cc7636d51a3e70262ebbf10e75a86e727",
+        "en": "1cf419d849c1e875dd38f707bd1074bae2852943f54bdd89559aef0ace5b6449"
+      },
+      "canonical_claim_digest": "ed12ebd59a2fa9511088ed9e6867deb116d8a9e60034dec428e8d53fba02d1d8"
+    },
+    "CLAIM-PERMISSIONS-MINIMAL": {
+      "required_keywords": {
+        "zh": [
+          "BLUETOOTH_CONNECT",
+          "BLUETOOTH_ADVERTISE",
+          "tools:node=\"remove\""
+        ],
+        "en": [
+          "BLUETOOTH_CONNECT",
+          "BLUETOOTH_ADVERTISE",
+          "tools:node=\"remove\""
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "廣告廣播",
+          "追蹤權限"
+        ],
+        "en": [
+          "broadcast advertisement",
+          "tracking permission"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "286b2fee5370614e2ffdea1fd1522d1ab29911eb9534fc0ac70ab9c03e4de9aa",
+        "en": "71eaec8ad0fa4ec20e10749557f60bf0c8d390573e89330a07553818726ed546"
+      },
+      "canonical_claim_digest": "a7999bd2dc19e62f0db7734588ea58dcad54507f6fbcd5a0453ed2734ac7864e"
+    },
+    "CLAIM-NO-THIRD-PARTY-SDKS": {
+      "required_keywords": {
+        "zh": [
+          "沒有整合任何分析",
+          "pubspec.yaml"
+        ],
+        "en": [
+          "pubspec.yaml",
+          "analytics"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "啟用 Firebase",
+          "啟用追蹤 SDK"
+        ],
+        "en": [
+          "enable firebase",
+          "tracking sdk integrated"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "21e5aef3cc4d302f47bb42f534af09c8e5a95b85057da3a87fb10bdcd3e0a4d2",
+        "en": "fb3d6f5fe3934492667fecccf8d203a7170ad483d1a9a9d605ba205f0184f5b3"
+      },
+      "canonical_claim_digest": "179b50a399721e4a9a26ed3718bfd3438c148dbf20d787be9e5372989e92d6f7"
+    },
+    "CLAIM-OS-BACKUP-BEHAVIOR": {
+      "required_keywords": {
+        "zh": [
+          "作業系統備份",
+          "解除安裝"
+        ],
+        "en": [
+          "system backup",
+          "Uninstalling"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "保證不備份",
+          "絕不備份",
+          "永不備份",
+          "禁止備份",
+          "絕不複製",
+          "不會複製"
+        ],
+        "en": [
+          "guarantee no backup",
+          "never backed up",
+          "never backup",
+          "backup prohibited",
+          "never copy",
+          "never copies",
+          "never replicate",
+          "will not copy"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "9bdf3a29910850994d362ca2c30f322bae0e89481cd925a9532844e53ccac484",
+        "en": "19f34616bb4a97555625bb28b723e507612c03a1badbc3533cd455ea96258f47"
+      },
+      "canonical_claim_digest": "7547b80dbfdb8d77a808b8e8f1893966f302ae5d30985192e0863916f0fb074a"
+    },
+    "CLAIM-OPEN-SOURCE-VERIFIABLE": {
+      "required_keywords": {
+        "zh": [
+          "GPL-3.0",
+          "原始碼"
+        ],
+        "en": [
+          "GPL-3.0",
+          "source"
+        ]
+      },
+      "forbidden_terms": {
+        "zh": [
+          "專有私有代碼",
+          "不可公開驗證"
+        ],
+        "en": [
+          "closed source proprietary",
+          "unverifiable code"
+        ]
+      },
+      "canonical_digest": {
+        "zh": "0864ab7aedddd285fe78e4e1a049249cb335df74b4fb5247693cf204343bd72e",
+        "en": "87a345dac214783df68121ff0df1a6bdacbe07aa5d8cf22ab7e6be20bb923675"
+      },
+      "canonical_claim_digest": "4360593ad6df4a476c42a5662e7e15558785797563bd9dda97ed243dfd37e124"
+    }
+  },
+  "platform_storage_mapping": {
+    "android": {
+      "package_name": "com.cbstudio.telltale",
+      "preferences": {
+        "flutter_api": "SharedPreferences",
+        "native_path": "/data/data/com.cbstudio.telltale/shared_prefs/FlutterSharedPreferences.xml",
+        "backup_domain": "sharedpref",
+        "backup_classification": "os-backup-eligible"
+      },
+      "documents": {
+        "flutter_api": "getApplicationDocumentsDirectory",
+        "native_path": "/data/data/com.cbstudio.telltale/app_flutter/",
+        "backup_domain": "root",
+        "backup_classification": "os-backup-eligible"
+      },
+      "cache": {
+        "flutter_api": "getApplicationCacheDirectory",
+        "native_path": "/data/data/com.cbstudio.telltale/cache/",
+        "backup_domain": "cache",
+        "backup_classification": "os-backup-excluded"
+      }
+    },
+    "ios": {
+      "bundle_id": "com.cbstudio.telltale",
+      "preferences": {
+        "flutter_api": "SharedPreferences",
+        "native_path": "Library/Preferences/com.cbstudio.telltale.plist",
+        "backup_classification": "os-backup-eligible"
+      },
+      "documents": {
+        "flutter_api": "getApplicationDocumentsDirectory",
+        "native_path": "Documents/",
+        "backup_classification": "os-backup-eligible"
+      },
+      "cache": {
+        "flutter_api": "getApplicationCacheDirectory",
+        "native_path": "Library/Caches/",
+        "backup_classification": "os-backup-excluded"
+      }
+    },
+    "macos": {
+      "bundle_id": "com.cbstudio.telltale",
+      "preferences": {
+        "flutter_api": "SharedPreferences",
+        "native_path": "Library/Containers/com.cbstudio.telltale/Data/Library/Preferences/com.cbstudio.telltale.plist",
+        "backup_classification": "os-backup-eligible"
+      },
+      "documents": {
+        "flutter_api": "getApplicationDocumentsDirectory",
+        "native_path": "Library/Containers/com.cbstudio.telltale/Data/Documents/",
+        "backup_classification": "os-backup-eligible"
+      },
+      "cache": {
+        "flutter_api": "getApplicationCacheDirectory",
+        "native_path": "Library/Containers/com.cbstudio.telltale/Data/Library/Caches/",
+        "backup_classification": "os-backup-excluded"
+      }
+    }
+  },
+  "flows": [
+    {
+      "id": "DF-01-SETTINGS-VEHICLE-PROFILE",
+      "coverage_id": "DF01",
+      "name": "Vehicle Profile Settings and Assumptions",
+      "actor": "user",
+      "platform_scope": "all",
+      "user_trigger": "User edits vehicle profile parameters in Settings screen.",
+      "data_categories": [
+        "settings.vehicle_profile"
+      ],
+      "purpose": "Estimate engine horsepower and fuel consumption using user-configured or default vehicle parameters.",
+      "storage": {
+        "api": "SharedPreferences",
+        "relative_path": "shared_prefs/FlutterSharedPreferences.xml:vehicle_profile_v1"
+      },
+      "recipient_egress_class": "local-private",
+      "retention_trigger": "Retained across app launches until modified by user or app uninstallation.",
+      "local_deletion": "Overwritten on user edit or purged on app uninstallation.",
+      "post_handoff_limitation": "Full profile excluded from telemetry export; assumptions only frozen into session metadata if confirmed.",
+      "backup_classification": "os-backup-eligible",
+      "source_bindings": [
+        {
+          "path": "lib/state/settings.dart",
+          "symbol": "VehicleProfileController",
+          "sha256": "d5fb99b9c0976ff8a89a3c98a2c24bc6e63915352b3145f187a5600fd1416c66",
+          "storage_fact": "SharedPreferences"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-LOCAL-STORAGE-PARTITION"
+      ],
+      "test_ids": [
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "STATIC-CONTRACT"
+    },
+    {
+      "id": "DF-01-SETTINGS-ADAPTER-UI",
+      "coverage_id": "DF01",
+      "name": "Adapter Selection and UI Preferences",
+      "actor": "user",
+      "platform_scope": "all",
+      "user_trigger": "User connects to an adapter or toggles UI theme or gauge skin.",
+      "data_categories": [
+        "settings.adapter_address",
+        "settings.ui_preferences"
+      ],
+      "purpose": "Remember last used adapter host/port/name and visual theme preferences across sessions.",
+      "storage": {
+        "api": "SharedPreferences",
+        "relative_path": "shared_prefs/FlutterSharedPreferences.xml:last_adapter_v1,theme_mode_v1,gauge_skin"
+      },
+      "recipient_egress_class": "local-private",
+      "retention_trigger": "Retained until changed or explicitly cleared.",
+      "local_deletion": "Removed via forget() action or app uninstallation.",
+      "post_handoff_limitation": "Never transmitted to remote servers.",
+      "backup_classification": "os-backup-eligible",
+      "source_bindings": [
+        {
+          "path": "lib/state/settings.dart",
+          "symbol": "LastAdapterController",
+          "sha256": "d5fb99b9c0976ff8a89a3c98a2c24bc6e63915352b3145f187a5600fd1416c66",
+          "storage_fact": "SharedPreferences"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-LOCAL-STORAGE-PARTITION"
+      ],
+      "test_ids": [
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "STATIC-CONTRACT"
+    },
+    {
+      "id": "DF-02-CUSTOM-PID-DEFINITIONS",
+      "coverage_id": "DF02",
+      "name": "Custom OBD-II PID Definitions",
+      "actor": "user",
+      "platform_scope": "all",
+      "user_trigger": "User creates, imports, or configures custom OBD-II PIDs.",
+      "data_categories": [
+        "settings.custom_pid"
+      ],
+      "purpose": "Persist user-defined OBD-II PID definitions and formulas for live monitoring.",
+      "storage": {
+        "api": "SharedPreferences",
+        "relative_path": "shared_prefs/FlutterSharedPreferences.xml:custom_pids_v1,active_pid_ids_v1"
+      },
+      "recipient_egress_class": "local-private",
+      "retention_trigger": "Retained until modified or deleted by user.",
+      "local_deletion": "Removed when user deletes PID definitions in PID manager or uninstalls app.",
+      "post_handoff_limitation": "Separated from export files; exported only when user explicitly shares PID CSV definitions.",
+      "backup_classification": "os-backup-eligible",
+      "source_bindings": [
+        {
+          "path": "lib/state/pid_registry.dart",
+          "symbol": "PidRegistry",
+          "sha256": "e20fca791be536ec1b2b9b05c34c5a11288e18d5b93ac1832e39db9d72d64b4c",
+          "storage_fact": "SharedPreferences"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-LOCAL-STORAGE-PARTITION"
+      ],
+      "test_ids": [
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "STATIC-CONTRACT"
+    },
+    {
+      "id": "DF-03-RAW-TRANSCRIPT-LOG",
+      "coverage_id": "DF03",
+      "name": "Diagnostic Raw Byte Transcript",
+      "actor": "app",
+      "platform_scope": "all",
+      "user_trigger": "App connects to OBD-II adapter and exchanges diagnostic protocol frames.",
+      "data_categories": [
+        "vehicle.vin.plain",
+        "vehicle.vin.hex_ascii",
+        "diagnostic.raw_bytes",
+        "diagnostic.dtc_codes"
+      ],
+      "purpose": "Capture raw communication traffic of most recent session for connection debugging and offline diagnosis.",
+      "storage": {
+        "api": "getApplicationDocumentsDirectory",
+        "relative_path": "Documents/last-session.log"
+      },
+      "recipient_egress_class": "local-private",
+      "retention_trigger": "Exactly one session snapshot; preserved across crashes until next session boundary or user clear.",
+      "local_deletion": "Overwritten on next adapter session or purged via TranscriptStore.clear().",
+      "post_handoff_limitation": "Diagnostic fidelity retains raw VIN unredacted in private export; strictly forbidden from public publication.",
+      "backup_classification": "os-backup-eligible",
+      "source_bindings": [
+        {
+          "path": "lib/obd/transcript_store.dart",
+          "symbol": "TranscriptStore",
+          "sha256": "acd37aaf1f0fa9566019478690a7785b7320b9ab2f00a0b9d85838098444c20b",
+          "storage_fact": "getApplicationDocumentsDirectory"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-DIAGNOSTIC-RAW-BYTES",
+        "CLAIM-LOCAL-STORAGE-PARTITION"
+      ],
+      "test_ids": [
+        "test/privacy/public_artifact_boundary_contract_test.dart",
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "STATIC-CONTRACT"
+    },
+    {
+      "id": "DF-04-TELEMETRY-NDJSON",
+      "coverage_id": "DF04",
+      "name": "Drive Telemetry Session History",
+      "actor": "user",
+      "platform_scope": "all",
+      "user_trigger": "User records telemetry data during vehicle operation.",
+      "data_categories": [
+        "telemetry.ndjson",
+        "telemetry.signals",
+        "telemetry.timestamps"
+      ],
+      "purpose": "Store structured timeseries telemetry signals for in-app timeline review, replay, and optional export.",
+      "storage": {
+        "api": "getApplicationDocumentsDirectory",
+        "relative_path": "Documents/telltale-telemetry/<id>.ndjson"
+      },
+      "recipient_egress_class": "local-private",
+      "retention_trigger": "Stored in local telemetry library until deleted by user.",
+      "local_deletion": "User can delete individual sessions from session library UI.",
+      "post_handoff_limitation": "Derived CSV and JSON exports exclude structured VIN, GPS, accounts, and raw adapter network addresses; user-authored labels, formulas, and notes are preserved as written without text redaction.",
+      "backup_classification": "os-backup-eligible",
+      "source_bindings": [
+        {
+          "path": "lib/telemetry/session/telemetry_session_store.dart",
+          "symbol": "TelemetrySessionStore",
+          "sha256": "87c11f1191d4b01ea07646bd5a9e67fa9e641f0997874012e0db233fa71feccd",
+          "storage_fact": "getApplicationDocumentsDirectory"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-TELEMETRY-NDJSON",
+        "CLAIM-LOCAL-STORAGE-PARTITION"
+      ],
+      "test_ids": [
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "STATIC-CONTRACT"
+    },
+    {
+      "id": "DF-05-SHARE-CACHE-STAGING",
+      "coverage_id": "DF05",
+      "name": "Share Staging Cache and Leases",
+      "actor": "app",
+      "platform_scope": "all",
+      "user_trigger": "User triggers an export/share action from transcript or telemetry screens.",
+      "data_categories": [
+        "share.staged_file",
+        "share.lease_metadata"
+      ],
+      "purpose": "Stage temporary export files in application cache and manage lease metadata for OS share sheet handoff.",
+      "storage": {
+        "api": "getApplicationCacheDirectory",
+        "relative_path": "Caches/telltale-app-shares/<id>.share"
+      },
+      "recipient_egress_class": "local-private",
+      "retention_trigger": "Stamped with 15-minute cleanup-eligible and 24-hour cleanup-due timestamps.",
+      "local_deletion": "Purged during app startup or share flow entry once cleanup eligibility criteria are met.",
+      "post_handoff_limitation": "Cache cleanup purges local staging files only; cannot erase copies already received by external apps.",
+      "backup_classification": "os-backup-excluded",
+      "source_bindings": [
+        {
+          "path": "lib/state/app_share_coordinator.dart",
+          "symbol": "appShareCoordinatorProvider",
+          "sha256": "f0f4c17c87135e37f350126c9627cc881cfaa867941ed370fc52a33c8ed2152f",
+          "storage_fact": "getApplicationCacheDirectory"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-SHARE-CACHE-LIFECYCLE",
+        "CLAIM-LOCAL-STORAGE-PARTITION"
+      ],
+      "test_ids": [
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "MOCK-HANDOFF"
+    },
+    {
+      "id": "DF-06-FORMAL-SHARE-DISPATCH",
+      "coverage_id": "DF06",
+      "name": "Formal User-Controlled Share Dispatch",
+      "actor": "user",
+      "platform_scope": "all",
+      "user_trigger": "User taps share button, reviews disclosure preview, and selects target recipient app in share sheet.",
+      "data_categories": [
+        "share.rawTranscript",
+        "share.recoveredTranscript",
+        "share.telemetryCsv",
+        "share.telemetryJson",
+        "share.pidCsv"
+      ],
+      "purpose": "Deliver user-selected export files to external applications chosen by the user.",
+      "storage": {
+        "api": "system-share-sheet",
+        "relative_path": "external-app-handoff"
+      },
+      "recipient_egress_class": "user-selected-app",
+      "retention_trigger": "Controlled entirely by recipient application once handoff completes.",
+      "local_deletion": "Local staging file purged by cache cleanup; external copies subject to recipient app policies.",
+      "post_handoff_limitation": "Zero pre-action handoff. No remote recall or revocation possible once delivered to external app. Dismissed export returns dismissed without claiming delivery.",
+      "backup_classification": "not-applicable",
+      "source_bindings": [
+        {
+          "path": "lib/state/app_share_coordinator.dart",
+          "symbol": "AppShareCoordinator",
+          "sha256": "f0f4c17c87135e37f350126c9627cc881cfaa867941ed370fc52a33c8ed2152f",
+          "storage_fact": "system-share-sheet"
+        },
+        {
+          "path": "lib/state/app_share_entry_controller.dart",
+          "symbol": "AppShareEntryController",
+          "sha256": "6628d33fb84b9ce825cfb82839bf881e86bb315fef21a7d63968fcb8d0138f30",
+          "storage_fact": "system-share-sheet"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-USER-CONTROLLED-SHARE"
+      ],
+      "test_ids": [
+        "test/privacy/privacy_data_flow_contract_test.dart",
+        "test/app_share_entry_controller_test.dart"
+      ],
+      "evidence_level": "MOCK-HANDOFF"
+    },
+    {
+      "id": "DF-07-ADAPTER-TRANSPORT-LINK",
+      "coverage_id": "DF07",
+      "name": "OBD-II Hardware Transport Communications",
+      "actor": "user",
+      "platform_scope": "all",
+      "user_trigger": "User initiates connection to ELM327 adapter via Wi-Fi, BLE, Classic Bluetooth, or Serial.",
+      "data_categories": [
+        "obd.at_commands",
+        "obd.pid_queries",
+        "obd.raw_frames"
+      ],
+      "purpose": "Send OBD-II AT commands and PID requests to adapter and receive real-time vehicle ECU responses.",
+      "storage": {
+        "api": "network-socket-or-ble",
+        "relative_path": "memory-only-buffer"
+      },
+      "recipient_egress_class": "adapter-socket",
+      "retention_trigger": "In-memory during active connection session.",
+      "local_deletion": "Cleared on disconnect or connection tear down.",
+      "post_handoff_limitation": "Restricted to communication with user-configured adapter endpoint (destination depends on user settings); app never connects to remote developer servers or performs telemetry uploads.",
+      "backup_classification": "not-applicable",
+      "source_bindings": [
+        {
+          "path": "lib/obd/transport/wifi_transport.dart",
+          "symbol": "WifiTransport",
+          "sha256": "b4e28f7e906e16b3bf24d075c932009da183f4be01f6a554942d5bf0a0fbd898",
+          "storage_fact": "network-socket-or-ble"
+        },
+        {
+          "path": "lib/obd/transport/ble_transport.dart",
+          "symbol": "BleTransport",
+          "sha256": "48785811ea65563bfb16889b6c8a1274ad3ce5147a902e05d47c1eddffc86faa",
+          "storage_fact": "network-socket-or-ble"
+        },
+        {
+          "path": "lib/obd/transport/classic_transport.dart",
+          "symbol": "ClassicTransport",
+          "sha256": "7c5b08d36e336db18a05508bbea08348355ced5720f70d9f1ea755fe0db76d77",
+          "storage_fact": "network-socket-or-ble"
+        },
+        {
+          "path": "lib/obd/transport/serial_transport.dart",
+          "symbol": "SerialTransport",
+          "sha256": "0500a0c0021fc9fbf5eb06f20c1c6f485fe6a52752ac8539a080163060b177ce",
+          "storage_fact": "network-socket-or-ble"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-NETWORK-ADAPTER-ONLY",
+        "CLAIM-PERMISSIONS-MINIMAL"
+      ],
+      "test_ids": [
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "LOOPBACK"
+    },
+    {
+      "id": "DF-08-EXTERNAL-AFFILIATE-LINK",
+      "coverage_id": "DF08",
+      "name": "Recommended Adapter External Links",
+      "actor": "user",
+      "platform_scope": "all",
+      "user_trigger": "User explicitly taps recommended adapter link in Connect or Settings screen.",
+      "data_categories": [
+        "affiliate.store_url"
+      ],
+      "purpose": "Open maintainer affiliate storefront URL in system browser.",
+      "storage": {
+        "api": "url_launcher",
+        "relative_path": "external-browser"
+      },
+      "recipient_egress_class": "external-browser",
+      "retention_trigger": "Controlled by external browser and storefront website.",
+      "local_deletion": "No local state stored.",
+      "post_handoff_limitation": "Zero pre-click handoff. Strictly prohibited from appending VIN, telemetry, or device identifiers.",
+      "backup_classification": "not-applicable",
+      "source_bindings": [
+        {
+          "path": "lib/ui/widgets/recommended_purchase_panel.dart",
+          "symbol": "RecommendedPurchasePanel",
+          "sha256": "a44109deb932e60e67c3dcd5736669c15f9c1ee3d9a5e3af385121644adbce99",
+          "storage_fact": "url_launcher"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-EXTERNAL-AFFILIATE-LINKS"
+      ],
+      "test_ids": [
+        "test/recommended_purchases_test.dart",
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "STATIC-CONTRACT"
+    },
+    {
+      "id": "DF-09-BUNDLED-CATALOG-ASSETS",
+      "coverage_id": "DF09",
+      "name": "Bundled Vehicle Catalog Assets",
+      "actor": "app",
+      "platform_scope": "all",
+      "user_trigger": "Bundled asset read by application during vehicle lookup.",
+      "data_categories": [
+        "catalog.public_vehicle_models",
+        "fonts.open_licensed"
+      ],
+      "purpose": "Mobile app reads bundled vehicle catalog assets completely offline without network egress.",
+      "storage": {
+        "api": "flutter-bundle",
+        "relative_path": "assets/"
+      },
+      "recipient_egress_class": "none",
+      "retention_trigger": "Shipped within application package binary.",
+      "local_deletion": "Removed upon application uninstallation.",
+      "post_handoff_limitation": "Bundled read-only assets in mobile app; zero network egress.",
+      "backup_classification": "os-backup-excluded",
+      "source_bindings": [
+        {
+          "path": "lib/obd/vehicle_catalog/us_vehicle_catalog.dart",
+          "symbol": "UsVehicleCatalog",
+          "sha256": "8aadc35ad777cc91aacd45ad44db449e1107bd34c0e78bd83d5ec0c6f88052d9",
+          "storage_fact": "flutter-bundle"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-DEVELOPER-NO-COLLECTION",
+        "CLAIM-OPEN-SOURCE-VERIFIABLE"
+      ],
+      "test_ids": [
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "STATIC-CONTRACT"
+    },
+    {
+      "id": "DF-09-MAINTAINER-CATALOG-TOOL",
+      "coverage_id": "DF09",
+      "name": "Maintainer Vehicle Catalog Update Tool",
+      "actor": "maintainer",
+      "platform_scope": "all",
+      "user_trigger": "Developer workstation execution of repository maintenance tool (tool/update_us_vehicle_catalog.py).",
+      "data_categories": [
+        "catalog.public_vehicle_models"
+      ],
+      "purpose": "Developer maintenance script downloads public government catalog archive from FuelEconomy.gov on developer workstation to generate bundled assets; completely isolated from user mobile devices.",
+      "storage": {
+        "api": "flutter-bundle",
+        "relative_path": "assets/vehicle_catalog/"
+      },
+      "recipient_egress_class": "external-maintainer-download",
+      "retention_trigger": "Generated catalog artifact committed to repository assets/.",
+      "local_deletion": "Not applicable to user device; developer workstation artifact.",
+      "post_handoff_limitation": "Workstation outbound download from official U.S. government domain (fueleconomy.gov); zero user device transmission and zero personal data egress.",
+      "backup_classification": "os-backup-excluded",
+      "source_bindings": [
+        {
+          "path": "tool/update_us_vehicle_catalog.py",
+          "symbol": "download_archive",
+          "sha256": "e9c8a29b42a4c45b8860f4fa20f4c32af5a4dfc3724cf251b316babc81055a96",
+          "storage_fact": "flutter-bundle"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-DEVELOPER-NO-COLLECTION",
+        "CLAIM-OPEN-SOURCE-VERIFIABLE"
+      ],
+      "test_ids": [
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "STATIC-CONTRACT"
+    },
+    {
+      "id": "DF-10-PROVIDER-UPLOAD-AUDIT",
+      "coverage_id": "DF10",
+      "name": "Absence of Remote Providers and Tracking SDKs",
+      "actor": "app",
+      "platform_scope": "all",
+      "user_trigger": "None (strictly prohibited).",
+      "data_categories": [],
+      "purpose": "Audit and enforce complete absence of telemetry upload services, advertising, crash reporting, and analytics.",
+      "storage": {
+        "api": "none",
+        "relative_path": "none"
+      },
+      "recipient_egress_class": "none",
+      "retention_trigger": "None.",
+      "local_deletion": "None.",
+      "post_handoff_limitation": "No data transmitted to any developer, vendor, or third-party cloud infrastructure.",
+      "backup_classification": "not-applicable",
+      "audit_scope": {
+        "method": "dependency-graph-and-source-pattern-scan",
+        "audited_roots": [
+          "android/app/build.gradle.kts",
+          "lib",
+          "pubspec.lock",
+          "pubspec.yaml"
+        ],
+        "audit_command": "flutter pub deps --style=compact",
+        "receipt_file": "docs/privacy/sdk-audit-receipt.json",
+        "target_source_lock_sha256": "0c59c66b40489b3490b71b64be682387dd27ebde0db6205f73bc4c87d585b90c",
+        "status": "PASS",
+        "exit_code": 0,
+        "hits_count": 0,
+        "prohibited_sdk_patterns": [
+          "appsflyer",
+          "facebook",
+          "firebase",
+          "flurry",
+          "google_mobile_ads",
+          "mixpanel",
+          "sentry"
+        ],
+        "findings": "zero-third-party-sdk-dependencies"
+      },
+      "source_bindings": [
+        {
+          "path": "pubspec.yaml",
+          "symbol": "name: torque_obd",
+          "sha256": "d2219ca825cab91732e80e434d26594b99ec2f83c5a1c51f17524a39cb2a0a68",
+          "storage_fact": "none"
+        }
+      ],
+      "claim_ids": [
+        "CLAIM-DEVELOPER-NO-COLLECTION",
+        "CLAIM-NO-THIRD-PARTY-SDKS"
+      ],
+      "test_ids": [
+        "test/privacy/privacy_data_flow_contract_test.dart"
+      ],
+      "evidence_level": "STATIC-CONTRACT"
+    }
+  ],
+  "policy_ref_sha256": "386ebb1323de8de42e1dd06616aae112edc9f7cf24cd809f886bfc9c1f14f639"
+}
