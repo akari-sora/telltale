@@ -1,0 +1,332 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.cbstudio.telltale"
+4    android:versionCode="151"
+5    android:versionName="1.0.14" >
+6
+7    <uses-sdk
+7-->INJECTED
+8        android:minSdkVersion="24"
+8-->INJECTED
+9        android:targetSdkVersion="36" />
+9-->INJECTED
+10
+11    <!-- Wi-Fi TCP transport talks to the adapter's soft AP. -->
+12    <uses-permission android:name="android.permission.INTERNET" />
+12--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:5:5-66
+12--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:5:22-64
+13    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+13--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:6:5-78
+13--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:6:22-76
+14
+15    <!--
+16         Android 12 (API 31) and up: dedicated Bluetooth permissions.
+17         `neverForLocation` declares that scan results are not used to derive
+18         physical location, which is what keeps the system from demanding the
+19         location permission on top.
+20    -->
+21    <uses-permission
+21--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:12:5-15:30
+22        android:name="android.permission.BLUETOOTH_SCAN"
+22--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:13:9-57
+23        android:usesPermissionFlags="neverForLocation" />
+23--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:14:9-55
+24    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+24--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:16:5-75
+24--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:16:22-73
+25
+26    <!--
+27         Android 11 (API 30) and below still gate BLE scanning behind the
+28         legacy permissions plus a location permission.
+29    -->
+30    <uses-permission
+30--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:20:5-22:37
+31        android:name="android.permission.BLUETOOTH"
+31--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:21:9-52
+32        android:maxSdkVersion="30" />
+32--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:22:9-35
+33    <uses-permission
+33--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:23:5-25:37
+34        android:name="android.permission.BLUETOOTH_ADMIN"
+34--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:24:9-58
+35        android:maxSdkVersion="30" />
+35--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:25:9-35
+36    <uses-permission
+36--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:26:5-28:37
+37        android:name="android.permission.ACCESS_FINE_LOCATION"
+37--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:27:9-63
+38        android:maxSdkVersion="30" />
+38--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:28:9-35
+39    <!--
+40         Declared explicitly so the cap survives the merge. `uses-permission`
+41         merges by union, so one dependency declaring this unbounded is enough
+42         to ship an uncapped coarse-location request on every Android version,
+43         for something the app only needs below API 31 and only for discovery.
+44         `tools:node="replace"` makes the cap win regardless.
+45
+46         Verified 2026-08-18 against the merged manifest: no current dependency
+47         declares it, so this is insurance rather than a live correction. It
+48         stays because the cost is one line and the failure it prevents is a
+49         permission the user cannot see us not needing.
+50    -->
+51    <uses-permission
+51--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:39:5-42:31
+52        android:name="android.permission.ACCESS_COARSE_LOCATION"
+52--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:40:9-65
+53        android:maxSdkVersion="30" />
+53--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:41:9-35
+54
+55    <uses-feature
+55--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:54:5-87
+56        android:name="android.hardware.bluetooth"
+56--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:54:19-60
+57        android:required="false" />
+57--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:54:61-85
+58    <uses-feature
+58--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:55:5-90
+59        android:name="android.hardware.bluetooth_le"
+59--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:55:19-63
+60        android:required="false" />
+60--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:55:64-88
+61    <!--
+62         Required to query activities that can process text, see:
+63         https://developer.android.com/training/package-visibility and
+64         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+65
+66         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin.
+67    -->
+68    <queries>
+68--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:95:5-104:15
+69        <intent>
+69--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:96:9-99:18
+70            <action android:name="android.intent.action.PROCESS_TEXT" />
+70--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:97:13-72
+70--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:97:21-70
+71
+72            <data android:mimeType="text/plain" />
+72--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:98:13-50
+72--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:98:19-48
+73        </intent>
+74        <intent>
+74--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:100:9-103:18
+75            <action android:name="android.intent.action.VIEW" />
+75--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:101:13-64
+75--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:101:21-62
+76
+77            <data android:scheme="https" />
+77--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:98:13-50
+77--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:102:19-41
+78        </intent>
+79        <intent>
+79-->[:android_file_picker] <REPO_ROOT>/build/android_file_picker/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:8:9-12:18
+80            <action android:name="android.intent.action.GET_CONTENT" />
+80-->[:android_file_picker] <REPO_ROOT>/build/android_file_picker/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:9:13-72
+80-->[:android_file_picker] <REPO_ROOT>/build/android_file_picker/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:9:21-69
+81
+82            <data android:mimeType="*/*" />
+82--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:98:13-50
+82--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:98:19-48
+83        </intent>
+84    </queries>
+85
+86    <permission
+86-->[androidx.core:core:1.18.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/d093bb2eca2532b7d20813ec3c4a0c68/transformed/core-1.18.0/AndroidManifest.xml:22:5-24:47
+87        android:name="com.cbstudio.telltale.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+87-->[androidx.core:core:1.18.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/d093bb2eca2532b7d20813ec3c4a0c68/transformed/core-1.18.0/AndroidManifest.xml:23:9-81
+88        android:protectionLevel="signature" />
+88-->[androidx.core:core:1.18.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/d093bb2eca2532b7d20813ec3c4a0c68/transformed/core-1.18.0/AndroidManifest.xml:24:9-44
+89
+90    <uses-permission android:name="com.cbstudio.telltale.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+90-->[androidx.core:core:1.18.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/d093bb2eca2532b7d20813ec3c4a0c68/transformed/core-1.18.0/AndroidManifest.xml:26:5-97
+90-->[androidx.core:core:1.18.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/d093bb2eca2532b7d20813ec3c4a0c68/transformed/core-1.18.0/AndroidManifest.xml:26:22-94
+91
+92    <application
+92-->INJECTED
+93        android:name="android.app.Application"
+93-->INJECTED
+94        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+94-->[androidx.core:core:1.18.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/d093bb2eca2532b7d20813ec3c4a0c68/transformed/core-1.18.0/AndroidManifest.xml:28:18-86
+95        android:extractNativeLibs="false"
+95-->INJECTED
+96        android:icon="@mipmap/ic_launcher"
+96--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:60:9-43
+97        android:label="Telltale"
+97--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:58:9-33
+98        android:localeConfig="@xml/locales_config" >
+98--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:61:9-51
+99        <activity
+99--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:62:9-83:20
+100            android:name="com.cbstudio.telltale.MainActivity"
+100--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:63:13-41
+101            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+101--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:68:13-163
+102            android:exported="true"
+102--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:64:13-36
+103            android:hardwareAccelerated="true"
+103--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:69:13-47
+104            android:launchMode="singleTop"
+104--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:65:13-43
+105            android:taskAffinity=""
+105--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:66:13-36
+106            android:theme="@style/LaunchTheme"
+106--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:67:13-47
+107            android:windowSoftInputMode="adjustResize" >
+107--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:70:13-55
+108
+109            <!--
+110                 Specifies an Android theme to apply to this Activity as soon as
+111                 the Android process has started. This theme is visible to the user
+112                 while the Flutter UI initializes. After that, this theme continues
+113                 to determine the Window background behind the Flutter UI.
+114            -->
+115            <meta-data
+115--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:75:13-78:17
+116                android:name="io.flutter.embedding.android.NormalTheme"
+116--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:76:15-70
+117                android:resource="@style/NormalTheme" />
+117--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:77:15-52
+118
+119            <intent-filter>
+119--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:79:13-82:29
+120                <action android:name="android.intent.action.MAIN" />
+120--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:80:17-68
+120--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:80:25-66
+121
+122                <category android:name="android.intent.category.LAUNCHER" />
+122--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:81:17-76
+122--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:81:27-74
+123            </intent-filter>
+124        </activity>
+125        <!--
+126             Don't delete the meta-data below.
+127             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java
+128        -->
+129        <meta-data
+129--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:86:9-88:33
+130            android:name="flutterEmbedding"
+130--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:87:13-44
+131            android:value="2" />
+131--><REPO_ROOT>/android/app/src/main/AndroidManifest.xml:88:13-30
+132        <!--
+133           Declares a provider which allows us to store files to share in
+134           '.../caches/share_plus' and grant the receiving action access
+135        -->
+136        <provider
+136-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:13:9-21:20
+137            android:name="dev.fluttercommunity.plus.share.ShareFileProvider"
+137-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:14:13-77
+138            android:authorities="com.cbstudio.telltale.flutter.share_provider"
+138-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:15:13-74
+139            android:exported="false"
+139-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:16:13-37
+140            android:grantUriPermissions="true" >
+140-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:17:13-47
+141            <meta-data
+141-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:18:13-20:68
+142                android:name="android.support.FILE_PROVIDER_PATHS"
+142-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:19:17-67
+143                android:resource="@xml/flutter_share_file_paths" />
+143-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:20:17-65
+144        </provider>
+145        <!--
+146           This manifest declared broadcast receiver allows us to use an explicit
+147           Intent when creating a PendingItent to be informed of the user's choice
+148        -->
+149        <receiver
+149-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:26:9-32:20
+150            android:name="dev.fluttercommunity.plus.share.SharePlusPendingIntent"
+150-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:27:13-82
+151            android:exported="false" >
+151-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:28:13-37
+152            <intent-filter>
+152-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:29:13-31:29
+153                <action android:name="EXTRA_CHOSEN_COMPONENT" />
+153-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:30:17-65
+153-->[:share_plus] <REPO_ROOT>/build/share_plus/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:30:25-62
+154            </intent-filter>
+155        </receiver>
+156
+157        <activity
+157-->[:url_launcher_android] <REPO_ROOT>/build/url_launcher_android/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:8:9-11:74
+158            android:name="io.flutter.plugins.urllauncher.WebViewActivity"
+158-->[:url_launcher_android] <REPO_ROOT>/build/url_launcher_android/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:9:13-74
+159            android:exported="false"
+159-->[:url_launcher_android] <REPO_ROOT>/build/url_launcher_android/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:10:13-37
+160            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
+160-->[:url_launcher_android] <REPO_ROOT>/build/url_launcher_android/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml:11:13-71
+161
+162        <provider
+162-->[androidx.lifecycle:lifecycle-process:2.10.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/06aa87040e4b39ed5d8d478686f22d34/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:24:9-32:20
+163            android:name="androidx.startup.InitializationProvider"
+163-->[androidx.lifecycle:lifecycle-process:2.10.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/06aa87040e4b39ed5d8d478686f22d34/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:25:13-67
+164            android:authorities="com.cbstudio.telltale.androidx-startup"
+164-->[androidx.lifecycle:lifecycle-process:2.10.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/06aa87040e4b39ed5d8d478686f22d34/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:26:13-68
+165            android:exported="false" >
+165-->[androidx.lifecycle:lifecycle-process:2.10.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/06aa87040e4b39ed5d8d478686f22d34/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:27:13-37
+166            <meta-data
+166-->[androidx.lifecycle:lifecycle-process:2.10.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/06aa87040e4b39ed5d8d478686f22d34/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:29:13-31:52
+167                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+167-->[androidx.lifecycle:lifecycle-process:2.10.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/06aa87040e4b39ed5d8d478686f22d34/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:30:17-78
+168                android:value="androidx.startup" />
+168-->[androidx.lifecycle:lifecycle-process:2.10.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/06aa87040e4b39ed5d8d478686f22d34/transformed/lifecycle-process-2.10.0/AndroidManifest.xml:31:17-49
+169            <meta-data
+169-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:29:13-31:52
+170                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+170-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:30:17-85
+171                android:value="androidx.startup" />
+171-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:31:17-49
+172        </provider>
+173
+174        <uses-library
+174-->[androidx.window:window:1.2.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/3af980662234f52902de775e9c6e354f/transformed/window-1.2.0/AndroidManifest.xml:23:9-25:40
+175            android:name="androidx.window.extensions"
+175-->[androidx.window:window:1.2.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/3af980662234f52902de775e9c6e354f/transformed/window-1.2.0/AndroidManifest.xml:24:13-54
+176            android:required="false" />
+176-->[androidx.window:window:1.2.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/3af980662234f52902de775e9c6e354f/transformed/window-1.2.0/AndroidManifest.xml:25:13-37
+177        <uses-library
+177-->[androidx.window:window:1.2.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/3af980662234f52902de775e9c6e354f/transformed/window-1.2.0/AndroidManifest.xml:26:9-28:40
+178            android:name="androidx.window.sidecar"
+178-->[androidx.window:window:1.2.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/3af980662234f52902de775e9c6e354f/transformed/window-1.2.0/AndroidManifest.xml:27:13-51
+179            android:required="false" />
+179-->[androidx.window:window:1.2.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/3af980662234f52902de775e9c6e354f/transformed/window-1.2.0/AndroidManifest.xml:28:13-37
+180
+181        <receiver
+181-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:34:9-52:20
+182            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+182-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:35:13-76
+183            android:directBootAware="false"
+183-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:36:13-44
+184            android:enabled="true"
+184-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:37:13-35
+185            android:exported="true"
+185-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:38:13-36
+186            android:permission="android.permission.DUMP" >
+186-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:39:13-57
+187            <intent-filter>
+187-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:40:13-42:29
+188                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+188-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:41:17-91
+188-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:41:25-88
+189            </intent-filter>
+190            <intent-filter>
+190-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:43:13-45:29
+191                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+191-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:44:17-85
+191-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:44:25-82
+192            </intent-filter>
+193            <intent-filter>
+193-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:46:13-48:29
+194                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+194-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:47:17-88
+194-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:47:25-85
+195            </intent-filter>
+196            <intent-filter>
+196-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:49:13-51:29
+197                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+197-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:50:17-95
+197-->[androidx.profileinstaller:profileinstaller:1.4.0] <GRADLE_USER_HOME>/caches/9.3.1/transforms/7366a9c8623cf5e0422083d5012d9281/transformed/profileinstaller-1.4.0/AndroidManifest.xml:50:25-92
+198            </intent-filter>
+199        </receiver>
+200    </application>
+201
+202</manifest>
