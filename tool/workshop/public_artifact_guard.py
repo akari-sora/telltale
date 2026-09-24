@@ -181,6 +181,19 @@ def _is_plate_or_customer_key(key: str) -> bool:
     return has_identity_stem and has_qualifier
 
 
+def _is_identity_key(key: str) -> bool:
+    """Check if key represents an identity context (VIN, device UUID, device serial, plate/customer)."""
+    return bool(
+        key
+        and (
+            _is_vin_key(key)
+            or _is_device_uuid_key(key)
+            or _is_device_serial_key(key)
+            or _is_plate_or_customer_key(key)
+        )
+    )
+
+
 def _is_timestamp_key(key: str) -> bool:
     """Check if key indicates a timestamp field."""
     k = key.lower()
@@ -847,8 +860,8 @@ class PublicArtifactGuard:
                 )
 
         elif isinstance(obj, list):
-            # Check if this list is an inferred segment container
-            if _is_segment_container(obj, path_prefix):
+            # Enforce identity schema contract: identity lists cannot be bypassed by inferred segment dispatch
+            if not _is_identity_key(parent_key) and _is_segment_container(obj, path_prefix):
                 self._check_segment_items(obj, path_prefix, findings, errors)
                 return
             else:
@@ -906,7 +919,7 @@ class PublicArtifactGuard:
                                 message="Subject identifier (plate or customer ID) detected",
                             ))
                     elif isinstance(item, dict):
-                        if _is_vin_key(parent_key) or _is_device_uuid_key(parent_key) or _is_device_serial_key(parent_key) or _is_plate_or_customer_key(parent_key):
+                        if _is_identity_key(parent_key):
                             errors.append(SanitizedError(
                                 code="schema.invalid_identity_type",
                                 message="Identity field cannot contain nested objects.",
