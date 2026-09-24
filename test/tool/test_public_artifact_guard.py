@@ -701,6 +701,61 @@ class TestPublicArtifactGuardAcceptance(unittest.TestCase):
         finally:
             os.unlink(tf_path)
 
+    def test_s3_r5_h01_h12_identity_array_segment_interaction(self) -> None:
+        """Round 5 Reviewer Findings H01-H12: Identity array schema enforcement vs segment container dispatch."""
+        cases = [
+            ("H01", {"deviceSerial": ["TEL-SERIAL-0001"]}, 1, "device.serial", None),
+            ("H02", {"deviceSerial": [{"payload": "TEL-SERIAL-0001"}]}, 2, None, "schema.invalid_identity_type"),
+            ("H03", {"deviceSerial": [{"seq": 0, "payload": "TEL-SERIAL-0001"}]}, 2, None, "schema.invalid_identity_type"),
+            ("H04", {"deviceUuid": ["00000000-0000-4000-8000-000000000001"]}, 1, "device.uuid", None),
+            ("H05", {"deviceUuid": [{"payload": "00000000-0000-4000-8000-000000000001"}]}, 2, None, "schema.invalid_identity_type"),
+            ("H06", {"deviceUuid": [{"seq": 0, "payload": "00000000-0000-4000-8000-000000000001"}]}, 2, None, "schema.invalid_identity_type"),
+            ("H07", {"customer_id": ["CUST-SYNTH-999"]}, 1, "subject.plate_or_customer_id", None),
+            ("H08", {"customer_id": [{"payload": "CUST-SYNTH-999"}]}, 2, None, "schema.invalid_identity_type"),
+            ("H09", {"customer_id": [{"seq": 0, "payload": "CUST-SYNTH-999"}]}, 2, None, "schema.invalid_identity_type"),
+            ("H10", {"segments": [{"seq": 0, "payload": "abc"}, {"seq": 1, "payload": "def"}]}, 0, None, None),
+            ("H11", {"run_id": ["00000000-0000-4000-8000-000000000001"]}, 0, None, None),
+            ("H12", {"values": [1, 2, 3]}, 0, None, None),
+        ]
+
+        for name, data, exp_exit, exp_category, exp_error_code in cases:
+            data_str = json.dumps(data)
+            findings, errors = self.guard.scan_content(data_str, "json")
+
+            if exp_category is not None:
+                self.assertTrue(
+                    any(f.category == exp_category for f in findings),
+                    f"{name}: expected category {exp_category}, got {[f.category for f in findings]}",
+                )
+            if exp_error_code is not None:
+                self.assertTrue(
+                    any(e.code == exp_error_code for e in errors),
+                    f"{name}: expected error code {exp_error_code}, got {[e.code for e in errors]}",
+                )
+            if exp_exit == 0:
+                self.assertEqual(findings, [], f"{name}: expected 0 findings")
+                self.assertEqual(errors, [], f"{name}: expected 0 errors")
+
+            # Run via CLI
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
+                tf.write(data_str)
+                tf_path = tf.name
+            try:
+                cli_res = subprocess.run(
+                    [sys.executable, str(TOOL_DIR / "public_artifact_guard.py"), "check", "--classification", "public-summary", "--format", "json", tf_path],
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(
+                    cli_res.returncode,
+                    exp_exit,
+                    f"{name} CLI exit code mismatch: expected {exp_exit}, got {cli_res.returncode}. Stderr: {cli_res.stderr}",
+                )
+                if exp_error_code is not None:
+                    self.assertIn(exp_error_code, cli_res.stderr, f"{name}: expected {exp_error_code} in stderr")
+            finally:
+                os.unlink(tf_path)
+
     def test_s3_json_segment_container_null_and_invalid_payload_fail_closed(self) -> None:
 
         """P1-R2: JSON segment containers fail closed when null or invalid payload elements are present."""
