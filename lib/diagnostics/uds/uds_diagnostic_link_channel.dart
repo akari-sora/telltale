@@ -84,8 +84,9 @@ final class DiagnosticLinkUdsTransactionChannel implements UdsTransactionChannel
   Future<DiagnosticMessage> send(
     DiagnosticRequestId id,
     ApplicationPdu pdu,
-    Duration timeout,
-  ) async {
+    Duration timeout, {
+    DateTime? absoluteDeadline,
+  }) async {
     _checkPreconditions();
     clearContinuationQueue();
 
@@ -142,10 +143,17 @@ final class DiagnosticLinkUdsTransactionChannel implements UdsTransactionChannel
       );
     }
 
-    final localDeadline = DateTime.now().add(timeout);
-    final effectiveDeadline = outerDeadline != null && outerDeadline!.isBefore(localDeadline)
-        ? outerDeadline!
-        : localDeadline;
+    // [timeout] is the ECU phase window (P2) and is carried as responseTimeout
+    // so the link starts it when the service command is sent. The absolute
+    // deadline is the transaction budget. Using now+P2 for both makes Elm327
+    // preamble (ATH1/ATSH) consume P2, and _checkPostconditions then discards
+    // an NRC 0x78 the link already accepted — the engine reports P2 timeout
+    // instead of response-pending exhausted when maxResponsePendingCount is 0.
+    final phaseDeadline = DateTime.now().add(timeout);
+    var effectiveDeadline = absoluteDeadline ?? phaseDeadline;
+    if (outerDeadline != null && outerDeadline!.isBefore(effectiveDeadline)) {
+      effectiveDeadline = outerDeadline!;
+    }
     final request = DiagnosticRequest(
       id: id,
       pdu: pdu,

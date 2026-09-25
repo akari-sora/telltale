@@ -1891,6 +1891,16 @@ class ObdSession extends Notifier<ObdConnectionState> {
     DiagnosticCancellation cancellation = DiagnosticCancellation.none,
     DateTime? deadline,
   }) async {
+    if (cancellation.isCancelled) {
+      return UdsTransactionCancelled(
+        request: request,
+        attempts: 0,
+        retries: 0,
+        responsePendingCount: 0,
+        elapsed: Duration.zero,
+      );
+    }
+
     if (deadline != null && !DateTime.now().isBefore(deadline)) {
       return UdsTransactionTimedOut(
         request: request,
@@ -1946,6 +1956,15 @@ class ObdSession extends Notifier<ObdConnectionState> {
         },
       );
     } on DiagnosticLinkException catch (e) {
+      if (cancellation.isCancelled || e.kind == DiagnosticFailureKind.cancelled) {
+        return UdsTransactionCancelled(
+          request: request,
+          attempts: 0,
+          retries: 0,
+          responsePendingCount: 0,
+          elapsed: Duration.zero,
+        );
+      }
       if (e.kind == DiagnosticFailureKind.deadlineExpired) {
         return UdsTransactionTimedOut(
           request: request,

@@ -2086,6 +2086,11 @@ void main() {
         stack.transport.forceReplySequence('220100', [
           '7E8 03 7F 22 78\r7E8 05 62 01 00 99 88',
         ]);
+        // Adapter preamble is not part of P2. A loaded host spends the default
+        // 50ms P2 on ATH1/ATSH before 220100 is sent; the NRC 0x78 must still
+        // be classified as pending-exhausted rather than a P2 timeout.
+        stack.transport.slowCommands['ATH1'] = const Duration(milliseconds: 30);
+        stack.transport.slowCommands['ATSH7E0'] = const Duration(milliseconds: 25);
 
         final target = DiagnosticTarget.physicalCan(
           requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
@@ -2100,7 +2105,10 @@ void main() {
         );
 
         final engine = UdsTransactionEngine(
-          policy: UdsTransactionPolicy(maxResponsePendingCount: 0),
+          policy: UdsTransactionPolicy(
+            maxResponsePendingCount: 0,
+            p2Timeout: const Duration(seconds: 1),
+          ),
         );
         final request = UdsTransactionRequest.readDid(const UdsDid(0x0100));
 
@@ -2246,7 +2254,9 @@ void main() {
           wireOwnerToken: 'w06-token',
         );
 
-        const engine = UdsTransactionEngine();
+        final engine = UdsTransactionEngine(
+          policy: UdsTransactionPolicy(p2Timeout: const Duration(seconds: 1)),
+        );
         final request = UdsTransactionRequest.readDid(const UdsDid(0x0100));
 
         expect(
@@ -2470,6 +2480,7 @@ void main() {
         final firstResult = await session.runReadOnlyUdsTransaction(
           request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
           target: target,
+          policy: UdsTransactionPolicy(p2Timeout: const Duration(seconds: 1)),
         );
         expect(firstResult, isA<UdsTransactionSuccess>());
 
@@ -2485,6 +2496,7 @@ void main() {
         final secondResult = await session.runReadOnlyUdsTransaction(
           request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
           target: target,
+          policy: UdsTransactionPolicy(p2Timeout: const Duration(seconds: 1)),
         );
         expect(secondResult, isA<UdsTransactionSuccess>());
         final success = secondResult as UdsTransactionSuccess;
@@ -2546,6 +2558,55 @@ void main() {
         );
         expect(successResult, isA<UdsTransactionSuccess>());
         expect(adapter.commandLog.where((c) => c == '220100').length, 1);
+
+        await session.disconnect();
+      },
+    );
+
+    test(
+      'Pre-cancelled request with expired deadline prioritizes cancellation on ObdSession',
+      () async {
+        final container = await _createContainer({});
+        addTearDown(container.dispose);
+
+        final adapter = FakeElm327(
+          protocol: BusProtocol.can11,
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: const {
+                '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x10],
+                '220100': [0x62, 0x01, 0x00, 0xAA, 0xBB],
+              },
+            ),
+          ],
+        );
+
+        final session = container.read(obdSessionProvider.notifier);
+        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+        await _waitForInitialCensus(session);
+
+        final target = DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        );
+
+        final cts = DiagnosticCancellationTokenSource();
+        cts.cancel();
+        final expiredDeadline = DateTime.now().subtract(const Duration(seconds: 1));
+
+        final result = await session.runReadOnlyUdsTransaction(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          target: target,
+          cancellation: cts.token,
+          deadline: expiredDeadline,
+        );
+
+        expect(result, isA<UdsTransactionCancelled>());
+        expect(adapter.commandLog.where((c) => c == '220100').length, 0,
+            reason: 'Cancelled request must prevent wire transmission even if deadline is expired');
 
         await session.disconnect();
       },
@@ -2845,9 +2906,15 @@ class _DelayChannelWrapper implements UdsTransactionChannel {
   Future<DiagnosticMessage> send(
     DiagnosticRequestId id,
     ApplicationPdu pdu,
-    Duration timeout,
-  ) async {
-    final msg = await _inner.send(id, pdu, timeout);
+    Duration timeout, {
+    DateTime? absoluteDeadline,
+  }) async {
+    final msg = await _inner.send(
+      id,
+      pdu,
+      timeout,
+      absoluteDeadline: absoluteDeadline,
+    );
     await Future<void>.delayed(delay);
     return msg;
   }

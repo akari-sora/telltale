@@ -230,12 +230,19 @@ final class UdsReportSupportedDtcTransactionRequest
 ///
 /// Isolates the transaction state machine from underlying link transport.
 abstract interface class UdsTransactionChannel {
-  /// Transmits [pdu] with identifier [id] and awaits the response within [timeout].
+  /// Transmits [pdu] with identifier [id] and awaits the ECU response within [timeout].
+  ///
+  /// [timeout] is the phase window (P2 for the initial send). [absoluteDeadline]
+  /// is the transaction budget (total timeout and any caller outer deadline).
+  /// It must not be collapsed into [timeout]: a link that programs the adapter
+  /// before the request is on the wire spends that budget on preamble, and an
+  /// NRC 0x78 that arrives inside a fair P2 is then reported as a P2 timeout.
   Future<DiagnosticMessage> send(
     DiagnosticRequestId id,
     ApplicationPdu pdu,
-    Duration timeout,
-  );
+    Duration timeout, {
+    DateTime? absoluteDeadline,
+  });
 
   /// Awaits a continuation response without sending any wire data, within [timeout].
   ///
@@ -266,8 +273,9 @@ final class CallbackUdsTransactionChannel implements UdsTransactionChannel {
   Future<DiagnosticMessage> send(
     DiagnosticRequestId id,
     ApplicationPdu pdu,
-    Duration timeout,
-  ) =>
+    Duration timeout, {
+    DateTime? absoluteDeadline,
+  }) =>
       onSend(id, pdu, timeout);
 
   @override
