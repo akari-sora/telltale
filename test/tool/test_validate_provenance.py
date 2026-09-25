@@ -1506,6 +1506,70 @@ class TestValidateProvenanceSlice2(unittest.TestCase):
         )
         self.assertTrue(any(e.error_code == "EXECUTION_TEST_PATH_MISSING" for e in errors2))
 
+    def test_s1_m7_udsoncan_version_and_hash_drift(self) -> None:
+        """S1-M7: udsoncan version, wheel hash, or licence drift is rejected."""
+        # 1. Version drift
+        data_ver = copy.deepcopy(self.raw_inventory)
+        udsoncan_v = self._get_artifact(data_ver, "udsoncan-readonly-reference")
+        udsoncan_v["source"]["version"] = "1.26.0"
+        errs_ver = validate_provenance.validate_provenance_data(
+            data_ver, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "LOCKFILE_VERSION_DRIFT" for e in errs_ver))
+
+        # 2. Hash drift
+        data_hash = copy.deepcopy(self.raw_inventory)
+        udsoncan_h = self._get_artifact(data_hash, "udsoncan-readonly-reference")
+        udsoncan_h["source"]["artifact_sha256"] = "0" * 64
+        errs_hash = validate_provenance.validate_provenance_data(
+            data_hash, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "LOCKFILE_HASH_DRIFT" for e in errs_hash))
+
+        # 3. Licence evidence path missing
+        data_lic = copy.deepcopy(self.raw_inventory)
+        udsoncan_l = self._get_artifact(data_lic, "udsoncan-readonly-reference")
+        udsoncan_l["licence_evidence"]["local_evidence_path"] = "nonexistent/LICENSE"
+        errs_lic = validate_provenance.validate_provenance_data(
+            data_lic, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "LICENCE_EVIDENCE_MISSING" for e in errs_lic))
+
+        # 4. Licence evidence hash drift
+        data_ldrift = copy.deepcopy(self.raw_inventory)
+        udsoncan_ld = self._get_artifact(data_ldrift, "udsoncan-readonly-reference")
+        udsoncan_ld["licence_evidence"]["source_sha256"] = "a" * 64
+        errs_ld = validate_provenance.validate_provenance_data(
+            data_ldrift, REPO_ROOT, scope="test-only"
+        )
+        self.assertTrue(any(e.error_code == "LICENCE_EVIDENCE_HASH_DRIFT" for e in errs_ld))
+
+    def test_udsoncan_package_isolation_pubspec_and_registry_leak(self) -> None:
+        """udsoncan test-only assets leaking into pubspec assets or Dart licence registry fail."""
+        data = copy.deepcopy(self.raw_inventory)
+        pubspec_leaked = {"tool/uds_reference/verify_udsoncan_vectors.py"}
+        dart_leaked = {"docs/provenance/upstream/udsoncan-1.26.1.LICENSE"}
+
+        errs_pub = []
+        validate_provenance._check_test_only_package_isolation(
+            "udsoncan-readonly-reference",
+            self._get_artifact(data, "udsoncan-readonly-reference"),
+            pubspec_leaked,
+            set(),
+            errs_pub,
+        )
+        self.assertTrue(any(e.error_code == "TEST_ONLY_ASSET_IN_PUBSPEC" for e in errs_pub))
+
+        errs_reg = []
+        validate_provenance._check_test_only_package_isolation(
+            "udsoncan-readonly-reference",
+            self._get_artifact(data, "udsoncan-readonly-reference"),
+            set(),
+            dart_leaked,
+            errs_reg,
+        )
+        self.assertTrue(any(e.error_code == "TEST_ONLY_ASSET_IN_REGISTRY" for e in errs_reg))
+
 
 if __name__ == "__main__":
     unittest.main()

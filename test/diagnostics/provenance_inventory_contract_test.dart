@@ -22,14 +22,14 @@ void main() {
         .cast<Map<String, dynamic>>();
     expect(
       artifacts.length,
-      equals(5),
-      reason: 'Slice 2 inventory defines exactly 1 production and 4 test-only artifact classes',
+      equals(6),
+      reason: 'Inventory defines exactly 1 production and 5 test-only artifact classes',
     );
     batteryClass = artifacts.firstWhere(
       (a) => a['id'] == 'powertrain-battery-bundled-third-party',
     );
     testOnlyClasses = artifacts.where((a) => a['scope'] == 'test-only').toList();
-    expect(testOnlyClasses.length, equals(4));
+    expect(testOnlyClasses.length, equals(5));
   });
 
   // =========================================================================
@@ -85,7 +85,7 @@ void main() {
   // Slice 2: Test-only Oracle & Reference Invariants
   // =========================================================================
 
-  test('S2-A2: exactly four declared test-only artifact classes with exact IDs', () {
+  test('S2-A2: exactly five declared test-only artifact classes with exact IDs', () {
     final ids = testOnlyClasses.map((a) => a['id'] as String).toSet();
     expect(
       ids,
@@ -94,6 +94,7 @@ void main() {
         'telltale-chaos-proxy-test-reference',
         'telltale-freeze-frame-reference',
         'telltale-mode08-replay-reference',
+        'udsoncan-readonly-reference',
       }),
     );
   });
@@ -128,6 +129,15 @@ void main() {
     expect(mode08['ownership'], equals('project-owned'));
     expect(mode08['independence'], equals('project-owned-reference'));
     expect(mode08['distribution_channel'], equals('source-repository'));
+
+    final udsoncan = testOnlyClasses.firstWhere(
+      (a) => a['id'] == 'udsoncan-readonly-reference',
+    );
+    expect(udsoncan['ownership'], equals('third-party'));
+    expect(udsoncan['independence'], equals('independent-third-party-reference'));
+    expect(udsoncan['distribution_channel'], equals('external-fetch-only'));
+    expect(udsoncan['distribution_decision'], equals('not_distributed'));
+    expect(udsoncan['commercial_use_decision'], equals('allowed'));
   });
 
   test('S2-A8: package isolation - test-only artifacts forbidden from app package and registries', () {
@@ -200,5 +210,17 @@ void main() {
         'tool/obd_test_rig/mode08_replay_fixtures.json',
       ]),
     );
+
+    final udsoncan = testOnlyClasses.firstWhere(
+      (a) => a['id'] == 'udsoncan-readonly-reference',
+    );
+    final udSrc = udsoncan['source'] as Map<String, dynamic>;
+    final udLockfiles = (udSrc['lockfiles'] as List<dynamic>).cast<String>();
+    for (final lf in udLockfiles) {
+      expect(File(lf).existsSync(), isTrue, reason: 'Declared lockfile must exist: $lf');
+    }
+    final udLicEv = udsoncan['licence_evidence'] as Map<String, dynamic>;
+    final udEvPath = udLicEv['local_evidence_path'] as String;
+    expect(File(udEvPath).existsSync(), isTrue, reason: 'Licence evidence must exist: $udEvPath');
   });
 }

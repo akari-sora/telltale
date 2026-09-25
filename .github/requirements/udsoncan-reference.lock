@@ -1,0 +1,5 @@
+# Test-only independent UDS reference lane (ISO 14229-1, Issue #13)
+--only-binary=:all:
+
+udsoncan==1.26.1 \
+    --hash=sha256:c1bd6cc54d6c1124c0eafeff2ffaab48bfeb7d0d2576959f21840c37e96dfb9a
