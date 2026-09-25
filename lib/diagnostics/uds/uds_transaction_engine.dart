@@ -48,10 +48,20 @@ final class UdsTransactionEngine {
     String correlationId = 'uds-tx',
   }) async {
     final activeClock = clock ?? SystemUdsClock();
-    final effectiveExpectedResponder = expectedResponder ??
-        (target is PhysicalCanDiagnosticTarget
-            ? DiagnosticSourceAddress(target.expectedResponderIdentifier.value)
-            : null);
+    final DiagnosticSourceAddress? effectiveExpectedResponder;
+    if (target is PhysicalCanDiagnosticTarget) {
+      final targetExpected =
+          DiagnosticSourceAddress(target.expectedResponderIdentifier.value);
+      if (expectedResponder != null && expectedResponder != targetExpected) {
+        throw ArgumentError(
+          'Conflicting expected responder addressing: explicit expectedResponder ($expectedResponder) '
+          'does not match target.expectedResponderIdentifier ($targetExpected)',
+        );
+      }
+      effectiveExpectedResponder = targetExpected;
+    } else {
+      effectiveExpectedResponder = expectedResponder;
+    }
     var state = UdsTransactionState.created;
     onStateChange?.call(state);
 
