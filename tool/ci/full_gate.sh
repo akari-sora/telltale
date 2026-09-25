@@ -27,6 +27,7 @@ run_step python-tools python3 -m unittest discover -s test/tool -p 'test_*.py'
 run_step python-mode08 python3 -m unittest discover -s tool/obd_test_rig -p 'test_mode08_replay_reference.py'
 run_step flutter-tests flutter test --reporter expanded
 run_step mode08-required python3 tool/ci/run_mode08_required.py --output-dir ci-artifacts/mode08-required
+run_step ws10-s1-required python3 tool/ci/run_ws10_s1_required.py --output-dir ci-artifacts/ws10-s1-required
 # android/app/build.gradle.kts enables ABI splits for the F-Droid contract.
 # Ask Flutter for matching split outputs; an unsplit build injects ndk
 # abiFilters and conflicts with the Gradle splits.abi configuration.
