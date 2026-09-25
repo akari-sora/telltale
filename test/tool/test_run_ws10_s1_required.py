@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Tests for tool/ci/run_ws10_s1_required.py runner and exit code contracts."""
+
+import json
+from pathlib import Path
+import tempfile
+import unittest
+
+from tool.ci.run_ws10_s1_required import (
+    REQUIRED_CASE_MARKERS,
+    parse_and_validate_reporter,
+    run,
+)
+
+
+class TestRunWs10S1Required(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.output_dir = Path(self.temp_dir.name) / "output"
+        self.output_dir.mkdir(parents=True)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_required_markers_count(self):
+        self.assertEqual(len(REQUIRED_CASE_MARKERS), 12)
+        for i in range(1, 13):
+            self.assertIn(f"L{i:02d}", REQUIRED_CASE_MARKERS)
+
+    def test_parse_valid_report_with_all_markers(self):
+        report_file = self.output_dir / "valid_report.jsonl"
+        lines = []
+        for i, marker in enumerate(REQUIRED_CASE_MARKERS, start=1):
+            lines.append(json.dumps({
+                "type": "testStart",
+                "test": {"id": i, "name": f"Suite {marker}: test something"}
+            }))
+            lines.append(json.dumps({
+                "type": "testDone",
+                "testID": i,
+                "result": "success",
+                "hidden": False,
+                "skipped": False,
+            }))
+        lines.append(json.dumps({"type": "done", "success": True}))
+        report_file.write_text("\n".join(lines) + "\n")
+
+        passed_count, markers, failures, skipped = parse_and_validate_reporter(report_file)
+        self.assertEqual(passed_count, 12)
+        self.assertEqual(len(markers), 12)
+        self.assertEqual(failures, [])
+        self.assertEqual(skipped, 0)
+
+    def test_parse_report_with_failure(self):
+        report_file = self.output_dir / "failed_report.jsonl"
+        lines = [
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Suite L01: test"}}),
+            json.dumps({"type": "error", "testID": 1, "error": "Expected true but was false"}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "failure", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": False}),
+        ]
+        report_file.write_text("\n".join(lines) + "\n")
+
+        passed_count, markers, failures, skipped = parse_and_validate_reporter(report_file)
+        self.assertEqual(passed_count, 0)
+        self.assertEqual(len(failures), 2)
+        self.assertTrue(any("Expected true" in f for f in failures))
+
+    def test_parse_report_with_skip(self):
+        report_file = self.output_dir / "skipped_report.jsonl"
+        lines = [
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Suite L01: test"}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": True}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_file.write_text("\n".join(lines) + "\n")
+
+        passed_count, markers, failures, skipped = parse_and_validate_reporter(report_file)
+        self.assertEqual(passed_count, 0)
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(skipped, 1)
+        self.assertIn("SKIPPED", failures[0])
+
+    def test_malformed_json_raises_value_error(self):
+        report_file = self.output_dir / "corrupted_report.jsonl"
+        report_file.write_text('{"type": "testStart"}\n{invalid_json}\n')
+        with self.assertRaises(ValueError):
+            parse_and_validate_reporter(report_file)
+
+    def test_pub_resolver_preamble_still_parses_success(self):
+        """CI flutter stdout may lead with pub resolver prose before JSON events."""
+        report_file = self.output_dir / "preamble_report.jsonl"
+        lines = [
+            "Resolving dependencies...",
+            "Downloading packages...",
+            "  analyzer 13.3.0 (14.4.0 available)",
+            "Got dependencies!",
+        ]
+        for i, marker in enumerate(REQUIRED_CASE_MARKERS, start=1):
+            lines.append(json.dumps({
+                "type": "testStart",
+                "test": {"id": i, "name": f"Suite {marker}: test something"}
+            }))
+            lines.append(json.dumps({
+                "type": "testDone",
+                "testID": i,
+                "result": "success",
+                "hidden": False,
+                "skipped": False,
+            }))
+        lines.append(json.dumps({"type": "done", "success": True}))
+        report_file.write_text("\n".join(lines) + "\n")
+
+        passed_count, markers, failures, skipped = parse_and_validate_reporter(report_file)
+        self.assertEqual(passed_count, 12)
+        self.assertEqual(len(markers), 12)
+        self.assertEqual(failures, [])
+        self.assertEqual(skipped, 0)
+
+    def test_missing_done_event_reports_failure(self):
+        report_file = self.output_dir / "no_done_report.jsonl"
+        lines = [
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Suite L01: test"}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+        ]
+        report_file.write_text("\n".join(lines) + "\n")
+        passed_count, markers, failures, skipped = parse_and_validate_reporter(report_file)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("missing 'done' event", failures[0])
+
+    def test_uncompleted_test_reports_failure(self):
+        report_file = self.output_dir / "uncompleted_report.jsonl"
+        lines = [
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Suite L01: test"}}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_file.write_text("\n".join(lines) + "\n")
+        passed_count, markers, failures, skipped = parse_and_validate_reporter(report_file)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("INCOMPLETE (missing testDone)", failures[0])
+
+    def test_single_test_with_all_markers_only_satisfies_one_marker(self):
+        """Pattern 1: A single test containing all markers L01..L12 cannot satisfy all requirements."""
+        report_file = self.output_dir / "single_test_report.jsonl"
+        all_markers_name = "Suite " + " ".join(REQUIRED_CASE_MARKERS) + ": omnibus test"
+        lines = [
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": all_markers_name}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_file.write_text("\n".join(lines) + "\n")
+        passed_count, markers, failures, skipped = parse_and_validate_reporter(report_file)
+        self.assertEqual(passed_count, 1)
+        # Exactly 1 marker is satisfied, leaving 11 missing
+        self.assertEqual(len(markers), 1)
+        missing = set(REQUIRED_CASE_MARKERS) - markers
+        self.assertEqual(len(missing), 11)
+
+    def test_done_true_then_done_false_reports_failure(self):
+        """Pattern 2: A done=true followed by done=false is treated as a failed suite."""
+        report_file = self.output_dir / "done_flip_report.jsonl"
+        lines = [
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Suite L01: test"}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+            json.dumps({"type": "done", "success": False}),
+        ]
+        report_file.write_text("\n".join(lines) + "\n")
+        passed_count, markers, failures, skipped = parse_and_validate_reporter(report_file)
+        self.assertTrue(any("success=false" in f or "after terminal 'done'" in f for f in failures))
+
+    def test_duplicate_test_id_raises_protocol_violation(self):
+        """Pattern 3: Reused test ID raises a protocol violation error."""
+        report_file = self.output_dir / "duplicate_id_report.jsonl"
+        lines = [
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Suite L01: test 1"}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Suite L02: test 2 reused id"}}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_file.write_text("\n".join(lines) + "\n")
+        with self.assertRaises(ValueError) as ctx:
+            parse_and_validate_reporter(report_file)
+        self.assertIn("duplicate or reused test ID 1", str(ctx.exception))
+
+    def test_error_after_test_done_demotes_to_failure(self):
+        """Pattern 4: An error event arriving after testDone success demotes the test to failure."""
+        report_file = self.output_dir / "late_error_report.jsonl"
+        lines = [
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Suite L01: test"}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "error", "testID": 1, "error": "Asynchronous unhandled error"}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_file.write_text("\n".join(lines) + "\n")
+        passed_count, markers, failures, skipped = parse_and_validate_reporter(report_file)
+        self.assertEqual(passed_count, 0)
+        self.assertIn("L01", REQUIRED_CASE_MARKERS)
+        self.assertNotIn("L01", markers)
+        self.assertTrue(any("Asynchronous unhandled error" in f for f in failures))
+
+    def test_hidden_loading_failure_reports_failure(self):
+        """Pattern 5: A hidden loading test that fails is caught and reported as failure."""
+        report_file = self.output_dir / "hidden_failure_report.jsonl"
+        lines = [
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "loading test/some_test.dart"}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "failure", "hidden": True, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_file.write_text("\n".join(lines) + "\n")
+        passed_count, markers, failures, skipped = parse_and_validate_reporter(report_file)
+        self.assertEqual(passed_count, 0)
+        self.assertTrue(any("loading test/some_test.dart" in f for f in failures))
+
+    def test_missing_fixture_returns_exit_2(self):
+        fake_repo = Path(self.temp_dir.name) / "empty_repo"
+        fake_repo.mkdir()
+        rc = run(fake_repo, self.output_dir / "run_out", flutter="flutter", timeout=10)
+        self.assertEqual(rc, 2)
+
+
+if __name__ == "__main__":
+    unittest.main()

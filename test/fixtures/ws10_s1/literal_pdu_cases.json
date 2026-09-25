@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "milestone": "WS10-S1",
+  "scope": "canonical_uds_read_pdus",
+  "canonical_valid_cases": [
+    {
+      "id": "READ_DID_0100",
+      "service": "ReadDataByIdentifier",
+      "pdu_hex": "220100",
+      "pdu_bytes": [34, 1, 0],
+      "length": 3,
+      "description": "Standard 0x22 single DID read (DID 0x0100)"
+    },
+    {
+      "id": "READ_DID_F190",
+      "service": "ReadDataByIdentifier",
+      "pdu_hex": "22F190",
+      "pdu_bytes": [34, 241, 144],
+      "length": 3,
+      "description": "Standard 0x22 single DID read for VIN (DID 0xF190)"
+    },
+    {
+      "id": "REPORT_DTC_BY_STATUS_MASK_02",
+      "service": "ReportDTCByStatusMask",
+      "pdu_hex": "1902FF",
+      "pdu_bytes": [25, 2, 255],
+      "length": 3,
+      "description": "Standard 0x19 0x02 DTC query with status mask 0xFF"
+    },
+    {
+      "id": "REPORT_SUPPORTED_DTC_0A",
+      "service": "ReportSupportedDTC",
+      "pdu_hex": "190A",
+      "pdu_bytes": [25, 10],
+      "length": 2,
+      "description": "Standard 0x19 0x0A supported DTCs query"
+    }
+  ],
+  "rejected_illegal_cases": [
+    {
+      "id": "REJECT_SHORT_22",
+      "pdu_hex": "2201",
+      "pdu_bytes": [34, 1],
+      "reason": "short_pdu"
+    },
+    {
+      "id": "REJECT_MULTI_DID_22",
+      "pdu_hex": "2201000200",
+      "pdu_bytes": [34, 1, 0, 2, 0],
+      "reason": "multi_did_prohibited"
+    },
+    {
+      "id": "REJECT_TRAILING_BYTES_22",
+      "pdu_hex": "220100FF",
+      "pdu_bytes": [34, 1, 0, 255],
+      "reason": "trailing_bytes"
+    },
+    {
+      "id": "REJECT_UNSUPPORTED_19_SUBFUNCTION",
+      "pdu_hex": "1901FF",
+      "pdu_bytes": [25, 1, 255],
+      "reason": "unsupported_subfunction"
+    },
+    {
+      "id": "REJECT_TRAILING_BYTES_19_02",
+      "pdu_hex": "1902FF00",
+      "pdu_bytes": [25, 2, 255, 0],
+      "reason": "trailing_bytes"
+    },
+    {
+      "id": "REJECT_TRAILING_BYTES_19_0A",
+      "pdu_hex": "190A00",
+      "pdu_bytes": [25, 10, 0],
+      "reason": "trailing_bytes"
+    },
+    {
+      "id": "REJECT_WRITE_DID_2E",
+      "pdu_hex": "2E010000",
+      "pdu_bytes": [46, 1, 0, 0],
+      "reason": "forbidden_write_service"
+    },
+    {
+      "id": "REJECT_SESSION_CONTROL_10",
+      "pdu_hex": "1001",
+      "pdu_bytes": [16, 1],
+      "reason": "session_control_service"
+    },
+    {
+      "id": "REJECT_SECURITY_ACCESS_27",
+      "pdu_hex": "2701",
+      "pdu_bytes": [39, 1],
+      "reason": "security_access_service"
+    },
+    {
+      "id": "REJECT_ROUTINE_CONTROL_31",
+      "pdu_hex": "31010100",
+      "pdu_bytes": [49, 1, 1, 0],
+      "reason": "routine_control_service"
+    }
+  ]
+}
