@@ -1,0 +1,723 @@
+{
+  "schema_version": 1,
+  "service": "uds_transaction_engine",
+  "description": "ISO 14229-1 UDS application transaction vectors verified against independent reference model (WS-09 Slice 3, Refs #13).",
+  "vectors": [
+    {
+      "id": "TX-01",
+      "description": "Service 0x22 immediate positive response",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [98, 1, 0, 18, 52]
+        }
+      ],
+      "expected_outcome": "success",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0,
+      "expected_response_hex": "6201001234"
+    },
+    {
+      "id": "TX-02",
+      "description": "Service 0x19 0x02 immediate positive response",
+      "request_type": "report_dtc_by_status_mask",
+      "status_mask": 8,
+      "expected_request_bytes": [25, 2, 8],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 15,
+          "response_bytes": [89, 2, 255, 1, 2, 3, 8]
+        }
+      ],
+      "expected_outcome": "success",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0,
+      "expected_response_hex": "5902FF01020308"
+    },
+    {
+      "id": "TX-03",
+      "description": "Service 0x19 0x0A immediate positive response",
+      "request_type": "report_supported_dtc",
+      "expected_request_bytes": [25, 10],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 12,
+          "response_bytes": [89, 10, 255, 1, 2, 3, 0]
+        }
+      ],
+      "expected_outcome": "success",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0,
+      "expected_response_hex": "590AFF01020300"
+    },
+    {
+      "id": "TX-04",
+      "description": "Service 0x22 terminal negative response 0x31 requestOutOfRange",
+      "request_type": "read_did",
+      "did": 61830,
+      "expected_request_bytes": [34, 241, 134],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 8,
+          "response_bytes": [127, 34, 49]
+        }
+      ],
+      "expected_outcome": "terminal_negative",
+      "expected_nrc": 49,
+      "expected_original_sid": 34,
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0
+    },
+    {
+      "id": "TX-05",
+      "description": "Service 0x22 terminal negative response 0x22 conditionsNotCorrect",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 34]
+        }
+      ],
+      "expected_outcome": "terminal_negative",
+      "expected_nrc": 34,
+      "expected_original_sid": 34,
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0
+    },
+    {
+      "id": "TX-06",
+      "description": "Service 0x22 terminal negative response 0x33 securityAccessDenied",
+      "request_type": "read_did",
+      "did": 61840,
+      "expected_request_bytes": [34, 241, 144],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 51]
+        }
+      ],
+      "expected_outcome": "terminal_negative",
+      "expected_nrc": 51,
+      "expected_original_sid": 34,
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0
+    },
+    {
+      "id": "TX-07",
+      "description": "Service 0x19 terminal negative response 0x11 serviceNotSupported",
+      "request_type": "report_supported_dtc",
+      "expected_request_bytes": [25, 10],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 5,
+          "response_bytes": [127, 25, 17]
+        }
+      ],
+      "expected_outcome": "terminal_negative",
+      "expected_nrc": 17,
+      "expected_original_sid": 25,
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0
+    },
+    {
+      "id": "TX-08",
+      "description": "Service 0x22 NRC 0x21 busyRepeatRequest once then success on retry 1",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 2,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 33]
+        },
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [98, 1, 0, 85]
+        }
+      ],
+      "expected_outcome": "success",
+      "expected_attempts": 2,
+      "expected_retries": 1,
+      "expected_pending_count": 0,
+      "expected_response_hex": "62010055"
+    },
+    {
+      "id": "TX-09",
+      "description": "Service 0x22 NRC 0x21 busyRepeatRequest twice then success on retry 2",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 50,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 33]
+        },
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 33]
+        },
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [98, 1, 0, 170]
+        }
+      ],
+      "expected_outcome": "success",
+      "expected_attempts": 3,
+      "expected_retries": 2,
+      "expected_pending_count": 0,
+      "expected_response_hex": "620100AA"
+    },
+    {
+      "id": "TX-10",
+      "description": "Service 0x22 NRC 0x21 retries exhausted (max=2, 3 sends attempted)",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 2,
+        "busy_repeat_delay_ms": 50,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 33]
+        },
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 33]
+        },
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 33]
+        }
+      ],
+      "expected_outcome": "busy_retry_exhausted",
+      "expected_attempts": 3,
+      "expected_retries": 2,
+      "expected_pending_count": 0
+    },
+    {
+      "id": "TX-11",
+      "description": "Service 0x22 NRC 0x78 responsePending once then success (1 wire send)",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 20,
+          "response_bytes": [127, 34, 120]
+        },
+        {
+          "type": "receive_continuation",
+          "delay_ms": 300,
+          "response_bytes": [98, 1, 0, 1, 2]
+        }
+      ],
+      "expected_outcome": "success",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 1,
+      "expected_response_hex": "6201000102"
+    },
+    {
+      "id": "TX-12",
+      "description": "Service 0x22 NRC 0x78 responsePending twice then success (1 wire send)",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 20,
+          "response_bytes": [127, 34, 120]
+        },
+        {
+          "type": "receive_continuation",
+          "delay_ms": 500,
+          "response_bytes": [127, 34, 120]
+        },
+        {
+          "type": "receive_continuation",
+          "delay_ms": 400,
+          "response_bytes": [98, 1, 0, 3, 4]
+        }
+      ],
+      "expected_outcome": "success",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 2,
+      "expected_response_hex": "6201000304"
+    },
+    {
+      "id": "TX-13",
+      "description": "Service 0x22 NRC 0x78 responsePending exhausted (max=2, 3rd pending rejected)",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 2
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 20,
+          "response_bytes": [127, 34, 120]
+        },
+        {
+          "type": "receive_continuation",
+          "delay_ms": 200,
+          "response_bytes": [127, 34, 120]
+        },
+        {
+          "type": "receive_continuation",
+          "delay_ms": 200,
+          "response_bytes": [127, 34, 120]
+        }
+      ],
+      "expected_outcome": "response_pending_exhausted",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 3
+    },
+    {
+      "id": "TX-14",
+      "description": "Service 0x22 NRC 0x78 followed by terminal negative NRC 0x22",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 20,
+          "response_bytes": [127, 34, 120]
+        },
+        {
+          "type": "receive_continuation",
+          "delay_ms": 100,
+          "response_bytes": [127, 34, 34]
+        }
+      ],
+      "expected_outcome": "terminal_negative",
+      "expected_nrc": 34,
+      "expected_original_sid": 34,
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 1
+    },
+    {
+      "id": "TX-15",
+      "description": "Service 0x22 NRC 0x21 retry followed by NRC 0x78 continuation then success",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 2,
+        "busy_repeat_delay_ms": 50,
+        "max_response_pending_count": 5
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 33]
+        },
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 120]
+        },
+        {
+          "type": "receive_continuation",
+          "delay_ms": 200,
+          "response_bytes": [98, 1, 0, 77]
+        }
+      ],
+      "expected_outcome": "success",
+      "expected_attempts": 2,
+      "expected_retries": 1,
+      "expected_pending_count": 1,
+      "expected_response_hex": "6201004D"
+    },
+    {
+      "id": "TX-16",
+      "description": "Service 0x22 standard P2 response timeout",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_timeout",
+          "delay_ms": 50
+        }
+      ],
+      "expected_outcome": "timed_out",
+      "expected_timeout_type": "p2",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0
+    },
+    {
+      "id": "TX-17",
+      "description": "Service 0x22 P2* continuation response timeout after NRC 0x78",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 1000,
+        "total_timeout_ms": 5000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 20,
+          "response_bytes": [127, 34, 120]
+        },
+        {
+          "type": "continuation_timeout",
+          "delay_ms": 1000
+        }
+      ],
+      "expected_outcome": "timed_out",
+      "expected_timeout_type": "p2Star",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 1
+    },
+    {
+      "id": "TX-18",
+      "description": "Service 0x22 total timeout dominance over P2*",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 100,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 20,
+          "response_bytes": [127, 34, 120]
+        },
+        {
+          "type": "continuation_timeout",
+          "delay_ms": 80
+        }
+      ],
+      "expected_outcome": "timed_out",
+      "expected_timeout_type": "total",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 1
+    },
+    {
+      "id": "TX-19",
+      "description": "Cancellation before initial send",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "cancel_at": "before_initial",
+      "timeline": [],
+      "expected_outcome": "cancelled",
+      "expected_attempts": 0,
+      "expected_retries": 0,
+      "expected_pending_count": 0
+    },
+    {
+      "id": "TX-20",
+      "description": "Cancellation during busyRepeatDelay (no retry sent)",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "cancel_at": "during_busy_delay",
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [127, 34, 33]
+        }
+      ],
+      "expected_outcome": "cancelled",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0
+    },
+    {
+      "id": "TX-21",
+      "description": "Cancellation during responsePending wait",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "cancel_at": "during_pending_wait",
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 20,
+          "response_bytes": [127, 34, 120]
+        }
+      ],
+      "expected_outcome": "cancelled",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 1
+    },
+    {
+      "id": "TX-22",
+      "description": "Source address mismatch (expected 0x7E8, got 0x7E9)",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "expected_responder": "7E8",
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "source_address": "7E9",
+          "response_bytes": [98, 1, 0, 18, 52]
+        }
+      ],
+      "expected_outcome": "source_mismatch",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0
+    },
+    {
+      "id": "TX-23",
+      "description": "Stale connection generation during transaction (gen 1 -> gen 2)",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "generation": 1,
+      "retire_at": "after_send",
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [98, 1, 0, 18, 52]
+        }
+      ],
+      "expected_outcome": "retired",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0
+    },
+    {
+      "id": "TX-24",
+      "description": "Malformed response payload (truncated response 0x62)",
+      "request_type": "read_did",
+      "did": 256,
+      "expected_request_bytes": [34, 1, 0],
+      "policy": {
+        "p2_timeout_ms": 50,
+        "p2_star_timeout_ms": 5000,
+        "total_timeout_ms": 10000,
+        "max_busy_repeat_retries": 3,
+        "busy_repeat_delay_ms": 100,
+        "max_response_pending_count": 10
+      },
+      "timeline": [
+        {
+          "type": "send_and_receive",
+          "delay_ms": 10,
+          "response_bytes": [98]
+        }
+      ],
+      "expected_outcome": "malformed",
+      "expected_attempts": 1,
+      "expected_retries": 0,
+      "expected_pending_count": 0
+    }
+  ]
+}
