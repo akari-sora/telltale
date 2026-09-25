@@ -309,13 +309,30 @@ final class UdsTransactionEngine {
           ? policy.p2Timeout
           : remainingEffective;
 
+      // P2 bounds the ECU response after the request is transmitted. The
+      // absolute deadline bounds the whole exchange, including adapter
+      // preamble. Passing P2 as that deadline makes ATH1/ATSH consume it, and
+      // a real NRC 0x78 is then classified as a P2 timeout.
+      final totalDeadline = DateTime.now().add(remainingBeforeSend);
+      final DateTime sendAbsoluteDeadline;
+      if (outerDeadline != null && outerDeadline.isBefore(totalDeadline)) {
+        sendAbsoluteDeadline = outerDeadline;
+      } else {
+        sendAbsoluteDeadline = totalDeadline;
+      }
+
       attempts++;
       final reqId = DiagnosticRequestId('$correlationId-$nextRequestId');
       nextRequestId++;
 
       DiagnosticMessage msg;
       try {
-        msg = await channel.send(reqId, request.toPdu(), sendTimeout);
+        msg = await channel.send(
+          reqId,
+          request.toPdu(),
+          sendTimeout,
+          absoluteDeadline: sendAbsoluteDeadline,
+        );
       } on TimeoutException {
         final cancelErr = checkCancellation();
         if (cancelErr != null) return cancelErr;
