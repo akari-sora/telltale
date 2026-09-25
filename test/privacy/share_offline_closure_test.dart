@@ -301,14 +301,24 @@ void main() {
       );
     });
 
-    test('S5-M7: route omission detects missing share routes as RED', () {
-      final incompleteSet = routes.map((r) => r.name).toSet()..remove('shareHumanReportCsv');
-      expect(incompleteSet.length, isNot(7));
+    test('S5-M7: route omission detects missing share routes against production source', () {
+      final controllerFile = File('lib/state/app_share_entry_controller.dart');
+      expect(controllerFile.existsSync(), isTrue);
+      final source = controllerFile.readAsStringSync();
+
+      final matches = RegExp(r'Future<AppShareOutcome>\s+(share[a-zA-Z0-9_]+)\(').allMatches(source);
+      final productionRoutes = matches.map((m) => m.group(1)!).toSet();
+
+      final testRouteNames = routes.map((r) => r.name).toSet();
       expect(
-        incompleteSet.contains('shareHumanReportCsv'),
-        isFalse,
-        reason: 'Omission of any route must be detected by the census',
+        testRouteNames,
+        equals(productionRoutes),
+        reason: 'Test census must exactly match all production share* methods in AppShareEntryController',
       );
+
+      // Mutation control: omitting any route from census causes mismatch
+      final mutatedCensus = Set<String>.from(testRouteNames)..remove('shareHumanReportCsv');
+      expect(mutatedCensus, isNot(equals(productionRoutes)));
     });
   });
 
@@ -353,6 +363,40 @@ void main() {
         }, _NoNetworkHttpOverrides()),
         throwsA(isA<OfflineSentinelException>()),
       );
+    });
+
+    test('S5-M6: static verification of zero raw socket/provider primitives in share/export production code', () {
+      final shareFiles = [
+        File('lib/core/share/app_share_cache.dart'),
+        File('lib/core/share/app_share_platform_bridge.dart'),
+        File('lib/core/share/share_lease_ledger.dart'),
+        File('lib/state/app_share_coordinator.dart'),
+        File('lib/state/app_share_entry_controller.dart'),
+        File('lib/telemetry/session/telemetry_session_exporter.dart'),
+        File('lib/telemetry/session/telemetry_export_codec.dart'),
+        File('lib/obd/pid/pid_csv.dart'),
+        File('lib/obd/transcript.dart'),
+      ];
+
+      final forbiddenPatterns = [
+        RegExp(r'Socket\.connect'),
+        RegExp(r'RawSocket\.connect'),
+        RegExp(r"import 'package:http/"),
+        RegExp(r"import 'package:dio/"),
+        RegExp(r'launchUrl\('),
+      ];
+
+      for (final file in shareFiles) {
+        expect(file.existsSync(), isTrue, reason: '${file.path} must exist');
+        final text = file.readAsStringSync();
+        for (final pattern in forbiddenPatterns) {
+          expect(
+            pattern.hasMatch(text),
+            isFalse,
+            reason: 'Production file ${file.path} must not contain $pattern',
+          );
+        }
+      }
     });
   });
 
@@ -606,23 +650,65 @@ void main() {
     });
 
     test('S5-M8: closure overclaim (claiming non-run boundary as passed) rejected', () {
-      const explicitNotRunBoundaries = <String>{
-        'adapter_wifi_hardware_link',
-        'browser_store_url_launches',
-        'real_os_backup_restore_execution',
-        'external_provider_retention_or_revocation',
-        'physical_adapter_vehicle_qualification',
-      };
+      final docFile = File('docs/privacy/evidence/ws07-slice5-closure-mapping.md');
+      expect(docFile.existsSync(), isTrue, reason: 'Closure mapping document must exist on disk');
+      final content = docFile.readAsStringSync();
 
-      // Ensure every named boundary is classified as NOT_RUN or outside app control
-      for (final boundary in explicitNotRunBoundaries) {
-        expect(boundary.isNotEmpty, isTrue);
+      const requiredNotRunBoundaries = <String>[
+        'OBD-II Hardware Link',
+        'Browser & App Store URL Launches',
+        'Real OS Backup & Cloud Restore Experiments',
+        'Post-Handoff Recipient Retention & Remote Revocation',
+        'Physical Vehicle & Hardware Dongle Qualification',
+      ];
+
+      for (final boundary in requiredNotRunBoundaries) {
+        expect(content.contains(boundary), isTrue, reason: 'Document must explicitly identify $boundary');
       }
+
+      // Ensure explicit NOT_RUN labeling is present
+      expect(content.contains('NOT_RUN'), isTrue);
+
+      // Mutation control: verify validator rejects any mutation where a NOT_RUN boundary is removed or marked as passed
+      bool validateDocument(String text) {
+        for (final b in requiredNotRunBoundaries) {
+          if (!text.contains(b)) return false;
+        }
+        if (!text.contains('NOT_RUN')) return false;
+        if (text.contains('Physical Vehicle road testing: PASS') ||
+            text.contains('Real OS Backup: PASS') ||
+            text.contains('Remote Revocation: PASS')) {
+          return false;
+        }
+        return true;
+      }
+
+      expect(validateDocument(content), isTrue);
+      // Mutation: omitting a boundary fails
+      expect(validateDocument(content.replaceAll('Physical Vehicle', '')), isFalse);
+      // Mutation: claiming a boundary passed fails
+      expect(validateDocument('$content\nReal OS Backup: PASS'), isFalse);
     });
   });
 
   group('WS-07 / Slice 5: Acceptance S5-A10 and Governance Closure Mapping (S5-A13)', () {
     test('confirms exact five original Issue #11 acceptance mappings and NOT_RUN bounds', () {
+      final docFile = File('docs/privacy/evidence/ws07-slice5-closure-mapping.md');
+      expect(docFile.existsSync(), isTrue);
+      final content = docFile.readAsStringSync();
+
+      // Canonical inventory path must be used; stale tool/workshop path must be absent
+      expect(content.contains('docs/provenance/inventory.json'), isTrue);
+      expect(content.contains('tool/workshop/provenance_inventory.json'), isFalse);
+
+      // All 5 original Issue #11 acceptance headings must exist
+      for (var i = 1; i <= 5; i++) {
+        expect(content.contains('### Acceptance $i:'), isTrue, reason: 'Acceptance $i heading must exist');
+      }
+
+      // Governance handoff to Issue #105 must be present
+      expect(content.contains('Issue #105'), isTrue);
+
       const acceptanceMap = <int, String>{
         1: 'Inventory and production/package validators reject missing/changed required hashes/licences (Slices 1 & 2)',
         2: 'Canary tests cover JSON/CSV/logs/segmented payloads and private/public artifact separation (Slice 3)',

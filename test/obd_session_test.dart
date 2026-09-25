@@ -241,6 +241,9 @@ void main() {
 
       final session = container.read(obdSessionProvider.notifier);
       await session.connectDemo();
+      await session.telemetryStream
+          .firstWhere((s) => s.readings.isNotEmpty)
+          .timeout(const Duration(seconds: 15));
 
       final stored = await session.readDtcs(DtcKind.stored);
       expect(stored.map((d) => d.code), containsAll(['P0301', 'P0420']));

@@ -8,7 +8,7 @@ This document provides the definitive closure mapping for **WS-07 / Issue #11** 
 
 | Milestone / Slice | Target Subsystem | Key Artifacts | CI / Audit Status |
 |---|---|---|---|
-| **Slice 1** | Provenance Inventory & Hash Lockfile Gate | `tool/workshop/validate_provenance.py`, `tool/workshop/provenance_inventory.json` | Merged (!38), Pipeline SUCCESS |
+| **Slice 1** | Provenance Inventory & Hash Lockfile Gate | `tool/workshop/validate_provenance.py`, `docs/provenance/inventory.json` | Merged (!38), Pipeline SUCCESS |
 | **Slice 2** | Four Artifact Models & Strict Scope/Class Gate | `validate_provenance.py` (scope fail-closed), 4 artifact models | Merged (!39), Pipeline SUCCESS |
 | **Slice 3** | De-identification & Public Boundary Gate | `tool/workshop/public_artifact_guard.py`, `docs/privacy/public-artifact-boundary.md` | Merged (!40, !41), Pipeline SUCCESS |
 | **Slice 4** | Policy Parity, Data Flow (DF01–DF10) & Backup Mapping | `docs/privacy/data-flow-inventory.json`, `validate_privacy_contract.py`, `PRIVACY.md` | Merged (!42), Pipeline #2880387073 SUCCESS |
@@ -18,7 +18,7 @@ This document provides the definitive closure mapping for **WS-07 / Issue #11** 
 
 ## 2. Five Original Acceptance Criteria Resolution Matrix
 
-All 5 acceptance criteria originally defined in Issue #11 are fully resolved and backed by deterministic automated test gates:
+All 5 acceptance criteria originally defined in Issue #11 are mapped to deterministic automated test gates, candidate for final closure pending reviewer signoff and exact-main merge execution (A14):
 
 ### Acceptance 1: Provenance & Licence Validator Fail-Closed Gate
 > *Inventory and production/package validators reject missing/changed required hashes/licences and unauthorized content for the relevant release scope; provide a replace/remove path, not a universal app shutdown.*
@@ -67,7 +67,9 @@ All 5 acceptance criteria originally defined in Issue #11 are fully resolved and
 
 - **Resolution (Slice 5):**
   - Complete 7-route census and route matrix in `test/privacy/share_offline_closure_test.dart` exercising all production export methods.
-  - Offline preparation proven under an explicit `_NoNetworkHttpOverrides` sentinel that halts any attempt to make external HTTP/network connections.
+  - Offline local preparation proven via dual boundaries:
+    1. Runtime `_NoNetworkHttpOverrides` sentinel actively intercepts and rejects any `dart:io` `HttpClient` creation during staging.
+    2. Static source analysis enforces zero socket/provider primitives (`Socket.connect`, `RawSocket.connect`, `package:http`, `package:dio`, `launchUrl`) across all share/export preparation files.
   - 4 handoff states strictly proven:
     1. `selected`: exactly 1 platform call; staged file matches canonical bytes; ledger records `handedOffLease` with `selected`; never claims recipient received or retained.
     2. `dismissed`: exactly 1 platform call; user cancelled share sheet; outcome returns `dismissed` with `null` error; distinct from `selected` and distinct from handoff failure.
@@ -86,7 +88,7 @@ All 5 acceptance criteria originally defined in Issue #11 are fully resolved and
 > *Deliver exact-version notices, validation commands/results and remaining specific rights/security gaps under #105.*
 
 - **Resolution (Slice 5):**
-  - Exact-version third-party dependencies and notices are verified in `docs/privacy/sdk-audit-receipt.json` and `tool/workshop/provenance_inventory.json`:
+  - Exact-version third-party dependencies and notices are verified in `docs/privacy/sdk-audit-receipt.json` and `docs/provenance/inventory.json`:
     * Bundled battery catalog: provenance verified with immutable source URL and SHA-256.
     * ELM327 test oracle (Ircama): pinned to exact version `3.0.5` in test lockfiles with CC-BY-NC-SA external-test scope restriction.
   - Governance handoff formalizes all remaining rights and security gaps into **Issue #105**.
@@ -137,6 +139,6 @@ To maintain total integrity and prevent overclaiming, the following areas are fo
 
 ## 5. Governance Handoff to Issue #105
 
-With the completion of Slices 1–5, Issue #11 has satisfied 100% of its acceptance criteria.
+Subject to reviewer signoff and exact-main merge gate execution (A14), Issue #11 satisfies 5/5 of its original acceptance criteria.
 Ongoing maintenance, provenance inventory audits for future dependencies, and licence review obligations are formally transferred to:
 - **Issue #105: [MAINTENANCE] Migrated CI delivery, test matrix, and release governance rules**
