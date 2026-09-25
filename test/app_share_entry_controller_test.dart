@@ -26,7 +26,7 @@ import 'support/posix_path.dart';
 
 void main() {
   test(
-    'five production entry methods preserve canonical bytes and metadata',
+    'seven production entry methods preserve canonical bytes and metadata',
     () async {
       final documents = Directory.systemTemp.createTempSync('share-entry-docs');
       final roots = Directory.systemTemp.createTempSync('share-entry-roots');
@@ -149,6 +149,33 @@ void main() {
       expect(pid.request.mimeType, 'text/csv');
       expect(pid.request.subject, 'Telltale custom PID definitions');
       expect(pid.sourceKind, ShareSourceKind.pidCsv);
+
+      final samplePids = [PidLibrary.all.first];
+      final expectedSubset = await _collect(
+        PidCsv.streamTorqueSubset(samplePids),
+      );
+      final subset = await _invoke(
+        roots,
+        6,
+        (controller) => controller.shareTorqueSubsetCsv(pids: samplePids),
+      );
+      expect(subset.bytes, expectedSubset);
+      expect(subset.request.mimeType, 'text/csv');
+      expect(subset.request.subject, 'Torque-compatible PID definitions');
+      expect(subset.sourceKind, ShareSourceKind.pidCsv);
+
+      final expectedReport = await _collect(
+        PidCsv.streamHumanReport(samplePids),
+      );
+      final report = await _invoke(
+        roots,
+        7,
+        (controller) => controller.shareHumanReportCsv(pids: samplePids),
+      );
+      expect(report.bytes, expectedReport);
+      expect(report.request.mimeType, 'text/csv');
+      expect(report.request.subject, 'Telltale human PID report');
+      expect(report.sourceKind, ShareSourceKind.pidCsv);
     },
   );
 
