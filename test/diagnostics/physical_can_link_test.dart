@@ -135,7 +135,7 @@ void main() {
       final target = DiagnosticTarget.physicalCan(
         requestIdentifier: req11,
         expectedResponderIdentifier: exp11,
-      ) as PhysicalCanDiagnosticTarget;
+      );
 
       expect(target.requestIdentifier, equals(req11));
       expect(target.expectedResponderIdentifier, equals(exp11));
@@ -156,7 +156,7 @@ void main() {
       final target = DiagnosticTarget.physicalCan(
         requestIdentifier: req11,
         expectedResponderIdentifier: exp29,
-      ) as PhysicalCanDiagnosticTarget;
+      );
 
       expect(target.requestIdentifier.isStandard, isTrue);
       expect(target.expectedResponderIdentifier.isExtended, isTrue);

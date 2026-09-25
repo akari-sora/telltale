@@ -17,6 +17,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/elapsed_realtime.dart';
 import '../diagnostics/diagnostic_link.dart';
 import '../diagnostics/diagnostic_link_ownership.dart';
+import '../diagnostics/uds/uds_diagnostic_link_channel.dart';
+import '../diagnostics/uds/uds_transaction_engine.dart';
+import '../diagnostics/uds/uds_transaction_policy.dart';
+import '../diagnostics/uds/uds_transaction_types.dart';
 import '../core/field_evidence/evidence_text.dart';
 import '../core/field_evidence/platform_metadata.dart';
 import '../core/network/android_wifi_route_binder.dart';
@@ -697,6 +701,9 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// The active diagnostic link ownership authority for this session.
   @visibleForTesting
   DiagnosticLinkOwnershipAuthority? get linkOwnership => _linkOwnership;
+
+  /// The active diagnostic link for this session, if connected.
+  DiagnosticLink? get diagnosticLink => _engine?.diagnosticLink;
 
   /// This attempt's record, created at the tap rather than at the handshake.
   ObdTranscript? _attemptTranscript;
@@ -1866,6 +1873,63 @@ class ObdSession extends Notifier<ObdConnectionState> {
       },
       cancellation: cancellation,
       deadline: deadline,
+    );
+  }
+
+  /// Production facade for executing bounded, read-only UDS diagnostic transactions.
+  ///
+  /// Ref: Issue #13 ([WS-09][P1]), ISO 14229-1:2020.
+  /// Enforces:
+  /// - Sealed [UdsTransactionRequest] admitted strictly for read-only operations.
+  /// - Strict [PhysicalCanDiagnosticTarget] addressing.
+  /// - Half-duplex exclusive wire ownership via [runDiagnosticExclusive].
+  /// - Binds channel lifecycle to session connection generation and token.
+  Future<UdsTransactionResult> runReadOnlyUdsTransaction({
+    required UdsTransactionRequest request,
+    required PhysicalCanDiagnosticTarget target,
+    UdsTransactionPolicy policy = UdsTransactionPolicy.standard,
+    DiagnosticCancellation cancellation = DiagnosticCancellation.none,
+    DateTime? deadline,
+  }) async {
+    return runDiagnosticExclusive<UdsTransactionResult>(
+      operationName: 'udsReadOnlyTransaction:${request.serviceId}',
+      cancellation: cancellation,
+      deadline: deadline,
+      action: (wireOwner) async {
+        final link = _engine?.diagnosticLink;
+        if (link == null) {
+          throw const DiagnosticLinkException(
+            kind: DiagnosticFailureKind.retiredOperation,
+            message: 'No active diagnostic link available for connected session.',
+          );
+        }
+
+        final sessionGeneration = _generation;
+        final initialLinkGeneration = link.connectionGeneration;
+        final channel = DiagnosticLinkUdsTransactionChannel(
+          link: link,
+          target: target,
+          connectionGeneration: initialLinkGeneration,
+          wireOwnerToken: wireOwner,
+          cancellation: cancellation,
+        );
+
+        final engine = UdsTransactionEngine(policy: policy);
+        return engine.execute(
+          request: request,
+          channel: channel,
+          target: target,
+          connectionGeneration: initialLinkGeneration,
+          currentConnectionGeneration: () {
+            if (_generation != sessionGeneration) {
+              return -1; // Session retired
+            }
+            return link.connectionGeneration;
+          },
+          cancellation: cancellation,
+          correlationId: 'session-uds-${DateTime.now().microsecondsSinceEpoch}',
+        );
+      },
     );
   }
 
