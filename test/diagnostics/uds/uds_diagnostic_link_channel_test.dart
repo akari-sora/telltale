@@ -1,6 +1,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -121,11 +122,30 @@ Future<
 
   final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
   final clientSockets = <Socket>[];
+  Future<void> inboundChain = Future<void>.value();
 
   server.listen((clientSocket) {
     clientSockets.add(clientSocket);
+    final pending = StringBuffer();
     final sub1 = clientSocket.listen(
-      (data) => transport.write(data),
+      (data) {
+        inboundChain = inboundChain.then((_) async {
+          pending.write(ascii.decode(data, allowInvalid: true));
+          var buf = pending.toString();
+          var cr = buf.indexOf('\r');
+          while (cr >= 0) {
+            final command = buf.substring(0, cr);
+            buf = buf.substring(cr + 1);
+            if (command.isNotEmpty) {
+              await transport.write(ascii.encode('$command\r'));
+            }
+            cr = buf.indexOf('\r');
+          }
+          pending
+            ..clear()
+            ..write(buf);
+        });
+      },
       onError: (e) {},
       cancelOnError: true,
     );
@@ -209,13 +229,28 @@ Future<void> _waitForWireCommand(
 }
 
 Future<void> _waitForInitialCensus(ObdSession session) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 3));
+  final deadline = DateTime.now().add(const Duration(seconds: 8));
   while ((session.engine?.responders == null ||
           session.linkOwnership?.activeTakeovers != 0 ||
           session.engine?.supportDiscoveryComplete != true) &&
       DateTime.now().isBefore(deadline)) {
     await Future<void>.delayed(const Duration(milliseconds: 5));
   }
+  expect(
+    session.engine?.responders,
+    isNotNull,
+    reason: 'Timed out waiting for the initial responder census',
+  );
+  expect(
+    session.linkOwnership?.activeTakeovers,
+    0,
+    reason: 'Census exclusive ownership must be released before UDS work',
+  );
+  expect(
+    session.engine?.supportDiscoveryComplete,
+    isTrue,
+    reason: 'Support discovery must have been attempted before UDS work',
+  );
 }
 
 void main() {
@@ -2298,22 +2333,34 @@ void main() {
           wireOwnerToken: 'w07-token',
         );
 
-        // Delay 220100 and disconnect in flight to increment connectionGeneration
-        stack.transport.slowCommands['220100'] = const Duration(milliseconds: 60);
-        Future<void>.delayed(const Duration(milliseconds: 15), () async {
-          await stack.client.disconnect();
-        });
+        // Hold the 220100 reply until disconnect advances generation. Wall-clock
+        // delays (15ms vs 60ms vs default P2) lose that order under load.
+        final hold = Completer<void>();
+        stack.transport.responseBarrier = (cmd) =>
+            cmd == '220100' ? hold.future : null;
 
-        const engine = UdsTransactionEngine();
+        final engine = UdsTransactionEngine(
+          policy: UdsTransactionPolicy(
+            // Window for the injected disconnect, not a loosened pass criterion.
+            p2Timeout: const Duration(seconds: 2),
+            totalTimeout: const Duration(seconds: 5),
+          ),
+        );
         final request = UdsTransactionRequest.readDid(const UdsDid(0x0100));
 
-        final result = await engine.execute(
+        final future = engine.execute(
           request: request,
           channel: channel,
           target: target,
           connectionGeneration: initialGen,
           currentConnectionGeneration: () => stack.link.connectionGeneration,
         );
+
+        await _waitForWireCommand(stack.transport, '220100');
+        await stack.client.disconnect();
+        hold.complete();
+
+        final result = await future;
 
         expect(result, isA<UdsTransactionRetired>());
         final retired = result as UdsTransactionRetired;
