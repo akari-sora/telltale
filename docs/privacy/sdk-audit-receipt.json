@@ -61,7 +61,7 @@
     "lib/diagnostics/can/can_endpoint.dart": "8a5696c5cdca270ff14b762bd674b77b30d232b3350555fbf6ad4f1c2e9d58c4",
     "lib/diagnostics/can/can_io_clock.dart": "89b33e9475002e501ee3fd8a1419747b39e328505998bdc85b999e588e543050",
     "lib/diagnostics/can/can_io_contract.dart": "a7b37af4a338af2b4e753cfc42cbdcd31a66567aae514d29e8c08af54495fd49",
-    "lib/diagnostics/can/can_io_core.dart": "cdd31d66f2d94fa10ac6920410f8b1aa34358f92e27b1e43f2964096610cef34",
+    "lib/diagnostics/can/can_io_core.dart": "0254577c1b14ecd2f8677c3014047164b49df96d3a71d5fc25603a814d9149c1",
     "lib/diagnostics/service_recipes/active_test_profile.dart": "2b052fb7c77e0156140509ad8d7838714dac64ce953f783565120f69de22ebef",
     "lib/diagnostics/service_recipes/candidate_matrix.dart": "ff9479a70bf85dc733584752a2e850649bfd8832b1652a9ae71ab5ca188850a3",
     "lib/diagnostics/service_recipes/mode08_codec.dart": "5efcba6ad7f7f202625d93442d3afe32a205bf7c5841888b7e4a0f7f85e1d63c",

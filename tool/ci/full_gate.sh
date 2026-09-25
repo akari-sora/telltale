@@ -31,6 +31,6 @@ run_step ws10-s1-required python3 tool/ci/run_ws10_s1_required.py --output-dir c
 # android/app/build.gradle.kts enables ABI splits for the F-Droid contract.
 # Ask Flutter for matching split outputs; an unsplit build injects ndk
 # abiFilters and conflicts with the Gradle splits.abi configuration.
-run_step apk-build flutter build apk --debug --flavor field --split-per-abi
+run_step apk-build flutter build apk --verbose --debug --flavor field --split-per-abi
 sha256sum build/app/outputs/flutter-apk/*.apk > ci-artifacts/apks.sha256
 printf '\nAll gate commands and required replay passed. This is NOT Android device acceptance.\n'
