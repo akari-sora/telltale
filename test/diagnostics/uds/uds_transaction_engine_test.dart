@@ -382,4 +382,82 @@ void main() {
       });
     }
   });
+
+  group('UdsTransactionEngine - R6 Late Arrival Clock Enforcement', () {
+    test(
+      'R6: late positive response returning after totalTimeout expired is rejected as UdsTransactionTimedOut',
+      () async {
+        final clock = FakeUdsClock();
+        final policy = UdsTransactionPolicy(
+          p2Timeout: const Duration(milliseconds: 100),
+          p2StarTimeout: const Duration(milliseconds: 500),
+          totalTimeout: const Duration(milliseconds: 200),
+        );
+        final engine = UdsTransactionEngine(policy: policy, clock: clock);
+
+        final channel = CallbackUdsTransactionChannel(
+          onSend: (id, pdu, timeout) async {
+            // Clock advances past totalTimeout before returning the positive response
+            clock.advance(const Duration(milliseconds: 250));
+            return DiagnosticMessage(
+              pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+              sourceAddress: DiagnosticSourceAddress('7E8'),
+            );
+          },
+          onReceiveContinuation: (_) async =>
+              throw StateError('No continuation expected'),
+        );
+
+        final result = await engine.execute(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          channel: channel,
+        );
+
+        expect(result, isA<UdsTransactionTimedOut>());
+        final timedOut = result as UdsTransactionTimedOut;
+        expect(timedOut.timeoutType, UdsTimeoutType.total);
+      },
+    );
+
+    test(
+      'R6: continuation positive response arriving after totalTimeout is rejected as UdsTransactionTimedOut',
+      () async {
+        final clock = FakeUdsClock();
+        final policy = UdsTransactionPolicy(
+          p2Timeout: const Duration(milliseconds: 100),
+          p2StarTimeout: const Duration(milliseconds: 500),
+          totalTimeout: const Duration(milliseconds: 200),
+        );
+        final engine = UdsTransactionEngine(policy: policy, clock: clock);
+
+        final channel = CallbackUdsTransactionChannel(
+          onSend: (id, pdu, timeout) async {
+            clock.advance(const Duration(milliseconds: 50));
+            return DiagnosticMessage(
+              pdu: ApplicationPdu([0x7F, 0x22, 0x78]), // responsePending
+              sourceAddress: DiagnosticSourceAddress('7E8'),
+            );
+          },
+          onReceiveContinuation: (_) async {
+            // Continuation takes long enough that totalTimeout is exceeded
+            clock.advance(const Duration(milliseconds: 200));
+            return DiagnosticMessage(
+              pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+              sourceAddress: DiagnosticSourceAddress('7E8'),
+            );
+          },
+        );
+
+        final result = await engine.execute(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          channel: channel,
+        );
+
+        expect(result, isA<UdsTransactionTimedOut>());
+        final timedOut = result as UdsTransactionTimedOut;
+        expect(timedOut.timeoutType, UdsTimeoutType.total);
+      },
+    );
+  });
 }
+

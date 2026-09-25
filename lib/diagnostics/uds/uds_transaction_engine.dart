@@ -275,6 +275,9 @@ final class UdsTransactionEngine {
         final msgGen = checkGeneration();
         if (msgGen != null) return msgGen;
 
+        final msgDeadline = checkTotalDeadline();
+        if (msgDeadline != null) return msgDeadline;
+
         // Source address validation
         if (effectiveExpectedResponder != null &&
             msg.sourceAddress != effectiveExpectedResponder) {

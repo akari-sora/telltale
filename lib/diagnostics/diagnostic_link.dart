@@ -239,10 +239,10 @@ abstract class DiagnosticTarget {
 
   static const DiagnosticTarget wholeVehicleObd = _WholeVehicleObdTarget();
 
-  const factory DiagnosticTarget.physicalCan({
+  static const PhysicalCanDiagnosticTarget Function({
     required DiagnosticCanIdentifier requestIdentifier,
     required DiagnosticCanIdentifier expectedResponderIdentifier,
-  }) = PhysicalCanDiagnosticTarget;
+  }) physicalCan = PhysicalCanDiagnosticTarget.new;
 }
 
 class _WholeVehicleObdTarget extends DiagnosticTarget {
