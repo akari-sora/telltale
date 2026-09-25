@@ -7,7 +7,7 @@ default:
 
 variables:
   PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
-  GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false"
+  GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false -Djava.net.preferIPv4Stack=true"
   ANDROID_HOME: "/opt/android-sdk-linux"
   ANDROID_SDK_ROOT: "/opt/android-sdk-linux"
 

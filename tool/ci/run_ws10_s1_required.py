@@ -20,6 +20,10 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.parse
+import urllib.request
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 REQUIRED_CASE_MARKERS = [
     "L01",
@@ -54,7 +58,69 @@ def checked_run(command: list[str], cwd: Path, stdout: Path, stderr: Path,
                     process.wait(timeout=5)
 
 
-def parse_and_validate_reporter(report_path: Path) -> tuple[int, set[str], list[str], int]:
+REQUIRED_MARKER_SUITES: dict[str, str] = {
+    "L01": "test/diagnostics/can/can_endpoint_test.dart",
+    "L02": "test/diagnostics/can/can_io_core_test.dart",
+    "L03": "test/diagnostics/can/can_io_core_test.dart",
+    "L04": "test/diagnostics/can/can_io_core_test.dart",
+    "L05": "test/diagnostics/can/can_io_boundary_test.dart",
+    "L06": "test/diagnostics/can/can_io_core_test.dart",
+    "L07": "test/diagnostics/can/can_io_core_test.dart",
+    "L08": "test/diagnostics/can/can_io_core_test.dart",
+    "L09": "test/diagnostics/can/can_io_core_test.dart",
+    "L10": "test/diagnostics/can/can_io_core_test.dart",
+    "L11": "test/diagnostics/can/can_io_core_test.dart",
+    "L12": "test/diagnostics/can/can_io_boundary_test.dart",
+}
+
+
+def normalize_suite_path(raw_path: str, repo_root: Path | None = None) -> str:
+    """Normalizes a test suite path to repository-relative format (test/...).
+
+    Strict fail-closed:
+    - Rejects foreign authorities in URIs (e.g. file://untrusted.example.invalid/...)
+    - Rejects non-file URI schemes (http, https, ftp, etc.)
+    - Rejects paths outside the repository root
+    - Rejects substring matches like 'contest/' or 'other_checkout/test/...'
+    - Rejects non-.dart extensions
+    - Must resolve strictly to a path starting with 'test/' relative to repo_root.
+    """
+    if not raw_path:
+        return ""
+
+    root = (repo_root or REPO_ROOT).resolve()
+
+    if "://" in raw_path:
+        parsed = urllib.parse.urlparse(raw_path)
+        if parsed.scheme != "file":
+            return ""
+        if parsed.netloc and parsed.netloc not in ("", "localhost"):
+            return ""
+        local_path = urllib.request.url2pathname(parsed.path)
+    else:
+        local_path = raw_path
+
+    p = Path(local_path)
+    try:
+        if p.is_absolute():
+            resolved = p.resolve()
+            rel = resolved.relative_to(root).as_posix()
+        else:
+            resolved = (root / p).resolve()
+            rel = resolved.relative_to(root).as_posix()
+    except (ValueError, RuntimeError):
+        return ""
+
+    if not (rel == "test" or rel.startswith("test/")):
+        return ""
+
+    if not rel.endswith(".dart"):
+        return ""
+
+    return rel
+
+
+def parse_and_validate_reporter(report_path: Path, repo_root: Path | None = None) -> tuple[int, set[str], list[str], int]:
     """Parses Flutter test --reporter json output.
 
     Returns:
@@ -63,28 +129,38 @@ def parse_and_validate_reporter(report_path: Path) -> tuple[int, set[str], list[
     if not report_path.exists() or report_path.stat().st_size == 0:
         raise FileNotFoundError(f"Missing or empty test report: {report_path}")
 
+    suites_by_id: dict[int, str] = {}
     tests_by_id: dict[int, dict] = {}
     seen_start_test_ids: set[int] = set()
+    seen_done_test_ids: set[int] = set()
     passed_tests: set[int] = set()
     failed_tests: set[int] = set()
     skipped_tests: set[int] = set()
     hidden_tests: set[int] = set()
     errors_by_test: dict[int, list[str]] = {}
     global_errors: list[str] = []
+    failure_messages: list[str] = []
     seen_done_event = False
     final_done_success = False
     events_after_done = 0
+    stream_started = False
 
     for line_num, raw_line in enumerate(report_path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
         line = raw_line.strip()
         if not line:
             continue
-        # `flutter test --reporter json` can print pub resolver prose
-        # ("Resolving dependencies...", package lines) before the first
-        # event. Ignore non-objects. A line that starts with '{' is
-        # claiming to be an event and must parse.
+
+        if not stream_started:
+            if not line.startswith("{"):
+                # Preamble line before first JSON event (e.g. pub resolver output)
+                continue
+            stream_started = True
+
         if not line.startswith("{"):
-            continue
+            raise ValueError(
+                f"Protocol violation: corrupted non-JSON line after stream started on line {line_num}: {line}"
+            )
+
         try:
             event = json.loads(line)
         except json.JSONDecodeError as exc:
@@ -95,15 +171,38 @@ def parse_and_validate_reporter(report_path: Path) -> tuple[int, set[str], list[
 
         if seen_done_event:
             events_after_done += 1
+            failure_messages.append(
+                f"Protocol violation: event received after terminal 'done' on line {line_num}: {event.get('type')}"
+            )
 
         event_type = event.get("type")
-        if event_type == "testStart":
+        if event_type == "suite":
+            s = event.get("suite", {})
+            sid = s.get("id")
+            spath = s.get("path", "")
+            if sid is None:
+                raise ValueError(f"Protocol violation: suite event missing id on line {line_num}")
+            if sid in suites_by_id:
+                if suites_by_id[sid] != spath:
+                    raise ValueError(
+                        f"Protocol violation: suite ID {sid} redefined with path '{spath}' "
+                        f"(previously '{suites_by_id[sid]}') on line {line_num}"
+                    )
+            suites_by_id[sid] = spath
+        elif event_type == "testStart":
             t = event.get("test", {})
             tid = t.get("id")
             if tid is not None:
                 if tid in seen_start_test_ids:
                     raise ValueError(f"Protocol violation: duplicate or reused test ID {tid} on line {line_num}")
                 seen_start_test_ids.add(tid)
+                suite_id = t.get("suiteID")
+                # Fail-closed: suite must be pre-declared before test starts.
+                # No URL fallback. No retroactive suite association.
+                frozen_suite_path = ""
+                if suite_id is not None and suite_id in suites_by_id:
+                    frozen_suite_path = normalize_suite_path(suites_by_id[suite_id], repo_root=repo_root)
+                t["_frozen_suite_path"] = frozen_suite_path
                 tests_by_id[tid] = t
         elif event_type == "error":
             tid = event.get("testID")
@@ -116,6 +215,16 @@ def parse_and_validate_reporter(report_path: Path) -> tuple[int, set[str], list[
                 global_errors.append(err_msg)
         elif event_type == "testDone":
             tid = event.get("testID")
+            if tid is None or tid not in seen_start_test_ids:
+                raise ValueError(
+                    f"Protocol violation: testDone received for unstarted test ID {tid} on line {line_num}"
+                )
+            if tid in seen_done_test_ids:
+                raise ValueError(
+                    f"Protocol violation: duplicate testDone for test ID {tid} on line {line_num}"
+                )
+            seen_done_test_ids.add(tid)
+
             result = event.get("result")
             hidden = event.get("hidden", False)
             skipped = event.get("skipped", False)
@@ -131,12 +240,12 @@ def parse_and_validate_reporter(report_path: Path) -> tuple[int, set[str], list[
             else:
                 passed_tests.add(tid)
         elif event_type == "done":
-            seen_done_event = True
-            final_done_success = (event.get("success") is True)
+            if not seen_done_event:
+                seen_done_event = True
+                final_done_success = (event.get("success") is True)
 
     # Check for uncompleted tests (testStart without testDone)
     uncompleted = set(tests_by_id.keys()) - (passed_tests | failed_tests | skipped_tests | hidden_tests)
-    failure_messages: list[str] = []
     for tid in sorted(uncompleted):
         t = tests_by_id.get(tid, {})
         tname = t.get("name", f"test_{tid}")
@@ -146,8 +255,6 @@ def parse_and_validate_reporter(report_path: Path) -> tuple[int, set[str], list[
         failure_messages.append("Incomplete test suite: missing 'done' event")
     elif not final_done_success:
         failure_messages.append("Test suite failed: final 'done' event reported success=false")
-    elif events_after_done > 0:
-        failure_messages.append(f"Protocol violation: {events_after_done} events received after terminal 'done' event")
 
     for g_err in global_errors:
         failure_messages.append(f"Global test error: {g_err}")
@@ -164,9 +271,17 @@ def parse_and_validate_reporter(report_path: Path) -> tuple[int, set[str], list[
     # Check coverage of required markers with 1-to-1 distinct test case requirement
     marker_to_test: dict[str, int] = {}
     for tid in sorted(passed_tests):
-        tname = tests_by_id.get(tid, {}).get("name", "")
+        t = tests_by_id.get(tid, {})
+        tname = t.get("name", "")
+        suite_path = t.get("_frozen_suite_path", "")
+
         for marker in REQUIRED_CASE_MARKERS:
             if marker not in marker_to_test and re.search(rf"\b{marker}\b", tname):
+                expected_suite = REQUIRED_MARKER_SUITES.get(marker)
+                if expected_suite:
+                    # Fail-closed: missing suite metadata or mismatched path strictly rejected
+                    if not suite_path or suite_path != expected_suite:
+                        continue
                 marker_to_test[marker] = tid
                 break
 
@@ -224,7 +339,9 @@ def run(repo: Path, output: Path, flutter: str, timeout: int) -> int:
             (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
             return 1
 
-        total_passed, passed_markers, failures, skipped_count = parse_and_validate_reporter(report_file)
+        total_passed, passed_markers, failures, skipped_count = parse_and_validate_reporter(
+            report_file, repo_root=repo
+        )
         result["total_passed"] = total_passed
         result["passed_markers"] = sorted(passed_markers)
         result["missing_markers"] = sorted(set(REQUIRED_CASE_MARKERS) - passed_markers)

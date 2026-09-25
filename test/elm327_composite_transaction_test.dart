@@ -1126,7 +1126,7 @@ void main() {
           },
           header: '6F1',
           restoreHeader: true,
-          budget: const Duration(milliseconds: 50),
+          budget: const Duration(milliseconds: 500),
         ),
         throwsA(isA<TimeoutException>()),
       );

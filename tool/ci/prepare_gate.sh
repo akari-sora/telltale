@@ -18,6 +18,25 @@ else
   useradd -m -s /bin/bash flutter
   NONROOT=flutter
 fi
+# Prefer IPv4 stack and avoid container IPv6 blackholing
+sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
+sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true
+sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null 2>&1 || true
+
+NONROOT_HOME=$(eval echo "~$NONROOT")
+mkdir -p "$NONROOT_HOME/.gradle"
+if [ -d /root/.gradle ]; then
+  cp -rn /root/.gradle/* "$NONROOT_HOME/.gradle/" 2>/dev/null || true
+fi
+cat <<'EOF' > "$NONROOT_HOME/.gradle/gradle.properties"
+systemProp.java.net.preferIPv4Stack=true
+systemProp.java.net.preferIPv4Addresses=true
+org.gradle.jvmargs=-Xmx1536m -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true
+EOF
+chown -R "$NONROOT:$NONROOT" "$NONROOT_HOME/.gradle"
+
+python3 tool/ci/resolve_ci_network.py || true
+
 FLUTTER_HOME=$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")
 ANDROID_SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/opt/android-sdk-linux}}"
 export ANDROID_HOME="$ANDROID_SDK" ANDROID_SDK_ROOT="$ANDROID_SDK"
@@ -36,9 +55,11 @@ if [ ! -d "$ANDROID_SDK/ndk/28.2.13676358" ] || \
 fi
 chown -R "$NONROOT:$NONROOT" "$CI_PROJECT_DIR" "$ANDROID_SDK" "$FLUTTER_HOME"
 printf '%s\n' '#!/bin/bash' 'set -Eeuo pipefail' \
+  '[ -f /tmp/ci-proxy-env.sh ] && source /tmp/ci-proxy-env.sh' \
   "export PATH=\"$FLUTTER_HOME/bin:\$PATH\"" \
   "export PUB_CACHE=\"$CI_PROJECT_DIR/.pub-cache\"" \
-  "export GRADLE_OPTS=\"${GRADLE_OPTS:-}\"" \
+  "export GRADLE_USER_HOME=\"$NONROOT_HOME/.gradle\"" \
+  "export GRADLE_OPTS=\"-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true\"" \
   "export ANDROID_HOME=\"$ANDROID_SDK\"" \
   "export ANDROID_SDK_ROOT=\"$ANDROID_SDK\"" \
   "cd \"$CI_PROJECT_DIR\"" 'exec "$@"' > /usr/local/bin/as-nonroot

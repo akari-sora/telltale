@@ -20,8 +20,13 @@ class FakeCanPduBackend implements CanPduBackend {
   Duration? lastDrainTimeout;
   Duration simulatedDrainDelay = Duration.zero;
   Object? simulatedDrainError;
+  Future<void> Function()? simulatedDrainCallback;
   int closeCallCount = 0;
   bool isClosed = false;
+  Duration simulatedCloseDelay = Duration.zero;
+  Object? simulatedCloseError;
+  CanWriteReceipt? customReceiptToReturn;
+  int readCallCount = 0;
 
   void enqueueObservation(CanBackendObservation observation) {
     incomingQueue.add(observation);
@@ -84,6 +89,10 @@ class FakeCanPduBackend implements CanPduBackend {
                 ? pdu.length ~/ 2
                 : pdu.length);
 
+    if (customReceiptToReturn != null) {
+      return customReceiptToReturn!;
+    }
+
     return CanWriteReceipt(
       attemptId: attemptId,
       timestamp: record.timestamp,
@@ -98,6 +107,7 @@ class FakeCanPduBackend implements CanPduBackend {
     required Duration phaseBudget,
     DiagnosticCancellation? cancellation,
   }) async {
+    readCallCount++;
     if (isClosed) {
       throw StateError('Cannot read from closed backend.');
     }
@@ -120,6 +130,9 @@ class FakeCanPduBackend implements CanPduBackend {
   Future<void> drain({Duration? timeout}) async {
     drainCallCount++;
     lastDrainTimeout = timeout;
+    if (simulatedDrainCallback != null) {
+      await simulatedDrainCallback!();
+    }
     if (simulatedDrainDelay > Duration.zero) {
       await Future<void>.delayed(simulatedDrainDelay);
     }
@@ -134,6 +147,12 @@ class FakeCanPduBackend implements CanPduBackend {
     closeCallCount++;
     isClosed = true;
     incomingQueue.clear();
+    if (simulatedCloseDelay > Duration.zero) {
+      await Future<void>.delayed(simulatedCloseDelay);
+    }
+    if (simulatedCloseError != null) {
+      throw simulatedCloseError!;
+    }
   }
 }
 

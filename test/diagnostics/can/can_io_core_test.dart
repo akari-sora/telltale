@@ -49,6 +49,7 @@ void main() {
       int generation = 1,
       DiagnosticTarget? target,
       DiagnosticCancellation cancellation = DiagnosticCancellation.none,
+      DateTime? deadline,
     }) {
       final req = DiagnosticRequest(
         id: requestId ?? const DiagnosticRequestId('req_01'),
@@ -57,6 +58,7 @@ void main() {
         requiredCapabilities: {DiagnosticCapability.rawCanFrame},
         connectionGeneration: generation,
         cancellation: cancellation,
+        deadline: deadline,
         ownership: const DiagnosticOwnership(mode: DiagnosticOwnershipMode.exclusive),
       );
       return CanReadBinding.fromUdsRequest(
@@ -570,5 +572,342 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('C03: Phase deadline expiration rejects late backend return with TimeoutException', () async {
+      final binding = createBinding(pduBytes: [0x22, 0x01, 0x00]);
+      backend.simulatedReadDelay = const Duration(milliseconds: 60);
+
+      backend.enqueueSimpleObservation(
+        payload: [0x62, 0x01, 0x00, 0xAA],
+        sourceId: stdRx,
+      );
+
+      final outcome = await coordinator.withReadLease<void>(
+        binding: binding,
+        budget: CanIoBudget(
+          phaseBudget: const Duration(milliseconds: 20),
+          totalTimeout: const Duration(seconds: 2),
+        ),
+        cancellation: DiagnosticCancellation.none,
+        action: (lease) async {
+          await lease.receiveNext(const Duration(milliseconds: 20));
+        },
+      );
+
+      expect(outcome, isA<CanLeaseTimedOut<void>>());
+      expect(
+        (outcome as CanLeaseTimedOut<void>).reason,
+        contains('Timed out'),
+      );
+    });
+
+    test('C03: Unreturning action is bounded by total timeout and does not hang', () async {
+      final binding = createBinding(pduBytes: [0x22, 0x01, 0x00]);
+      final neverCompletes = Completer<int>();
+
+      final outcome = await coordinator.withReadLease<int>(
+        binding: binding,
+        budget: CanIoBudget(totalTimeout: const Duration(milliseconds: 50)),
+        cancellation: DiagnosticCancellation.none,
+        action: (lease) async => neverCompletes.future,
+      );
+
+      expect(outcome, isA<CanLeaseTimedOut<int>>());
+    });
+
+    test('C03: Operations on active lease after coordinator close throw StateError without backend call', () async {
+      final binding = createBinding(pduBytes: [0x22, 0x01, 0x00]);
+
+      final outcome = await coordinator.withReadLease<void>(
+        binding: binding,
+        budget: CanIoBudget(),
+        cancellation: DiagnosticCancellation.none,
+        action: (lease) async {
+          await coordinator.close();
+          // Attempting send after coordinator closed must fail immediately in _assertActive
+          expect(
+            () => lease.sendApproved(const DiagnosticRequestId('req_late_closed')),
+            throwsStateError,
+          );
+          expect(
+            () => lease.receiveNext(const Duration(seconds: 1)),
+            throwsStateError,
+          );
+        },
+      );
+
+      expect(outcome, isA<CanLeaseRetired<void>>());
+      expect(backend.writeLog, isEmpty);
+    });
+
+    test('C04: Concurrent close failure is shared across all concurrent callers', () async {
+      backend.simulatedCloseDelay = const Duration(milliseconds: 30);
+      backend.simulatedCloseError = StateError('Hardware close failure');
+
+      final f1 = coordinator.close();
+      final f2 = coordinator.close();
+      final f3 = coordinator.close();
+
+      Object? err1;
+      Object? err2;
+      Object? err3;
+
+      await Future.wait([
+        f1.catchError((e) {
+          err1 = e;
+        }),
+        f2.catchError((e) {
+          err2 = e;
+        }),
+        f3.catchError((e) {
+          err3 = e;
+        }),
+      ]);
+
+      expect(err1, isA<StateError>());
+      expect(err2, isA<StateError>());
+      expect(err3, isA<StateError>());
+      expect((err1 as StateError).message, 'Hardware close failure');
+      expect((err2 as StateError).message, 'Hardware close failure');
+      expect((err3 as StateError).message, 'Hardware close failure');
+      expect(coordinator.state, CoordinatorState.closed);
+    });
+
+    test('C04: Cancellation or retirement during cleanup drain invalidates prior success', () async {
+      final cts = DiagnosticCancellationTokenSource();
+      final binding = createBinding(
+        pduBytes: [0x22, 0x01, 0x00],
+        cancellation: cts.token,
+      );
+      backend.simulatedDrainDelay = const Duration(milliseconds: 60);
+
+      final outcomeFuture = coordinator.withReadLease<int>(
+        binding: binding,
+        budget: CanIoBudget(cleanupBudget: const Duration(milliseconds: 200)),
+        cancellation: cts.token,
+        action: (lease) async {
+          // Trigger cancellation during drain
+          Future<void>.delayed(const Duration(milliseconds: 20), () {
+            cts.cancel();
+          });
+          return 999;
+        },
+      );
+
+      final outcome = await outcomeFuture;
+      expect(outcome, isA<CanLeaseCancelled<int>>());
+      expect(outcome.valueOrNull, isNull);
+    });
+
+    test('C05: Write receipt with mismatched attemptId throws StateError', () async {
+      final binding = createBinding(pduBytes: [0x22, 0x01, 0x00]);
+      backend.customReceiptToReturn = CanWriteReceipt(
+        attemptId: const DiagnosticRequestId('foreign_attempt_id'),
+        timestamp: DateTime.now(),
+        disposition: CanSendDisposition.submitted,
+        bytesWritten: 3,
+      );
+
+      final outcome = await coordinator.withReadLease<void>(
+        binding: binding,
+        budget: CanIoBudget(),
+        cancellation: DiagnosticCancellation.none,
+        action: (lease) async {
+          await lease.sendApproved(const DiagnosticRequestId('req_01'));
+        },
+      );
+
+      expect(outcome, isA<CanLeaseTransportFailure<void>>());
+      expect(
+        (outcome as CanLeaseTransportFailure<void>).error.toString(),
+        contains('does not match expected attempt ID'),
+      );
+    });
+
+    test('C05: Write receipt with inconsistent byte count throws StateError', () async {
+      final binding = createBinding(pduBytes: [0x22, 0x01, 0x00]);
+      backend.customReceiptToReturn = CanWriteReceipt(
+        attemptId: const DiagnosticRequestId('req_01'),
+        timestamp: DateTime.now(),
+        disposition: CanSendDisposition.submitted,
+        bytesWritten: 1, // PDU has length 3, 1 byte is inconsistent
+      );
+
+      final outcome = await coordinator.withReadLease<void>(
+        binding: binding,
+        budget: CanIoBudget(),
+        cancellation: DiagnosticCancellation.none,
+        action: (lease) async {
+          await lease.sendApproved(const DiagnosticRequestId('req_01'));
+        },
+      );
+
+      expect(outcome, isA<CanLeaseTransportFailure<void>>());
+      expect(
+        (outcome as CanLeaseTransportFailure<void>).error.toString(),
+        contains('does not match PDU length'),
+      );
+    });
+
+    test('C06: Synchronous throw in backend.close() is safely surfaced via Future and shared across all concurrent callers', () async {
+      final syncBackend = _SynchronousThrowBackend();
+      final syncCoordinator = CanIoCoordinator(
+        backend: syncBackend,
+        endpoint: endpoint,
+        clock: clock,
+      );
+
+      final closeFuture1 = syncCoordinator.close();
+      final closeFuture2 = syncCoordinator.close();
+
+      expect(closeFuture1, throwsA(isA<StateError>()));
+      expect(closeFuture2, throwsA(isA<StateError>()));
+
+      try {
+        await closeFuture1;
+      } catch (e) {
+        expect(e, isA<StateError>());
+      }
+
+      expect(syncCoordinator.state, equals(CoordinatorState.closed));
+    });
+
+    test('C06: remainingUntilDeadline <= 0 immediately throws TimeoutException before action execution', () async {
+      final scriptedClock = _ScriptedAdvancingClock(
+        triggerCallIndex: 4,
+        advanceAfterCalls: const Duration(seconds: 10),
+      );
+      final scriptedCoordinator = CanIoCoordinator(
+        endpoint: endpoint,
+        backend: backend,
+        clock: scriptedClock,
+      );
+      final binding = createBinding(pduBytes: [0x22, 0x01, 0x00]);
+      bool actionExecuted = false;
+
+      final outcome = await scriptedCoordinator.withReadLease<int>(
+        binding: binding,
+        budget: CanIoBudget(totalTimeout: const Duration(seconds: 1)),
+        cancellation: DiagnosticCancellation.none,
+        action: (lease) async {
+          actionExecuted = true;
+          return 42;
+        },
+      );
+
+      expect(actionExecuted, isFalse);
+      expect(outcome, isA<CanLeaseTimedOut<int>>());
+      expect((outcome as CanLeaseTimedOut<int>).reason, contains('Total lease deadline expired before action execution'));
+    });
+
+    test('C06 Barrier: success -> cancel during drain -> drain error yields cancelled outcome', () async {
+      final drainEntered = Completer<void>();
+      final drainRelease = Completer<void>();
+
+      backend.simulatedDrainCallback = () async {
+        drainEntered.complete();
+        await drainRelease.future;
+        throw StateError('Simulated hardware drain crash');
+      };
+
+      bool isCancelled = false;
+      final cancellation = DiagnosticCancellation(() => isCancelled);
+
+      final outcomeFuture = coordinator.withReadLease<int>(
+        binding: createBinding(pduBytes: [0x22, 0x01, 0x00]),
+        budget: CanIoBudget(),
+        cancellation: cancellation,
+        action: (lease) async => 42,
+      );
+
+      await drainEntered.future;
+      isCancelled = true;
+      drainRelease.complete();
+
+      final outcome = await outcomeFuture;
+      expect(outcome, isA<CanLeaseCancelled<int>>());
+      final cancelled = outcome as CanLeaseCancelled<int>;
+      expect(cancelled.reason, contains('Cancelled during lease cleanup'));
+      expect(cancelled.reason, contains('cleanup failure: Bad state: Simulated hardware drain crash'));
+      expect(coordinator.state, equals(CoordinatorState.retiring));
+    });
+
+    test('C06 Barrier: action error -> retire during drain -> drain error yields retired outcome', () async {
+      final drainEntered = Completer<void>();
+      final drainRelease = Completer<void>();
+
+      backend.simulatedDrainCallback = () async {
+        drainEntered.complete();
+        await drainRelease.future;
+        throw StateError('Simulated hardware drain crash');
+      };
+
+      final outcomeFuture = coordinator.withReadLease<int>(
+        binding: createBinding(pduBytes: [0x22, 0x01, 0x00]),
+        budget: CanIoBudget(),
+        cancellation: DiagnosticCancellation.none,
+        action: (lease) async {
+          throw StateError('Action transport failure');
+        },
+      );
+
+      await drainEntered.future;
+      unawaited(coordinator.close());
+      drainRelease.complete();
+
+      final outcome = await outcomeFuture;
+      expect(outcome, isA<CanLeaseRetired<int>>());
+      final retired = outcome as CanLeaseRetired<int>;
+      expect(retired.reason, contains('Coordinator closed during cleanup'));
+      expect(retired.reason, contains('cleanup failure: Bad state: Simulated hardware drain crash'));
+      expect(coordinator.state, equals(CoordinatorState.closed));
+    });
+
+    test('C06: Cleanup drain failure does not regress closed coordinator back to retiring', () async {
+      backend.simulatedDrainError = StateError('Drain failed');
+      final binding = createBinding(pduBytes: [0x22, 0x01, 0x00]);
+
+      final outcome = await coordinator.withReadLease<int>(
+        binding: binding,
+        budget: CanIoBudget(),
+        cancellation: DiagnosticCancellation.none,
+        action: (lease) async {
+          unawaited(coordinator.close());
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          return 123;
+        },
+      );
+
+      expect(coordinator.state, equals(CoordinatorState.closed));
+      expect(outcome, isA<CanLeaseRetired<int>>());
+    });
   });
+}
+
+class _SynchronousThrowBackend extends FakeCanPduBackend {
+  @override
+  Future<void> close() {
+    throw StateError('Synchronous driver crash during close()');
+  }
+}
+
+class _ScriptedAdvancingClock extends FakeCanIoClock {
+  int _callCount = 0;
+  final Duration advanceAfterCalls;
+  final int triggerCallIndex;
+
+  _ScriptedAdvancingClock({
+    required this.triggerCallIndex,
+    required this.advanceAfterCalls,
+    DateTime? initial,
+  }) : super(initial);
+
+  @override
+  DateTime now() {
+    _callCount++;
+    if (_callCount >= triggerCallIndex) {
+      advance(advanceAfterCalls);
+    }
+    return super.now();
+  }
 }

@@ -99,6 +99,50 @@ void main() {
       );
     });
 
+    test('C02 / Exact Boundary: 16, 17, 31, 32 succeed, 33 rejected, backend read count is 32', () async {
+      final binding = createBinding([0x22, 0x01, 0x00]);
+
+      // Enqueue 35 observations of 1 byte each
+      for (var i = 0; i < 35; i++) {
+        backend.enqueueSimpleObservation(
+          payload: [0x55],
+          sourceId: stdRx,
+        );
+      }
+
+      int readCount = 0;
+      Object? failureError;
+
+      final outcome = await coordinator.withReadLease<int>(
+        binding: binding,
+        budget: CanIoBudget(),
+        cancellation: DiagnosticCancellation.none,
+        action: (lease) async {
+          for (var i = 1; i <= 35; i++) {
+            try {
+              final obs = await lease.receiveNext(const Duration(seconds: 1));
+              expect(obs.payload, [0x55]);
+              readCount = i;
+            } catch (e) {
+              failureError = e;
+              rethrow;
+            }
+          }
+          return readCount;
+        },
+      );
+
+      expect(outcome, isA<CanLeaseTransportFailure<int>>());
+      expect(
+        failureError.toString(),
+        contains('Buffered observations ceiling exceeded'),
+      );
+      // Strictly verify 16, 17, 31, and 32 succeeded, and 33 failed
+      expect(readCount, 32, reason: 'Must successfully complete 32 observations');
+      // The 33rd attempt must fail before dispatching backend read, so backend read count is exactly 32
+      expect(backend.readCallCount, 32, reason: 'Backend read count must be exactly 32');
+    });
+
     test('L05: Aggregate buffered bytes limit (strictly max 4096 bytes, 4097 rejected)', () async {
       final binding = createBinding([0x22, 0x01, 0x00]);
 
