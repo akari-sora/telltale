@@ -1,0 +1,341 @@
+{
+  "schema_version": 1,
+  "description": "ISO 14229-1 Service 0x19 (ReadDTCInformation) test vectors verified against python-udsoncan 1.26.1 (WS-09 Slice 2, Refs #13).",
+  "service": "0x19",
+  "allowed_subfunctions": [
+    {
+      "code": 2,
+      "name": "reportDTCByStatusMask"
+    },
+    {
+      "code": 10,
+      "name": "reportSupportedDTC"
+    }
+  ],
+  "vectors": [
+    {
+      "id": "dtc_req_01_status_mask_ff",
+      "category": "request_encode",
+      "subfunction": 2,
+      "status_mask": 255,
+      "expected_request_bytes": [25, 2, 255],
+      "expected_request_hex": "1902FF"
+    },
+    {
+      "id": "dtc_req_02_status_mask_00",
+      "category": "request_encode",
+      "subfunction": 2,
+      "status_mask": 0,
+      "expected_request_bytes": [25, 2, 0],
+      "expected_request_hex": "190200"
+    },
+    {
+      "id": "dtc_req_03_status_mask_08",
+      "category": "request_encode",
+      "subfunction": 2,
+      "status_mask": 8,
+      "expected_request_bytes": [25, 2, 8],
+      "expected_request_hex": "190208"
+    },
+    {
+      "id": "dtc_req_04_supported_dtc",
+      "category": "request_encode",
+      "subfunction": 10,
+      "status_mask": null,
+      "expected_request_bytes": [25, 10],
+      "expected_request_hex": "190A"
+    },
+    {
+      "id": "dtc_pos_01_empty_02",
+      "category": "positive_response",
+      "subfunction": 2,
+      "requested_mask": 1,
+      "response_bytes": [89, 2, 255],
+      "expected_availability_mask": 255,
+      "expected_records": []
+    },
+    {
+      "id": "dtc_pos_02_one_record_02",
+      "category": "positive_response",
+      "subfunction": 2,
+      "requested_mask": 9,
+      "response_bytes": [89, 2, 255, 1, 2, 3, 9],
+      "expected_availability_mask": 255,
+      "expected_records": [
+        {
+          "code": 66051,
+          "code_hex": "010203",
+          "status": 9,
+          "status_hex": "09"
+        }
+      ]
+    },
+    {
+      "id": "dtc_pos_03_multi_record_02",
+      "category": "positive_response",
+      "subfunction": 2,
+      "requested_mask": 8,
+      "response_bytes": [89, 2, 255, 1, 2, 3, 8, 4, 5, 6, 8],
+      "expected_availability_mask": 255,
+      "expected_records": [
+        {
+          "code": 66051,
+          "code_hex": "010203",
+          "status": 8,
+          "status_hex": "08"
+        },
+        {
+          "code": 263430,
+          "code_hex": "040506",
+          "status": 8,
+          "status_hex": "08"
+        }
+      ]
+    },
+    {
+      "id": "dtc_pos_04_empty_0a",
+      "category": "positive_response",
+      "subfunction": 10,
+      "requested_mask": null,
+      "response_bytes": [89, 10, 255],
+      "expected_availability_mask": 255,
+      "expected_records": []
+    },
+    {
+      "id": "dtc_pos_05_multi_record_0a",
+      "category": "positive_response",
+      "subfunction": 10,
+      "requested_mask": null,
+      "response_bytes": [89, 10, 255, 1, 2, 3, 9, 160, 176, 192, 32],
+      "expected_availability_mask": 255,
+      "expected_records": [
+        {
+          "code": 66051,
+          "code_hex": "010203",
+          "status": 9,
+          "status_hex": "09"
+        },
+        {
+          "code": 10531008,
+          "code_hex": "A0B0C0",
+          "status": 32,
+          "status_hex": "20"
+        }
+      ]
+    },
+    {
+      "id": "dtc_pos_06_boundary_min_code",
+      "category": "positive_response",
+      "subfunction": 10,
+      "requested_mask": null,
+      "response_bytes": [89, 10, 255, 0, 0, 0, 1],
+      "expected_availability_mask": 255,
+      "expected_records": [
+        {
+          "code": 0,
+          "code_hex": "000000",
+          "status": 1,
+          "status_hex": "01"
+        }
+      ]
+    },
+    {
+      "id": "dtc_pos_07_boundary_max_code",
+      "category": "positive_response",
+      "subfunction": 10,
+      "requested_mask": null,
+      "response_bytes": [89, 10, 255, 255, 255, 255, 128],
+      "expected_availability_mask": 255,
+      "expected_records": [
+        {
+          "code": 16777215,
+          "code_hex": "FFFFFF",
+          "status": 128,
+          "status_hex": "80"
+        }
+      ]
+    },
+    {
+      "id": "dtc_pos_08_all_eight_status_bits",
+      "category": "positive_response",
+      "subfunction": 10,
+      "requested_mask": null,
+      "response_bytes": [
+        89, 10, 255,
+        0, 0, 1, 1,
+        0, 0, 2, 2,
+        0, 0, 3, 4,
+        0, 0, 4, 8,
+        0, 0, 5, 16,
+        0, 0, 6, 32,
+        0, 0, 7, 64,
+        0, 0, 8, 128
+      ],
+      "expected_availability_mask": 255,
+      "expected_records": [
+        {"code": 1, "code_hex": "000001", "status": 1, "status_hex": "01"},
+        {"code": 2, "code_hex": "000002", "status": 2, "status_hex": "02"},
+        {"code": 3, "code_hex": "000003", "status": 4, "status_hex": "04"},
+        {"code": 4, "code_hex": "000004", "status": 8, "status_hex": "08"},
+        {"code": 5, "code_hex": "000005", "status": 16, "status_hex": "10"},
+        {"code": 6, "code_hex": "000006", "status": 32, "status_hex": "20"},
+        {"code": 7, "code_hex": "000007", "status": 64, "status_hex": "40"},
+        {"code": 8, "code_hex": "000008", "status": 128, "status_hex": "80"}
+      ]
+    },
+    {
+      "id": "dtc_pos_09_mixed_status_bits",
+      "category": "positive_response",
+      "subfunction": 2,
+      "requested_mask": 41,
+      "response_bytes": [89, 2, 255, 18, 52, 86, 41],
+      "expected_availability_mask": 255,
+      "expected_records": [
+        {
+          "code": 1193046,
+          "code_hex": "123456",
+          "status": 41,
+          "status_hex": "29"
+        }
+      ]
+    },
+    {
+      "id": "dtc_pos_10_duplicates_preserved",
+      "category": "positive_response",
+      "subfunction": 2,
+      "requested_mask": 9,
+      "response_bytes": [89, 2, 255, 1, 2, 3, 9, 1, 2, 3, 9],
+      "expected_availability_mask": 255,
+      "expected_records": [
+        {
+          "code": 66051,
+          "code_hex": "010203",
+          "status": 9,
+          "status_hex": "09"
+        },
+        {
+          "code": 66051,
+          "code_hex": "010203",
+          "status": 9,
+          "status_hex": "09"
+        }
+      ]
+    },
+    {
+      "id": "dtc_neg_01_subfunction_not_supported",
+      "category": "negative_response",
+      "subfunction": 2,
+      "response_bytes": [127, 25, 18],
+      "expected_original_sid": 25,
+      "expected_nrc_code": 18,
+      "expected_nrc_name": "subFunctionNotSupported"
+    },
+    {
+      "id": "dtc_neg_02_request_out_of_range",
+      "category": "negative_response",
+      "subfunction": 2,
+      "response_bytes": [127, 25, 49],
+      "expected_original_sid": 25,
+      "expected_nrc_code": 49,
+      "expected_nrc_name": "requestOutOfRange"
+    },
+    {
+      "id": "dtc_neg_03_busy_repeat_request",
+      "category": "negative_response",
+      "subfunction": 10,
+      "response_bytes": [127, 25, 33],
+      "expected_original_sid": 25,
+      "expected_nrc_code": 33,
+      "expected_nrc_name": "busyRepeatRequest"
+    },
+    {
+      "id": "dtc_neg_04_response_pending",
+      "category": "negative_response",
+      "subfunction": 10,
+      "response_bytes": [127, 25, 120],
+      "expected_original_sid": 25,
+      "expected_nrc_code": 120,
+      "expected_nrc_name": "requestCorrectlyReceived_ResponsePending"
+    },
+    {
+      "id": "dtc_mal_01_wrong_positive_sid",
+      "category": "malformed_response",
+      "subfunction": 2,
+      "requested_mask": 255,
+      "response_bytes": [98, 2, 255],
+      "expected_malformed_reason": "wrongPositiveSid"
+    },
+    {
+      "id": "dtc_mal_02_wrong_subfunction_echo",
+      "category": "malformed_response",
+      "subfunction": 2,
+      "requested_mask": 255,
+      "response_bytes": [89, 10, 255],
+      "expected_malformed_reason": "wrongSubfunctionEcho"
+    },
+    {
+      "id": "dtc_mal_03_truncated_before_avail_mask",
+      "category": "malformed_response",
+      "subfunction": 2,
+      "requested_mask": 255,
+      "response_bytes": [89, 2],
+      "expected_malformed_reason": "truncated"
+    },
+    {
+      "id": "dtc_mal_04_stride_incomplete_1_byte",
+      "category": "malformed_response",
+      "subfunction": 2,
+      "requested_mask": 9,
+      "response_bytes": [89, 2, 255, 1, 2, 3, 9, 170],
+      "expected_malformed_reason": "recordStrideMismatch"
+    },
+    {
+      "id": "dtc_mal_05_stride_incomplete_2_bytes",
+      "category": "malformed_response",
+      "subfunction": 2,
+      "requested_mask": 9,
+      "response_bytes": [89, 2, 255, 1, 2, 3, 9, 170, 187],
+      "expected_malformed_reason": "recordStrideMismatch"
+    },
+    {
+      "id": "dtc_mal_06_stride_incomplete_3_bytes",
+      "category": "malformed_response",
+      "subfunction": 2,
+      "requested_mask": 9,
+      "response_bytes": [89, 2, 255, 1, 2, 3, 9, 170, 187, 204],
+      "expected_malformed_reason": "recordStrideMismatch"
+    },
+    {
+      "id": "dtc_mal_07_status_outside_availability",
+      "category": "malformed_response",
+      "subfunction": 2,
+      "requested_mask": 255,
+      "response_bytes": [89, 2, 15, 1, 2, 3, 17],
+      "expected_malformed_reason": "statusOutsideAvailabilityMask"
+    },
+    {
+      "id": "dtc_mal_08_status_does_not_intersect_request_mask",
+      "category": "malformed_response",
+      "subfunction": 2,
+      "requested_mask": 4,
+      "response_bytes": [89, 2, 255, 1, 2, 3, 8],
+      "expected_malformed_reason": "statusDoesNotMatchRequestMask"
+    },
+    {
+      "id": "dtc_mal_09_wrong_negative_original_sid",
+      "category": "malformed_response",
+      "subfunction": 2,
+      "requested_mask": 255,
+      "response_bytes": [127, 34, 18],
+      "expected_malformed_reason": "wrongNegativeOriginalSid"
+    },
+    {
+      "id": "dtc_mal_10_negative_missing_nrc",
+      "category": "malformed_response",
+      "subfunction": 2,
+      "requested_mask": 255,
+      "response_bytes": [127, 25],
+      "expected_malformed_reason": "missingNrc"
+    }
+  ]
+}

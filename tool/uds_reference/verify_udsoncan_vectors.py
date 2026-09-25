@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Independent reference verifier using python-udsoncan for ISO 14229-1 Service 0x22 (WS-09, Issue #13 Slice 1).
+"""Independent reference verifier using python-udsoncan for ISO 14229-1 (WS-09, Refs #13).
 
-Verifies the literal test vectors in `tool/uds_reference/uds_readonly_vectors.json`
+Verifies the literal test vectors in:
+- `tool/uds_reference/uds_readonly_vectors.json` (Service 0x22 ReadDataByIdentifier)
+- `tool/uds_reference/uds_dtc_vectors.json` (Service 0x19 ReadDTCInformation)
 against the pinned `udsoncan==1.26.1` independent reference implementation.
 """
 from __future__ import annotations
@@ -32,6 +34,7 @@ def verify_vectors(fixture_path: Path) -> int:
         sys.exit(f"[FAIL] Vectors fixture missing: {fixture_path}")
 
     data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    service = data.get("service")
     vectors = data.get("vectors", [])
     if not vectors:
         sys.exit("[FAIL] No vectors found in fixture")
@@ -45,15 +48,27 @@ def verify_vectors(fixture_path: Path) -> int:
 
         try:
             if category == "request_encode":
-                did = vec["did"]
                 expected_bytes = bytes(vec["expected_request_bytes"])
                 expected_hex = vec["expected_request_hex"]
 
-                # udsoncan request encoding
-                req = Request(
-                    service=services.ReadDataByIdentifier,
-                    data=struct.pack(">H", did),
-                )
+                if service == "0x19" or "subfunction" in vec:
+                    subfunc = vec["subfunction"]
+                    mask = vec.get("status_mask")
+                    if mask is not None:
+                        req = services.ReadDTCInformation.make_request(
+                            subfunction=subfunc, status_mask=mask
+                        )
+                    else:
+                        req = services.ReadDTCInformation.make_request(
+                            subfunction=subfunc
+                        )
+                else:
+                    did = vec["did"]
+                    req = Request(
+                        service=services.ReadDataByIdentifier,
+                        data=struct.pack(">H", did),
+                    )
+
                 payload = req.get_payload()
 
                 if payload != expected_bytes:
@@ -71,41 +86,96 @@ def verify_vectors(fixture_path: Path) -> int:
 
             elif category == "positive_response":
                 resp_bytes = bytes(vec["response_bytes"])
-                requested_did = vec["requested_did"]
-                expected_data = bytes(vec["expected_data_record"])
 
-                resp = Response.from_payload(resp_bytes)
-                if not resp.valid or not resp.positive:
-                    errors.append(
-                        f"[{vec_id}] expected valid positive response, got valid={resp.valid}, positive={resp.positive}"
+                if service == "0x19" or "subfunction" in vec:
+                    subfunc = vec["subfunction"]
+                    resp = Response.from_payload(resp_bytes)
+                    if not resp.valid or not resp.positive:
+                        errors.append(
+                            f"[{vec_id}] expected valid positive response, got valid={resp.valid}, positive={resp.positive}"
+                        )
+                        continue
+
+                    if resp.service != services.ReadDTCInformation:
+                        errors.append(
+                            f"[{vec_id}] service mismatch: expected ReadDTCInformation, got {resp.service}"
+                        )
+                        continue
+
+                    interp = services.ReadDTCInformation.interpret_response(
+                        resp, subfunction=subfunc
                     )
-                    continue
+                    avail = interp.service_data.status_availability.get_byte_as_int()
+                    if avail != vec["expected_availability_mask"]:
+                        errors.append(
+                            f"[{vec_id}] availability mask mismatch: got {avail}, expected {vec['expected_availability_mask']}"
+                        )
+                        continue
 
-                if resp.service != services.ReadDataByIdentifier:
-                    errors.append(
-                        f"[{vec_id}] service mismatch: expected ReadDataByIdentifier, got {resp.service}"
-                    )
-                    continue
+                    dtcs = interp.service_data.dtcs
+                    expected_records = vec["expected_records"]
+                    if len(dtcs) != len(expected_records):
+                        errors.append(
+                            f"[{vec_id}] record count mismatch: got {len(dtcs)}, expected {len(expected_records)}"
+                        )
+                        continue
 
-                if len(resp.data) < 2:
-                    errors.append(f"[{vec_id}] response data too short for DID echo")
-                    continue
+                    mismatch = False
+                    for idx, (actual_dtc, exp_rec) in enumerate(zip(dtcs, expected_records)):
+                        if actual_dtc.id != exp_rec["code"]:
+                            errors.append(
+                                f"[{vec_id}] DTC #{idx} code mismatch: got 0x{actual_dtc.id:06X}, expected 0x{exp_rec['code']:06X}"
+                            )
+                            mismatch = True
+                            break
+                        act_status = actual_dtc.status.get_byte_as_int()
+                        if act_status != exp_rec["status"]:
+                            errors.append(
+                                f"[{vec_id}] DTC #{idx} status mismatch: got 0x{act_status:02X}, expected 0x{exp_rec['status']:02X}"
+                            )
+                            mismatch = True
+                            break
+                    if mismatch:
+                        continue
 
-                echoed_did = struct.unpack(">H", resp.data[:2])[0]
-                if echoed_did != requested_did:
-                    errors.append(
-                        f"[{vec_id}] DID echo mismatch: got 0x{echoed_did:04X}, expected 0x{requested_did:04X}"
-                    )
-                    continue
+                    passed += 1
 
-                data_record = resp.data[2:]
-                if data_record != expected_data:
-                    errors.append(
-                        f"[{vec_id}] data record mismatch: got {data_record.hex()}, expected {expected_data.hex()}"
-                    )
-                    continue
+                else:
+                    requested_did = vec["requested_did"]
+                    expected_data = bytes(vec["expected_data_record"])
 
-                passed += 1
+                    resp = Response.from_payload(resp_bytes)
+                    if not resp.valid or not resp.positive:
+                        errors.append(
+                            f"[{vec_id}] expected valid positive response, got valid={resp.valid}, positive={resp.positive}"
+                        )
+                        continue
+
+                    if resp.service != services.ReadDataByIdentifier:
+                        errors.append(
+                            f"[{vec_id}] service mismatch: expected ReadDataByIdentifier, got {resp.service}"
+                        )
+                        continue
+
+                    if len(resp.data) < 2:
+                        errors.append(f"[{vec_id}] response data too short for DID echo")
+                        continue
+
+                    echoed_did = struct.unpack(">H", resp.data[:2])[0]
+                    if echoed_did != requested_did:
+                        errors.append(
+                            f"[{vec_id}] DID echo mismatch: got 0x{echoed_did:04X}, expected 0x{requested_did:04X}"
+                        )
+                        continue
+
+                    data_record = resp.data[2:]
+                    if data_record != expected_data:
+                        errors.append(
+                            f"[{vec_id}] data record mismatch: got {data_record.hex()}, expected {expected_data.hex()}"
+                        )
+                        continue
+
+                    passed += 1
 
             elif category == "negative_response":
                 resp_bytes = bytes(vec["response_bytes"])
@@ -145,39 +215,76 @@ def verify_vectors(fixture_path: Path) -> int:
 
             elif category == "malformed_response":
                 resp_bytes = bytes(vec["response_bytes"])
-                requested_did = vec.get("requested_did")
                 reason = vec.get("expected_malformed_reason")
 
                 is_malformed = False
 
-                if reason == "wrongPositiveSid":
-                    # SID is not 0x62
-                    is_malformed = (resp_bytes[0] != 0x62)
-                elif reason == "wrongDidEcho":
-                    resp = Response.from_payload(resp_bytes)
-                    if resp.valid and resp.positive:
-                        echoed_did = struct.unpack(">H", resp.data[:2])[0]
-                        is_malformed = (echoed_did != requested_did)
-                elif reason == "truncated":
-                    # Positive response with fewer than 3 bytes (SID + DID)
-                    is_malformed = len(resp_bytes) < 3
-                elif reason == "missingNrc":
-                    # Negative response with fewer than 3 bytes (7F + SID + NRC)
-                    is_malformed = (resp_bytes[0] == 0x7F and len(resp_bytes) < 3)
-                elif reason == "wrongNegativeOriginalSid":
-                    resp = Response.from_payload(resp_bytes)
-                    is_malformed = (resp.service is None or resp.service.request_id() != 0x22)
-                elif reason == "unexpectedLength":
-                    defn = vec.get("definition", {})
-                    exact_len = defn.get("exact_byte_length")
-                    resp = Response.from_payload(resp_bytes)
-                    if resp.valid and resp.positive and exact_len is not None:
-                        is_malformed = (len(resp.data[2:]) != exact_len)
-                elif reason == "nonFiniteDecodedValue":
-                    is_malformed = True
+                if service == "0x19" or "subfunction" in vec:
+                    subfunc = vec.get("subfunction")
+                    if reason == "wrongPositiveSid":
+                        is_malformed = (resp_bytes[0] != 0x59)
+                    elif reason == "wrongSubfunctionEcho":
+                        is_malformed = (len(resp_bytes) >= 2 and resp_bytes[1] != subfunc)
+                    elif reason == "truncated":
+                        is_malformed = (len(resp_bytes) < 3)
+                    elif reason == "recordStrideMismatch":
+                        payload = resp_bytes[3:]
+                        is_malformed = (len(payload) % 4 != 0)
+                    elif reason == "statusOutsideAvailabilityMask":
+                        avail = resp_bytes[2]
+                        payload = resp_bytes[3:]
+                        for i in range(0, len(payload), 4):
+                            st = payload[i + 3]
+                            if (st & ~avail) != 0:
+                                is_malformed = True
+                    elif reason == "statusDoesNotMatchRequestMask":
+                        avail = resp_bytes[2]
+                        req_mask = vec.get("requested_mask", 0)
+                        eff = req_mask & avail
+                        payload = resp_bytes[3:]
+                        for i in range(0, len(payload), 4):
+                            st = payload[i + 3]
+                            if eff != 0 and (st & eff) == 0:
+                                is_malformed = True
+                    elif reason == "wrongNegativeOriginalSid":
+                        is_malformed = (
+                            resp_bytes[0] == 0x7F
+                            and len(resp_bytes) >= 2
+                            and resp_bytes[1] != 0x19
+                        )
+                    elif reason == "missingNrc":
+                        is_malformed = (resp_bytes[0] == 0x7F and len(resp_bytes) < 3)
+                else:
+                    requested_did = vec.get("requested_did")
+                    if reason == "wrongPositiveSid":
+                        is_malformed = (resp_bytes[0] != 0x62)
+                    elif reason == "wrongDidEcho":
+                        resp = Response.from_payload(resp_bytes)
+                        if resp.valid and resp.positive:
+                            echoed_did = struct.unpack(">H", resp.data[:2])[0]
+                            is_malformed = (echoed_did != requested_did)
+                    elif reason == "truncated":
+                        is_malformed = len(resp_bytes) < 3
+                    elif reason == "missingNrc":
+                        is_malformed = (resp_bytes[0] == 0x7F and len(resp_bytes) < 3)
+                    elif reason == "wrongNegativeOriginalSid":
+                        resp = Response.from_payload(resp_bytes)
+                        is_malformed = (
+                            resp.service is None or resp.service.request_id() != 0x22
+                        )
+                    elif reason == "unexpectedLength":
+                        defn = vec.get("definition", {})
+                        exact_len = defn.get("exact_byte_length")
+                        resp = Response.from_payload(resp_bytes)
+                        if resp.valid and resp.positive and exact_len is not None:
+                            is_malformed = len(resp.data[2:]) != exact_len
+                    elif reason == "nonFiniteDecodedValue":
+                        is_malformed = True
 
                 if not is_malformed:
-                    errors.append(f"[{vec_id}] vector expected to be rejected as malformed ({reason}), but passed")
+                    errors.append(
+                        f"[{vec_id}] vector expected to be rejected as malformed ({reason}), but passed"
+                    )
                     continue
 
                 passed += 1
@@ -194,13 +301,17 @@ def verify_vectors(fixture_path: Path) -> int:
 
                 echoed_did = struct.unpack(">H", resp.data[:2])[0]
                 if echoed_did != requested_did:
-                    errors.append(f"[{vec_id}] DID echo mismatch: got 0x{echoed_did:04X}, expected 0x{requested_did:04X}")
+                    errors.append(
+                        f"[{vec_id}] DID echo mismatch: got 0x{echoed_did:04X}, expected 0x{requested_did:04X}"
+                    )
                     continue
 
                 data_record = resp.data[2:]
                 exact_len = defn.get("exact_byte_length")
                 if exact_len is not None and len(data_record) != exact_len:
-                    errors.append(f"[{vec_id}] exact length mismatch: got {len(data_record)}, expected {exact_len}")
+                    errors.append(
+                        f"[{vec_id}] exact length mismatch: got {len(data_record)}, expected {exact_len}"
+                    )
                     continue
 
                 byte_order = defn.get("byte_order", "big")
@@ -227,28 +338,38 @@ def verify_vectors(fixture_path: Path) -> int:
                 errors.append(f"[{vec_id}] unknown category '{category}'")
 
         except Exception as e:
-            # If expecting malformed and an exception occurred during parse, that is valid rejection
             if category == "malformed_response":
                 passed += 1
             else:
                 errors.append(f"[{vec_id}] unexpected exception: {e}")
 
     if errors:
-        print(f"[FAIL] {len(errors)} error(s) during udsoncan vector verification:")
+        print(f"[FAIL] {len(errors)} error(s) during {fixture_path.name} verification:")
         for err in errors:
             print(f"  - {err}")
         return 1
 
     print(
-        f"[PASS] Successfully verified {passed}/{len(vectors)} UDS read-only vectors against udsoncan=={EXPECTED_UDSONCAN_VERSION}"
+        f"[PASS] Successfully verified {passed}/{len(vectors)} vectors in {fixture_path.name} against udsoncan=={EXPECTED_UDSONCAN_VERSION}"
     )
     return 0
 
 
 def main() -> int:
     repo_root = Path(__file__).resolve().parents[2]
-    vectors_path = repo_root / "tool/uds_reference/uds_readonly_vectors.json"
-    return verify_vectors(vectors_path)
+    fixtures = [
+        repo_root / "tool/uds_reference/uds_readonly_vectors.json",
+        repo_root / "tool/uds_reference/uds_dtc_vectors.json",
+    ]
+    total_exit = 0
+    for fix in fixtures:
+        if fix.is_file():
+            rc = verify_vectors(fix)
+            if rc != 0:
+                total_exit = rc
+        else:
+            print(f"[WARN] Vector fixture not found: {fix}")
+    return total_exit
 
 
 if __name__ == "__main__":
