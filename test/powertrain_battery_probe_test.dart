@@ -388,6 +388,107 @@ void main() {
     );
     await client.dispose();
   });
+
+  test(
+    'BMS probe succeeds with pending NRC 78 followed by positive response without reporting ambiguousResponse',
+    () async {
+      final profile = snapshot.catalog.profiles.singleWhere(
+        (profile) => profile.id == 'mg-zs-ev-au-2021',
+      );
+      final command = profile.commands.singleWhere(
+        (command) => command.modeAndIdentifier == '22B046',
+      );
+      final transport = FakeElm327(
+        protocol: BusProtocol.can11,
+        ecus: [
+          FakeEcu(
+            name: 'BMS',
+            requestId: command.requestHeader,
+            responseId: command.expectedResponder,
+            responses: const {
+              '0100': [0x41, 0x00, 0x80, 0x00, 0x00, 0x00],
+              '22B046': [0x62, 0xB0, 0x46, 0x01, 0xF4],
+            },
+          ),
+        ],
+      );
+      transport.pendingBefore['22B046'] = 1;
+      transport.slowCommands['22B046'] = const Duration(milliseconds: 40);
+
+      final client = Elm327Client(
+        transport,
+        commandTimeout: const Duration(milliseconds: 200),
+      );
+      expect(await client.connect(), isTrue);
+      addTearDown(client.dispose);
+
+      final result = await PowertrainBatteryProbe.run(
+        client: client,
+        diagnosticLink: Elm327DiagnosticLink(client),
+        snapshot: snapshot,
+        profileId: profile.id,
+        commandKey: command.wireKey,
+      );
+
+      expect(result.passed, isTrue);
+      expect(result.failure, isNull);
+      expect(result.readings.length, 1);
+      expect(result.readings.single.value, 50.0);
+    },
+  );
+
+  test(
+    'BMS probe fails closed with ambiguousResponse when wire yields duplicate frames',
+    () async {
+      final profile = snapshot.catalog.profiles.singleWhere(
+        (profile) => profile.id == 'mg-zs-ev-au-2021',
+      );
+      final command = profile.commands.singleWhere(
+        (command) => command.modeAndIdentifier == '22B046',
+      );
+      final transport = FakeElm327(
+        protocol: BusProtocol.can11,
+        ecus: [
+          FakeEcu(
+            name: 'BMS',
+            requestId: command.requestHeader,
+            responseId: command.expectedResponder,
+            responses: const {
+              '0100': [0x41, 0x00, 0x80, 0x00, 0x00, 0x00],
+              '22B046': [0x62, 0xB0, 0x46, 0x01, 0xF4],
+            },
+          ),
+          FakeEcu(
+            name: 'ConflictingECU',
+            requestId: command.requestHeader,
+            responseId: '7E8',
+            responses: const {
+              '0100': [0x41, 0x00, 0x80, 0x00, 0x00, 0x00],
+              '22B046': [0x62, 0xB0, 0x46, 0x01, 0xF4],
+            },
+          ),
+        ],
+      );
+
+      final client = Elm327Client(
+        transport,
+        commandTimeout: const Duration(milliseconds: 200),
+      );
+      expect(await client.connect(), isTrue);
+      addTearDown(client.dispose);
+
+      final result = await PowertrainBatteryProbe.run(
+        client: client,
+        diagnosticLink: Elm327DiagnosticLink(client),
+        snapshot: snapshot,
+        profileId: profile.id,
+        commandKey: command.wireKey,
+      );
+
+      expect(result.passed, isFalse);
+      expect(result.failure, PowertrainBatteryProbeFailure.ambiguousResponse);
+    },
+  );
 }
 
 final class _ThrowingSingleFrameList extends ListBase<ObdFrame> {

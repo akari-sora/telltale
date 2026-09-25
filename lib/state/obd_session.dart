@@ -1891,47 +1891,73 @@ class ObdSession extends Notifier<ObdConnectionState> {
     DiagnosticCancellation cancellation = DiagnosticCancellation.none,
     DateTime? deadline,
   }) async {
-    return runDiagnosticExclusive<UdsTransactionResult>(
-      operationName: 'udsReadOnlyTransaction:${request.serviceId}',
-      cancellation: cancellation,
-      deadline: deadline,
-      action: (wireOwner) async {
-        final link = _engine?.diagnosticLink;
-        if (link == null) {
-          throw const DiagnosticLinkException(
-            kind: DiagnosticFailureKind.retiredOperation,
-            message: 'No active diagnostic link available for connected session.',
+    if (deadline != null && !DateTime.now().isBefore(deadline)) {
+      return UdsTransactionTimedOut(
+        request: request,
+        attempts: 0,
+        retries: 0,
+        responsePendingCount: 0,
+        elapsed: Duration.zero,
+        timeoutType: UdsTimeoutType.total,
+      );
+    }
+
+    try {
+      return await runDiagnosticExclusive<UdsTransactionResult>(
+        operationName: 'udsReadOnlyTransaction:${request.serviceId}',
+        cancellation: cancellation,
+        deadline: deadline,
+        action: (wireOwner) async {
+          final link = _engine?.diagnosticLink;
+          if (link == null) {
+            throw const DiagnosticLinkException(
+              kind: DiagnosticFailureKind.retiredOperation,
+              message: 'No active diagnostic link available for connected session.',
+            );
+          }
+
+          final sessionGeneration = _generation;
+          final initialLinkGeneration = link.connectionGeneration;
+          final channel = DiagnosticLinkUdsTransactionChannel(
+            link: link,
+            target: target,
+            connectionGeneration: initialLinkGeneration,
+            wireOwnerToken: wireOwner,
+            cancellation: cancellation,
+            outerDeadline: deadline,
           );
-        }
 
-        final sessionGeneration = _generation;
-        final initialLinkGeneration = link.connectionGeneration;
-        final channel = DiagnosticLinkUdsTransactionChannel(
-          link: link,
-          target: target,
-          connectionGeneration: initialLinkGeneration,
-          wireOwnerToken: wireOwner,
-          cancellation: cancellation,
-        );
-
-        final engine = UdsTransactionEngine(policy: policy);
-        return engine.execute(
+          final engine = UdsTransactionEngine(policy: policy);
+          return engine.execute(
+            request: request,
+            channel: channel,
+            target: target,
+            connectionGeneration: initialLinkGeneration,
+            currentConnectionGeneration: () {
+              if (_generation != sessionGeneration) {
+                return -1; // Session retired
+              }
+              return link.connectionGeneration;
+            },
+            outerDeadline: deadline,
+            cancellation: cancellation,
+            correlationId: 'session-uds-${DateTime.now().microsecondsSinceEpoch}',
+          );
+        },
+      );
+    } on DiagnosticLinkException catch (e) {
+      if (e.kind == DiagnosticFailureKind.deadlineExpired) {
+        return UdsTransactionTimedOut(
           request: request,
-          channel: channel,
-          target: target,
-          connectionGeneration: initialLinkGeneration,
-          currentConnectionGeneration: () {
-            if (_generation != sessionGeneration) {
-              return -1; // Session retired
-            }
-            return link.connectionGeneration;
-          },
-          outerDeadline: deadline,
-          cancellation: cancellation,
-          correlationId: 'session-uds-${DateTime.now().microsecondsSinceEpoch}',
+          attempts: 0,
+          retries: 0,
+          responsePendingCount: 0,
+          elapsed: Duration.zero,
+          timeoutType: UdsTimeoutType.total,
         );
-      },
-    );
+      }
+      rethrow;
+    }
   }
 
   Future<List<Dtc>> readDtcs(DtcKind kind, {DateTime? deadline}) async {

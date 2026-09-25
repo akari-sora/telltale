@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:torque_obd/diagnostics/diagnostic_link.dart';
+import 'package:torque_obd/diagnostics/uds/uds_diagnostic_link_channel.dart';
 import 'package:torque_obd/diagnostics/uds/uds_dtc_types.dart';
 import 'package:torque_obd/diagnostics/uds/uds_read_types.dart';
 import 'package:torque_obd/diagnostics/uds/uds_transaction_engine.dart';
@@ -453,6 +454,168 @@ void main() {
           channel: channel,
         );
 
+        expect(result, isA<UdsTransactionTimedOut>());
+        final timedOut = result as UdsTransactionTimedOut;
+        expect(timedOut.timeoutType, UdsTimeoutType.total);
+      },
+    );
+
+    test(
+      'F3: continuation unavailable prioritizing cancellation over transport failure',
+      () async {
+        final clock = FakeUdsClock();
+        final engine = UdsTransactionEngine(clock: clock);
+        final cts = DiagnosticCancellationTokenSource();
+
+        final channel = CallbackUdsTransactionChannel(
+          onSend: (_, _, _) async => DiagnosticMessage(
+            pdu: ApplicationPdu([0x7F, 0x22, 0x78]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          onReceiveContinuation: (_) async {
+            // Cancel token before throwing unavailable
+            cts.cancel();
+            throw const DiagnosticLinkContinuationUnavailableException(
+              'Continuation buffer empty',
+            );
+          },
+        );
+
+        final result = await engine.execute(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          channel: channel,
+          cancellation: cts.token,
+        );
+
+        expect(result, isA<UdsTransactionCancelled>());
+      },
+    );
+
+    test(
+      'F3: continuation unavailable prioritizing generation retirement over transport failure',
+      () async {
+        final clock = FakeUdsClock();
+        final engine = UdsTransactionEngine(clock: clock);
+        var currentGen = 1;
+
+        final channel = CallbackUdsTransactionChannel(
+          onSend: (_, _, _) async => DiagnosticMessage(
+            pdu: ApplicationPdu([0x7F, 0x22, 0x78]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          onReceiveContinuation: (_) async {
+            // Retire generation before throwing unavailable
+            currentGen = 2;
+            throw const DiagnosticLinkContinuationUnavailableException(
+              'Continuation buffer empty',
+            );
+          },
+        );
+
+        final result = await engine.execute(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          channel: channel,
+          connectionGeneration: 1,
+          currentConnectionGeneration: () => currentGen,
+        );
+
+        expect(result, isA<UdsTransactionRetired>());
+      },
+    );
+
+    test(
+      'F3: continuation unavailable without cancel or retirement returns UdsTransactionTransportFailure',
+      () async {
+        final clock = FakeUdsClock();
+        final engine = UdsTransactionEngine(clock: clock);
+
+        final channel = CallbackUdsTransactionChannel(
+          onSend: (_, _, _) async => DiagnosticMessage(
+            pdu: ApplicationPdu([0x7F, 0x22, 0x78]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          onReceiveContinuation: (_) async =>
+              throw const DiagnosticLinkContinuationUnavailableException(
+            'Buffer unavailable under normal condition',
+          ),
+        );
+
+        final result = await engine.execute(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          channel: channel,
+        );
+
+        expect(result, isA<UdsTransactionTransportFailure>());
+        final failure = result as UdsTransactionTransportFailure;
+        expect(failure.message, contains('Buffer unavailable'));
+      },
+    );
+
+    test(
+      'F2: initial send TimeoutException with expired outerDeadline classifies as UdsTimeoutType.total',
+      () async {
+        final clock = FakeUdsClock();
+        final policy = UdsTransactionPolicy(
+          p2Timeout: const Duration(seconds: 10),
+          totalTimeout: const Duration(seconds: 30),
+        );
+        final engine = UdsTransactionEngine(policy: policy, clock: clock);
+
+        var sendExecuted = false;
+        final channel = CallbackUdsTransactionChannel(
+          onSend: (_, _, _) async {
+            sendExecuted = true;
+            await Future.delayed(const Duration(milliseconds: 40));
+            throw TimeoutException('send timed out');
+          },
+          onReceiveContinuation: (_) async =>
+              throw StateError('unreachable'),
+        );
+
+        final result = await engine.execute(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          channel: channel,
+          outerDeadline: DateTime.now().add(const Duration(milliseconds: 20)),
+        );
+
+        expect(sendExecuted, isTrue, reason: 'Must enter channel.send to test catch block');
+        expect(result, isA<UdsTransactionTimedOut>());
+        final timedOut = result as UdsTransactionTimedOut;
+        expect(timedOut.timeoutType, UdsTimeoutType.total);
+      },
+    );
+
+    test(
+      'F2: continuation TimeoutException with expired outerDeadline classifies as UdsTimeoutType.total',
+      () async {
+        final clock = FakeUdsClock();
+        final policy = UdsTransactionPolicy(
+          p2Timeout: const Duration(milliseconds: 100),
+          p2StarTimeout: const Duration(seconds: 10),
+          totalTimeout: const Duration(seconds: 30),
+        );
+        final engine = UdsTransactionEngine(policy: policy, clock: clock);
+
+        var continuationExecuted = false;
+        final channel = CallbackUdsTransactionChannel(
+          onSend: (_, _, _) async => DiagnosticMessage(
+            pdu: ApplicationPdu([0x7F, 0x22, 0x78]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          onReceiveContinuation: (_) async {
+            continuationExecuted = true;
+            await Future.delayed(const Duration(milliseconds: 40));
+            throw TimeoutException('continuation timed out');
+          },
+        );
+
+        final result = await engine.execute(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          channel: channel,
+          outerDeadline: DateTime.now().add(const Duration(milliseconds: 20)),
+        );
+
+        expect(continuationExecuted, isTrue, reason: 'Must enter receiveContinuation to test catch block');
         expect(result, isA<UdsTransactionTimedOut>());
         final timedOut = result as UdsTransactionTimedOut;
         expect(timedOut.timeoutType, UdsTimeoutType.total);

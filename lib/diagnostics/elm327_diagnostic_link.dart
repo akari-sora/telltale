@@ -199,6 +199,13 @@ class Elm327DiagnosticLink implements DiagnosticLink {
             : DiagnosticResponseStatus.error);
 
     final messages = <DiagnosticMessage>[
+      if (request.includePendingObservations)
+        for (final frame in obdResponse.pendingFrames)
+          if (frame.bytes.isNotEmpty)
+            DiagnosticMessage(
+              pdu: ApplicationPdu(frame.bytes),
+              sourceAddress: DiagnosticSourceAddress.tryParse(frame.sourceId),
+            ),
       for (final frame in obdResponse.frames)
         if (frame.bytes.isNotEmpty)
           DiagnosticMessage(

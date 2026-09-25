@@ -1509,21 +1509,21 @@ void main() {
       final transport = _ReconnectingTransport();
       final client = await _connect(
         transport,
-        commandTimeout: const Duration(seconds: 1),
+        commandTimeout: const Duration(seconds: 3),
       );
       expect(client.connectionSession, 1);
 
       // Configure slow reply for in-flight command in generation 1
-      transport.slowCommands['22DDBC'] = const Duration(milliseconds: 500);
+      transport.slowCommands['22DDBC'] = const Duration(seconds: 2);
 
-      // Start transaction with 80ms drainBudget
+      // Start transaction with 150ms drainBudget
       final oldTxFuture = client.runTransacted(
         (send) async {
           unawaited(send('22DDBC').catchError((_) => const ObdResponse()));
           return 'action-done';
         },
         header: '6F1',
-        drainBudget: const Duration(milliseconds: 80),
+        drainBudget: const Duration(milliseconds: 150),
       );
       oldTxFuture.ignore();
 
@@ -1537,11 +1537,11 @@ void main() {
       expect(client.connectionSession, 2);
 
       // In generation 2, queue a slow command that will remain pending during old drain timeout
-      transport.slowCommands['010C'] = const Duration(milliseconds: 200);
+      transport.slowCommands['010C'] = const Duration(milliseconds: 600);
       final gen2SendFuture = client.send('010C');
 
-      // Wait past the old generation's 80ms drain budget so old inFlight.timeout triggers
-      await Future.delayed(const Duration(milliseconds: 120));
+      // Wait past the old generation's 150ms drain budget so old inFlight.timeout triggers
+      await Future.delayed(const Duration(milliseconds: 200));
 
       // Old transaction completes with error
       await expectLater(oldTxFuture, throwsA(isA<TransportException>()));

@@ -36,6 +36,7 @@ final class DiagnosticLinkUdsTransactionChannel implements UdsTransactionChannel
     required this.connectionGeneration,
     this.wireOwnerToken,
     this.cancellation = DiagnosticCancellation.none,
+    this.outerDeadline,
   }) : requiredCapabilities = const {
           DiagnosticCapability.applicationPdu,
           DiagnosticCapability.physicalEcuAddressing,
@@ -76,6 +77,9 @@ final class DiagnosticLinkUdsTransactionChannel implements UdsTransactionChannel
     _continuationQueue.clear();
   }
 
+  /// Optional caller-provided outer deadline constraining the overall transaction.
+  final DateTime? outerDeadline;
+
   @override
   Future<DiagnosticMessage> send(
     DiagnosticRequestId id,
@@ -85,61 +89,63 @@ final class DiagnosticLinkUdsTransactionChannel implements UdsTransactionChannel
     _checkPreconditions();
     clearContinuationQueue();
 
-    // Read-only admission & owner verification (A9)
+    // 1. Physical target pre-send admission check (R56-1)
+    final expResponderId = target.expectedResponderIdentifier;
+    if (expResponderId == null) {
+      clearContinuationQueue();
+      throw const DiagnosticLinkException(
+        kind: DiagnosticFailureKind.unsupportedTarget,
+        message: 'Channel targeting requires physical CAN addressing target.',
+      );
+    }
+
+    // 2. Wire owner admission check
     if (wireOwnerToken == null) {
+      clearContinuationQueue();
       throw const DiagnosticLinkException(
         kind: DiagnosticFailureKind.unsupportedTarget,
         message: 'Channel requires valid wireOwnerToken for admission.',
       );
     }
 
-    if (pdu.bytes.isEmpty) {
-      throw const DiagnosticLinkException(
-        kind: DiagnosticFailureKind.unsupportedTarget,
-        message: 'Empty PDU rejected.',
-      );
+    // 3. Exact 3-shape Request Grammar Admission (R56-1 / F1):
+    // Read DID: [0x22, hi, lo] (strictly 3 bytes)
+    // DTC by status mask: [0x19, 0x02, mask] (strictly 3 bytes)
+    // Supported DTC: [0x19, 0x0A] (strictly 2 bytes)
+    final bytes = pdu.bytes;
+    final bool isAdmittedGrammar;
+    if (bytes.length == 3 && bytes[0] == 0x22) {
+      isAdmittedGrammar = true;
+    } else if (bytes.length == 3 && bytes[0] == 0x19 && bytes[1] == 0x02) {
+      isAdmittedGrammar = true;
+    } else if (bytes.length == 2 && bytes[0] == 0x19 && bytes[1] == 0x0A) {
+      isAdmittedGrammar = true;
+    } else {
+      isAdmittedGrammar = false;
     }
 
-    final sid = pdu.bytes.first;
-    if (sid != 0x22 && sid != 0x19) {
+    if (!isAdmittedGrammar) {
+      clearContinuationQueue();
       throw DiagnosticLinkException(
         kind: DiagnosticFailureKind.unsupportedTarget,
         message:
-            'Service 0x${sid.toRadixString(16).toUpperCase()} is not admitted for read-only UDS transaction.',
+            'PDU [${bytes.map((b) => '0x${b.toRadixString(16).padLeft(2, '0').toUpperCase()}').join(', ')}] does not match approved read-only UDS grammar.',
       );
     }
 
-    if (sid == 0x22 && pdu.bytes.length < 3) {
+    // 4. Pre-send outer deadline check (R56-2)
+    if (outerDeadline != null && !DateTime.now().isBefore(outerDeadline!)) {
+      clearContinuationQueue();
       throw const DiagnosticLinkException(
-        kind: DiagnosticFailureKind.unsupportedTarget,
-        message: 'Service 0x22 requires at least 2 DID bytes.',
+        kind: DiagnosticFailureKind.deadlineExpired,
+        message: 'Outer deadline expired prior to transmission.',
       );
     }
 
-    if (sid == 0x19) {
-      if (pdu.bytes.length < 2) {
-        throw const DiagnosticLinkException(
-          kind: DiagnosticFailureKind.unsupportedTarget,
-          message: 'Service 0x19 requires at least 1 sub-function byte.',
-        );
-      }
-      final subfunc = pdu.bytes[1];
-      if (subfunc != 0x02 && subfunc != 0x0A) {
-        throw DiagnosticLinkException(
-          kind: DiagnosticFailureKind.unsupportedTarget,
-          message:
-              'Service 0x19 subfunction 0x${subfunc.toRadixString(16).toUpperCase()} is not admitted for read-only UDS transaction.',
-        );
-      }
-      if (subfunc == 0x02 && pdu.bytes.length < 3) {
-        throw const DiagnosticLinkException(
-          kind: DiagnosticFailureKind.unsupportedTarget,
-          message: 'Service 0x19 0x02 requires status mask byte.',
-        );
-      }
-    }
-
-    final deadline = DateTime.now().add(timeout);
+    final localDeadline = DateTime.now().add(timeout);
+    final effectiveDeadline = outerDeadline != null && outerDeadline!.isBefore(localDeadline)
+        ? outerDeadline!
+        : localDeadline;
     final request = DiagnosticRequest(
       id: id,
       pdu: pdu,
@@ -147,12 +153,13 @@ final class DiagnosticLinkUdsTransactionChannel implements UdsTransactionChannel
       requiredCapabilities: requiredCapabilities,
       connectionGeneration: connectionGeneration,
       responseTimeout: timeout,
-      deadline: deadline,
+      deadline: effectiveDeadline,
       cancellation: cancellation,
       ownership: DiagnosticOwnership(
         mode: DiagnosticOwnershipMode.oneShot,
         token: wireOwnerToken,
       ),
+      includePendingObservations: true,
     );
 
     final DiagnosticResponse response;
@@ -171,7 +178,7 @@ final class DiagnosticLinkUdsTransactionChannel implements UdsTransactionChannel
     }
 
     try {
-      _checkPostconditions(deadline: deadline, timeout: timeout);
+      _checkPostconditions(deadline: effectiveDeadline, timeout: timeout);
     } catch (_) {
       clearContinuationQueue();
       rethrow;
@@ -263,14 +270,6 @@ final class DiagnosticLinkUdsTransactionChannel implements UdsTransactionChannel
       );
     }
 
-    final expResponderId = target.expectedResponderIdentifier;
-    if (expResponderId == null) {
-      clearContinuationQueue();
-      throw const DiagnosticLinkException(
-        kind: DiagnosticFailureKind.unsupportedTarget,
-        message: 'Channel targeting requires physical CAN addressing target.',
-      );
-    }
     final expectedResponder = expResponderId.value.toUpperCase();
 
     if (!response.provenance.sourceAttributionAvailable) {
