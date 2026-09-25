@@ -214,5 +214,109 @@ void main() {
         UdsTransactionState.completed,
       ]);
     });
+
+    test('Boundary: expectedResponder rejects null sourceAddress as sourceMismatch',
+        () async {
+      final clock = FakeUdsClock();
+      final engine = UdsTransactionEngine(clock: clock);
+
+      final channel = CallbackUdsTransactionChannel(
+        onSend: (_, _, _) async => DiagnosticMessage(
+          pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x11]),
+          sourceAddress: null,
+        ),
+        onReceiveContinuation: (_) async =>
+            throw StateError('No continuation expected'),
+      );
+
+      final result = await engine.execute(
+        request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+        channel: channel,
+        expectedResponder: DiagnosticSourceAddress('7E8'),
+      );
+
+      expect(result, isA<UdsTransactionSourceMismatch>());
+      final mismatch = result as UdsTransactionSourceMismatch;
+      expect(mismatch.expectedSource, DiagnosticSourceAddress('7E8'));
+      expect(mismatch.actualSource, isNull);
+    });
+
+    test('Boundary: target as PhysicalCanDiagnosticTarget automatically binds expectedResponder',
+        () async {
+      final clock = FakeUdsClock();
+      final engine = UdsTransactionEngine(clock: clock);
+
+      final channel = CallbackUdsTransactionChannel(
+        onSend: (_, _, _) async => DiagnosticMessage(
+          pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x11]),
+          sourceAddress: DiagnosticSourceAddress('7E9'),
+        ),
+        onReceiveContinuation: (_) async =>
+            throw StateError('No continuation expected'),
+      );
+
+      final result = await engine.execute(
+        request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+        channel: channel,
+        target: DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        ),
+      );
+
+      expect(result, isA<UdsTransactionSourceMismatch>());
+      final mismatch = result as UdsTransactionSourceMismatch;
+      expect(mismatch.expectedSource, DiagnosticSourceAddress('7E8'));
+      expect(mismatch.actualSource, DiagnosticSourceAddress('7E9'));
+    });
+
+    test('Boundary: unhandled exception in channel.send finalizes state to completed',
+        () async {
+      final clock = FakeUdsClock();
+      final engine = UdsTransactionEngine(clock: clock);
+      final recordedStates = <UdsTransactionState>[];
+
+      final channel = CallbackUdsTransactionChannel(
+        onSend: (_, _, _) async => throw StateError('Transport send error'),
+        onReceiveContinuation: (_) async =>
+            throw StateError('No continuation expected'),
+      );
+
+      await expectLater(
+        engine.execute(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          channel: channel,
+          onStateChange: recordedStates.add,
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(recordedStates.last, UdsTransactionState.completed);
+    });
+
+    test('Boundary: unhandled exception in channel.receiveContinuation finalizes state to completed',
+        () async {
+      final clock = FakeUdsClock();
+      final engine = UdsTransactionEngine(clock: clock);
+      final recordedStates = <UdsTransactionState>[];
+
+      final channel = CallbackUdsTransactionChannel(
+        onSend: (_, _, _) async =>
+            DiagnosticMessage(pdu: ApplicationPdu([0x7F, 0x22, 0x78])),
+        onReceiveContinuation: (_) async =>
+            throw StateError('Continuation socket error'),
+      );
+
+      await expectLater(
+        engine.execute(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          channel: channel,
+          onStateChange: recordedStates.add,
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(recordedStates.last, UdsTransactionState.completed);
+    });
   });
 }

@@ -48,6 +48,10 @@ final class UdsTransactionEngine {
     String correlationId = 'uds-tx',
   }) async {
     final activeClock = clock ?? SystemUdsClock();
+    final effectiveExpectedResponder = expectedResponder ??
+        (target is PhysicalCanDiagnosticTarget
+            ? DiagnosticSourceAddress(target.expectedResponderIdentifier.value)
+            : null);
     var state = UdsTransactionState.created;
     onStateChange?.call(state);
 
@@ -244,6 +248,8 @@ final class UdsTransactionEngine {
         if (cancelErr != null) return cancelErr;
         final genErr = checkGeneration();
         if (genErr != null) return genErr;
+        state = UdsTransactionState.completed;
+        onStateChange?.call(state);
         rethrow;
       }
 
@@ -260,9 +266,8 @@ final class UdsTransactionEngine {
         if (msgGen != null) return msgGen;
 
         // Source address validation
-        if (expectedResponder != null &&
-            msg.sourceAddress != null &&
-            msg.sourceAddress != expectedResponder) {
+        if (effectiveExpectedResponder != null &&
+            msg.sourceAddress != effectiveExpectedResponder) {
           state = UdsTransactionState.completed;
           onStateChange?.call(state);
           return UdsTransactionSourceMismatch(
@@ -271,7 +276,7 @@ final class UdsTransactionEngine {
             retries: retries,
             responsePendingCount: responsePendingCount,
             elapsed: activeClock.elapsed,
-            expectedSource: expectedResponder,
+            expectedSource: effectiveExpectedResponder,
             actualSource: msg.sourceAddress,
           );
         }
@@ -409,6 +414,8 @@ final class UdsTransactionEngine {
               if (continuationCancel != null) return continuationCancel;
               final continuationGen = checkGeneration();
               if (continuationGen != null) return continuationGen;
+              state = UdsTransactionState.completed;
+              onStateChange?.call(state);
               rethrow;
             }
 

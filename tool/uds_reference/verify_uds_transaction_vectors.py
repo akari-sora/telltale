@@ -121,7 +121,7 @@ class PythonUdsTransactionModel:
             src_addr = event.get("source_address")
 
             # Check source address
-            if expected_responder is not None and src_addr is not None and src_addr != expected_responder:
+            if expected_responder is not None and src_addr != expected_responder:
                 return TransactionOutcome("source_mismatch", attempts, retries, pending_count)
 
             # Response processing loop (handles 0x78 continuations)
@@ -183,6 +183,10 @@ class PythonUdsTransactionModel:
                         elapsed_ms += cont_delay
                         if elapsed_ms >= self.policy.total_timeout_ms:
                             return TransactionOutcome("timed_out", attempts, retries, pending_count, timeout_type="total")
+
+                        cont_src_addr = cont_event.get("source_address")
+                        if expected_responder is not None and cont_src_addr != expected_responder:
+                            return TransactionOutcome("source_mismatch", attempts, retries, pending_count)
 
                         current_resp = cont_event.get("response_bytes", [])
                         continue
