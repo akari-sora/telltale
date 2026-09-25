@@ -42,6 +42,8 @@ A provenance failure in test-only artifacts fails `test-only` and `all`, but **n
   Project-owned Mode 02 freeze-frame reference server (`tool/obd_test_rig/freeze_frame_reference.py`, SHA-256 `1f8e5f7b...`) under GPL-3.0. Identity banner pinned to `Telltale Freeze-Frame Reference` to prevent confusion with third-party oracles.
 - **`telltale-mode08-replay-reference`** (Role: `test-only`, Ownership: `project-owned`, Independence: `project-owned-reference`):
   Project-owned Mode 08 replay reference server (`tool/obd_test_rig/mode08_replay_reference.py`, SHA-256 `4cdc34b4...`) and synthetic fixtures (`tool/obd_test_rig/mode08_replay_fixtures.json`, SHA-256 `e0a10d41...`) under GPL-3.0. Identity banner pinned to `Telltale Mode 08 Replay Reference`. Bound to `tool/ci/run_mode08_required.py` with `MODE08_ORACLE_REQUIRED=true`.
+- **`udsoncan-readonly-reference`** (Role: `test-only`, Ownership: `third-party`, Independence: `independent-third-party-reference`):
+  External UDS reference library (`udsoncan==1.26.1`, wheel SHA-256 `c1bd6cc5...`). Hash-pinned in `.github/requirements/udsoncan-reference.lock`. Reviewed exact licence evidence (`MIT`, SHA-256 `aae122e2...`) stored under `docs/provenance/upstream/udsoncan-1.26.1.LICENSE`. Bound to `tool/uds_reference/verify_udsoncan_vectors.py`.
 
 ## Package Isolation (S2-A8)
 

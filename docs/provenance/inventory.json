@@ -232,6 +232,49 @@
           "MODE08_ORACLE_REQUIRED=true"
         ]
       }
+    },
+    {
+      "id": "udsoncan-readonly-reference",
+      "artifact_class": "udsoncan-readonly-reference",
+      "scope": "test-only",
+      "role": "test-only",
+      "title": "python-udsoncan Independent Read-Only UDS Reference Library",
+      "ownership": "third-party",
+      "independence": "independent-third-party-reference",
+      "owning_issues": [13],
+      "distribution_channel": "external-fetch-only",
+      "distribution_decision": "not_distributed",
+      "commercial_use_decision": "allowed",
+      "commercial_use_rationale": "MIT licence permits commercial and non-commercial use. Pinned as an independent test-only reference library for validating UDS codecs in development/CI without copying, modifying, bundling, or distributing upstream code in the application package.",
+      "reviewer_status": "reviewed",
+      "package_policy": {
+        "app_package": "forbidden"
+      },
+      "remediation": {
+        "on_rights_revocation": "Replace udsoncan reference tests with project-owned reference fixtures or an alternate independent clean-room reference; application runtime and production packaging remain unaffected.",
+        "on_integrity_failure": "Refuse reference verification execution until package hash and lockfiles are reconciled with reviewed upstream release."
+      },
+      "source": {
+        "kind": "python-package",
+        "package_name": "udsoncan",
+        "version": "1.26.1",
+        "artifact_sha256": "c1bd6cc54d6c1124c0eafeff2ffaab48bfeb7d0d2576959f21840c37e96dfb9a",
+        "repository_url": "https://github.com/pylessard/python-udsoncan",
+        "lockfiles": [
+          ".github/requirements/udsoncan-reference.lock"
+        ]
+      },
+      "licence_evidence": {
+        "identifier": "MIT",
+        "local_evidence_path": "docs/provenance/upstream/udsoncan-1.26.1.LICENSE",
+        "source_sha256": "aae122e22b842c7fe113e6968ff00a52619d3a11b37f7791eebecb7fc7042103"
+      },
+      "execution_bindings": {
+        "runner_script": "tool/uds_reference/verify_udsoncan_vectors.py",
+        "test_paths": [
+          "tool/uds_reference/test_verify_udsoncan_vectors.py"
+        ]
+      }
     }
   ]
 }

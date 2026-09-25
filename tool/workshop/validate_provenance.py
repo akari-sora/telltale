@@ -46,6 +46,7 @@ ALLOWED_REVIEWER_STATUS = {"reviewed", "pending", "unreviewed"}
 ALLOWED_OWNERSHIP = {"third-party", "project-owned"}
 ALLOWED_INDEPENDENCE = {
     "independent-third-party-oracle",
+    "independent-third-party-reference",
     "project-owned-fault-injector",
     "project-owned-reference",
 }
@@ -68,6 +69,7 @@ SCOPE_ALLOWED_CLASSES = {
         "telltale-chaos-proxy-test-reference",
         "telltale-freeze-frame-reference",
         "telltale-mode08-replay-reference",
+        "udsoncan-readonly-reference",
     }),
 }
 ALL_ALLOWED_CLASSES = (
@@ -483,6 +485,112 @@ def _validate_ircama_oracle(
             errors.append(ValidationError(artifact_id, "EXECUTION_BINDING_FLAG_MISSING", "'required_flags' must include 'ELM_ORACLE_REQUIRED=true'"))
 
 
+def _validate_udsoncan_reference(
+    artifact_id: str,
+    item: dict[str, Any],
+    repo_root: Path,
+    errors: list[ValidationError],
+) -> None:
+    """Validates third-party udsoncan reference package hashes, lockfiles, and licence evidence."""
+    source = item.get("source")
+    if not isinstance(source, dict):
+        errors.append(ValidationError(artifact_id, "SOURCE_SPEC_MISSING", "'source' object is required for udsoncan"))
+        return
+
+    kind = source.get("kind")
+    if kind != "python-package":
+        errors.append(ValidationError(artifact_id, "SOURCE_KIND_INVALID", f"Source kind must be 'python-package', got '{kind}'"))
+
+    pkg_name = source.get("package_name")
+    if pkg_name != "udsoncan":
+        errors.append(ValidationError(artifact_id, "PACKAGE_NAME_MISMATCH", f"package_name must be 'udsoncan', got '{pkg_name}'"))
+
+    ver = source.get("version")
+    if not isinstance(ver, str) or not ver.strip():
+        errors.append(ValidationError(artifact_id, "VERSION_MISSING", "version is required and must be non-empty"))
+
+    sha = source.get("artifact_sha256")
+    if not isinstance(sha, str) or not SHA256_RE.match(sha):
+        errors.append(ValidationError(artifact_id, "SHA256_INVALID", f"artifact_sha256 '{sha}' must be a 64-char hex string"))
+
+    lockfiles = source.get("lockfiles")
+    if not isinstance(lockfiles, list) or not lockfiles:
+        errors.append(ValidationError(artifact_id, "LOCKFILES_SPEC_MISSING", "'lockfiles' must be a non-empty list of file paths"))
+    else:
+        for lock_rel in lockfiles:
+            if not isinstance(lock_rel, str) or not lock_rel.strip():
+                errors.append(ValidationError(artifact_id, "LOCKFILE_PATH_INVALID", f"Invalid lockfile path '{lock_rel}'"))
+                continue
+            lock_path = repo_root / lock_rel
+            if not lock_path.is_file():
+                errors.append(ValidationError(artifact_id, "LOCKFILE_MISSING", f"Lockfile '{lock_rel}' missing on disk"))
+                continue
+
+            lock_text = lock_path.read_text(encoding="utf-8", errors="replace")
+            op, lock_ver, lock_hashes = _parse_lockfile_package_entry(lock_text, pkg_name or "udsoncan")
+            if op is None:
+                errors.append(ValidationError(artifact_id, "LOCKFILE_PACKAGE_MISSING", f"Lockfile '{lock_rel}' does not contain package '{pkg_name}'"))
+            else:
+                if op != "==":
+                    errors.append(ValidationError(artifact_id, "LOCKFILE_FLOATING_SPEC", f"Lockfile '{lock_rel}' uses floating/range spec '{op}' for {pkg_name}; exact '==' pin required"))
+                if ver and lock_ver != ver:
+                    errors.append(ValidationError(artifact_id, "LOCKFILE_VERSION_DRIFT", f"Lockfile '{lock_rel}' specifies version '{lock_ver}', expected '{ver}'"))
+                if not lock_hashes:
+                    errors.append(ValidationError(artifact_id, "LOCKFILE_HASH_MISSING", f"Lockfile '{lock_rel}' missing hash for {pkg_name}"))
+                elif sha and not any(h.lower() == sha.lower() for h in lock_hashes):
+                    errors.append(ValidationError(artifact_id, "LOCKFILE_HASH_DRIFT", f"Lockfile '{lock_rel}' hash '{lock_hashes[0]}' does not match expected '{sha}'"))
+
+    # Licence evidence validation
+    lic_ev = item.get("licence_evidence")
+    if not isinstance(lic_ev, dict):
+        errors.append(ValidationError(artifact_id, "LICENCE_EVIDENCE_SPEC_MISSING", "'licence_evidence' object is required"))
+    else:
+        ident = lic_ev.get("identifier")
+        if ident != "MIT":
+            errors.append(ValidationError(artifact_id, "LICENCE_IDENTIFIER_MISMATCH", f"licence_evidence.identifier must be 'MIT', got '{ident}'"))
+
+        loc_path_str = lic_ev.get("local_evidence_path")
+        if not isinstance(loc_path_str, str) or not loc_path_str.strip():
+            errors.append(ValidationError(artifact_id, "LICENCE_EVIDENCE_PATH_MISSING", "'licence_evidence.local_evidence_path' is required"))
+        else:
+            evidence_file = repo_root / loc_path_str
+            if not evidence_file.is_file():
+                errors.append(ValidationError(artifact_id, "LICENCE_EVIDENCE_MISSING", f"Licence evidence file '{loc_path_str}' missing on disk"))
+            else:
+                ev_bytes = evidence_file.read_bytes()
+                actual_sha = hashlib.sha256(ev_bytes).hexdigest()
+                expected_sha = lic_ev.get("source_sha256")
+                if not isinstance(expected_sha, str) or not SHA256_RE.match(expected_sha):
+                    errors.append(ValidationError(artifact_id, "SHA256_INVALID", f"source_sha256 '{expected_sha}' must be a 64-char hex string"))
+                elif actual_sha.lower() != expected_sha.lower():
+                    errors.append(ValidationError(artifact_id, "LICENCE_EVIDENCE_HASH_DRIFT", f"Licence evidence file '{loc_path_str}' hash drift: got {actual_sha}, expected {expected_sha}"))
+
+                ev_text = ev_bytes.decode("utf-8", errors="replace")
+                if "Pier-Yves Lessard" not in ev_text or "MIT License" not in ev_text:
+                    errors.append(ValidationError(artifact_id, "LICENCE_EVIDENCE_CONTENT_MISMATCH", f"Licence evidence file '{loc_path_str}' does not contain expected udsoncan MIT notice"))
+
+    # Execution bindings validation
+    exec_bind = item.get("execution_bindings")
+    if not isinstance(exec_bind, dict):
+        errors.append(ValidationError(artifact_id, "EXECUTION_BINDINGS_MISSING", "'execution_bindings' object is required"))
+    else:
+        runner_script = exec_bind.get("runner_script")
+        if not isinstance(runner_script, str) or not runner_script.strip():
+            errors.append(ValidationError(artifact_id, "EXECUTION_RUNNER_MISSING", "'runner_script' is required"))
+        else:
+            runner_file = repo_root / runner_script
+            if not runner_file.is_file():
+                errors.append(ValidationError(artifact_id, "EXECUTION_RUNNER_MISSING", f"Execution runner '{runner_script}' missing on disk"))
+
+        test_paths = exec_bind.get("test_paths")
+        if not isinstance(test_paths, list) or not test_paths:
+            errors.append(ValidationError(artifact_id, "EXECUTION_TEST_PATHS_MISSING", "'test_paths' must be a non-empty list of test files"))
+        else:
+            for tp in test_paths:
+                if not isinstance(tp, str) or not (repo_root / tp).is_file():
+                    errors.append(ValidationError(artifact_id, "EXECUTION_TEST_PATH_MISSING", f"Test path '{tp}' missing on disk"))
+
+
 def _validate_project_reference(
     artifact_id: str,
     item: dict[str, Any],
@@ -838,6 +946,8 @@ def _validate_test_only_artifact(
     # 7. Class-specific source & integrity validation
     if artifact_id == "ircama-elm327-emulator-test-oracle":
         _validate_ircama_oracle(artifact_id, item, repo_root, errors)
+    elif artifact_id == "udsoncan-readonly-reference":
+        _validate_udsoncan_reference(artifact_id, item, repo_root, errors)
     elif artifact_id in (
         "telltale-chaos-proxy-test-reference",
         "telltale-freeze-frame-reference",

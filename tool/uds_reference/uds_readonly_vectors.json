@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "description": "Literal independent test vectors for ISO 14229-1 Service 0x22 ReadDataByIdentifier (WS-09, Issue #13 Slice 1).",
+  "provenance": {
+    "standard": "ISO 14229-1:2020",
+    "service_id": "0x22",
+    "positive_response_sid": "0x62",
+    "negative_response_sid": "0x7F",
+    "independent_reference": "udsoncan==1.26.1"
+  },
+  "vectors": [
+    {
+      "id": "vec-01-req-encode-canonical",
+      "description": "Canonical 0x22 request encode with DID 0x0100",
+      "category": "request_encode",
+      "did": 256,
+      "did_hex": "0100",
+      "expected_request_bytes": [34, 1, 0],
+      "expected_request_hex": "220100"
+    },
+    {
+      "id": "vec-02-req-encode-boundary-min",
+      "description": "Minimum 16-bit DID 0x0000 request encode",
+      "category": "request_encode",
+      "did": 0,
+      "did_hex": "0000",
+      "expected_request_bytes": [34, 0, 0],
+      "expected_request_hex": "220000"
+    },
+    {
+      "id": "vec-03-req-encode-boundary-max",
+      "description": "Maximum 16-bit DID 0xFFFF request encode",
+      "category": "request_encode",
+      "did": 65535,
+      "did_hex": "FFFF",
+      "expected_request_bytes": [34, 255, 255],
+      "expected_request_hex": "22FFFF"
+    },
+    {
+      "id": "vec-04-req-encode-typical-f190",
+      "description": "Standard VIN DID 0xF190 request encode",
+      "category": "request_encode",
+      "did": 61840,
+      "did_hex": "F190",
+      "expected_request_bytes": [34, 241, 144],
+      "expected_request_hex": "22F190"
+    },
+    {
+      "id": "vec-05-pos-valid-raw-echo",
+      "description": "Positive 0x62 response with exact DID echo and payload",
+      "category": "positive_response",
+      "requested_did": 256,
+      "response_bytes": [98, 1, 0, 18, 52],
+      "response_hex": "6201001234",
+      "expected_classification": "success",
+      "expected_data_record": [18, 52]
+    },
+    {
+      "id": "vec-06-malformed-wrong-pos-sid",
+      "category": "malformed_response",
+      "description": "Response with wrong positive SID (0x61 instead of 0x62)",
+      "requested_did": 256,
+      "response_bytes": [97, 1, 0, 18, 52],
+      "response_hex": "6101001234",
+      "expected_classification": "malformed",
+      "expected_malformed_reason": "wrongPositiveSid"
+    },
+    {
+      "id": "vec-07-malformed-wrong-did-echo",
+      "category": "malformed_response",
+      "description": "Positive response with wrong DID echo (requested 0x0100, echoed 0x0200)",
+      "requested_did": 256,
+      "response_bytes": [98, 2, 0, 18, 52],
+      "response_hex": "6202001234",
+      "expected_classification": "malformed",
+      "expected_malformed_reason": "wrongDidEcho"
+    },
+    {
+      "id": "vec-08-malformed-short-positive",
+      "category": "malformed_response",
+      "description": "Short positive response missing low byte of DID echo",
+      "requested_did": 256,
+      "response_bytes": [98, 1],
+      "response_hex": "6201",
+      "expected_classification": "malformed",
+      "expected_malformed_reason": "truncated"
+    },
+    {
+      "id": "vec-09-malformed-overlong-exact-length",
+      "category": "malformed_response",
+      "description": "Overlong response against an exact 2-byte length definition",
+      "requested_did": 257,
+      "definition": {
+        "did": 257,
+        "exact_byte_length": 2
+      },
+      "response_bytes": [98, 1, 1, 1, 2, 3],
+      "response_hex": "620101010203",
+      "expected_classification": "malformed",
+      "expected_malformed_reason": "unexpectedLength"
+    },
+    {
+      "id": "vec-10-malformed-short-exact-length",
+      "category": "malformed_response",
+      "description": "Short response against an exact 4-byte length definition",
+      "requested_did": 262,
+      "definition": {
+        "did": 262,
+        "exact_byte_length": 4
+      },
+      "response_bytes": [98, 1, 6, 1, 2],
+      "response_hex": "6201060102",
+      "expected_classification": "malformed",
+      "expected_malformed_reason": "unexpectedLength"
+    },
+    {
+      "id": "vec-11-neg-nrc-31-range",
+      "category": "negative_response",
+      "description": "Negative response 7F 22 31 (requestOutOfRange)",
+      "requested_did": 256,
+      "response_bytes": [127, 34, 49],
+      "response_hex": "7F2231",
+      "expected_classification": "negative",
+      "expected_original_sid": 34,
+      "expected_nrc_code": 49,
+      "expected_nrc_name": "requestOutOfRange"
+    },
+    {
+      "id": "vec-12-neg-nrc-21-busy",
+      "category": "negative_response",
+      "description": "Negative response 7F 22 21 (busyRepeatRequest)",
+      "requested_did": 256,
+      "response_bytes": [127, 34, 33],
+      "response_hex": "7F2221",
+      "expected_classification": "negative",
+      "expected_original_sid": 34,
+      "expected_nrc_code": 33,
+      "expected_nrc_name": "busyRepeatRequest"
+    },
+    {
+      "id": "vec-13-neg-nrc-78-pending",
+      "category": "negative_response",
+      "description": "Negative response 7F 22 78 (responsePending)",
+      "requested_did": 256,
+      "response_bytes": [127, 34, 120],
+      "response_hex": "7F2278",
+      "expected_classification": "negative",
+      "expected_original_sid": 34,
+      "expected_nrc_code": 120,
+      "expected_nrc_name": "responsePending"
+    },
+    {
+      "id": "vec-14-neg-nrc-unknown",
+      "category": "negative_response",
+      "description": "Negative response 7F 22 99 with unassigned/unknown NRC code",
+      "requested_did": 256,
+      "response_bytes": [127, 34, 153],
+      "response_hex": "7F2299",
+      "expected_classification": "negative",
+      "expected_original_sid": 34,
+      "expected_nrc_code": 153,
+      "expected_nrc_is_known": false
+    },
+    {
+      "id": "vec-15-malformed-wrong-neg-orig-sid",
+      "category": "malformed_response",
+      "description": "Negative response with wrong original SID (echoes 0x2F instead of 0x22)",
+      "requested_did": 256,
+      "response_bytes": [127, 47, 49],
+      "response_hex": "7F2F31",
+      "expected_classification": "malformed",
+      "expected_malformed_reason": "wrongNegativeOriginalSid"
+    },
+    {
+      "id": "vec-16-malformed-neg-missing-nrc",
+      "category": "malformed_response",
+      "description": "Negative response missing NRC byte (truncated 7F 22)",
+      "requested_did": 256,
+      "response_bytes": [127, 34],
+      "response_hex": "7F22",
+      "expected_classification": "malformed",
+      "expected_malformed_reason": "missingNrc"
+    },
+    {
+      "id": "vec-17-decode-synthetic-big-endian-scale",
+      "category": "did_decode",
+      "description": "Synthetic big-endian 16-bit decode with scaling 0.1 and offset -40.0",
+      "requested_did": 258,
+      "definition": {
+        "did": 258,
+        "name": "Synthetic_Temperature",
+        "exact_byte_length": 2,
+        "byte_order": "big",
+        "scale": 0.1,
+        "offset": -40.0,
+        "unit": "degC"
+      },
+      "response_bytes": [98, 1, 2, 2, 88],
+      "response_hex": "6201020258",
+      "expected_classification": "success",
+      "expected_raw_value": 600,
+      "expected_scaled_value": 20.0,
+      "expected_unit": "degC"
+    },
+    {
+      "id": "vec-18-decode-synthetic-little-endian",
+      "category": "did_decode",
+      "description": "Synthetic little-endian 16-bit decode: bytes 0x00 0x01 decode as 256",
+      "requested_did": 259,
+      "definition": {
+        "did": 259,
+        "name": "Synthetic_Counter",
+        "exact_byte_length": 2,
+        "byte_order": "little",
+        "scale": 1.0,
+        "offset": 0.0,
+        "unit": "counts"
+      },
+      "response_bytes": [98, 1, 3, 0, 1],
+      "response_hex": "6201030001",
+      "expected_classification": "success",
+      "expected_raw_value": 256,
+      "expected_scaled_value": 256.0,
+      "expected_unit": "counts"
+    },
+    {
+      "id": "vec-19-decode-non-finite-rejection",
+      "category": "malformed_response",
+      "description": "Non-finite decoded value (NaN/Infinity) must fail closed as malformed",
+      "requested_did": 260,
+      "definition": {
+        "did": 260,
+        "name": "Synthetic_NonFinite",
+        "exact_byte_length": 2
+      },
+      "response_bytes": [98, 1, 4, 127, 255],
+      "response_hex": "6201047FFF",
+      "expected_classification": "malformed",
+      "expected_malformed_reason": "nonFiniteDecodedValue"
+    },
+    {
+      "id": "vec-20-raw-fallback-no-definition",
+      "category": "positive_response",
+      "description": "Missing DID definition returns typed raw value with bytes preserved",
+      "requested_did": 261,
+      "response_bytes": [98, 1, 5, 222, 173, 190, 239],
+      "response_hex": "620105DEADBEEF",
+      "expected_classification": "success",
+      "expected_data_record": [222, 173, 190, 239]
+    }
+  ]
+}
