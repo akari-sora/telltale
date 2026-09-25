@@ -23,6 +23,8 @@ import 'package:torque_obd/state/pid_registry.dart';
 
 import '../../support/fake_elm327.dart';
 
+const _testWireOwner = 'test-wire-owner';
+
 List<FakeEcu> _withHandshakeEcus(List<FakeEcu>? ecus) {
   final list = ecus ??
       [
@@ -231,6 +233,7 @@ void main() {
         link: stack.link,
         target: physicalTarget,
         connectionGeneration: stack.link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
       );
       expect(chPhys.requiredCapabilities, contains(DiagnosticCapability.applicationPdu));
       expect(chPhys.requiredCapabilities, contains(DiagnosticCapability.physicalEcuAddressing));
@@ -251,6 +254,7 @@ void main() {
         link: stack.link,
         target: physicalTarget,
         connectionGeneration: stack.link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
         cancellation: cts.token,
       );
 
@@ -282,7 +286,8 @@ void main() {
       final channel = DiagnosticLinkUdsTransactionChannel(
         link: stack.link,
         target: physicalTarget,
-        connectionGeneration: stack.link.connectionGeneration + 99, // Mismatched generation
+        connectionGeneration: stack.link.connectionGeneration + 99,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -315,6 +320,7 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: stack.link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -348,6 +354,7 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
       );
 
       final first = await channel.send(
@@ -384,6 +391,7 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
       );
 
       // First send leaves 1 continuation in buffer
@@ -405,7 +413,7 @@ void main() {
       expect(channel.bufferedContinuationCount, 1);
     });
 
-    test('continuation buffer: receiveContinuation with empty buffer throws TimeoutException', () async {
+    test('continuation buffer: receiveContinuation with empty buffer throws DiagnosticLinkContinuationUnavailableException', () async {
       final stack = await _createProductionStack();
       addTearDown(() => stack.client.disconnect());
 
@@ -416,11 +424,12 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: stack.link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
         () => channel.receiveContinuation(const Duration(milliseconds: 50)),
-        throwsA(isA<TimeoutException>()),
+        throwsA(isA<DiagnosticLinkContinuationUnavailableException>()),
       );
     });
 
@@ -445,6 +454,7 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
       );
 
       await channel.send(
@@ -456,6 +466,687 @@ void main() {
 
       channel.clearContinuationQueue();
       expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('continuation buffer: receiveContinuation with cancellation throws cancelled and clears queue', () async {
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0xAA, 0xBB]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+        ],
+      );
+
+      final cts = DiagnosticCancellationTokenSource();
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        ),
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+        cancellation: cts.token,
+      );
+
+      await channel.send(
+        const DiagnosticRequestId('req-cancel-cont'),
+        ApplicationPdu([0x22, 0x01, 0x00]),
+        const Duration(milliseconds: 500),
+      );
+      expect(channel.bufferedContinuationCount, 1);
+
+      // Trigger cancellation before receiving continuation
+      cts.cancel();
+
+      expect(
+        () => channel.receiveContinuation(const Duration(milliseconds: 200)),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.cancelled,
+          ),
+        ),
+      );
+      // Queue must be cleanly wiped on cancellation
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('continuation buffer: receiveContinuation with retired generation throws retiredGeneration and clears queue', () async {
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0xAA, 0xBB]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+        ],
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        ),
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      await channel.send(
+        const DiagnosticRequestId('req-retire-cont'),
+        ApplicationPdu([0x22, 0x01, 0x00]),
+        const Duration(milliseconds: 500),
+      );
+      expect(channel.bufferedContinuationCount, 1);
+
+      // Advance link generation to simulate connection renewal/retirement
+      link.connectionGeneration++;
+
+      expect(
+        () => channel.receiveContinuation(const Duration(milliseconds: 200)),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.retiredGeneration,
+          ),
+        ),
+      );
+      // Queue must be cleanly wiped on generation retirement
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('continuation buffer: NRC 78 multi-message delivers pending then continuation, engine records responsePendingCount == 1', () async {
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x7F, 0x22, 0x78]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+        ],
+      );
+
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      const engine = UdsTransactionEngine();
+      final result = await engine.execute(
+        request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+        channel: channel,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+      );
+
+      expect(result, isA<UdsTransactionSuccess>());
+      final success = result as UdsTransactionSuccess;
+      expect(success.attempts, 1);
+      expect(success.retries, 0);
+      expect(success.responsePendingCount, 1, reason: 'Engine must record exactly 1 pending response across continuation');
+      expect(success.readResult?.dataRecord, [0x12, 0x34]);
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('continuation buffer: single message with null source is rejected and continuation queue is clear', () async {
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+            sourceAddress: null,
+          ),
+        ],
+      );
+
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-null-src'),
+          ApplicationPdu([0x22, 0x01, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('continuation buffer: multi-message batch [good, null] is rejected and continuation queue is clear', () async {
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x55, 0x66]),
+            sourceAddress: null,
+          ),
+        ],
+      );
+
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-good-null'),
+          ApplicationPdu([0x22, 0x01, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('continuation buffer: multi-message batch [null, good] is rejected and continuation queue is clear', () async {
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x55, 0x66]),
+            sourceAddress: null,
+          ),
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+        ],
+      );
+
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-null-good'),
+          ApplicationPdu([0x22, 0x01, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('continuation buffer: multi-message batch [good, wrong] is rejected and continuation queue is clear', () async {
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x55, 0x66]),
+            sourceAddress: DiagnosticSourceAddress('7E9'),
+          ),
+        ],
+      );
+
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-good-wrong'),
+          ApplicationPdu([0x22, 0x01, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('capacity limits: response with > 32 messages is rejected fail-closed and queue is clear', () async {
+      final messages = List.generate(
+        33,
+        (i) => DiagnosticMessage(
+          pdu: ApplicationPdu([0x62, 0x01, 0x00, i]),
+          sourceAddress: DiagnosticSourceAddress('7E8'),
+        ),
+      );
+      final link = _MultiFrameDiagnosticLink(messages: messages);
+
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-msg-limit'),
+          ApplicationPdu([0x22, 0x01, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('capacity limits: response with > 4096 aggregate bytes is rejected fail-closed and queue is clear', () async {
+      // 2 messages with 2049 bytes each -> 4098 bytes total (> 4096 limit)
+      final largeBytes = List<int>.filled(2049, 0xAA);
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu(largeBytes),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          DiagnosticMessage(
+            pdu: ApplicationPdu(largeBytes),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+        ],
+      );
+
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-byte-limit'),
+          ApplicationPdu([0x22, 0x01, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('admission defense: wireOwnerToken == null throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: null, // Null owner token
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-null-owner'),
+          ApplicationPdu([0x22, 0x01, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Link send must never be invoked when wireOwnerToken is null');
+    });
+
+    test('admission defense: non-read-only SID (0x2E WriteDID) throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-write-did'),
+          ApplicationPdu([0x2E, 0x01, 0x00, 0x12, 0x34]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Link send must never be invoked for non-read-only SID 0x2E');
+    });
+
+    test('admission defense: non-read-only SID (0x10 SessionControl) throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-session-ctrl'),
+          ApplicationPdu([0x10, 0x01]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Link send must never be invoked for non-read-only SID 0x10');
+    });
+
+    test('admission defense: empty PDU bytes throws ArgumentError in ApplicationPdu constructor', () {
+      expect(
+        () => ApplicationPdu(const []),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('admission defense: non-admitted 0x19 subfunction (0x01 reportNumberOfDTCByStatusMask) throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-1901'),
+          ApplicationPdu([0x19, 0x01, 0xFF]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Link send must never be invoked for non-admitted subfunction 0x01');
+    });
+
+    test('admission defense: non-admitted 0x19 subfunction (0x03) throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-1903'),
+          ApplicationPdu([0x19, 0x03]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Link send must never be invoked for non-admitted subfunction 0x03');
+    });
+
+    test('admission defense: incomplete 0x19 PDU (missing subfunction) throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-19-short'),
+          ApplicationPdu([0x19]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Link send must never be invoked for 0x19 without subfunction');
+    });
+
+    test('admission defense: incomplete 0x19 0x02 PDU (missing status mask) throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-1902-short'),
+          ApplicationPdu([0x19, 0x02]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Link send must never be invoked for 0x19 0x02 missing status mask');
+    });
+
+    test('admission defense: incomplete 0x22 PDU (missing DID bytes) throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      expect(
+        () => channel.send(
+          const DiagnosticRequestId('req-22-short'),
+          ApplicationPdu([0x22, 0x01]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Link send must never be invoked for 0x22 with fewer than 2 DID bytes');
+    });
+
+    test('admission defense: valid 0x19 0x02 and 0x19 0x0A PDUs are admitted and sent to link', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      // 0x19 0x02 with mask 0xFF
+      final res1 = await channel.send(
+        const DiagnosticRequestId('req-1902-valid'),
+        ApplicationPdu([0x19, 0x02, 0xFF]),
+        const Duration(milliseconds: 500),
+      );
+      expect(res1.pdu.bytes, [0x62, 0x01, 0x00, 0x12, 0x34]);
+      expect(link.sendCount, 1);
+
+      // 0x19 0x0A
+      final res2 = await channel.send(
+        const DiagnosticRequestId('req-190A-valid'),
+        ApplicationPdu([0x19, 0x0A]),
+        const Duration(milliseconds: 500),
+      );
+      expect(res2.pdu.bytes, [0x62, 0x01, 0x00, 0x12, 0x34]);
+      expect(link.sendCount, 2);
     });
   });
 
@@ -476,6 +1167,7 @@ void main() {
         link: unassistedLink,
         target: target,
         connectionGeneration: stack.link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -517,6 +1209,7 @@ void main() {
         link: link,
         target: target,
         connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -553,6 +1246,7 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: 1,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -589,6 +1283,7 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: 1,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -625,6 +1320,7 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: 1,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -661,6 +1357,7 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: 1,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -697,6 +1394,7 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: 1,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -732,6 +1430,7 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         ),
         connectionGeneration: 1,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -773,6 +1472,7 @@ void main() {
         link: link,
         target: target,
         connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
       );
 
       expect(
@@ -807,6 +1507,7 @@ void main() {
         link: stack.link,
         target: target,
         connectionGeneration: stack.link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
       );
 
       // Policy totalTimeout (100ms) dominates p2Timeout (50ms), wire delay is 150ms
@@ -826,6 +1527,124 @@ void main() {
         channel: channel,
         target: target,
         connectionGeneration: stack.link.connectionGeneration,
+      );
+
+      expect(result, isA<UdsTransactionTimedOut>());
+      final timedOut = result as UdsTransactionTimedOut;
+      expect(timedOut.timeoutType, UdsTimeoutType.total);
+    });
+
+    test('outerDeadline: pre-send expired outerDeadline returns UdsTransactionTimedOut with zero wire calls', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      const engine = UdsTransactionEngine();
+      final result = await engine.execute(
+        request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+        channel: channel,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        outerDeadline: DateTime.now().subtract(const Duration(milliseconds: 10)), // Pre-expired
+      );
+
+      expect(result, isA<UdsTransactionTimedOut>());
+      final timedOut = result as UdsTransactionTimedOut;
+      expect(timedOut.timeoutType, UdsTimeoutType.total);
+      expect(link.sendCount, 0, reason: 'Zero wire calls when outerDeadline is pre-expired');
+    });
+
+    test('outerDeadline: outerDeadline expires during NRC21 busy repeat delay aborts retry', () async {
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x7F, 0x22, 0x21]), // NRC 0x21 BusyRepeatRequest
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+        ],
+      );
+
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      final engine = UdsTransactionEngine(
+        policy: UdsTransactionPolicy(
+          p2Timeout: const Duration(milliseconds: 50),
+          p2StarTimeout: const Duration(milliseconds: 500),
+          totalTimeout: const Duration(seconds: 5),
+          busyRepeatDelay: const Duration(milliseconds: 200), // Long delay
+          maxBusyRepeatRetries: 3,
+          maxResponsePendingCount: 1,
+        ),
+      );
+
+      // outerDeadline is set to only 30ms from now, shorter than 200ms busyRepeatDelay
+      final result = await engine.execute(
+        request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+        channel: channel,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        outerDeadline: DateTime.now().add(const Duration(milliseconds: 30)),
+      );
+
+      expect(result, isA<UdsTransactionTimedOut>());
+      final timedOut = result as UdsTransactionTimedOut;
+      expect(timedOut.retries, 0, reason: 'Retry must be aborted when busyRepeatDelay exceeds remaining outerDeadline');
+    });
+
+    test('outerDeadline: positive response arriving after outerDeadline is rejected and returns UdsTransactionTimedOut', () async {
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+        ],
+      );
+
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      // Wrap channel to insert a small delay so outerDeadline expires before engine processes response
+      final delayedChannel = _DelayChannelWrapper(
+        channel,
+        delay: const Duration(milliseconds: 50),
+      );
+
+      const engine = UdsTransactionEngine();
+      final result = await engine.execute(
+        request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+        channel: delayedChannel,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        outerDeadline: DateTime.now().add(const Duration(milliseconds: 20)), // Expires during send
       );
 
       expect(result, isA<UdsTransactionTimedOut>());
@@ -958,6 +1777,12 @@ void main() {
           wireOwnerToken: 'w03-token',
         );
 
+        final seenRequestIds = <DiagnosticRequestId>[];
+        final trackingChannel = _TrackingChannelWrapper(
+          channel,
+          onSend: (id) => seenRequestIds.add(id),
+        );
+
         final engine = UdsTransactionEngine(
           policy: UdsTransactionPolicy(
             p2Timeout: const Duration(milliseconds: 500),
@@ -973,7 +1798,7 @@ void main() {
 
         final result = await engine.execute(
           request: request,
-          channel: channel,
+          channel: trackingChannel,
           target: target,
           connectionGeneration: stack.link.connectionGeneration,
           correlationId: 'w03-run',
@@ -985,6 +1810,10 @@ void main() {
         expect(success.retries, 2);
         expect(success.readResult?.did, const UdsDid(0x0100));
         expect(success.readResult?.dataRecord, [0x12, 0x34]);
+
+        // Assert distinct request IDs across retries (B6)
+        expect(seenRequestIds.length, 3);
+        expect(seenRequestIds.toSet().length, 3, reason: 'Each retry attempt must have a distinct request ID');
 
         final sentCommands = stack.transport.commandLog.where((c) => c == '220100').length;
         expect(sentCommands, 3, reason: 'Must send 3 wire requests due to 2 retries');
@@ -1028,7 +1857,9 @@ void main() {
         final success = result as UdsTransactionSuccess;
         expect(success.attempts, 1, reason: 'Zero wire retry on NRC 78');
         expect(success.retries, 0);
-        expect(success.responsePendingCount, anyOf(0, 1));
+        // Note (A10): Elm327Client absorbs superseded pending single frames at transport layer,
+        // so engine receives clean terminal message directly without seeing pending count increment.
+        expect(success.responsePendingCount, 0);
         expect(success.readResult?.dataRecord, [0x99, 0x88]);
         expect(success.sourceAddress, DiagnosticSourceAddress('7E8'));
 
@@ -1244,6 +2075,66 @@ void main() {
         await session.disconnect();
       },
     );
+
+    test(
+      'Reconnection decoupling: session reconnects with fresh link generation 1 and executes UDS transaction successfully',
+      () async {
+        final container = await _createContainer({});
+        addTearDown(container.dispose);
+
+        FakeElm327 createAdapter() => FakeElm327(
+              protocol: BusProtocol.can11,
+              ecus: [
+                FakeEcu(
+                  name: 'ECM',
+                  requestId: '7E0',
+                  responseId: '7E8',
+                  responses: const {
+                    '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x10],
+                    '220100': [0x62, 0x01, 0x00, 0x12, 0x34],
+                  },
+                ),
+              ],
+            );
+
+        final session = container.read(obdSessionProvider.notifier);
+        final firstAdapter = createAdapter();
+        expect(await session.connectForTest(firstAdapter, TransportKind.demo), isTrue);
+        await _waitForInitialCensus(session);
+
+        final target = DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        );
+
+        // First transaction on first connection
+        final firstResult = await session.runReadOnlyUdsTransaction(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          target: target,
+        );
+        expect(firstResult, isA<UdsTransactionSuccess>());
+
+        // Disconnect session
+        await session.disconnect();
+
+        // Reconnect with a second fresh adapter/client (new link generation resets to 1, while session gen increments)
+        final secondAdapter = createAdapter();
+        expect(await session.connectForTest(secondAdapter, TransportKind.demo), isTrue);
+        await _waitForInitialCensus(session);
+
+        // Second transaction on reconnected session must succeed without retired generation failure
+        final secondResult = await session.runReadOnlyUdsTransaction(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          target: target,
+        );
+        expect(secondResult, isA<UdsTransactionSuccess>());
+        final success = secondResult as UdsTransactionSuccess;
+        expect(success.readResult?.did, const UdsDid(0x0100));
+        expect(success.readResult?.dataRecord, [0x12, 0x34]);
+
+        await session.disconnect();
+      },
+    );
   });
 }
 
@@ -1282,7 +2173,7 @@ class _MultiFrameDiagnosticLink implements DiagnosticLink {
   });
 
   @override
-  final int connectionGeneration = 1;
+  int connectionGeneration = 1;
   final List<DiagnosticMessage> messages;
   final bool sourceAttributionAvailable = true;
 
@@ -1352,3 +2243,90 @@ class _EnvelopeConfigurableLink implements DiagnosticLink {
     );
   }
 }
+
+class _TrackingChannelWrapper implements UdsTransactionChannel {
+  _TrackingChannelWrapper(this._inner, {this.onSend});
+
+  final UdsTransactionChannel _inner;
+  final void Function(DiagnosticRequestId id)? onSend;
+
+  @override
+  Future<DiagnosticMessage> send(
+    DiagnosticRequestId id,
+    ApplicationPdu pdu,
+    Duration timeout,
+  ) {
+    onSend?.call(id);
+    return _inner.send(id, pdu, timeout);
+  }
+
+  @override
+  Future<DiagnosticMessage> receiveContinuation(Duration timeout) {
+    return _inner.receiveContinuation(timeout);
+  }
+}
+
+class _CountingDiagnosticLink implements DiagnosticLink {
+  int sendCount = 0;
+  DiagnosticRequest? lastRequest;
+
+  @override
+  int get connectionGeneration => 1;
+
+  @override
+  Set<DiagnosticCapability> get capabilities => const {
+        DiagnosticCapability.physicalEcuAddressing,
+        DiagnosticCapability.applicationPdu,
+      };
+
+  @override
+  Future<DiagnosticResponse> send(DiagnosticRequest request) async {
+    sendCount++;
+    lastRequest = request;
+    return DiagnosticResponse(
+      requestId: request.id,
+      acceptedGeneration: connectionGeneration,
+      status: DiagnosticResponseStatus.success,
+      provenance: DiagnosticResponseProvenance(
+        backendId: 'counting-link',
+        connectionGeneration: connectionGeneration,
+        target: request.target,
+        sourceAttributionAvailable: true,
+      ),
+      messages: [
+        DiagnosticMessage(
+          pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+          sourceAddress: DiagnosticSourceAddress('7E8'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DelayChannelWrapper implements UdsTransactionChannel {
+  _DelayChannelWrapper(this._inner, {required this.delay});
+
+  final UdsTransactionChannel _inner;
+  final Duration delay;
+
+  @override
+  Future<DiagnosticMessage> send(
+    DiagnosticRequestId id,
+    ApplicationPdu pdu,
+    Duration timeout,
+  ) async {
+    final msg = await _inner.send(id, pdu, timeout);
+    await Future<void>.delayed(delay);
+    return msg;
+  }
+
+  @override
+  Future<DiagnosticMessage> receiveContinuation(Duration timeout) async {
+    final msg = await _inner.receiveContinuation(timeout);
+    await Future<void>.delayed(delay);
+    return msg;
+  }
+}
+
+
+
