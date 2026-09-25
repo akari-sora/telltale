@@ -282,6 +282,10 @@ class ObdResponse {
   /// that turns headers on.
   final bool headersEnabled;
 
+  /// Intermediate pending frames (NRC 0x78) observed and superseded by subsequent
+  /// terminal messages within the same exchange.
+  final List<ObdFrame> pendingFrames;
+
   const ObdResponse({
     this.rawLines = const [],
     this.hexPayload = '',
@@ -292,6 +296,7 @@ class ObdResponse {
     this.observedFrames = const [],
     this.batteryVoltage,
     this.headersEnabled = false,
+    this.pendingFrames = const [],
   });
 
   ObdResponse withHeadersEnabled(bool value) => ObdResponse(
@@ -304,6 +309,7 @@ class ObdResponse {
     headersEnabled: value,
     attributedSources: attributedSources,
     observedFrames: observedFrames,
+    pendingFrames: pendingFrames,
   );
 
   bool get isSuccess => errorCode == Elm327ErrorCode.none;
@@ -685,11 +691,7 @@ class Elm327Client {
     // and resume with 70 ms of a scan's budget left and the command got five
     // seconds back. The suspension does not extend what the caller asked for.
     if (_pending != null) {
-      _pendingTimeout?.cancel();
-      _pendingTimeout = Timer(
-        _withinDeadline(commandTimeout),
-        _onCommandTimeout,
-      );
+      _armPendingTimer(_withinDeadline(commandTimeout), _onCommandTimeout);
     }
   }
 
@@ -1120,8 +1122,7 @@ class Elm327Client {
     final seen = RegExp(r'7F[0-9A-F]{2}78').allMatches(text).length;
     if (seen <= _pendingSeen) return;
     _pendingSeen = seen;
-    _pendingTimeout?.cancel();
-    _pendingTimeout = Timer(
+    _armPendingTimer(
       _withinDeadline(responsePendingTimeout),
       _onCommandTimeout,
     );
@@ -1214,8 +1215,7 @@ class Elm327Client {
     if (!text.contains('SEARCHING')) return;
 
     _searchExtended = true;
-    _pendingTimeout?.cancel();
-    _pendingTimeout = Timer(_withinDeadline(protocolSearchTimeout), () {
+    _armPendingTimer(_withinDeadline(protocolSearchTimeout), () {
       _outOfSync = true;
       _failPending(
         TimeoutException(
@@ -1464,7 +1464,7 @@ class Elm327Client {
     final normalised = command.trim().toUpperCase().replaceAll(' ', '');
     // Kept for the watchdog, which must not give up before the command does.
     _pendingDeadline = timeout;
-    _pendingTimeout = Timer(timeout, _onCommandTimeout);
+    _armPendingTimer(timeout, _onCommandTimeout);
     final previouslyWritten =
         writeAudit?._commands.contains(normalised) ?? false;
     final previousRequested = requestedProtocol;
@@ -1758,6 +1758,20 @@ class Elm327Client {
         issue: TransportIssue.headerRestoreFailed,
       );
     }
+  }
+
+  /// Arms [_pendingTimeout] for the connection generation that is current now.
+  ///
+  /// Disconnect and reconnect both advance [_connectionGeneration]. A timer
+  /// that then fires must not mark the new link out of sync or fail the new
+  /// generation's pending command.
+  void _armPendingTimer(Duration timeout, void Function() onFire) {
+    final generation = _connectionGeneration;
+    _pendingTimeout?.cancel();
+    _pendingTimeout = Timer(timeout, () {
+      if (_connectionGeneration != generation) return;
+      onFire();
+    });
   }
 
   /// A timed-out command leaves the adapter still owing us a reply.
@@ -2940,6 +2954,40 @@ class Elm327Client {
     Object? txSenderError;
     StackTrace? txSenderStackTrace;
 
+    bool generationMoved() =>
+        _connectionSession != txSession ||
+        _connectionGeneration != txGeneration;
+
+    /// The in-flight reply belongs to this transaction's generation. Once that
+    /// generation is gone, waiting out [drainBudget] must not be reported as a
+    /// quarantine of the connection that replaced it.
+    Future<void> awaitInFlightDrain() async {
+      final watch = Stopwatch()..start();
+      while (true) {
+        if (generationMoved()) {
+          throw const TransportException(
+            'Connection generation changed during transaction.',
+            issue: TransportIssue.linkDroppedMidSession,
+          );
+        }
+        final left = drainBudget - watch.elapsed;
+        if (left <= Duration.zero) {
+          throw TimeoutException(
+            'In-flight transaction command failed to drain within ${drainBudget.inMilliseconds}ms; connection quarantined.',
+          );
+        }
+        final slice = left < const Duration(milliseconds: 15)
+            ? left
+            : const Duration(milliseconds: 15);
+        try {
+          await inFlight.timeout(slice);
+          return;
+        } on TimeoutException {
+          // The slice elapsed. Recheck the generation before quarantining.
+        }
+      }
+    }
+
     try {
       // 1. Apply Extended Addressing (ATCEA)
       if (extendedAddressByte != null) {
@@ -3363,20 +3411,26 @@ class Elm327Client {
       // Close acceptance of NEW commands immediately when action returns!
       isAcceptingNewCommands = false;
 
-      // Drain already accepted in-flight command with bounded drain budget
+      // Drain already accepted in-flight command with bounded drain budget.
+      // A reconnect during the wait fails this transaction; it must not
+      // quarantine the new generation.
       try {
-        await inFlight.timeout(drainBudget);
+        await awaitInFlightDrain();
       } on TimeoutException catch (e, st) {
-        if (_connectionSession == txSession) {
+        if (!generationMoved()) {
           _quarantineConnection(
             expectedSession: txSession,
             expectedGeneration: txGeneration,
           );
+          actionError ??= e;
+          actionStackTrace ??= st;
+        } else {
+          actionError ??= const TransportException(
+            'Connection generation changed during transaction.',
+            issue: TransportIssue.linkDroppedMidSession,
+          );
+          actionStackTrace ??= st;
         }
-        actionError ??= TimeoutException(
-          'In-flight transaction command failed to drain within ${drainBudget.inMilliseconds}ms; connection quarantined.',
-        );
-        actionStackTrace ??= st;
       } catch (e, st) {
         actionError ??= e;
         actionStackTrace ??= st;
@@ -3391,11 +3445,11 @@ class Elm327Client {
     } finally {
       isAcceptingNewCommands = false;
       isTxActive = false; // Revoke sender immediately!
-      if (!_transactionQuarantined && _connectionSession == txSession) {
+      if (!_transactionQuarantined && !generationMoved()) {
         try {
-          await inFlight.timeout(drainBudget);
+          await awaitInFlightDrain();
         } on TimeoutException {
-          if (_connectionSession == txSession) {
+          if (!generationMoved()) {
             _quarantineConnection(
               expectedSession: txSession,
               expectedGeneration: txGeneration,
@@ -3422,6 +3476,14 @@ class Elm327Client {
     }
 
     if (actionError != null) {
+      // A drain timeout recorded before the reconnect became visible is the
+      // old generation's failure, not a quarantine of the new one.
+      if (generationMoved() && actionError is TimeoutException) {
+        throw const TransportException(
+          'Connection generation changed during transaction.',
+          issue: TransportIssue.linkDroppedMidSession,
+        );
+      }
       Error.throwWithStackTrace(actionError, actionStackTrace!);
     }
     _throwIfStickyRestoreFailed();
@@ -6855,6 +6917,7 @@ class Elm327Client {
     // Only frames that are *superseded* are dropped: a pending reply with
     // nothing after it is still the whole answer, and reporting it as such is
     // what tells the user to rescan rather than that the car is fine.
+    final pendingFrames = <ObdFrame>[];
     for (final id in order) {
       final bodies = groups[id]!;
       if (bodies.length < 2) continue;
@@ -6909,7 +6972,19 @@ class Elm327Client {
               (later) =>
                   _isPendingSingleFrame(later) && _serviceOf(later) == service,
             );
-        if (!answered && !restated) kept.add(body);
+        if (!answered && !restated) {
+          kept.add(body);
+        } else {
+          final pendingPayload = _reassembleIsoTp([body]) ??
+              (body.length >= 4 ? body.sublist(1, 4) : body);
+          pendingFrames.add(
+            ObdFrame(
+              pendingPayload,
+              sourceId: id,
+              service: service,
+            ),
+          );
+        }
       }
       if (kept.isNotEmpty && kept.length != bodies.length) groups[id] = kept;
     }
@@ -6940,6 +7015,7 @@ class Elm327Client {
       frames: frames,
       attributedSources: canSources,
       batteryVoltage: volts,
+      pendingFrames: pendingFrames,
     );
   }
 

@@ -500,6 +500,7 @@ class DiagnosticRequest {
   final Duration? responseTimeout;
   final DiagnosticCancellation cancellation;
   final DiagnosticOwnership ownership;
+  final bool includePendingObservations;
 
   const DiagnosticRequest({
     required this.id,
@@ -511,6 +512,7 @@ class DiagnosticRequest {
     this.responseTimeout,
     this.cancellation = DiagnosticCancellation.none,
     required this.ownership,
+    this.includePendingObservations = false,
   });
 
   @override

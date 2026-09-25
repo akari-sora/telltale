@@ -324,7 +324,8 @@ final class UdsTransactionEngine {
 
         state = UdsTransactionState.completed;
         onStateChange?.call(state);
-        final isTotal = activeClock.elapsed >= policy.totalTimeout;
+        final isTotal = activeClock.elapsed >= policy.totalTimeout ||
+            (outerDeadline != null && !DateTime.now().isBefore(outerDeadline));
         return UdsTransactionTimedOut(
           request: request,
           attempts: attempts,
@@ -510,6 +511,15 @@ final class UdsTransactionEngine {
             try {
               msg = await channel.receiveContinuation(p2StarTimeout);
             } on DiagnosticLinkContinuationUnavailableException catch (e) {
+              final cancelErr = checkCancellation();
+              if (cancelErr != null) return cancelErr;
+              final genErr = checkGeneration();
+              if (genErr != null) return genErr;
+              final outerErr = checkOuterDeadline();
+              if (outerErr != null) return outerErr;
+              final totalErr = checkTotalDeadline();
+              if (totalErr != null) return totalErr;
+
               state = UdsTransactionState.completed;
               onStateChange?.call(state);
               return UdsTransactionTransportFailure(
@@ -528,7 +538,8 @@ final class UdsTransactionEngine {
 
               state = UdsTransactionState.completed;
               onStateChange?.call(state);
-              final isTotal = activeClock.elapsed >= policy.totalTimeout;
+              final isTotal = activeClock.elapsed >= policy.totalTimeout ||
+                  (outerDeadline != null && !DateTime.now().isBefore(outerDeadline));
               return UdsTransactionTimedOut(
                 request: request,
                 attempts: attempts,

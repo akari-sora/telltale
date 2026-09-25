@@ -961,6 +961,65 @@ void main() {
       );
     });
 
+    test('admission defense: wholeVehicleObd target throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: DiagnosticTarget.wholeVehicleObd,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      await expectLater(
+        channel.send(
+          const DiagnosticRequestId('req-whole-veh'),
+          ApplicationPdu([0x22, 0x01, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Link send must never be invoked for wholeVehicleObd');
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('admission defense: multi-DID 0x22 PDU (22 01 00 02 00) throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      await expectLater(
+        channel.send(
+          const DiagnosticRequestId('req-multi-did'),
+          ApplicationPdu([0x22, 0x01, 0x00, 0x02, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Link send must never be invoked for multi-DID PDU');
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
     test('admission defense: non-admitted 0x19 subfunction (0x01 reportNumberOfDTCByStatusMask) throws DiagnosticLinkException and link.send is never called', () async {
       final link = _CountingDiagnosticLink();
       final target = DiagnosticTarget.physicalCan(
@@ -975,8 +1034,8 @@ void main() {
         wireOwnerToken: _testWireOwner,
       );
 
-      expect(
-        () => channel.send(
+      await expectLater(
+        channel.send(
           const DiagnosticRequestId('req-1901'),
           ApplicationPdu([0x19, 0x01, 0xFF]),
           const Duration(milliseconds: 500),
@@ -990,6 +1049,7 @@ void main() {
         ),
       );
       expect(link.sendCount, 0, reason: 'Link send must never be invoked for non-admitted subfunction 0x01');
+      expect(channel.bufferedContinuationCount, 0);
     });
 
     test('admission defense: non-admitted 0x19 subfunction (0x03) throws DiagnosticLinkException and link.send is never called', () async {
@@ -1006,8 +1066,8 @@ void main() {
         wireOwnerToken: _testWireOwner,
       );
 
-      expect(
-        () => channel.send(
+      await expectLater(
+        channel.send(
           const DiagnosticRequestId('req-1903'),
           ApplicationPdu([0x19, 0x03]),
           const Duration(milliseconds: 500),
@@ -1021,6 +1081,71 @@ void main() {
         ),
       );
       expect(link.sendCount, 0, reason: 'Link send must never be invoked for non-admitted subfunction 0x03');
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('admission defense: 0x19 0x02 with trailing byte (19 02 FF 00) throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      await expectLater(
+        channel.send(
+          const DiagnosticRequestId('req-1902-extra'),
+          ApplicationPdu([0x19, 0x02, 0xFF, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0);
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('admission defense: 0x19 0x0A with trailing byte (19 0A 00) throws DiagnosticLinkException and link.send is never called', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      await expectLater(
+        channel.send(
+          const DiagnosticRequestId('req-190A-extra'),
+          ApplicationPdu([0x19, 0x0A, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.unsupportedTarget,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0);
+      expect(channel.bufferedContinuationCount, 0);
     });
 
     test('admission defense: incomplete 0x19 PDU (missing subfunction) throws DiagnosticLinkException and link.send is never called', () async {
@@ -1037,8 +1162,8 @@ void main() {
         wireOwnerToken: _testWireOwner,
       );
 
-      expect(
-        () => channel.send(
+      await expectLater(
+        channel.send(
           const DiagnosticRequestId('req-19-short'),
           ApplicationPdu([0x19]),
           const Duration(milliseconds: 500),
@@ -1052,6 +1177,7 @@ void main() {
         ),
       );
       expect(link.sendCount, 0, reason: 'Link send must never be invoked for 0x19 without subfunction');
+      expect(channel.bufferedContinuationCount, 0);
     });
 
     test('admission defense: incomplete 0x19 0x02 PDU (missing status mask) throws DiagnosticLinkException and link.send is never called', () async {
@@ -1068,8 +1194,8 @@ void main() {
         wireOwnerToken: _testWireOwner,
       );
 
-      expect(
-        () => channel.send(
+      await expectLater(
+        channel.send(
           const DiagnosticRequestId('req-1902-short'),
           ApplicationPdu([0x19, 0x02]),
           const Duration(milliseconds: 500),
@@ -1083,6 +1209,7 @@ void main() {
         ),
       );
       expect(link.sendCount, 0, reason: 'Link send must never be invoked for 0x19 0x02 missing status mask');
+      expect(channel.bufferedContinuationCount, 0);
     });
 
     test('admission defense: incomplete 0x22 PDU (missing DID bytes) throws DiagnosticLinkException and link.send is never called', () async {
@@ -1099,8 +1226,8 @@ void main() {
         wireOwnerToken: _testWireOwner,
       );
 
-      expect(
-        () => channel.send(
+      await expectLater(
+        channel.send(
           const DiagnosticRequestId('req-22-short'),
           ApplicationPdu([0x22, 0x01]),
           const Duration(milliseconds: 500),
@@ -1114,6 +1241,7 @@ void main() {
         ),
       );
       expect(link.sendCount, 0, reason: 'Link send must never be invoked for 0x22 with fewer than 2 DID bytes');
+      expect(channel.bufferedContinuationCount, 0);
     });
 
     test('admission defense: valid 0x19 0x02 and 0x19 0x0A PDUs are admitted and sent to link', () async {
@@ -1147,6 +1275,85 @@ void main() {
       );
       expect(res2.pdu.bytes, [0x62, 0x01, 0x00, 0x12, 0x34]);
       expect(link.sendCount, 2);
+    });
+
+    test('admission defense: pre-existing continuation messages in queue are cleaned on admission rejection', () async {
+      final link = _MultiFrameDiagnosticLink(
+        messages: [
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x12, 0x34]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+          DiagnosticMessage(
+            pdu: ApplicationPdu([0x62, 0x01, 0x00, 0x56, 0x78]),
+            sourceAddress: DiagnosticSourceAddress('7E8'),
+          ),
+        ],
+      );
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+      );
+
+      // First successful send populates continuation queue with 1 message
+      await channel.send(
+        const DiagnosticRequestId('req-valid'),
+        ApplicationPdu([0x22, 0x01, 0x00]),
+        const Duration(milliseconds: 500),
+      );
+      expect(channel.bufferedContinuationCount, 1);
+
+      // Next send has admission rejection (invalid grammar)
+      await expectLater(
+        channel.send(
+          const DiagnosticRequestId('req-invalid'),
+          ApplicationPdu([0x2E, 0x01, 0x00, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(isA<DiagnosticLinkException>()),
+      );
+      // Queue must be wiped clean upon rejection
+      expect(channel.bufferedContinuationCount, 0);
+    });
+
+    test('deadline defense: pre-send outerDeadline expired throws DiagnosticLinkException without wire transmission', () async {
+      final link = _CountingDiagnosticLink();
+      final target = DiagnosticTarget.physicalCan(
+        requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+        expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+      );
+
+      final channel = DiagnosticLinkUdsTransactionChannel(
+        link: link,
+        target: target,
+        connectionGeneration: link.connectionGeneration,
+        wireOwnerToken: _testWireOwner,
+        outerDeadline: DateTime.now().subtract(const Duration(milliseconds: 50)),
+      );
+
+      await expectLater(
+        channel.send(
+          const DiagnosticRequestId('req-expired-outer'),
+          ApplicationPdu([0x22, 0x01, 0x00]),
+          const Duration(milliseconds: 500),
+        ),
+        throwsA(
+          isA<DiagnosticLinkException>().having(
+            (e) => e.kind,
+            'kind',
+            DiagnosticFailureKind.deadlineExpired,
+          ),
+        ),
+      );
+      expect(link.sendCount, 0, reason: 'Must not send when outer deadline is expired');
+      expect(channel.bufferedContinuationCount, 0);
     });
   });
 
@@ -1770,17 +1977,12 @@ void main() {
           expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
         );
 
+        final spyLink = _SpyDiagnosticLink(stack.link);
         final channel = DiagnosticLinkUdsTransactionChannel(
-          link: stack.link,
+          link: spyLink,
           target: target,
           connectionGeneration: stack.link.connectionGeneration,
           wireOwnerToken: 'w03-token',
-        );
-
-        final seenRequestIds = <DiagnosticRequestId>[];
-        final trackingChannel = _TrackingChannelWrapper(
-          channel,
-          onSend: (id) => seenRequestIds.add(id),
         );
 
         final engine = UdsTransactionEngine(
@@ -1798,7 +2000,7 @@ void main() {
 
         final result = await engine.execute(
           request: request,
-          channel: trackingChannel,
+          channel: channel,
           target: target,
           connectionGeneration: stack.link.connectionGeneration,
           correlationId: 'w03-run',
@@ -1811,9 +2013,18 @@ void main() {
         expect(success.readResult?.did, const UdsDid(0x0100));
         expect(success.readResult?.dataRecord, [0x12, 0x34]);
 
-        // Assert distinct request IDs across retries (B6)
-        expect(seenRequestIds.length, 3);
+        // Assert distinct request IDs across retries at DiagnosticLink boundary (F5)
+        expect(spyLink.sentRequests.length, 3);
+        final seenRequestIds = spyLink.sentRequests.map((r) => r.id).toList();
         expect(seenRequestIds.toSet().length, 3, reason: 'Each retry attempt must have a distinct request ID');
+        for (final req in spyLink.sentRequests) {
+          expect(req.pdu.bytes, [0x22, 0x01, 0x00]);
+          expect(req.target, target);
+          expect(req.connectionGeneration, stack.link.connectionGeneration);
+          expect(req.ownership.mode, DiagnosticOwnershipMode.oneShot);
+          expect(req.ownership.token, 'w03-token');
+          expect(req.deadline, isNotNull);
+        }
 
         final sentCommands = stack.transport.commandLog.where((c) => c == '220100').length;
         expect(sentCommands, 3, reason: 'Must send 3 wire requests due to 2 retries');
@@ -1857,14 +2068,102 @@ void main() {
         final success = result as UdsTransactionSuccess;
         expect(success.attempts, 1, reason: 'Zero wire retry on NRC 78');
         expect(success.retries, 0);
-        // Note (A10): Elm327Client absorbs superseded pending single frames at transport layer,
-        // so engine receives clean terminal message directly without seeing pending count increment.
-        expect(success.responsePendingCount, 0);
+        expect(success.responsePendingCount, 1, reason: 'Engine observes real wire NRC 78 intermediate pending frame');
         expect(success.readResult?.dataRecord, [0x99, 0x88]);
         expect(success.sourceAddress, DiagnosticSourceAddress('7E8'));
 
         final sentCommands = stack.transport.commandLog.where((c) => c == '220100').length;
         expect(sentCommands, 1, reason: 'Zero wire retry on NRC 78');
+      },
+    );
+
+    test(
+      'W04b (F4): NRC78 pending on real TCP fails when maxResponsePendingCount is 0',
+      () async {
+        final stack = await _createProductionTcpStack();
+        addTearDown(() => _teardownTcpStack(stack));
+
+        stack.transport.forceReplySequence('220100', [
+          '7E8 03 7F 22 78\r7E8 05 62 01 00 99 88',
+        ]);
+
+        final target = DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        );
+
+        final channel = DiagnosticLinkUdsTransactionChannel(
+          link: stack.link,
+          target: target,
+          connectionGeneration: stack.link.connectionGeneration,
+          wireOwnerToken: 'w04b-token',
+        );
+
+        final engine = UdsTransactionEngine(
+          policy: UdsTransactionPolicy(maxResponsePendingCount: 0),
+        );
+        final request = UdsTransactionRequest.readDid(const UdsDid(0x0100));
+
+        final result = await engine.execute(
+          request: request,
+          channel: channel,
+          target: target,
+          connectionGeneration: stack.link.connectionGeneration,
+          correlationId: 'w04b-pending-exhausted',
+        );
+
+        expect(result, isA<UdsTransactionResponsePendingExhausted>());
+        final exhausted = result as UdsTransactionResponsePendingExhausted;
+        expect(exhausted.responsePendingCount, 1);
+        expect(exhausted.maxPending, 0);
+
+        final sentCommands = stack.transport.commandLog.where((c) => c == '220100').length;
+        expect(sentCommands, 1, reason: 'Zero wire retry on NRC 78');
+      },
+    );
+
+    test(
+      'W04c (F4): NRC78 wrong-source pending on real TCP rejected fail-closed',
+      () async {
+        final stack = await _createProductionTcpStack();
+        addTearDown(() => _teardownTcpStack(stack));
+
+        // Wrong-source pending from 7E9 before terminal 7E8
+        stack.transport.forceReplySequence('220100', [
+          '7E9 03 7F 22 78\r7E8 05 62 01 00 99 88',
+        ]);
+
+        final target = DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        );
+
+        final channel = DiagnosticLinkUdsTransactionChannel(
+          link: stack.link,
+          target: target,
+          connectionGeneration: stack.link.connectionGeneration,
+          wireOwnerToken: 'w04c-token',
+        );
+
+        const engine = UdsTransactionEngine();
+        final request = UdsTransactionRequest.readDid(const UdsDid(0x0100));
+
+        expect(
+          () => engine.execute(
+            request: request,
+            channel: channel,
+            target: target,
+            connectionGeneration: stack.link.connectionGeneration,
+            correlationId: 'w04c-wrong-source-pending',
+          ),
+          throwsA(
+            isA<DiagnosticLinkException>().having(
+              (e) => e.kind,
+              'kind',
+              DiagnosticFailureKind.unsupportedTarget,
+            ),
+          ),
+        );
       },
     );
 
@@ -2067,12 +2366,72 @@ void main() {
         final udsCommands = adapter.commandLog.where((c) => c == '220100').length;
         expect(udsCommands, 1, reason: '220100 must be sent on the wire');
 
-        // Verify normal polling resumes after exclusive action completes
+        // Verify no-interleave during exclusive UDS execution
+        final udsIndex = adapter.commandLog.indexOf('220100');
+        expect(udsIndex, greaterThan(0));
+
+        // Verify normal polling resumes after exclusive action completes with positive delta
         await _waitForWireCommand(adapter, '010D', afterCount: baseline010DCount);
+        final postUds010DCount = adapter.commandLog.where((c) => c == '010D').length;
+        expect(postUds010DCount, greaterThan(baseline010DCount), reason: 'Polling must resume with positive 010D delta');
         expect(session.engine?.isRunning, isTrue, reason: 'Polling must be restored after exclusive action completes');
         expect(session.linkOwnership?.displacedRestorationCount, greaterThanOrEqualTo(1));
 
         await session.disconnect();
+      },
+    );
+
+    test(
+      'Polling restoration defense: retired session does not restore polling',
+      () async {
+        final container = await _createContainer({});
+        addTearDown(container.dispose);
+
+        final adapter = FakeElm327(
+          protocol: BusProtocol.can11,
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: const {
+                '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x10],
+                '010D': [0x41, 0x0D, 0x3C],
+                '220100': [0x62, 0x01, 0x00, 0xAA, 0xBB],
+              },
+            ),
+          ],
+        );
+
+        final session = container.read(obdSessionProvider.notifier);
+        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+        await _waitForInitialCensus(session);
+        session.syncActivePids(const [PidLibrary.vehicleSpeed]);
+        await _waitForWireCommand(adapter, '010D');
+
+        // Disconnect session so generation retires
+        await session.disconnect();
+        expect(session.engine?.isRunning ?? false, isFalse);
+
+        // Attempting exclusive action on retired session throws DiagnosticLinkException
+        final target = DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        );
+        expect(
+          () => session.runReadOnlyUdsTransaction(
+            request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+            target: target,
+          ),
+          throwsA(
+            isA<DiagnosticLinkException>().having(
+              (e) => e.kind,
+              'kind',
+              DiagnosticFailureKind.retiredOperation,
+            ),
+          ),
+        );
+        expect(session.engine?.isRunning ?? false, isFalse, reason: 'Retired session must never restore polling');
       },
     );
 
@@ -2133,6 +2492,201 @@ void main() {
         expect(success.readResult?.dataRecord, [0x12, 0x34]);
 
         await session.disconnect();
+      },
+    );
+
+    test(
+      'Production facade outerDeadline penetration and zero transmission on ObdSession',
+      () async {
+        final container = await _createContainer({});
+        addTearDown(container.dispose);
+
+        final adapter = FakeElm327(
+          protocol: BusProtocol.can11,
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: const {
+                '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x10],
+                '220100': [0x62, 0x01, 0x00, 0xAA, 0xBB],
+              },
+            ),
+          ],
+        );
+
+        final session = container.read(obdSessionProvider.notifier);
+        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+        await _waitForInitialCensus(session);
+
+        final target = DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        );
+
+        // Case 1: Pre-send expired deadline produces immediate UdsTransactionTimedOut with zero wire transmission
+        final expiredDeadline = DateTime.now().subtract(const Duration(milliseconds: 10));
+        final expiredResult = await session.runReadOnlyUdsTransaction(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          target: target,
+          deadline: expiredDeadline,
+        );
+        expect(expiredResult, isA<UdsTransactionTimedOut>());
+        expect((expiredResult as UdsTransactionTimedOut).timeoutType, UdsTimeoutType.total);
+        expect(adapter.commandLog.where((c) => c == '220100').length, 0,
+            reason: 'Expired deadline must prevent wire transmission in production facade');
+
+        // Case 2: Valid future outerDeadline successfully penetrates and executes
+        final futureDeadline = DateTime.now().add(const Duration(seconds: 5));
+        final successResult = await session.runReadOnlyUdsTransaction(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          target: target,
+          deadline: futureDeadline,
+        );
+        expect(successResult, isA<UdsTransactionSuccess>());
+        expect(adapter.commandLog.where((c) => c == '220100').length, 1);
+
+        await session.disconnect();
+      },
+    );
+
+    test(
+      'In-flight reply barrier proves zero 010D polling transmitted during UDS execution',
+      () async {
+        final container = await _createContainer({});
+        addTearDown(container.dispose);
+
+        final adapter = FakeElm327(
+          protocol: BusProtocol.can11,
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: const {
+                '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x10],
+                '010D': [0x41, 0x0D, 0x3C],
+                '220100': [0x62, 0x01, 0x00, 0xAA, 0xBB],
+              },
+            ),
+          ],
+        );
+
+        final session = container.read(obdSessionProvider.notifier);
+        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+        await _waitForInitialCensus(session);
+
+        session.syncActivePids(const [PidLibrary.vehicleSpeed]);
+        await _waitForWireCommand(adapter, '010D');
+
+        final target = DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        );
+
+        final barrierCompleter = Completer<void>();
+        adapter.responseBarrier = (cmd) => cmd == '220100' ? barrierCompleter.future : null;
+
+        final udsFuture = session.runReadOnlyUdsTransaction(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          target: target,
+          policy: UdsTransactionPolicy(p2Timeout: const Duration(seconds: 1)),
+        );
+
+        await _waitForWireCommand(adapter, '220100');
+        expect(adapter.commandLog.contains('220100'), isTrue);
+
+        final inFlight010DCount = adapter.commandLog.where((c) => c == '010D').length;
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(
+          adapter.commandLog.where((c) => c == '010D').length,
+          inFlight010DCount,
+          reason: 'No 010D polling commands may be transmitted on wire while UDS is in flight',
+        );
+
+        barrierCompleter.complete();
+        final result = await udsFuture;
+        expect(result, isA<UdsTransactionSuccess>());
+
+        await _waitForWireCommand(adapter, '010D', afterCount: inFlight010DCount);
+        expect(adapter.commandLog.where((c) => c == '010D').length, greaterThan(inFlight010DCount));
+        expect(session.engine?.isRunning, isTrue);
+
+        await session.disconnect();
+      },
+    );
+
+    test(
+      'Disconnect during in-flight UDS transaction retires session and never restores polling',
+      () async {
+        final container = await _createContainer({});
+        addTearDown(container.dispose);
+
+        final adapter = FakeElm327(
+          protocol: BusProtocol.can11,
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: const {
+                '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x10],
+                '010D': [0x41, 0x0D, 0x3C],
+                '220100': [0x62, 0x01, 0x00, 0xAA, 0xBB],
+              },
+            ),
+          ],
+        );
+
+        final session = container.read(obdSessionProvider.notifier);
+        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+        await _waitForInitialCensus(session);
+
+        session.syncActivePids(const [PidLibrary.vehicleSpeed]);
+        await _waitForWireCommand(adapter, '010D');
+
+        final target = DiagnosticTarget.physicalCan(
+          requestIdentifier: DiagnosticCanIdentifier.standard(0x7E0),
+          expectedResponderIdentifier: DiagnosticCanIdentifier.standard(0x7E8),
+        );
+
+        final barrierCompleter = Completer<void>();
+        adapter.responseBarrier = (cmd) => cmd == '220100' ? barrierCompleter.future : null;
+
+        final udsFuture = session.runReadOnlyUdsTransaction(
+          request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
+          target: target,
+        );
+
+        await _waitForWireCommand(adapter, '220100');
+
+        await session.disconnect();
+        barrierCompleter.complete();
+
+        try {
+          final result = await udsFuture;
+          expect(result, anyOf(isA<UdsTransactionRetired>(), isA<UdsTransactionCancelled>()));
+        } on DiagnosticLinkException catch (e) {
+          expect(
+            e.kind,
+            anyOf(
+              DiagnosticFailureKind.retiredOperation,
+              DiagnosticFailureKind.retiredGeneration,
+              DiagnosticFailureKind.cancelled,
+              DiagnosticFailureKind.transportFailure,
+            ),
+          );
+        }
+
+        expect(session.engine?.isRunning ?? false, isFalse);
+        final postDisconnect010DCount = adapter.commandLog.where((c) => c == '010D').length;
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(
+          adapter.commandLog.where((c) => c == '010D').length,
+          postDisconnect010DCount,
+          reason: 'Old polling must never be restored after session was disconnected during in-flight UDS',
+        );
       },
     );
   });
@@ -2244,28 +2798,6 @@ class _EnvelopeConfigurableLink implements DiagnosticLink {
   }
 }
 
-class _TrackingChannelWrapper implements UdsTransactionChannel {
-  _TrackingChannelWrapper(this._inner, {this.onSend});
-
-  final UdsTransactionChannel _inner;
-  final void Function(DiagnosticRequestId id)? onSend;
-
-  @override
-  Future<DiagnosticMessage> send(
-    DiagnosticRequestId id,
-    ApplicationPdu pdu,
-    Duration timeout,
-  ) {
-    onSend?.call(id);
-    return _inner.send(id, pdu, timeout);
-  }
-
-  @override
-  Future<DiagnosticMessage> receiveContinuation(Duration timeout) {
-    return _inner.receiveContinuation(timeout);
-  }
-}
-
 class _CountingDiagnosticLink implements DiagnosticLink {
   int sendCount = 0;
   DiagnosticRequest? lastRequest;
@@ -2325,6 +2857,25 @@ class _DelayChannelWrapper implements UdsTransactionChannel {
     final msg = await _inner.receiveContinuation(timeout);
     await Future<void>.delayed(delay);
     return msg;
+  }
+}
+
+class _SpyDiagnosticLink implements DiagnosticLink {
+  _SpyDiagnosticLink(this.inner);
+
+  final DiagnosticLink inner;
+  final List<DiagnosticRequest> sentRequests = [];
+
+  @override
+  Set<DiagnosticCapability> get capabilities => inner.capabilities;
+
+  @override
+  int get connectionGeneration => inner.connectionGeneration;
+
+  @override
+  Future<DiagnosticResponse> send(DiagnosticRequest request) {
+    sentRequests.add(request);
+    return inner.send(request);
   }
 }
 
