@@ -1886,7 +1886,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// - Binds channel lifecycle to session connection generation and token.
   Future<UdsTransactionResult> runReadOnlyUdsTransaction({
     required UdsTransactionRequest request,
-    required PhysicalCanDiagnosticTarget target,
+    required DiagnosticTarget target,
     UdsTransactionPolicy policy = UdsTransactionPolicy.standard,
     DiagnosticCancellation cancellation = DiagnosticCancellation.none,
     DateTime? deadline,
@@ -1926,6 +1926,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
             }
             return link.connectionGeneration;
           },
+          outerDeadline: deadline,
           cancellation: cancellation,
           correlationId: 'session-uds-${DateTime.now().microsecondsSinceEpoch}',
         );

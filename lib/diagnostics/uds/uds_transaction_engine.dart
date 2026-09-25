@@ -19,6 +19,8 @@ import 'uds_dtc_types.dart';
 import 'uds_nrc.dart';
 import 'uds_read_codec.dart';
 import 'uds_read_types.dart';
+import 'uds_diagnostic_link_channel.dart'
+    show DiagnosticLinkContinuationUnavailableException;
 import 'uds_transaction_policy.dart';
 import 'uds_transaction_types.dart';
 
@@ -43,6 +45,7 @@ final class UdsTransactionEngine {
     DiagnosticSourceAddress? expectedResponder,
     int connectionGeneration = 1,
     int Function()? currentConnectionGeneration,
+    DateTime? outerDeadline,
     DiagnosticCancellation cancellation = DiagnosticCancellation.none,
     void Function(UdsTransactionState state)? onStateChange,
     String correlationId = 'uds-tx',
@@ -125,6 +128,23 @@ final class UdsTransactionEngine {
       return null;
     }
 
+    // Helper: Check outer deadline (A6 / A7)
+    UdsTransactionTimedOut? checkOuterDeadline() {
+      if (outerDeadline != null && !DateTime.now().isBefore(outerDeadline)) {
+        state = UdsTransactionState.completed;
+        onStateChange?.call(state);
+        return UdsTransactionTimedOut(
+          request: request,
+          attempts: attempts,
+          retries: retries,
+          responsePendingCount: responsePendingCount,
+          elapsed: activeClock.elapsed,
+          timeoutType: UdsTimeoutType.total,
+        );
+      }
+      return null;
+    }
+
     // Initial pre-send checks
     final initCancel = checkCancellation();
     if (initCancel != null) return initCancel;
@@ -134,6 +154,9 @@ final class UdsTransactionEngine {
 
     final initDeadline = checkTotalDeadline();
     if (initDeadline != null) return initDeadline;
+
+    final initOuter = checkOuterDeadline();
+    if (initOuter != null) return initOuter;
 
     // Main transaction exchange loop (handles retries)
     while (true) {
@@ -145,6 +168,9 @@ final class UdsTransactionEngine {
 
       final loopDeadline = checkTotalDeadline();
       if (loopDeadline != null) return loopDeadline;
+
+      final loopOuter = checkOuterDeadline();
+      if (loopOuter != null) return loopOuter;
 
       // Handle NRC 0x21 busy repeat delay if this is a retry attempt
       if (isRetry) {
@@ -175,6 +201,36 @@ final class UdsTransactionEngine {
           );
         }
 
+        // Outer deadline check before busy repeat delay (A6 / B3)
+        if (outerDeadline != null) {
+          final now = DateTime.now();
+          if (!now.isBefore(outerDeadline)) {
+            state = UdsTransactionState.completed;
+            onStateChange?.call(state);
+            return UdsTransactionTimedOut(
+              request: request,
+              attempts: attempts,
+              retries: retries,
+              responsePendingCount: responsePendingCount,
+              elapsed: activeClock.elapsed,
+              timeoutType: UdsTimeoutType.total,
+            );
+          }
+          final remainingOuter = outerDeadline.difference(now);
+          if (policy.busyRepeatDelay >= remainingOuter) {
+            state = UdsTransactionState.completed;
+            onStateChange?.call(state);
+            return UdsTransactionTimedOut(
+              request: request,
+              attempts: attempts,
+              retries: retries,
+              responsePendingCount: responsePendingCount,
+              elapsed: activeClock.elapsed,
+              timeoutType: UdsTimeoutType.total,
+            );
+          }
+        }
+
         state = UdsTransactionState.busyRepeatDelay;
         onStateChange?.call(state);
 
@@ -188,6 +244,9 @@ final class UdsTransactionEngine {
 
         final afterDelayGen = checkGeneration();
         if (afterDelayGen != null) return afterDelayGen;
+
+        final afterDelayOuter = checkOuterDeadline();
+        if (afterDelayOuter != null) return afterDelayOuter;
 
         if (activeClock.elapsed >= policy.totalTimeout) {
           state = UdsTransactionState.completed;
@@ -210,7 +269,7 @@ final class UdsTransactionEngine {
         onStateChange?.call(state);
       }
 
-      // Calculate time budget for this send
+      // Calculate time budget for this send (capped by phase, total remaining, and outer remaining)
       final remainingBeforeSend = policy.totalTimeout - activeClock.elapsed;
       if (remainingBeforeSend <= Duration.zero) {
         state = UdsTransactionState.completed;
@@ -225,9 +284,30 @@ final class UdsTransactionEngine {
         );
       }
 
-      final sendTimeout = policy.p2Timeout < remainingBeforeSend
+      var remainingEffective = remainingBeforeSend;
+      if (outerDeadline != null) {
+        final now = DateTime.now();
+        if (!now.isBefore(outerDeadline)) {
+          state = UdsTransactionState.completed;
+          onStateChange?.call(state);
+          return UdsTransactionTimedOut(
+            request: request,
+            attempts: attempts,
+            retries: retries,
+            responsePendingCount: responsePendingCount,
+            elapsed: activeClock.elapsed,
+            timeoutType: UdsTimeoutType.total,
+          );
+        }
+        final remainingOuter = outerDeadline.difference(now);
+        if (remainingOuter < remainingEffective) {
+          remainingEffective = remainingOuter;
+        }
+      }
+
+      final sendTimeout = policy.p2Timeout < remainingEffective
           ? policy.p2Timeout
-          : remainingBeforeSend;
+          : remainingEffective;
 
       attempts++;
       final reqId = DiagnosticRequestId('$correlationId-$nextRequestId');
@@ -277,6 +357,9 @@ final class UdsTransactionEngine {
 
         final msgDeadline = checkTotalDeadline();
         if (msgDeadline != null) return msgDeadline;
+
+        final msgOuter = checkOuterDeadline();
+        if (msgOuter != null) return msgOuter;
 
         // Source address validation
         if (effectiveExpectedResponder != null &&
@@ -385,7 +468,8 @@ final class UdsTransactionEngine {
             state = UdsTransactionState.awaitingP2Star;
             onStateChange?.call(state);
 
-            final remainingAfterPending = policy.totalTimeout - activeClock.elapsed;
+            var remainingAfterPending =
+                policy.totalTimeout - activeClock.elapsed;
             if (remainingAfterPending <= Duration.zero) {
               state = UdsTransactionState.completed;
               onStateChange?.call(state);
@@ -399,12 +483,43 @@ final class UdsTransactionEngine {
               );
             }
 
+            if (outerDeadline != null) {
+              final now = DateTime.now();
+              if (!now.isBefore(outerDeadline)) {
+                state = UdsTransactionState.completed;
+                onStateChange?.call(state);
+                return UdsTransactionTimedOut(
+                  request: request,
+                  attempts: attempts,
+                  retries: retries,
+                  responsePendingCount: responsePendingCount,
+                  elapsed: activeClock.elapsed,
+                  timeoutType: UdsTimeoutType.total,
+                );
+              }
+              final remainingOuter = outerDeadline.difference(now);
+              if (remainingOuter < remainingAfterPending) {
+                remainingAfterPending = remainingOuter;
+              }
+            }
+
             final p2StarTimeout = policy.p2StarTimeout < remainingAfterPending
                 ? policy.p2StarTimeout
                 : remainingAfterPending;
 
             try {
               msg = await channel.receiveContinuation(p2StarTimeout);
+            } on DiagnosticLinkContinuationUnavailableException catch (e) {
+              state = UdsTransactionState.completed;
+              onStateChange?.call(state);
+              return UdsTransactionTransportFailure(
+                request: request,
+                attempts: attempts,
+                retries: retries,
+                responsePendingCount: responsePendingCount,
+                elapsed: activeClock.elapsed,
+                message: e.message,
+              );
             } on TimeoutException {
               final cancelErr = checkCancellation();
               if (cancelErr != null) return cancelErr;
@@ -449,6 +564,10 @@ final class UdsTransactionEngine {
             originalSid: origSid,
           );
         }
+
+        // Check outer deadline before publishing success (A6 / B3)
+        final postSendOuter = checkOuterDeadline();
+        if (postSendOuter != null) return postSendOuter;
 
         // ---------------------------------------------------------------------
         // Non-Negative Response Handling

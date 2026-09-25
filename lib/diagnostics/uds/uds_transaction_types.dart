@@ -537,3 +537,21 @@ final class UdsTransactionMalformed extends UdsTransactionFailure {
   @override
   String toString() => 'UdsTransactionMalformed($message)';
 }
+
+/// Underlying channel transport failed (e.g. continuation queue empty/unavailable).
+final class UdsTransactionTransportFailure extends UdsTransactionFailure {
+  const UdsTransactionTransportFailure({
+    required super.request,
+    required super.attempts,
+    required super.retries,
+    required super.responsePendingCount,
+    required super.elapsed,
+    required this.message,
+  });
+
+  final String message;
+
+  @override
+  String toString() =>
+      'UdsTransactionTransportFailure(message: $message, attempts: $attempts)';
+}

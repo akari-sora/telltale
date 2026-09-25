@@ -158,10 +158,10 @@ void main() {
         expectedResponderIdentifier: exp29,
       );
 
-      expect(target.requestIdentifier.isStandard, isTrue);
-      expect(target.expectedResponderIdentifier.isExtended, isTrue);
-      expect(target.requestIdentifier.value, '781');
-      expect(target.expectedResponderIdentifier.value, '18DAF110');
+      expect(target.requestIdentifier!.isStandard, isTrue);
+      expect(target.expectedResponderIdentifier!.isExtended, isTrue);
+      expect(target.requestIdentifier!.value, '781');
+      expect(target.expectedResponderIdentifier!.value, '18DAF110');
     });
   });
 
