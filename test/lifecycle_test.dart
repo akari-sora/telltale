@@ -13,6 +13,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
@@ -491,6 +492,48 @@ void main() {
       expect(response.firstLine, contains('ELM327'));
     },
   );
+
+  test(
+    'H01: post-write reply timer is clipped to remaining deadline budget',
+    () async {
+      final transport = _BudgetTestDemo();
+      final client = Elm327Client(
+        transport,
+        writeTimeout: const Duration(milliseconds: 500),
+      );
+      addTearDown(client.dispose);
+      expect(await client.connect(), isTrue);
+
+      // Case 1: write takes 40ms, reply takes 30ms. Total 70ms <= 120ms budget -> succeeds.
+      transport.writeDelay = const Duration(milliseconds: 40);
+      transport.replyDelay = const Duration(milliseconds: 30);
+      final deadline1 = DateTime.now().add(const Duration(milliseconds: 120));
+      final response = await client.send(
+        'ATI',
+        timeout: const Duration(milliseconds: 120),
+        deadline: deadline1,
+      );
+      expect(response.isSuccess, isTrue);
+      expect(response.firstLine, contains('ELM327'));
+
+      // Case 2: write takes 50ms, reply takes 70ms. Total 120ms > 100ms deadline.
+      // Reply timer is clipped to ~50ms remaining budget, so 70ms reply causes TimeoutException.
+      transport.writeDelay = const Duration(milliseconds: 50);
+      transport.replyDelay = const Duration(milliseconds: 70);
+      final deadline2 = DateTime.now().add(const Duration(milliseconds: 100));
+      final started = DateTime.now();
+      await expectLater(
+        client.send(
+          'ATI',
+          timeout: const Duration(milliseconds: 100),
+          deadline: deadline2,
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+      final elapsed = DateTime.now().difference(started);
+      expect(elapsed, lessThan(const Duration(milliseconds: 150)));
+    },
+  );
 }
 
 /// Stalls inside [write] before the demo adapter schedules its reply timer.
@@ -506,6 +549,25 @@ class _PreemptedDemo extends DemoTransport {
       preemptNextWrite = false;
       final spin = Stopwatch()..start();
       while (spin.elapsed < const Duration(milliseconds: 80)) {}
+    }
+    await super.write(data);
+  }
+}
+
+/// Transport to verify remaining deadline budgeting across write and reply.
+class _BudgetTestDemo extends DemoTransport {
+  Duration writeDelay = Duration.zero;
+  Duration? replyDelay;
+
+  @override
+  Future<void> write(List<int> data) async {
+    if (writeDelay > Duration.zero) {
+      await Future<void>.delayed(writeDelay);
+    }
+    if (replyDelay != null) {
+      final delay = replyDelay!;
+      Timer(delay, () => emitBytes(ascii.encode('ELM327 v2.1\r>')));
+      return;
     }
     await super.write(data);
   }

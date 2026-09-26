@@ -1304,6 +1304,7 @@ class Elm327Client {
     String command, {
     Duration? timeout,
     ElmWriteAudit? writeAudit,
+    DateTime? deadline,
   }) {
     _throwIfInsideTransaction();
     _claimWriteAudit(writeAudit);
@@ -1311,12 +1312,13 @@ class Elm327Client {
     _commandChain = _commandChain.then((_) async {
       try {
         _throwIfStickyRestoreFailed();
-        if (_outOfSync) await _resync();
+        if (_outOfSync) await _resync(deadline: deadline);
         completer.complete(
           await _sendNow(
             command,
             timeout ?? commandTimeout,
             writeAudit: writeAudit,
+            deadline: deadline,
           ),
         );
       } on Object catch (e, st) {
@@ -1580,7 +1582,9 @@ class Elm327Client {
     // waits for the prompt. A transport that completed the reply during the
     // write must not have a second timer armed over the next command.
     if (identical(_pending, pending) && !pending.isCompleted) {
-      _armPendingTimer(timeout, _onCommandTimeout);
+      final replyTimeout = _withinDeadline(timeout);
+      _pendingDeadline = replyTimeout;
+      _armPendingTimer(replyTimeout, _onCommandTimeout);
     }
     final response = await pending.future;
     _applyRenderingState(normalised, response);

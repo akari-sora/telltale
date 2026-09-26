@@ -458,11 +458,13 @@ void main() {
 
       // Part A: Export failure suppression under covered route
       final exportBarrier = _TestBarrier();
+      var exportInvocations = 0;
       Future<Directory> exportDir() async {
         if (!exportBarrier.entered.isCompleted) {
           exportBarrier.entered.complete();
         }
         await exportBarrier.release.future;
+        exportInvocations++;
         return tempDir;
       }
 
@@ -526,7 +528,8 @@ void main() {
 
       // Release export barrier
       exportBarrier.release.complete();
-      await _waitForSettlement(tester, () => true);
+      await _waitForSettlement(tester, () => exportInvocations > 0);
+      expect(exportInvocations, 1);
 
       // Terminal assertion: No SnackBar displayed on covering route
       expect(find.byType(SnackBar), findsNothing);
@@ -537,19 +540,23 @@ void main() {
 
       // Part B: Delete failure suppression under covered route
       final deleteBarrier = _TestBarrier();
+      var deleteDirCount = 0;
       Future<Directory> deleteDir() async {
         if (!deleteBarrier.entered.isCompleted) {
           deleteBarrier.entered.complete();
         }
         await deleteBarrier.release.future;
+        deleteDirCount++;
         return tempDir;
       }
 
+      final deleteGate = ArtifactOperationGate();
+      final trackingPolicy = _TrackingPolicy(allow: true);
       final deleteActions = TelemetrySessionActions(
         documentsDirectory: deleteDir,
         store: TelemetrySessionStore(documentsDirectory: deleteDir),
-        artifactGate: ArtifactOperationGate(),
-        sharePolicy: const _AllowPolicy(),
+        artifactGate: deleteGate,
+        sharePolicy: trackingPolicy,
         readRecorderPhase: () => TelemetryRecorderPhase.idle,
         readRestartRequired: () => false,
       );
@@ -605,7 +612,13 @@ void main() {
 
       // Release delete barrier (fails with notFound because file does not exist)
       deleteBarrier.release.complete();
-      await _waitForSettlement(tester, () => true);
+      await _waitForSettlement(
+        tester,
+        () => deleteDirCount > 0 && deleteGate.snapshot.isIdle,
+      );
+      expect(deleteDirCount, 1);
+      expect(trackingPolicy.freezeCount, 1);
+      expect(deleteGate.snapshot.isIdle, isTrue);
 
       // Terminal assertion: No SnackBar displayed on covering route
       expect(find.byType(SnackBar), findsNothing);
@@ -620,18 +633,21 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final deleteBarrier = _TestBarrier();
+      var deleteDirCount = 0;
       Future<Directory> deleteDir() async {
         if (!deleteBarrier.entered.isCompleted) {
           deleteBarrier.entered.complete();
         }
         await deleteBarrier.release.future;
+        deleteDirCount++;
         return tempDir;
       }
 
+      final deleteGate = ArtifactOperationGate();
       final actions = TelemetrySessionActions(
         documentsDirectory: deleteDir,
         store: TelemetrySessionStore(documentsDirectory: deleteDir),
-        artifactGate: ArtifactOperationGate(),
+        artifactGate: deleteGate,
         sharePolicy: const _AllowPolicy(),
         readRecorderPhase: () => TelemetryRecorderPhase.idle,
         readRestartRequired: () => false,
@@ -695,9 +711,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Covering Route Screen'), findsOneWidget);
 
-      // Release delete barrier (store operation fails via _DenyPolicy)
+      // Release delete barrier (store operation fails via notFound because file does not exist)
       deleteBarrier.release.complete();
-      await _waitForSettlement(tester, () => true);
+      await _waitForSettlement(
+        tester,
+        () => deleteDirCount > 0 && deleteGate.snapshot.isIdle,
+      );
+      expect(deleteDirCount, 1);
+      expect(deleteGate.snapshot.isIdle, isTrue);
 
       // Terminal assertion: SnackBar suppressed because route is not current
       expect(find.byType(SnackBar), findsNothing);
@@ -717,18 +738,21 @@ void main() {
       damagedFile.writeAsStringSync('{"kind":"corrupted"}\n');
 
       final deleteBarrier = _TestBarrier();
+      var deleteDirCount = 0;
       Future<Directory> deleteDir() async {
         if (!deleteBarrier.entered.isCompleted) {
           deleteBarrier.entered.complete();
         }
         await deleteBarrier.release.future;
+        deleteDirCount++;
         return tempDir;
       }
 
+      final deleteGate = ArtifactOperationGate();
       final actions = TelemetrySessionActions(
         documentsDirectory: deleteDir,
         store: TelemetrySessionStore(documentsDirectory: deleteDir),
-        artifactGate: ArtifactOperationGate(),
+        artifactGate: deleteGate,
         sharePolicy: const _AllowPolicy(),
         readRecorderPhase: () => TelemetryRecorderPhase.idle,
         readRestartRequired: () => false,
@@ -800,7 +824,12 @@ void main() {
 
       // Release delete barrier -> delete completes successfully on disk
       deleteBarrier.release.complete();
-      await _waitForSettlement(tester, () => !damagedFile.existsSync());
+      await _waitForSettlement(
+        tester,
+        () => !damagedFile.existsSync() && deleteDirCount > 0 && deleteGate.snapshot.isIdle,
+      );
+      expect(deleteDirCount, 1);
+      expect(deleteGate.snapshot.isIdle, isTrue);
 
       // Terminal assertions:
       // 1. File was actually deleted on disk
@@ -1046,8 +1075,29 @@ void main() {
       expect(tester.getSize(confirmBtnFinder).height, greaterThanOrEqualTo(48.0));
       expect(tester.getSize(cancelBtnFinder).height, greaterThanOrEqualTo(48.0));
 
-      // Confirm delete -> SnackBar displayed
-      await tester.tap(confirmBtnFinder);
+      // Switch to Traditional Chinese while dialog is still OPEN (testing dynamic dialog relocalization)
+      harnessKey.currentState!.changeLocale(testUiLocale);
+      await tester.pump();
+      expect(find.text('刪除本機紀錄？'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, '刪除'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, '取消'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // Verify narrow landscape layout (568x320) with 200% text scale while dialog is OPEN
+      tester.view.physicalSize = const Size(568, 320);
+      await tester.pump();
+      expect(dialogFinder, findsOneWidget);
+      expect(find.text('刪除本機紀錄？'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // Verify accessible touch target dimensions (>= 48dp min touch height) in landscape zh dialog
+      final zhConfirmBtnFinder = find.widgetWithText(FilledButton, '刪除');
+      final zhCancelBtnFinder = find.widgetWithText(TextButton, '取消');
+      expect(tester.getSize(zhConfirmBtnFinder).height, greaterThanOrEqualTo(48.0));
+      expect(tester.getSize(zhCancelBtnFinder).height, greaterThanOrEqualTo(48.0));
+
+      // Confirm delete in zh landscape dialog -> SnackBar displayed
+      await tester.tap(zhConfirmBtnFinder);
       await tester.pumpAndSettle();
 
       final snackBarFinder = find.byType(SnackBar);
@@ -1056,18 +1106,7 @@ void main() {
         MediaQuery.textScalerOf(tester.element(snackBarFinder)).scale(14),
         28.0,
       );
-      expect(tester.takeException(), isNull);
-
-      // Switch to Traditional Chinese
-      harnessKey.currentState!.changeLocale(testUiLocale);
-      await tester.pump();
-
       expect(find.text('刪除未完成：操作期間行車或連線狀態已改變'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-
-      // Verify narrow landscape layout (568x320)
-      tester.view.physicalSize = const Size(568, 320);
-      await tester.pump();
       expect(tester.takeException(), isNull);
     });
 
@@ -1081,11 +1120,13 @@ void main() {
 
       final trackingPolicy = _TrackingPolicy(allow: false);
       final exportBarrier = _TestBarrier();
+      var exportInvocations = 0;
       Future<Directory> exportDir() async {
         if (!exportBarrier.entered.isCompleted) {
           exportBarrier.entered.complete();
         }
         await exportBarrier.release.future;
+        exportInvocations++;
         return tempDir;
       }
 
@@ -1164,7 +1205,8 @@ void main() {
 
       // Release export barrier
       exportBarrier.release.complete();
-      await _waitForSettlement(tester, () => true);
+      await _waitForSettlement(tester, () => exportInvocations > 0);
+      expect(exportInvocations, 1);
 
       // TargetSessionId check safely discarded stale feedback for testSessionId2
       expect(find.byType(SnackBar), findsNothing);
