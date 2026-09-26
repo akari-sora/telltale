@@ -599,6 +599,17 @@ class Elm327Client {
 
   Completer<ObdResponse>? _pending;
   Timer? _pendingTimeout;
+
+  /// Silence that already existed when the current reply budget was armed.
+  ///
+  /// The budget starts only after the write is accepted. A stall in that gap
+  /// — a loaded host, a flush that takes a second — moves the wall clock while
+  /// the adapter has not yet been given its window. Counting that gap as
+  /// unanswered silence lets the watchdog drop the session before the reply
+  /// timer exists, which is the opposite of the grace a short caller deadline
+  /// is supposed to leave the link. Subtracted only while the budget is still
+  /// running; once the command gives up, later silence counts in full.
+  Duration? _silenceBeforeReplyBudget;
   Future<void>? _activeTeardown;
   bool _searchExtended = false;
 
@@ -1071,6 +1082,7 @@ class Elm327Client {
       // on a flaky Bluetooth link that turned every timeout into five seconds
       // plus three of doing nothing.
       _outOfSync = false;
+      _resyncGraceUntil = null;
       return;
     }
 
@@ -1785,9 +1797,13 @@ class Elm327Client {
   /// generation's pending command.
   void _armPendingTimer(Duration timeout, void Function() onFire) {
     final generation = _connectionGeneration;
+    // Snapshot before the timer, so a stall that happened *before* this
+    // budget is not later read as the adapter missing it.
+    _silenceBeforeReplyBudget = DateTime.now().difference(lastRxAt);
     _pendingTimeout?.cancel();
     _pendingTimeout = Timer(timeout, () {
       if (_connectionGeneration != generation) return;
+      _silenceBeforeReplyBudget = null;
       onFire();
     });
   }
@@ -1872,6 +1888,19 @@ class Elm327Client {
     // command with a millisecond left still spent them here, and a link that
     // stays quiet then ends the session — long after whoever asked had gone.
     final started = _clock();
+    // Published before the drain waits, not when its timer eventually fires.
+    //
+    // The short window and the watchdog are both timers. On a busy isolate
+    // the watchdog tick is often already due when the caller gives up, and it
+    // runs before a timer that was only just armed. Recording the adapter's
+    // window here means that tick still sees it. A caller who ran out of time
+    // is refused by the drain; the link keeps the three seconds it was
+    // promised either way.
+    final adapterWindowEnd = started.add(resyncTimeout);
+    final openGrace = _resyncGraceUntil;
+    if (openGrace == null || openGrace.isBefore(adapterWindowEnd)) {
+      _resyncGraceUntil = adapterWindowEnd;
+    }
     final window = deadline == null
         ? resyncTimeout
         : (() {
@@ -1940,6 +1969,8 @@ class Elm327Client {
       );
     }
     _outOfSync = false;
+    // The prompt that was owed has arrived. The grace was only for that wait.
+    _resyncGraceUntil = null;
   }
 
   /// How long to wait for the outstanding reply's prompt before giving up on
@@ -1948,8 +1979,10 @@ class Elm327Client {
 
   /// Until when a late prompt is still an ordinary recovery.
   ///
-  /// Set when a drain is cut short by its caller's budget rather than by the
-  /// adapter failing to answer. Null the rest of the time.
+  /// Set when a drain starts, and kept when the caller's budget cuts that
+  /// drain short. Cleared once the owed prompt arrives. Null the rest of the
+  /// time, which is when the watchdog may treat continued silence as a wedged
+  /// link.
   DateTime? _resyncGraceUntil;
 
   /// Queries a PID. Distinct from [send] only in that it refuses to run before
@@ -5653,6 +5686,11 @@ class Elm327Client {
       // protocol; tripping the 5 s stall timer through that would tear down a
       // connection that was about to succeed.
       if (_searchExtended && _pending != null) return;
+      // A write still in flight has no reply budget yet. `writeTimeout`
+      // bounds it. Treating the stall as adapter silence drops the session
+      // before that budget starts — the tick lands, the command timer is not
+      // armed, and a caller who still has a recovery window never gets it.
+      if (_pending != null && _pendingTimeout == null) return;
       // Silence only means something when the adapter owes us a reply. An idle
       // link — every active PID unsupported, or the app just resumed from the
       // background with a stale wall-clock timestamp — is not a dead one, and
@@ -5704,7 +5742,15 @@ class Elm327Client {
         if (DateTime.now().isBefore(grace)) return;
         _resyncGraceUntil = null;
       }
-      if (DateTime.now().difference(lastRxAt) <= limit) return;
+      var silentFor = DateTime.now().difference(lastRxAt);
+      final prepaid = _silenceBeforeReplyBudget;
+      if (_pendingTimeout != null && prepaid != null) {
+        // Only silence *inside* the reply budget counts while that budget
+        // is still open. The part before it is the write, and the command
+        // has not been given its window yet.
+        silentFor = silentFor > prepaid ? silentFor - prepaid : Duration.zero;
+      }
+      if (silentFor <= limit) return;
       isInitialized = false;
       _watchdog?.cancel();
       _watchdog = null;
