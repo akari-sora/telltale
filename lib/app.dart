@@ -14,6 +14,7 @@ import 'l10n/locale_resolution.dart';
 import 'l10n/startup_copy.dart';
 import 'state/app_locales_synchronizer.dart';
 import 'state/app_share_coordinator.dart';
+import 'state/language_switch_guard.dart';
 import 'state/locale_settings.dart';
 import 'state/pid_registry.dart';
 import 'state/powertrain_battery_profiles.dart';
@@ -80,17 +81,33 @@ class _TorqueAppState extends ConsumerState<TorqueApp>
   }
 
   Future<void> _syncAppLocalesAsync() async {
+    final block = ref.read(languageSwitchBlockProvider);
+    if (block != LanguageSwitchBlock.none) return;
+
+    final controller = ref.read(localePreferenceProvider.notifier);
+    final versionAtStart = controller.attempt;
     final prefs = ref.read(sharedPreferencesProvider);
-    final sync = AppLocalesSynchronizer(
-      prefs: prefs,
-      getOs: AppLocalesPlatform.get,
-      setOs: AppLocalesPlatform.setOverrideTags,
-    );
-    final plan = await sync.sync();
-    if (!mounted) return;
-    final next = localePreferenceFromStored(plan.storedIdToKeep);
-    if (ref.read(localePreferenceProvider) != next) {
-      await ref.read(localePreferenceProvider.notifier).set(next);
+
+    try {
+      await controller.synchronize((version) async {
+        if (ref.read(languageSwitchBlockProvider) != LanguageSwitchBlock.none ||
+            version != versionAtStart) {
+          return null;
+        }
+        final sync = AppLocalesSynchronizer(
+          prefs: prefs,
+          getOs: AppLocalesPlatform.get,
+          setOs: AppLocalesPlatform.setOverrideTags,
+          shouldAbort: () =>
+              ref.read(languageSwitchBlockProvider) != LanguageSwitchBlock.none ||
+              controller.attempt != version,
+        );
+        final result = await sync.sync();
+        if (!mounted) return result;
+        return result;
+      });
+    } on Object {
+      // Absorb any unexpected error so unawaited() does not leak unhandled errors.
     }
   }
 
@@ -105,7 +122,9 @@ class _TorqueAppState extends ConsumerState<TorqueApp>
   void didChangeLocales(List<Locale>? locales) {
     _syncAppLocales();
     if (ref.read(localePreferenceProvider) == LocalePreference.system) {
-      setState(() {});
+      if (ref.read(languageSwitchBlockProvider) == LanguageSwitchBlock.none) {
+        setState(() {});
+      }
     }
   }
 
@@ -152,6 +171,14 @@ class _TorqueAppState extends ConsumerState<TorqueApp>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<LanguageSwitchBlock>(languageSwitchBlockProvider, (prev, next) {
+      if (prev != null &&
+          prev != LanguageSwitchBlock.none &&
+          next == LanguageSwitchBlock.none) {
+        _syncAppLocales();
+      }
+    });
+
     // Rehydrates installed battery-profile PIDs from the verified catalog.
     ref.watch(installedPowertrainProfilesRestoreProvider);
     if (isWatchFormFactor()) {

@@ -13,6 +13,7 @@ import 'dart:io';
 
 import 'package:flutter_classic_bluetooth/flutter_classic_bluetooth.dart'
     show FlutterClassicBluetooth;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:permission_handler/permission_handler.dart';
 
 enum BlePermissionOutcome { granted, denied, permanentlyDenied }
@@ -59,10 +60,18 @@ final class BlePermissionResult {
 /// The first Android release with `BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT`.
 const int _androidS = 31;
 
+/// Test override for simulating specific permission outcomes in widget tests.
+@visibleForTesting
+Future<BlePermissionResult> Function({required bool forScanning})?
+    testEnsureBluetoothPermissionsOverride;
+
 /// Acquires exactly the permissions the next action needs, and no others.
 Future<BlePermissionResult> ensureBluetoothPermissions({
   required bool forScanning,
 }) async {
+  if (testEnsureBluetoothPermissionsOverride != null) {
+    return testEnsureBluetoothPermissionsOverride!(forScanning: forScanning);
+  }
   if (!Platform.isAndroid) {
     return const BlePermissionResult.granted();
   }
