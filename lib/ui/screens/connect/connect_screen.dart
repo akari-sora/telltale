@@ -20,6 +20,7 @@ import '../../../core/serial/spp_serial_platform.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/ble_scan_permissions.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../wear/wear_permission_copy.dart';
 import '../../../obd/elm327_client.dart';
 import '../../../state/pid_registry.dart' show sharedPreferencesProvider;
 import '../../../obd/transport/ble_transport.dart';
@@ -66,11 +67,12 @@ class ConnectScreen extends ConsumerStatefulWidget {
   ConsumerState<ConnectScreen> createState() => _ConnectScreenState();
 }
 
+enum _WifiValidationError { hostRequired, portRequired, portInvalid }
+
 class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   TransportKind? _expanded;
   List<DiscoveredDevice> _devices = const [];
   bool _scanning = false;
-  String? _scanError;
   BleScanIssue? _scanIssue;
 
   /// Remembered between launches.
@@ -143,7 +145,6 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     setState(() {
       _expanded = _expanded == kind ? null : kind;
       _devices = const [];
-      _scanError = null;
     });
     if (_expanded == TransportKind.bluetoothClassic) {
       await _loadPairedDevices();
@@ -171,9 +172,13 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   /// The version-aware rule itself lives in [ensureBluetoothPermissions] so
   /// the wear shell shares it instead of growing a weaker copy; this wrapper
   /// only maps the outcome onto this screen's recovery affordances.
+  BlePermissionResult? _lastBlePermissionResult;
+  bool _pairedListFailed = false;
+
   Future<bool> _ensurePermissions({required bool forScanning}) async {
     _permissionPermanentlyDenied = false;
     final result = await ensureBluetoothPermissions(forScanning: forScanning);
+    _lastBlePermissionResult = result;
     if (result.granted) return true;
     _permissionPermanentlyDenied =
         result.outcome == BlePermissionOutcome.permanentlyDenied;
@@ -185,47 +190,26 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   /// without offering it, the wizard is a dead end.
   bool _permissionPermanentlyDenied = false;
 
-  // `BlePermissionResult.deniedKind` is deliberately not read here, which is a
-  // narrower statement than it used to be written as. It is an identifier now
-  // rather than the fixed Chinese word it once was, so the reason is no longer
-  // that this screen cannot localize it.
-  //
-  // This screen calls `_ensurePermissions` from two places and they are not
-  // alike. `_loadPairedDevices` below passes `forScanning: false`: on Android
-  // 12 and above the only thing that path can have refused is
-  // `BLUETOOTH_CONNECT`, and on 11 and below it asks for nothing at all, so
-  // the two `connectBluetoothPermission…` messages naming Bluetooth outright
-  // are correct on every release. The BLE tab is the other caller — `_BleBody`
-  // is built with `ensurePermissions: () => _ensurePermissions(forScanning:
-  // true)` — and there the kind is not fixed: on Android 11 and below
-  // `ensureBluetoothPermissions` requests `ACCESS_FINE_LOCATION` and returns
-  // `BlePermissionKind.location`.
-  //
-  // On that path the copy is wrong, and this comment says so rather than
-  // phrasing the screen as if the path did not exist. `_BleBody._startScan`
-  // shows `connectBlePermissionNeeded` / `connectBlePermissionDeniedForever`;
-  // both name Bluetooth, and the second sends the reader into app settings to
-  // find a Bluetooth switch that Android 11 and below does not offer, when
-  // what they refused was Location. `minSdk` is 24 and AndroidManifest.xml
-  // keeps `ACCESS_FINE_LOCATION` at `maxSdkVersion="30"`, so the branch ships.
-  //
-  // That is a separate defect and it is not fixed here: this screen behaves
-  // exactly as it did before `deniedKind` became an enum, because neither
-  // version read it. A fix threads the kind out of `_ensurePermissions` into
-  // `_BleBody` and picks the sentence from it — the wear shell already does
-  // that through `blePermissionName`, so the copy exists. Until then, what
-  // this line records is that nothing here reads `deniedKind`, which is
-  // precisely the thing such a fix has to change.
+  String? _resolveClassicScanError(AppLocalizations l10n) {
+    if (_scanIssue == BleScanIssue.permissionNeeded) {
+      return _permissionPermanentlyDenied
+          ? l10n.connectBluetoothPermissionDeniedForever
+          : l10n.connectBluetoothPermissionNeededForPairedList;
+    }
+    if (_scanIssue == BleScanIssue.poweredOff) {
+      return l10n.connectBluetoothOff;
+    }
+    if (_pairedListFailed) {
+      return l10n.connectPairedListFailed;
+    }
+    return null;
+  }
 
   Future<void> _loadPairedDevices() async {
-    // Read before the first await. Every await below can outlive the screen,
-    // and the message belongs to the language that was on screen when the
-    // user asked for the list.
-    final l10n = AppLocalizations.of(context);
     setState(() {
       _scanning = true;
-      _scanError = null;
       _scanIssue = null;
+      _pairedListFailed = false;
     });
     try {
       // Windows/Linux Classic is Bluetooth SPP serial (COM / rfcomm).
@@ -245,9 +229,6 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         if (!mounted) return;
         setState(() {
           _scanIssue = BleScanIssue.permissionNeeded;
-          _scanError = _permissionPermanentlyDenied
-              ? l10n.connectBluetoothPermissionDeniedForever
-              : l10n.connectBluetoothPermissionNeededForPairedList;
         });
         return;
       }
@@ -255,7 +236,6 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         if (!mounted) return;
         setState(() {
           _scanIssue = BleScanIssue.poweredOff;
-          _scanError = l10n.connectBluetoothOff;
         });
         return;
       }
@@ -272,7 +252,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         ),
       );
       if (mounted) {
-        setState(() => _scanError = l10n.connectPairedListFailed);
+        setState(() => _pairedListFailed = true);
       }
     } finally {
       if (mounted) setState(() => _scanning = false);
@@ -317,7 +297,22 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     return [...likely, ...rest];
   }
 
-  String? _wifiError;
+  _WifiValidationError? _wifiValidationError;
+  String? _wifiInvalidPortText;
+
+  String? _resolveWifiError(AppLocalizations l10n) {
+    return switch (_wifiValidationError) {
+      _WifiValidationError.hostRequired => l10n.connectWifiHostRequired,
+      _WifiValidationError.portRequired =>
+        l10n.connectWifiPortRequired(WifiTransport.defaultPort),
+      _WifiValidationError.portInvalid => l10n.connectWifiPortInvalid(
+        _wifiInvalidPortText ?? '',
+        _kMinPort,
+        _kMaxPort,
+      ),
+      null => null,
+    };
+  }
 
   /// Validates before connecting rather than silently substituting a default.
   ///
@@ -326,23 +321,24 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   /// and a failed connection sent the user looking at their adapter instead of
   /// at the box they had just cleared.
   Future<void> _connectWifi() async {
-    // Before the awaits below, for the same reason as `_loadPairedDevices`.
-    final l10n = AppLocalizations.of(context);
     final host = _hostController.text.trim();
     final portText = _portController.text.trim();
     final port = int.tryParse(portText);
 
-    String? error;
+    _wifiValidationError = null;
+    _wifiInvalidPortText = null;
+
     if (host.isEmpty) {
-      error = l10n.connectWifiHostRequired;
+      _wifiValidationError = _WifiValidationError.hostRequired;
     } else if (portText.isEmpty) {
-      error = l10n.connectWifiPortRequired(WifiTransport.defaultPort);
+      _wifiValidationError = _WifiValidationError.portRequired;
     } else if (port == null || port < _kMinPort || port > _kMaxPort) {
-      error = l10n.connectWifiPortInvalid(portText, _kMinPort, _kMaxPort);
+      _wifiValidationError = _WifiValidationError.portInvalid;
+      _wifiInvalidPortText = portText;
     }
 
-    setState(() => _wifiError = error);
-    if (error != null) return;
+    setState(() {});
+    if (_wifiValidationError != null) return;
 
     // Stored on attempt rather than on success: an address that failed once is
     // still far more likely to be the right starting point next time than the
@@ -552,13 +548,13 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
       TransportKind.wifi => _WifiBody(
         hostController: _hostController,
         portController: _portController,
-        error: _wifiError,
+        error: _resolveWifiError(l10n),
         onConnect: _connectWifi,
       ),
       TransportKind.bluetoothClassic => _DeviceListBody(
         devices: _devices,
         scanning: _scanning,
-        error: _scanError,
+        error: _resolveClassicScanError(l10n),
         scanIssue: _scanIssue,
         emptyHint: classicDeviceListEmptyHint(
           l10n,
@@ -594,6 +590,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         // later request, so recoverable configuration looked permanently
         // broken with no route out.
         isPermanentlyDenied: () => _permissionPermanentlyDenied,
+        deniedKind: () => _lastBlePermissionResult?.deniedKind,
       ),
     };
   }
@@ -1101,6 +1098,7 @@ class _BleBody extends StatefulWidget {
     required this.onConnect,
     required this.ensurePermissions,
     required this.isPermanentlyDenied,
+    this.deniedKind,
   });
 
   final void Function(BleAdapterHandle device) onConnect;
@@ -1108,6 +1106,9 @@ class _BleBody extends StatefulWidget {
 
   /// Read after a failed request — the flag is only set during one.
   final bool Function() isPermanentlyDenied;
+
+  /// The specific permission refused, if known (Bluetooth vs Location).
+  final BlePermissionKind? Function()? deniedKind;
 
   @override
   State<_BleBody> createState() => _BleBodyState();
@@ -1121,9 +1122,9 @@ class _BleBodyState extends State<_BleBody> {
   /// Without it the guidance would greet somebody who has not tapped anything
   /// yet with an explanation of a failure that has not happened.
   bool _scanned = false;
-  String? _error;
   BleScanIssue? _scanIssue;
   bool _permanentlyDenied = false;
+  BlePermissionKind? _deniedKind;
   final List<_BleEntry> _found = [];
   StreamSubscription<_BleEntry>? _sub;
 
@@ -1133,26 +1134,41 @@ class _BleBodyState extends State<_BleBody> {
     super.dispose();
   }
 
+  String? _resolveError(AppLocalizations l10n) {
+    if (_scanIssue != null) {
+      if (_scanIssue == BleScanIssue.permissionNeeded) {
+        if (_deniedKind == BlePermissionKind.location) {
+          final permName = blePermissionName(l10n, BlePermissionKind.location);
+          return _permanentlyDenied
+              ? l10n.wearScanPermissionPermanentlyDenied(permName)
+              : l10n.wearScanPermissionNeeded(permName);
+        }
+        return _permanentlyDenied
+            ? l10n.connectBlePermissionDeniedForever
+            : l10n.connectBlePermissionNeeded;
+      }
+      return bleScanIssueText(l10n, _scanIssue!);
+    }
+    return null;
+  }
+
   Future<void> _startScan() async {
     // Before the permission await: that dialog sits in front of the app for as
     // long as the user ignores it, and the refusal has to be phrased in the
     // language that was on screen when they tapped search.
-    final l10n = AppLocalizations.of(context);
     if (!await widget.ensurePermissions()) {
       if (!mounted) return;
       setState(() {
         _permanentlyDenied = widget.isPermanentlyDenied();
+        _deniedKind = widget.deniedKind?.call();
         _scanIssue = BleScanIssue.permissionNeeded;
-        _error = _permanentlyDenied
-            ? l10n.connectBlePermissionDeniedForever
-            : l10n.connectBlePermissionNeeded;
       });
       return;
     }
     setState(() {
       _scanning = true;
-      _error = null;
       _scanIssue = null;
+      _deniedKind = null;
       _found.clear();
     });
 
@@ -1178,7 +1194,6 @@ class _BleBodyState extends State<_BleBody> {
             setState(() {
               final issue = BleTransport.scanIssueFor(e);
               _scanIssue = issue;
-              _error = bleScanIssueText(l10n, issue);
             });
           }
         },
@@ -1197,7 +1212,6 @@ class _BleBodyState extends State<_BleBody> {
         setState(() {
           final issue = BleTransport.scanIssueFor(e);
           _scanIssue = issue;
-          _error = bleScanIssueText(l10n, issue);
           _scanning = false;
           _scanned = true;
         });
@@ -1209,14 +1223,15 @@ class _BleBodyState extends State<_BleBody> {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final l10n = AppLocalizations.of(context);
+    final displayedError = _resolveError(l10n);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(l10n.connectBleBody, style: context.texts.bodyMedium),
-        if (_error != null) ...[
+        if (displayedError != null) ...[
           const SizedBox(height: Spacing.md),
           Text(
-            _error!,
+            displayedError,
             style: context.texts.bodyMedium?.copyWith(color: palette.warning),
           ),
           if (connectionFailureAction(scan: _scanIssue) case final mapped?) ...[
