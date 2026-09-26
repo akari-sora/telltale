@@ -32,7 +32,7 @@ class _FastDemoSession extends ObdSession {
   ObdConnectionState build() => const ObdConnectionState();
 
   @override
-  Future<bool> connectDemo() async {
+  Future<bool> connectDemo({Duration? responseLatency}) async {
     demoAttempts += 1;
     state = const ObdConnectionState(
       phase: ConnectionPhase.connected,

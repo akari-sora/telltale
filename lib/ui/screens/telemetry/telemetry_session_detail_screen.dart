@@ -12,6 +12,7 @@ import '../../../state/telemetry_sessions.dart';
 import '../../../telemetry/session/telemetry_session.dart';
 import '../../widgets/panel.dart';
 import '../../widgets/status/datum_status_copy.dart';
+import '../../widgets/telemetry/telemetry_session_action_feedback.dart';
 import '../../widgets/telemetry/telemetry_status_copy.dart';
 import 'telemetry_export_sheet.dart';
 import 'telemetry_source_copy.dart';
@@ -78,65 +79,89 @@ class _TelemetrySessionDetailScreenState
     });
   }
 
-  void _snack(String message) {
+  void _snack(
+    TelemetrySessionActionResult result,
+    TelemetrySessionActionKind kind,
+  ) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: TelemetrySessionActionFeedback(
+          result: result,
+          kind: kind,
+        ),
+      ),
+    );
   }
 
   Future<void> _export() async {
-    // Read before the awaits. The message describes the export the user asked
-    // for, so it belongs to the language that was on screen when they asked.
-    final l10n = AppLocalizations.of(context);
+    final targetSessionId = widget.sessionId;
+    final route = ModalRoute.of(context);
     final box = context.findRenderObject() as RenderBox?;
     final origin = box == null
         ? null
         : box.localToGlobal(Offset.zero) & box.size;
     final format = await showTelemetryExportSheet(context);
-    if (format == null || !mounted) return;
+    if (format == null || !mounted || widget.sessionId != targetSessionId) return;
+    if (route != null && !route.isCurrent) return;
     final result = await ref
         .read(telemetrySessionActionsProvider)
-        .export(widget.sessionId, format, sharePositionOrigin: origin);
+        .export(targetSessionId, format, sharePositionOrigin: origin);
+    if (!mounted || widget.sessionId != targetSessionId) return;
+    if (route != null && !route.isCurrent) return;
     if (!result.isSuccess &&
         result.failure != TelemetrySessionActionFailure.restartRequired) {
-      _snack(l10n.telemetryExportFailed(result.message(l10n)));
+      _snack(result, TelemetrySessionActionKind.export);
     }
   }
 
   Future<void> _delete(TelemetrySessionReplay replay) async {
-    // Read before the dialog. The outcome describes the delete the user asked
-    // for, so it belongs to the language that was on screen when they asked.
-    final l10n = AppLocalizations.of(context);
+    final targetSessionId = widget.sessionId;
+    final route = ModalRoute.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.telemetryDeleteSessionTitle),
-        content: Text(
-          l10n.telemetryDeleteSessionBody('${replay.startedAtUtc.toLocal()}'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(l10n.telemetryCancel),
+      builder: (dialogContext) {
+        final dialogL10n = AppLocalizations.of(dialogContext);
+        return AlertDialog(
+          scrollable: true,
+          title: Text(dialogL10n.telemetryDeleteSessionTitle),
+          content: Text(
+            dialogL10n.telemetryDeleteSessionBody(
+              '${replay.startedAtUtc.toLocal()}',
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(l10n.telemetryDelete),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(dialogL10n.telemetryCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(dialogL10n.telemetryDelete),
+            ),
+          ],
+        );
+      },
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted || widget.sessionId != targetSessionId) {
+      return;
+    }
+    if (route != null && !route.isCurrent) return;
     final result = await ref
         .read(telemetrySessionActionsProvider)
-        .delete(widget.sessionId, confirmed: true);
-    if (!mounted) return;
+        .delete(targetSessionId, confirmed: true);
+    if (!mounted || widget.sessionId != targetSessionId) return;
     if (result.isSuccess) {
       ref.invalidate(telemetrySessionLibraryProvider);
-      Navigator.pop(context);
+      if (route != null && route.isCurrent) {
+        Navigator.pop(context);
+      }
     } else {
+      if (route != null && !route.isCurrent) return;
       if (result.failure != TelemetrySessionActionFailure.restartRequired) {
-        _snack(l10n.telemetryDeleteFailed(result.message(l10n)));
+        _snack(result, TelemetrySessionActionKind.delete);
       }
     }
   }

@@ -907,7 +907,12 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// Starts the built-in simulator. Needs no permissions and no hardware, so
   /// it is also what the app falls back to when the user just wants to look
   /// around.
-  Future<bool> connectDemo() => _connect(DemoTransport(), TransportKind.demo);
+  Future<bool> connectDemo({Duration? responseLatency}) => _connect(
+    DemoTransport(
+      responseLatency: responseLatency ?? const Duration(milliseconds: 18),
+    ),
+    TransportKind.demo,
+  );
 
   /// Connects an arbitrary transport. Tests only.
   ///

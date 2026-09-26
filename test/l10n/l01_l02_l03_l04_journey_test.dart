@@ -64,7 +64,7 @@ class _IdleSession extends ObdSession {
   }
 
   @override
-  Future<bool> connectDemo() async {
+  Future<bool> connectDemo({Duration? responseLatency}) async {
     connects++;
     return false;
   }

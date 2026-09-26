@@ -384,7 +384,15 @@ void main() {
           sdkInt: '36',
         );
 
-      expect(await session.connectDemo(), isTrue);
+      final connected = await session.connectDemo(
+        responseLatency: Duration.zero,
+      );
+      expect(
+        connected,
+        isTrue,
+        reason:
+            'Handshake failed: ${session.state.error} (${session.state.issue})',
+      );
       expect(session.transcriptHeader, contains('無車測試馬具證據'));
       expect(session.transcriptHeader, isNot(contains('Telltale 實車證據')));
       expect(
