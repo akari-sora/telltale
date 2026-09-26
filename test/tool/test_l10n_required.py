@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Unit tests and mutation coverage for tool/ci/run_l10n_required.py.
 
-Verifies fail-closed behavior across M01-M07 mutation scenarios:
+Verifies fail-closed behavior across M01-M07 mutation scenarios and G-EVENT,
+G-SUITE, G-MANIFEST, G-CENSUS, G-PNG, G-RUN, G-FAILURE, G-ARCHIVE regressions:
 - M01: Missing required test case
 - M02: Required test case failure
 - M03: Required test case skip
@@ -9,6 +10,13 @@ Verifies fail-closed behavior across M01-M07 mutation scenarios:
 - M05: Nonzero runner child exit code
 - M06: Missing required artifact file
 - M07: Happy path control (all cases succeed and artifacts present)
+- G-SUITE: Missing suite, unknown suiteID, duplicate suite, boolean suite ID
+- G-EVENT: Duplicate testStart, testStart after terminal borrowing outcome, unclosed tests
+- G-CENSUS: Unrelated test failure in report, 1-to-1 violation
+- G-MANIFEST: Duplicate JSON keys, unsupported schemaVersion, string required field
+- G-PNG: PNG magic with junk bytes, corrupt IDAT, trailing junk
+- G-FAILURE: Child process spawn failure overwrites stale ACCEPTED receipt
+- G-ARCHIVE: Complete atomic archive bundle creation and failure fail-closed behavior
 """
 
 from __future__ import annotations
@@ -16,12 +24,37 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import struct
 import sys
 import tempfile
 import unittest
+import zlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from tool.ci.run_l10n_required import verify_l10n_required, L10nRequiredError, find_flutter_bin
+from tool.ci.run_l10n_required import (
+    verify_l10n_required,
+    L10nRequiredError,
+    find_flutter_bin,
+    main as runner_main,
+)
+
+
+def make_valid_png(width: int = 1, height: int = 1) -> bytes:
+    """Generates a strictly valid minimal RGBA PNG."""
+    def chunk(ctype: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + ctype
+            + data
+            + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+        )
+
+    magic = b"\x89PNG\r\n\x1a\n"
+    ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+    raw_scanlines = b"".join(b"\x00" + b"\x00\x00\x00\xff" * width for _ in range(height))
+    idat = chunk(b"IDAT", zlib.compress(raw_scanlines))
+    iend = chunk(b"IEND", b"")
+    return magic + ihdr + idat + iend
 
 
 class TestL10nRequiredRunner(unittest.TestCase):
@@ -29,9 +62,9 @@ class TestL10nRequiredRunner(unittest.TestCase):
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp_dir.name)
 
-        # Create dummy artifacts
+        # Create valid artifact PNG
         self.artifact_file = self.root / "test_artifact.png"
-        self.artifact_file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"dummy" * 50)
+        self.artifact_file.write_bytes(make_valid_png(1, 1))
 
         # Base minimal manifest
         self.manifest_data = {
@@ -131,6 +164,9 @@ class TestL10nRequiredRunner(unittest.TestCase):
         )
 
         self.assertEqual(receipt["status"], "ACCEPTED")
+        self.assertEqual(receipt["executionStatus"], "EXECUTION_PASS")
+        self.assertEqual(receipt["reviewStatus"], "PENDING_REVIEW")
+        self.assertEqual(receipt["provenanceLevel"], "C1A_R2A_VERIFIER_PROVENANCE_ACCEPTED")
         self.assertEqual(receipt["requiredCasesPassed"], 2)
         self.assertEqual(receipt["requiredCasesTotal"], 2)
         self.assertTrue(receipt_path.exists())
@@ -157,7 +193,7 @@ class TestL10nRequiredRunner(unittest.TestCase):
                 runner_exit=0,
                 repo_root=self.root,
             )
-        self.assertIn("failed", str(ctx.exception).lower())
+        self.assertTrue("failed" in str(ctx.exception).lower() or "failing" in str(ctx.exception).lower())
 
     def test_m03_required_case_skipped(self):
         """M03: Skipped required test fails closed."""
@@ -222,14 +258,12 @@ class TestL10nRequiredRunner(unittest.TestCase):
             else:
                 os.environ.pop("FLUTTER_BIN", None)
 
-        # Fallback should return a non-empty string (either PATH, local FVM, or "flutter")
         res = find_flutter_bin()
         self.assertTrue(len(res) > 0)
 
     def test_reject_one_test_covering_two_required_cases(self):
         """Negative 1: Single test cannot satisfy multiple required cases (1-to-1 violation)."""
         manifest_data = dict(self.manifest_data)
-        # Attempt to map C09.1 to the same test name as C01
         manifest_data["cases"] = [
             dict(manifest_data["cases"][0]),
             {
@@ -244,7 +278,6 @@ class TestL10nRequiredRunner(unittest.TestCase):
         manifest_file = self.root / "manifest_dup_target.json"
         manifest_file.write_text(json.dumps(manifest_data), encoding="utf-8")
 
-        # Report has only one test
         report_path = self.root / "report_single_test.jsonl"
         lines = [
             json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
@@ -261,7 +294,6 @@ class TestL10nRequiredRunner(unittest.TestCase):
         """Negative 2: Wrong suite or wrong qualified name with matching tag is rejected."""
         report_path = self.root / "report_wrong_suite.jsonl"
         lines = [
-            # Wrong suite path
             json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/other/wrong_suite.dart"}}),
             json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
             json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
@@ -401,12 +433,11 @@ class TestL10nRequiredRunner(unittest.TestCase):
 
     def test_reject_artifact_invalid_png_magic_bytes(self):
         """Negative 10: Artifact with non-PNG magic bytes is rejected."""
-        # Overwrite artifact with non-PNG bytes
         self.artifact_file.write_bytes(b"NOT_A_PNG_FILE_JUST_SOME_TEXT_DATA")
         report = self._generate_report_jsonl()
         with self.assertRaises(L10nRequiredError) as ctx:
             verify_l10n_required(self.manifest_path, report, runner_exit=0, repo_root=self.root)
-        self.assertIn("valid png", str(ctx.exception).lower())
+        self.assertIn("png", str(ctx.exception).lower())
 
     def test_reject_unrecognized_or_mismatched_profile(self):
         """Negative 11: Unrecognized or mismatched profile is rejected."""
@@ -420,7 +451,6 @@ class TestL10nRequiredRunner(unittest.TestCase):
             verify_l10n_required(m_file, report, runner_exit=0, repo_root=self.root)
         self.assertIn("profile", str(ctx.exception).lower())
 
-        # Also test profile mismatch against expected_profile
         with self.assertRaises(L10nRequiredError) as ctx:
             verify_l10n_required(
                 self.manifest_path,
@@ -461,6 +491,281 @@ class TestL10nRequiredRunner(unittest.TestCase):
         self.assertTrue(receipt_path.exists())
         data = json.loads(receipt_path.read_text(encoding="utf-8"))
         self.assertEqual(data["status"], "REJECTED")
+
+    # --- New G-Suite, G-Event, G-Manifest, G-PNG, G-Failure, G-Archive Regressions ---
+
+    def test_reject_png_magic_plus_junk(self):
+        """G-PNG: PNG with magic bytes followed by arbitrary junk is rejected by chunk parser."""
+        self.artifact_file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"junk_bytes_instead_of_chunks" * 10)
+        report = self._generate_report_jsonl()
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report, runner_exit=0, repo_root=self.root)
+        self.assertTrue("png" in str(ctx.exception).lower() or "chunk" in str(ctx.exception).lower())
+
+    def test_reject_missing_or_empty_suite_path(self):
+        """G-SUITE: Suite event with empty or whitespace path is rejected."""
+        report_path = self.root / "report_empty_suite_path.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "   "}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertIn("suite", str(ctx.exception).lower())
+
+    def test_reject_unknown_suite_in_test_start(self):
+        """G-SUITE: testStart referencing undeclared suiteID is rejected."""
+        report_path = self.root / "report_unknown_suite_id.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            # testID 1 points to unknown suiteID 99
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 99}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertIn("unknown suiteid", str(ctx.exception).lower())
+
+    def test_reject_duplicate_suite_id(self):
+        """G-SUITE: Duplicate suite definition for the same suite ID is rejected."""
+        report_path = self.root / "report_dup_suite.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test_other.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertIn("duplicate suite", str(ctx.exception).lower())
+
+    def test_reject_boolean_suite_id_or_ref(self):
+        """G-SUITE: Boolean value for suite.id or testStart.suiteID is rejected."""
+        report_path = self.root / "report_bool_suite.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": True, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": True}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertIn("suite", str(ctx.exception).lower())
+
+    def test_reject_duplicate_test_start(self):
+        """G-EVENT: Duplicate testStart for the same test ID is rejected."""
+        report_path = self.root / "report_dup_start.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Another Name", "suiteID": 1}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertIn("duplicate teststart", str(ctx.exception).lower())
+
+    def test_reject_test_start_after_terminal_borrowing_result(self):
+        """G-EVENT: testStart issued after testDone borrowing result is rejected."""
+        report_path = self.root / "report_borrow_terminal.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            # testID 1 starts as Non-Required
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Unrelated Test", "suiteID": 1}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            # testID 1 reissued as required name after terminal
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertTrue("terminated" in str(ctx.exception).lower() or "duplicate" in str(ctx.exception).lower())
+
+    def test_reject_unrelated_test_failure_in_report(self):
+        """G-CENSUS: Unrelated test failure in report fails closed even if all required cases pass."""
+        report_path = self.root / "report_extra_failure.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "testStart", "test": {"id": 3, "name": "Unrelated Failing Test", "suiteID": 1}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 3, "result": "failure", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertTrue("failed" in str(ctx.exception).lower() or "failing" in str(ctx.exception).lower())
+
+    def test_reject_manifest_duplicate_json_keys(self):
+        """G-MANIFEST: Duplicate JSON keys in manifest are rejected by strict parser."""
+        bad_json = """{
+            "schemaVersion": "1.0.0",
+            "profile": "test-profile",
+            "profile": "other-profile",
+            "cases": []
+        }"""
+        m_file = self.root / "manifest_dup_keys.json"
+        m_file.write_text(bad_json, encoding="utf-8")
+        report = self._generate_report_jsonl()
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(m_file, report, runner_exit=0, repo_root=self.root)
+        self.assertIn("duplicate json key", str(ctx.exception).lower())
+
+    def test_reject_manifest_unsupported_schema_version(self):
+        """G-MANIFEST: Unsupported manifest schemaVersion is rejected."""
+        manifest_data = dict(self.manifest_data)
+        manifest_data["schemaVersion"] = "99.0.0"
+        m_file = self.root / "manifest_unsupported_schema.json"
+        m_file.write_text(json.dumps(manifest_data), encoding="utf-8")
+        report = self._generate_report_jsonl()
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(m_file, report, runner_exit=0, repo_root=self.root)
+        self.assertIn("schemaversion", str(ctx.exception).lower())
+
+    def test_reject_manifest_string_required(self):
+        """G-MANIFEST: String 'true' for case.required is rejected with non-boolean type error."""
+        manifest_data = dict(self.manifest_data)
+        manifest_data["cases"] = [
+            {
+                "caseId": "C01",
+                "criterionId": "AC40-1",
+                "suitePath": "test/l10n/test.dart",
+                "qualifiedTestName": "Test Suite [C01] Language",
+                "layer": "software-root",
+                "required": "true",  # String instead of bool!
+            }
+        ]
+        m_file = self.root / "manifest_string_req.json"
+        m_file.write_text(json.dumps(manifest_data), encoding="utf-8")
+        report = self._generate_report_jsonl()
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(m_file, report, runner_exit=0, repo_root=self.root)
+        self.assertIn("non-boolean", str(ctx.exception).lower())
+
+    def test_archive_failure_overwrites_rejected_receipt(self):
+        """G-ARCHIVE: Archive failure (e.g. destination collision) fails closed and writes REJECTED receipt."""
+        bundle_dir = self.root / "broken_bundle"
+        bundle_dir.mkdir(parents=True)
+        # Create collision where manifest.json is a directory
+        (bundle_dir / "manifest.json").mkdir()
+
+        receipt_path = self.root / "receipt.json"
+        receipt_path.write_text(json.dumps({"status": "ACCEPTED"}), encoding="utf-8")
+        report = self._generate_report_jsonl()
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(
+                self.manifest_path,
+                report,
+                runner_exit=0,
+                evidence_path=receipt_path,
+                bundle_dir=bundle_dir,
+                repo_root=self.root,
+            )
+        self.assertIn("archive failed", str(ctx.exception).lower())
+        data = json.loads(receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["status"], "REJECTED")
+        self.assertEqual(data["executionStatus"], "EXECUTION_FAIL")
+
+    def test_main_spawn_failure_overwrites_rejected_receipt(self):
+        """G-FAILURE: Subprocess spawn failure in main() writes REJECTED receipt and returns 1."""
+        receipt_path = self.root / "receipt_spawn_fail.json"
+        receipt_path.write_text(json.dumps({"status": "ACCEPTED"}), encoding="utf-8")
+
+        rc = runner_main([
+            "--flutter",
+            "/nonexistent/binary/path/that/cannot/exist",
+            "--manifest",
+            str(self.manifest_path),
+            "--report",
+            str(self.root / "spawn_report.jsonl"),
+            "--evidence",
+            str(receipt_path),
+            "--expected-profile",
+            "test-profile",
+        ])
+        self.assertEqual(rc, 1)
+        data = json.loads(receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["status"], "REJECTED")
+        self.assertEqual(data["executionStatus"], "EXECUTION_FAIL")
+
+    def test_full_archive_bundle_generation(self):
+        """G-ARCHIVE: Verified run creates complete 11-file bundle archive and matches hashes."""
+        bundle_dir = self.root / "ci-artifacts/l10n-required/test-run"
+        receipt_path = self.root / "ci-artifacts/l10n-required/receipt.json"
+        report = self._generate_report_jsonl()
+
+        receipt = verify_l10n_required(
+            self.manifest_path,
+            report,
+            runner_exit=0,
+            evidence_path=receipt_path,
+            bundle_dir=bundle_dir,
+            repo_root=self.root,
+        )
+
+        self.assertEqual(receipt["status"], "ACCEPTED")
+        self.assertEqual(receipt["executionStatus"], "EXECUTION_PASS")
+        self.assertEqual(receipt["reviewStatus"], "PENDING_REVIEW")
+        self.assertEqual(receipt["provenanceLevel"], "C1A_R2A_VERIFIER_PROVENANCE_ACCEPTED")
+
+        # Verify all bundle files exist
+        required_bundle_files = [
+            "run-context.json",
+            "manifest.json",
+            "command.json",
+            "child.exit",
+            "child.stdout.jsonl",
+            "child.stderr.txt",
+            "case-observations.json",
+            "artifacts/test_artifact.png",
+            "artifacts.sha256",
+            "attempt.json",
+            "verification.json",
+        ]
+        for f in required_bundle_files:
+            file_path = bundle_dir / f
+            self.assertTrue(file_path.exists(), f"Missing required bundle file: {f}")
+
+        # Check sha256 in artifacts.sha256
+        sha_lines = (bundle_dir / "artifacts.sha256").read_text(encoding="utf-8").strip().splitlines()
+        self.assertEqual(len(sha_lines), 1)
+        self.assertIn("test_artifact.png", sha_lines[0])
 
 
 if __name__ == "__main__":

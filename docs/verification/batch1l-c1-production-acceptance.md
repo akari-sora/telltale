@@ -75,5 +75,5 @@ The scoped gate runner `python3 tool/ci/run_l10n_required.py` is integrated into
 run_step l10n-required python3 tool/ci/run_l10n_required.py --evidence ci-artifacts/l10n-required/receipt.json
 ```
 Receipts, test logs, and accessibility PNG artifacts are saved and verified under `build/reports/l10n_accessibility/` and `docs/verification/evidence/l10n_production_receipt.json`.
-For acceptance hardening details, see [docs/verification/batch1l-c1a-r1-acceptance-integrity.md](file:///Users/iml1s/Documents/mine/apps/auto/torque/docs/verification/batch1l-c1a-r1-acceptance-integrity.md).
+For acceptance hardening details, see [docs/verification/batch1l-c1a-r1-acceptance-integrity.md](file:///Users/iml1s/Documents/mine/apps/auto/torque/docs/verification/batch1l-c1a-r1-acceptance-integrity.md) and [docs/verification/batch1l-c1a-r2a-verifier-provenance.md](file:///Users/iml1s/Documents/mine/apps/auto/torque/docs/verification/batch1l-c1a-r2a-verifier-provenance.md).
 

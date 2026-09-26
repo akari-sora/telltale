@@ -1,99 +1,120 @@
 {
   "status": "ACCEPTED",
+  "executionStatus": "EXECUTION_PASS",
+  "reviewStatus": "PENDING_REVIEW",
+  "provenanceLevel": "C1A_R2A_VERIFIER_PROVENANCE_ACCEPTED",
+  "runId": "run_20260926T192339Z_65046",
   "profile": "software-root",
-  "timestampUtc": "2026-09-26T18:18:22.616534+00:00",
+  "timestampUtc": "2026-09-26T19:23:39.813700+00:00",
+  "sourceSha": "62fd84a01bb822229ca4116b37b564400bb5539b",
+  "treeSha": "bcdce7ac5f3515814651189adeaabcda28cc4288",
   "manifestHash": "866bfb57e1cd90a027f80aacc700b55df3362ea5870943f9f9c67e6ea26e5afc",
-  "reportHash": "bbbc28b68ed04c48accecff52fa5d31af9e21999ed0b1818e2fe7b0797a9e2e4",
+  "reportHash": "01e1080984aca3d256bc5330ca0ef056c2acc55b2d787aaf05495d3ad1db85c0",
   "requiredCasesTotal": 12,
   "requiredCasesPassed": 12,
   "cases": [
     {
       "caseId": "C01",
       "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C01] Unconnected Language: real entry reachable before connection, bidirectional en/zh switch with zero extra requests",
+      "suitePath": "test/l10n/l06_production_root_journey_test.dart",
       "result": "success",
       "artifacts": []
     },
     {
       "caseId": "C02",
       "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C02] Demo to Dashboard/PID/DTC: real Demo connect, session connected, live PIDs, read-only DTC",
+      "suitePath": "test/l10n/l06_production_root_journey_test.dart",
       "result": "success",
       "artifacts": []
     },
     {
       "caseId": "C03",
       "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C03] Recording to History to Replay: live recording collects values, stop settles, tile click opens exact session replay",
+      "suitePath": "test/l10n/l06_production_root_journey_test.dart",
       "result": "success",
       "artifacts": []
     },
     {
       "caseId": "C04",
       "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C04] Export/Cancel/Reopen: real UI export CSV and JSON, byte-identical canonical contents, gate settles, reopen same session",
+      "suitePath": "test/l10n/l06_production_root_journey_test.dart",
       "result": "success",
       "artifacts": []
     },
     {
       "caseId": "C05",
       "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C05] Real Disconnect: actually tap Disconnect, session/transport terminal, zero subsequent dispatch",
+      "suitePath": "test/l10n/l06_production_root_journey_test.dart",
       "result": "success",
       "artifacts": []
     },
     {
       "caseId": "C06",
       "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C06] Permission and transport failure: refusal reasons rendered, stored failure does not re-prompt",
+      "suitePath": "test/l10n/l06_production_root_journey_test.dart",
       "result": "success",
       "artifacts": []
     },
     {
       "caseId": "C07",
       "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C07] Formal language guard: recording and artifact-busy blocks switch, permits when idle",
+      "suitePath": "test/l10n/l06_production_root_journey_test.dart",
       "result": "success",
       "artifacts": []
     },
     {
       "caseId": "C08",
       "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C08] Late result/route/dispose: covered-success and route currentness protect owner and feedback",
+      "suitePath": "test/l10n/l06_production_root_journey_test.dart",
       "result": "success",
       "artifacts": []
     },
     {
       "caseId": "C09.1",
       "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.1] 320x640 portrait at 2.0x text scale: zero overflow, minimum touch targets, semantics, and PNG capture",
+      "suitePath": "test/l10n/l06_production_accessibility_test.dart",
       "result": "success",
       "artifacts": [
         {
           "path": "build/reports/l10n_accessibility/c09_portrait_320x640_2x.png",
           "bytes": 16650,
-          "sha256": "c57b8dc08277992a1f3f2bd48d859c1a61a7eda127d950836e70497960de4bb1"
+          "sha256": "c57b8dc08277992a1f3f2bd48d859c1a61a7eda127d950836e70497960de4bb1",
+          "dimensions": "320x640"
         }
       ]
     },
     {
       "caseId": "C09.2",
       "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.2] 568x320 landscape at 2.0x text scale: zero overflow and PNG capture",
+      "suitePath": "test/l10n/l06_production_accessibility_test.dart",
       "result": "success",
       "artifacts": [
         {
           "path": "build/reports/l10n_accessibility/c09_landscape_568x320_2x.png",
           "bytes": 5724,
-          "sha256": "5ba6856019b75f6552c16549a69d7ed896f0191b9bc8a8b6a4a1f3abfbad1891"
+          "sha256": "5ba6856019b75f6552c16549a69d7ed896f0191b9bc8a8b6a4a1f3abfbad1891",
+          "dimensions": "568x320"
         }
       ]
     },
     {
       "caseId": "C09.3",
       "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.3] Dialog kept open while rotating orientation and switching locale: zero crash and zero overflow",
+      "suitePath": "test/l10n/l06_production_accessibility_test.dart",
       "result": "success",
       "artifacts": [
         {
           "path": "build/reports/l10n_accessibility/c09_dialog_open_landscape_rotated.png",
           "bytes": 2957,
-          "sha256": "11d48336bb5ff82ff3c2d85cfb6d492c828e7535673fbe04c8ba222078fcc580"
+          "sha256": "11d48336bb5ff82ff3c2d85cfb6d492c828e7535673fbe04c8ba222078fcc580",
+          "dimensions": "568x320"
         }
       ]
     },
     {
       "caseId": "C09.4",
       "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.4] Semantics inspection: key controls provide accessible labels and actions",
+      "suitePath": "test/l10n/l06_production_accessibility_test.dart",
       "result": "success",
       "artifacts": []
     }
