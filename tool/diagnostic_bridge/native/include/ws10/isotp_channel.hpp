@@ -11,6 +11,8 @@
 
 namespace ws10 {
 
+constexpr int64_t kMaxSafeTimeoutMs = 86400000LL * 30LL;  // 30 days
+
 /// Configurable I/O and retry budget for ISO-TP operations.
 struct CanIoBudget {
   std::chrono::milliseconds open_timeout{1000};
@@ -36,8 +38,10 @@ struct CanIoBudget {
   }
 
   void validate() const {
-    if (open_timeout.count() <= 0 || write_timeout.count() <= 0 || read_timeout.count() <= 0) {
-      throw std::invalid_argument("CanIoBudget timeouts must be positive (got open=" +
+    if (open_timeout.count() <= 0 || open_timeout.count() > kMaxSafeTimeoutMs ||
+        write_timeout.count() <= 0 || write_timeout.count() > kMaxSafeTimeoutMs ||
+        read_timeout.count() <= 0 || read_timeout.count() > kMaxSafeTimeoutMs) {
+      throw std::invalid_argument("CanIoBudget timeouts must be positive and <= 30 days (got open=" +
                                   std::to_string(open_timeout.count()) +
                                   ", write=" + std::to_string(write_timeout.count()) +
                                   ", read=" + std::to_string(read_timeout.count()) + ")");
@@ -45,7 +49,9 @@ struct CanIoBudget {
   }
 
   bool is_valid() const noexcept {
-    return open_timeout.count() > 0 && write_timeout.count() > 0 && read_timeout.count() > 0;
+    return open_timeout.count() > 0 && open_timeout.count() <= kMaxSafeTimeoutMs &&
+           write_timeout.count() > 0 && write_timeout.count() <= kMaxSafeTimeoutMs &&
+           read_timeout.count() > 0 && read_timeout.count() <= kMaxSafeTimeoutMs;
   }
 };
 
@@ -57,14 +63,13 @@ inline std::chrono::steady_clock::time_point checked_phase_deadline(
   if (phase_timeout.count() <= 0) {
     return now;
   }
-  auto max_tp = std::chrono::steady_clock::time_point::max();
-  if (now >= max_tp) {
-    return std::min(max_tp, overall_deadline);
+  if (phase_timeout.count() > kMaxSafeTimeoutMs) {
+    return overall_deadline;
   }
-  auto time_to_max = std::chrono::duration_cast<std::chrono::nanoseconds>(max_tp - now);
-  auto phase_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(phase_timeout);
+  auto max_tp = std::chrono::steady_clock::time_point::max();
+  auto dur = std::chrono::duration_cast<std::chrono::steady_clock::duration>(phase_timeout);
   std::chrono::steady_clock::time_point phase_dl =
-      (phase_ns >= time_to_max) ? max_tp : (now + phase_timeout);
+      (now > max_tp - dur) ? max_tp : (now + dur);
   return std::min(phase_dl, overall_deadline);
 }
 
@@ -90,8 +95,8 @@ class OperationContext {
       std::shared_ptr<bool> retired_flag = nullptr)
       : attempt_id_(attempt_id),
         deadline_(deadline),
-        cancel_flag_(cancel_flag),
-        retired_flag_(retired_flag) {}
+        cancel_flag_(std::move(cancel_flag)),
+        retired_flag_(std::move(retired_flag)) {}
 
   static OperationContext with_timeout(
       AttemptId attempt_id,
@@ -102,21 +107,15 @@ class OperationContext {
     if (timeout.count() < 0) {
       throw std::invalid_argument("Timeout cannot be negative: " + std::to_string(timeout.count()));
     }
+    if (timeout.count() > kMaxSafeTimeoutMs) {
+      throw std::invalid_argument("Timeout exceeds safe maximum (30 days): " + std::to_string(timeout.count()));
+    }
     auto now = clock.now();
     auto max_tp = std::chrono::steady_clock::time_point::max();
-    std::chrono::steady_clock::time_point deadline;
-    if (now >= max_tp) {
-      deadline = max_tp;
-    } else {
-      auto dur_until_max = std::chrono::duration_cast<std::chrono::nanoseconds>(max_tp - now);
-      auto to_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(timeout);
-      if (to_ns >= dur_until_max) {
-        deadline = max_tp;
-      } else {
-        deadline = now + timeout;
-      }
-    }
-    return OperationContext(attempt_id, deadline, cancel_flag, retired_flag);
+    auto dur = std::chrono::duration_cast<std::chrono::steady_clock::duration>(timeout);
+    std::chrono::steady_clock::time_point deadline =
+        (now > max_tp - dur) ? max_tp : (now + dur);
+    return OperationContext(attempt_id, deadline, std::move(cancel_flag), std::move(retired_flag));
   }
 
   const AttemptId& attempt_id() const noexcept { return attempt_id_; }
@@ -186,9 +185,25 @@ class KernelIsoTpChannel {
   /// Guarantees rollback (fd closed, handle invalidated) on any setup failure.
   void open(const CanEndpointSpec& spec, const CanIoBudget& budget = CanIoBudget{});
 
-  /// Sends an Application PDU over ISO-TP, returning a write execution receipt.
-  /// Strictly requires and validates expected handle ownership and single-use attempt.
+  /// Issues a single-use diagnostic operation authorization binding the approved read to
+  /// the active endpoint, channel generation, attempt ID, and monotonic deadline.
+  /// Throws std::logic_error if the channel is closed or poisoned.
+  /// Throws std::invalid_argument if the AttemptId was already recorded on this channel.
+  DiagnosticAuthorization authorize(
+      const ApprovedRead& request,
+      AttemptId attempt_id,
+      std::chrono::milliseconds timeout,
+      std::shared_ptr<bool> cancel_flag = nullptr,
+      std::shared_ptr<bool> retired_flag = nullptr);
+
+  /// Sends an approved diagnostic request using a DiagnosticAuthorization.
   WriteReceipt send(
+      DiagnosticAuthorization& auth,
+      const CanIoBudget& budget = CanIoBudget{});
+
+  /// Internal raw send for low-level protocol tests and negative controls.
+  /// Public consumers must use authorize() + exchange() or authorize() + send().
+  WriteReceipt internal_raw_send_for_testing(
       const ApplicationPdu& pdu,
       const OperationContext& ctx,
       const HandleId& expected_handle,
@@ -198,6 +213,11 @@ class KernelIsoTpChannel {
   /// Enforces maximum 4095-byte payload and rejects 4096+ datagram truncation.
   ApplicationPdu receive(
       const OperationContext& ctx,
+      const CanIoBudget& budget = CanIoBudget{});
+
+  /// Executes an approved diagnostic read exchange consuming a DiagnosticAuthorization.
+  ExchangeResult exchange(
+      DiagnosticAuthorization& auth,
       const CanIoBudget& budget = CanIoBudget{});
 
   /// Executes an approved diagnostic read exchange (send request + await response).

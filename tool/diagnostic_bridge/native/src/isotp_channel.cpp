@@ -21,8 +21,15 @@ KernelIsoTpChannel::KernelIsoTpChannel(KernelIsoTpChannel&& other) noexcept
       clock_(std::move(other.clock_)),
       fd_(other.fd_),
       generation_(other.generation_),
-      endpoint_(std::move(other.endpoint_)) {
+      endpoint_(std::move(other.endpoint_)),
+      close_state_(other.close_state_),
+      is_poisoned_(other.is_poisoned_),
+      seen_attempts_(std::move(other.seen_attempts_)) {
   other.fd_ = -1;
+  other.generation_ = 0;
+  other.close_state_ = ChannelCloseState::kClosed;
+  other.is_poisoned_ = false;
+  other.seen_attempts_.clear();
 }
 
 KernelIsoTpChannel& KernelIsoTpChannel::operator=(KernelIsoTpChannel&& other) noexcept {
@@ -33,7 +40,15 @@ KernelIsoTpChannel& KernelIsoTpChannel::operator=(KernelIsoTpChannel&& other) no
     fd_ = other.fd_;
     generation_ = other.generation_;
     endpoint_ = std::move(other.endpoint_);
+    close_state_ = other.close_state_;
+    is_poisoned_ = other.is_poisoned_;
+    seen_attempts_ = std::move(other.seen_attempts_);
+
     other.fd_ = -1;
+    other.generation_ = 0;
+    other.close_state_ = ChannelCloseState::kClosed;
+    other.is_poisoned_ = false;
+    other.seen_attempts_.clear();
   }
   return *this;
 }
@@ -134,7 +149,52 @@ void KernelIsoTpChannel::open(const CanEndpointSpec& spec, const CanIoBudget& bu
   seen_attempts_.clear();
 }
 
+DiagnosticAuthorization KernelIsoTpChannel::authorize(
+    const ApprovedRead& request,
+    AttemptId attempt_id,
+    std::chrono::milliseconds timeout,
+    std::shared_ptr<bool> cancel_flag,
+    std::shared_ptr<bool> retired_flag) {
+  if (is_poisoned_) {
+    throw std::logic_error("KernelIsoTpChannel close failed previously; channel cannot be reused.");
+  }
+  if (!is_open()) {
+    throw std::logic_error("Cannot authorize diagnostic operation on closed KernelIsoTpChannel.");
+  }
+  if (has_attempt(attempt_id)) {
+    throw std::invalid_argument("AttemptId " + std::to_string(attempt_id.value) + " already used on this channel.");
+  }
+  if (timeout.count() < 0 || timeout.count() > kMaxSafeTimeoutMs) {
+    throw std::invalid_argument("Invalid timeout duration: " + std::to_string(timeout.count()));
+  }
+  auto now = clock_->now();
+  auto max_tp = std::chrono::steady_clock::time_point::max();
+  auto dur = std::chrono::duration_cast<std::chrono::steady_clock::duration>(timeout);
+  std::chrono::steady_clock::time_point deadline = (now > max_tp - dur) ? max_tp : (now + dur);
+  return DiagnosticAuthorization(request, *endpoint_, handle(), attempt_id, deadline, std::move(cancel_flag), std::move(retired_flag));
+}
+
 WriteReceipt KernelIsoTpChannel::send(
+    DiagnosticAuthorization& auth,
+    const CanIoBudget& budget) {
+  if (auth.is_consumed()) {
+    return WriteReceipt{auth.attempt_id(), 0, WriteDisposition::kProvenNotSubmitted,
+                        "Authorization has already been consumed"};
+  }
+  if (!validate_handle(auth.handle())) {
+    return WriteReceipt{auth.attempt_id(), 0, WriteDisposition::kProvenNotSubmitted,
+                        "Invalid, stale, or mismatched handle"};
+  }
+  if (!endpoint_ || *endpoint_ != auth.endpoint()) {
+    return WriteReceipt{auth.attempt_id(), 0, WriteDisposition::kProvenNotSubmitted,
+                        "Endpoint mismatch between authorization and channel"};
+  }
+  auth.mark_consumed();
+  OperationContext ctx(auth.attempt_id(), auth.deadline(), auth.cancel_flag(), auth.retired_flag());
+  return internal_raw_send_for_testing(auth.request().pdu(), ctx, auth.handle(), budget);
+}
+
+WriteReceipt KernelIsoTpChannel::internal_raw_send_for_testing(
     const ApplicationPdu& pdu,
     const OperationContext& ctx,
     const HandleId& expected_handle,
@@ -376,6 +436,54 @@ ApplicationPdu KernelIsoTpChannel::receive(
 }
 
 ExchangeResult KernelIsoTpChannel::exchange(
+    DiagnosticAuthorization& auth,
+    const CanIoBudget& budget) {
+  ExchangeResult res;
+  res.handle_id = handle();
+  res.cleanup_outcome = CleanupOutcome::kSkipped;
+
+  if (auth.is_consumed()) {
+    res.write_receipt = WriteReceipt{
+        auth.attempt_id(), 0, WriteDisposition::kProvenNotSubmitted,
+        "Authorization has already been consumed"};
+    res.primary_outcome = PrimaryOutcome::kAdmissionRejected;
+    res.message = res.write_receipt.reason;
+    return res;
+  }
+
+  if (!validate_handle(auth.handle())) {
+    res.write_receipt = WriteReceipt{
+        auth.attempt_id(), 0, WriteDisposition::kProvenNotSubmitted,
+        "Invalid, stale, or mismatched handle for exchange"};
+    res.primary_outcome = PrimaryOutcome::kAdmissionRejected;
+    res.message = res.write_receipt.reason;
+    return res;
+  }
+
+  if (!endpoint_ || *endpoint_ != auth.endpoint()) {
+    res.write_receipt = WriteReceipt{
+        auth.attempt_id(), 0, WriteDisposition::kProvenNotSubmitted,
+        "Endpoint mismatch between authorization and channel"};
+    res.primary_outcome = PrimaryOutcome::kAdmissionRejected;
+    res.message = res.write_receipt.reason;
+    return res;
+  }
+
+  if (has_attempt(auth.attempt_id())) {
+    res.write_receipt = WriteReceipt{
+        auth.attempt_id(), 0, WriteDisposition::kProvenNotSubmitted,
+        "AttemptId already used on this channel"};
+    res.primary_outcome = PrimaryOutcome::kAdmissionRejected;
+    res.message = res.write_receipt.reason;
+    return res;
+  }
+
+  auth.mark_consumed();
+  OperationContext ctx(auth.attempt_id(), auth.deadline(), auth.cancel_flag(), auth.retired_flag());
+  return exchange(auth.request(), ctx, auth.handle(), budget);
+}
+
+ExchangeResult KernelIsoTpChannel::exchange(
     const ApprovedRead& request,
     const OperationContext& ctx,
     const HandleId& expected_handle,
@@ -430,7 +538,7 @@ ExchangeResult KernelIsoTpChannel::exchange(
   OperationContext send_ctx(ctx.attempt_id(), send_deadline, ctx.cancel_flag(), ctx.retired_flag());
 
   // 1. Submit Request PDU bound to verified handle
-  res.write_receipt = send(request.pdu(), send_ctx, expected_handle, budget);
+  res.write_receipt = internal_raw_send_for_testing(request.pdu(), send_ctx, expected_handle, budget);
   if (res.write_receipt.disposition != WriteDisposition::kSubmitted) {
     bool cancelled = ctx.is_cancelled();
     bool retired = ctx.is_retired();

@@ -338,7 +338,7 @@ bool test_u08_send_success() {
   AttemptId attempt{42};
   auto ctx = OperationContext::with_timeout(attempt, std::chrono::milliseconds(500), *fake_clock);
 
-  WriteReceipt receipt = channel.send(pdu, ctx, channel.handle());
+  WriteReceipt receipt = channel.internal_raw_send_for_testing(pdu, ctx, channel.handle());
   TEST_ASSERT(receipt.attempt_id == attempt, "attempt_id match");
   TEST_ASSERT(receipt.disposition == WriteDisposition::kSubmitted, "disposition submitted");
   TEST_ASSERT(receipt.bytes_written == 3, "bytes_written == 3");
@@ -366,19 +366,19 @@ bool test_u09_send_bounded_retry_and_timeout() {
   AttemptId attempt{99};
   auto ctx = OperationContext::with_timeout(attempt, std::chrono::milliseconds(1000), *fake_clock);
 
-  WriteReceipt receipt = channel.send(pdu, ctx, channel.handle());
+  WriteReceipt receipt = channel.internal_raw_send_for_testing(pdu, ctx, channel.handle());
   TEST_ASSERT(receipt.disposition == WriteDisposition::kSubmitted, "submitted after retries");
 
   // Expiration before send
   AttemptId expired_attempt{100};
   auto expired_ctx = OperationContext::with_timeout(expired_attempt, std::chrono::milliseconds(10), *fake_clock);
   fake_clock->advance(std::chrono::milliseconds(2000));
-  WriteReceipt expired_receipt = channel.send(pdu, expired_ctx, channel.handle());
+  WriteReceipt expired_receipt = channel.internal_raw_send_for_testing(pdu, expired_ctx, channel.handle());
   TEST_ASSERT(expired_receipt.disposition == WriteDisposition::kProvenNotSubmitted,
               "expired must be proven not submitted");
 
   // Single-use attempt rejection
-  WriteReceipt dup_receipt = channel.send(pdu, ctx, channel.handle());
+  WriteReceipt dup_receipt = channel.internal_raw_send_for_testing(pdu, ctx, channel.handle());
   TEST_ASSERT(dup_receipt.disposition == WriteDisposition::kProvenNotSubmitted,
               "duplicate attempt ID must be rejected");
 
@@ -520,7 +520,7 @@ bool test_u13_post_poll_revocation_and_handle_validation() {
   // R64-2: Send with stale handle must be rejected
   AttemptId attempt{777};
   auto ctx = OperationContext::with_timeout(attempt, std::chrono::milliseconds(1000), *fake_clock);
-  WriteReceipt r_stale = channel.send(
+  WriteReceipt r_stale = channel.internal_raw_send_for_testing(
       ApplicationPdu(std::vector<uint8_t>{0x22, 0xF1, 0x90}), ctx, stale_handle);
   TEST_ASSERT(r_stale.disposition == WriteDisposition::kProvenNotSubmitted,
               "send with stale handle must be proven not submitted");
@@ -528,7 +528,7 @@ bool test_u13_post_poll_revocation_and_handle_validation() {
   // R64-3: POLLNVAL revents handled as error
   fake_sys->poll_return = 1;
   fake_sys->poll_revents_override = POLLNVAL;
-  WriteReceipt r_nval = channel.send(
+  WriteReceipt r_nval = channel.internal_raw_send_for_testing(
       ApplicationPdu(std::vector<uint8_t>{0x22, 0xF1, 0x90}), ctx, active_handle);
   TEST_ASSERT(r_nval.disposition == WriteDisposition::kProvenNotSubmitted,
               "POLLNVAL must be proven not submitted");
@@ -540,7 +540,7 @@ bool test_u13_post_poll_revocation_and_handle_validation() {
   auto cancel_ctx = OperationContext::with_timeout(cancel_attempt, std::chrono::milliseconds(1000), *fake_clock, cancel_flag);
   fake_sys->poll_return = 1;
   *cancel_flag = true;
-  WriteReceipt r_cancel = channel.send(
+  WriteReceipt r_cancel = channel.internal_raw_send_for_testing(
       ApplicationPdu(std::vector<uint8_t>{0x22, 0xF1, 0x90}), cancel_ctx, active_handle);
   TEST_ASSERT(r_cancel.disposition == WriteDisposition::kProvenNotSubmitted,
               "post-poll cancellation must be proven not submitted");
@@ -600,6 +600,175 @@ bool test_u14_exchange_phase_deadline_and_response_payload() {
   return true;
 }
 
+bool test_u15_move_semantics_and_state_preservation() {
+  auto fake_sys = std::make_shared<FakeSyscalls>();
+  auto fake_clock = std::make_shared<FakeClock>();
+
+  // 1. Move open channel
+  KernelIsoTpChannel ch1(fake_sys, fake_clock);
+  CanEndpointSpec spec("vcan0", CanId(0x7E0U, CanIdFormat::kStandard),
+                               CanId(0x7E8U, CanIdFormat::kStandard));
+  ch1.open(spec);
+  int owned_fd = ch1.handle().fd();
+  TEST_ASSERT(ch1.is_open(), "ch1 open before move");
+
+  KernelIsoTpChannel ch2(std::move(ch1));
+  TEST_ASSERT(!ch1.is_open(), "ch1 closed after move");
+  TEST_ASSERT(ch1.handle().fd() == -1, "ch1 fd cleared");
+  TEST_ASSERT(ch2.is_open(), "ch2 open after move");
+  TEST_ASSERT(ch2.handle().fd() == owned_fd, "ch2 owns original fd");
+
+  // Closing ch2 must close the fd exactly once
+  CleanupOutcome cl = ch2.close();
+  TEST_ASSERT(cl == CleanupOutcome::kSuccess, "ch2 close succeeds");
+  TEST_ASSERT(!ch2.is_open(), "ch2 closed");
+  TEST_ASSERT(fake_sys->closed_fds.size() == 1, "underlying fd closed exactly once");
+
+  // 2. Move seen attempts
+  KernelIsoTpChannel ch3(fake_sys, fake_clock);
+  ch3.open(spec);
+  ApprovedRead req = ApprovedRead::parse(ApplicationPdu(std::vector<uint8_t>{0x22, 0xF1, 0x90}));
+  AttemptId att1{555};
+  auto auth1 = ch3.authorize(req, att1, std::chrono::milliseconds(500));
+  fake_sys->read_script.push_back({{0x62, 0xF1, 0x90, 0x01}, 0});
+  ch3.exchange(auth1);
+
+  KernelIsoTpChannel ch4(std::move(ch3));
+  // Attempt 555 must still be recorded as seen in ch4
+  bool dup_attempt_rejected = false;
+  try {
+    ch4.authorize(req, att1, std::chrono::milliseconds(500));
+  } catch (const std::invalid_argument&) {
+    dup_attempt_rejected = true;
+  }
+  TEST_ASSERT(dup_attempt_rejected, "seen attempt preserved across move");
+
+  // 3. Move poisoned state
+  fake_sys->close_return = -1;  // simulate close syscall failure
+  ch4.close();
+  TEST_ASSERT(ch4.is_poisoned(), "ch4 is poisoned after close error");
+  KernelIsoTpChannel ch5(std::move(ch4));
+  TEST_ASSERT(ch5.is_poisoned(), "ch5 retains poisoned state after move");
+  bool reopen_rejected = false;
+  try {
+    ch5.open(spec);
+  } catch (const std::logic_error&) {
+    reopen_rejected = true;
+  }
+  TEST_ASSERT(reopen_rejected, "poisoned channel cannot be opened after move");
+  fake_sys->close_return = 0;  // Reset
+
+  // 4. Move assignment overwriting an already-open channel cleans up the existing socket
+  KernelIsoTpChannel ch6(fake_sys, fake_clock);
+  ch6.open(spec);
+  KernelIsoTpChannel ch7(fake_sys, fake_clock);
+  ch7.open(spec);
+  size_t closes_before = fake_sys->closed_fds.size();
+  ch7 = std::move(ch6);
+  TEST_ASSERT(fake_sys->closed_fds.size() == closes_before + 1, "move assignment closed overwritten channel");
+
+  return true;
+}
+
+bool test_u16_diagnostic_authorization_and_no_raw_bypass() {
+  auto fake_sys = std::make_shared<FakeSyscalls>();
+  auto fake_clock = std::make_shared<FakeClock>();
+
+  KernelIsoTpChannel ch(fake_sys, fake_clock);
+  CanEndpointSpec spec1("vcan0", CanId(0x7E0U, CanIdFormat::kStandard),
+                                CanId(0x7E8U, CanIdFormat::kStandard));
+  ch.open(spec1);
+
+  ApprovedRead req = ApprovedRead::parse(ApplicationPdu(std::vector<uint8_t>{0x22, 0xF1, 0x90}));
+  AttemptId att{123};
+  auto auth = ch.authorize(req, att, std::chrono::milliseconds(500));
+
+  TEST_ASSERT(!auth.is_consumed(), "auth not yet consumed");
+  TEST_ASSERT(auth.request() == req, "auth request matches");
+  TEST_ASSERT(auth.endpoint() == spec1, "auth endpoint matches");
+  TEST_ASSERT(auth.handle() == ch.handle(), "auth handle matches");
+
+  // 1. Successful exchange with authorization
+  fake_sys->read_script.push_back({{0x62, 0xF1, 0x90, 0x01}, 0});
+  ExchangeResult res = ch.exchange(auth);
+  TEST_ASSERT(res.is_success(), "exchange with auth succeeds");
+  TEST_ASSERT(auth.is_consumed(), "auth marked consumed after exchange");
+
+  // 2. Cannot reuse consumed authorization
+  ExchangeResult res2 = ch.exchange(auth);
+  TEST_ASSERT(res2.primary_outcome == PrimaryOutcome::kAdmissionRejected,
+              "reusing consumed auth must be rejected with kAdmissionRejected");
+
+  // 3. Old authorization cannot be paired with a new endpoint or reopened channel
+  ch.close();
+  CanEndpointSpec spec2("vcan1", CanId(0x7E0U, CanIdFormat::kStandard),
+                                CanId(0x7E8U, CanIdFormat::kStandard));
+  ch.open(spec2);
+
+  AttemptId att2{124};
+  KernelIsoTpChannel ch_other(fake_sys, fake_clock);
+  ch_other.open(spec1);
+  auto auth_foreign = ch_other.authorize(req, att2, std::chrono::milliseconds(500));
+
+  ExchangeResult res_foreign = ch.exchange(auth_foreign);
+  TEST_ASSERT(res_foreign.primary_outcome == PrimaryOutcome::kAdmissionRejected,
+              "auth with mismatched endpoint or handle must be rejected with kAdmissionRejected");
+
+  // 4. Closed channel rejects authorize()
+  ch.close();
+  bool closed_auth_rejected = false;
+  try {
+    ch.authorize(req, AttemptId{999}, std::chrono::milliseconds(500));
+  } catch (const std::logic_error&) {
+    closed_auth_rejected = true;
+  }
+  TEST_ASSERT(closed_auth_rejected, "authorizing on closed channel throws logic_error");
+
+  return true;
+}
+
+bool test_u17_chrono_overflow_and_safe_bounds() {
+  auto fake_clock = std::make_shared<FakeClock>();
+
+  // 1. Negative clock epoch does not cause signed integer overflow
+  fake_clock->advance(std::chrono::milliseconds(-1000));  // negative epoch
+  AttemptId att{901};
+  auto ctx_neg = OperationContext::with_timeout(att, std::chrono::milliseconds(100), *fake_clock);
+  TEST_ASSERT(!ctx_neg.is_expired(fake_clock->now()), "ctx with negative epoch not expired");
+
+  // 2. checked_phase_deadline with negative now does not overflow
+  auto max_tp = std::chrono::steady_clock::time_point::max();
+  auto phase_dl = checked_phase_deadline(fake_clock->now(), std::chrono::milliseconds(50), max_tp);
+  TEST_ASSERT(phase_dl > fake_clock->now(), "phase deadline advances safely from negative epoch");
+
+  // 3. Near-max clock saturates to max_tp without signed overflow
+  auto near_max = max_tp - std::chrono::nanoseconds(50);
+  auto sat_dl = checked_phase_deadline(near_max, std::chrono::milliseconds(100), max_tp);
+  TEST_ASSERT(sat_dl == max_tp, "phase deadline saturates to max_tp");
+
+  // 4. milliseconds::max() is rejected before arithmetic
+  bool max_ms_rejected = false;
+  try {
+    OperationContext::with_timeout(att, std::chrono::milliseconds::max(), *fake_clock);
+  } catch (const std::invalid_argument&) {
+    max_ms_rejected = true;
+  }
+  TEST_ASSERT(max_ms_rejected, "milliseconds::max() rejected before conversion");
+
+  // 5. CanIoBudget with extreme timeout is rejected
+  bool budget_rejected = false;
+  try {
+    CanIoBudget bad_budget(std::chrono::milliseconds::max(),
+                           std::chrono::milliseconds(100),
+                           std::chrono::milliseconds(100));
+  } catch (const std::invalid_argument&) {
+    budget_rejected = true;
+  }
+  TEST_ASSERT(budget_rejected, "CanIoBudget rejects duration > 30 days");
+
+  return true;
+}
+
 bool run_deliberate_assertion_failure() {
   auto fake_clock = std::make_shared<FakeClock>();
   TEST_ASSERT(fake_clock->now() == (fake_clock->now() + std::chrono::hours(1)),
@@ -628,6 +797,9 @@ int main(int argc, char** argv) {
       {"U12", test_u12_channel_close_and_cleanup},
       {"U13", test_u13_post_poll_revocation_and_handle_validation},
       {"U14", test_u14_exchange_phase_deadline_and_response_payload},
+      {"U15", test_u15_move_semantics_and_state_preservation},
+      {"U16", test_u16_diagnostic_authorization_and_no_raw_bypass},
+      {"U17", test_u17_chrono_overflow_and_safe_bounds},
   };
 
   std::string target_case;

@@ -51,6 +51,15 @@ if(BUILD_TESTING)
     add_test(NAME ws10_case_u14 COMMAND ws10_isotp_unit_tests --case U14)
     set_tests_properties(ws10_case_u14 PROPERTIES LABELS "ws10-s2-step1")
 
+    add_test(NAME ws10_case_u15 COMMAND ws10_isotp_unit_tests --case U15)
+    set_tests_properties(ws10_case_u15 PROPERTIES LABELS "ws10-s2-step1")
+
+    add_test(NAME ws10_case_u16 COMMAND ws10_isotp_unit_tests --case U16)
+    set_tests_properties(ws10_case_u16 PROPERTIES LABELS "ws10-s2-step1")
+
+    add_test(NAME ws10_case_u17 COMMAND ws10_isotp_unit_tests --case U17)
+    set_tests_properties(ws10_case_u17 PROPERTIES LABELS "ws10-s2-step1")
+
     # Negative Controls (Expected to fail / return non-zero exit codes)
     add_test(NAME ws10_neg_assertion_fail COMMAND ws10_isotp_unit_tests --neg-assertion-fail)
     set_tests_properties(ws10_neg_assertion_fail PROPERTIES WILL_FAIL TRUE LABELS "ws10-s2-negative-control")
