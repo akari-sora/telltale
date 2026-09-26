@@ -614,36 +614,47 @@ class _Header extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: Spacing.md,
+            runSpacing: Spacing.sm,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(Radii.md),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [palette.accent, palette.accentSoft],
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(Radii.md),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [palette.accent, palette.accentSoft],
+                      ),
+                    ),
+                    child: Icon(Icons.speed, color: palette.background, size: 24),
                   ),
-                ),
-                child: Icon(Icons.speed, color: palette.background, size: 24),
-              ),
-              const SizedBox(width: Spacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      AppLocalizations.of(context).appTitle,
-                      style: context.texts.headlineMedium,
+                  const SizedBox(width: Spacing.md),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 220),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          AppLocalizations.of(context).appTitle,
+                          style: context.texts.headlineMedium,
+                        ),
+                        Text(
+                          AppLocalizations.of(context).appTagline,
+                          style: context.texts.bodySmall,
+                        ),
+                      ],
                     ),
-                    Text(
-                      AppLocalizations.of(context).appTagline,
-                      style: context.texts.bodySmall,
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               TextButton(
                 key: const Key('connect_language_entry'),
@@ -651,6 +662,7 @@ class _Header extends StatelessWidget {
                   showModalBottomSheet<void>(
                     context: context,
                     showDragHandle: true,
+                    isScrollControlled: true,
                     builder: (sheetContext) {
                       return const SafeArea(
                         child: Padding(

@@ -40,9 +40,11 @@ class LanguagePicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final current = ref.watch(localePreferenceProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         if (showHeading) ...[
           Text(
             l10n.languageSectionTitle,
@@ -83,6 +85,7 @@ class LanguagePicker extends ConsumerWidget {
             },
           ),
       ],
+      ),
     );
   }
 }

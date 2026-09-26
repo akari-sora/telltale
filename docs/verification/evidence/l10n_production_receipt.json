@@ -1,0 +1,127 @@
+{
+  "status": "ACCEPTED",
+  "profile": "software-root",
+  "timestampUtc": "2026-09-26T16:28:05.299964+00:00",
+  "manifestHash": "4fb734d3db5cac9207fe8ce001a7ac1c2230de3fe319961864c96a0a5483d6c8",
+  "reportHash": "378a1cc0404e3eee47a675c3f9c04691315cdcea9b547fdfd55d6f3178b5d52a",
+  "requiredCasesTotal": 12,
+  "requiredCasesPassed": 12,
+  "cases": [
+    {
+      "caseId": "C01",
+      "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C01] Unconnected Language: real entry reachable before connection, bidirectional en/zh switch with zero extra requests",
+      "result": "success",
+      "artifacts": []
+    },
+    {
+      "caseId": "C02",
+      "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C02] Demo to Dashboard/PID/DTC: real Demo connect, session connected, live PIDs, read-only DTC",
+      "result": "success",
+      "artifacts": []
+    },
+    {
+      "caseId": "C03",
+      "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C03] Recording to History to Replay: live recording collects values, stop settles, tile click opens exact session replay",
+      "result": "success",
+      "artifacts": []
+    },
+    {
+      "caseId": "C04",
+      "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C04] Export/Cancel/Reopen: real UI export CSV and JSON, byte-identical canonical contents, gate settles, reopen same session",
+      "result": "success",
+      "artifacts": []
+    },
+    {
+      "caseId": "C05",
+      "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C05] Real Disconnect: actually tap Disconnect, session/transport terminal, zero subsequent dispatch",
+      "result": "success",
+      "artifacts": []
+    },
+    {
+      "caseId": "C06",
+      "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C06] Permission and transport failure: refusal reasons rendered, stored failure does not re-prompt",
+      "result": "success",
+      "artifacts": []
+    },
+    {
+      "caseId": "C07",
+      "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C07] Formal language guard: recording and artifact-busy blocks switch, permits when idle",
+      "result": "success",
+      "artifacts": []
+    },
+    {
+      "caseId": "C08",
+      "qualifiedTestName": "Batch 1L-C1a: Production Root Journey Acceptance [C08] Late result/route/dispose: covered-success and route currentness protect owner and feedback",
+      "result": "success",
+      "artifacts": []
+    },
+    {
+      "caseId": "C09.1",
+      "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.1] 320x640 portrait at 2.0x text scale: zero overflow, minimum touch targets, semantics, and PNG capture",
+      "result": "success",
+      "artifacts": [
+        {
+          "path": "build/reports/l10n_accessibility/c09_portrait_320x640_2x.png",
+          "bytes": 16461,
+          "sha256": "80345ecacc72da9cb048d557893e892e87f269649038256891ee1ab4d85e1663"
+        }
+      ]
+    },
+    {
+      "caseId": "C09.2",
+      "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.2] 568x320 landscape at 2.0x text scale: zero overflow and PNG capture",
+      "result": "success",
+      "artifacts": [
+        {
+          "path": "build/reports/l10n_accessibility/c09_landscape_568x320_2x.png",
+          "bytes": 5724,
+          "sha256": "5ba6856019b75f6552c16549a69d7ed896f0191b9bc8a8b6a4a1f3abfbad1891"
+        }
+      ]
+    },
+    {
+      "caseId": "C09.3",
+      "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.3] Dialog kept open while rotating orientation and switching locale: zero crash and zero overflow",
+      "result": "success",
+      "artifacts": [
+        {
+          "path": "build/reports/l10n_accessibility/c09_dialog_open_landscape_rotated.png",
+          "bytes": 5724,
+          "sha256": "5ba6856019b75f6552c16549a69d7ed896f0191b9bc8a8b6a4a1f3abfbad1891"
+        }
+      ]
+    },
+    {
+      "caseId": "C09.4",
+      "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.4] Semantics inspection: key controls provide accessible labels and actions",
+      "result": "success",
+      "artifacts": []
+    }
+  ],
+  "nativeResiduals": [
+    {
+      "residualId": "R01_NATIVE_DEVICE_BLE",
+      "layer": "native-device",
+      "status": "NOT_RUN",
+      "requiredInC1a": false,
+      "residualOwner": "Batch 1L-C1b / Issue #36",
+      "notes": "Physical Bluetooth adapter discovery & connection on Android/iOS"
+    },
+    {
+      "residualId": "R02_NATIVE_OS_LOCALE_SYNC",
+      "layer": "native-platform",
+      "status": "NOT_RUN",
+      "requiredInC1a": false,
+      "residualOwner": "Batch 1L-C1b / Issue #36",
+      "notes": "Platform channel OS locale broadcast and per-app language settings on Android 13+"
+    },
+    {
+      "residualId": "R03_PHYSICAL_WEAR_RENDER",
+      "layer": "native-wear",
+      "status": "NOT_RUN",
+      "requiredInC1a": false,
+      "residualOwner": "Issue #48 / WearOS Lane",
+      "notes": "Circular round display physical render on Galaxy Watch / Pixel Watch"
+    }
+  ]
+}
