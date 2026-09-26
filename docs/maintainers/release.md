@@ -14,7 +14,7 @@
 
 ## 0. GitHub community APK 與 Google Play 是兩條發布線
 
-公開 [`aa22396584/telltale`](https://github.com/aa22396584/telltale) 的 tag 會觸發
+公開 [`aa22396584/telltale`](https://gitlab.com/aa22396584/telltale) 的 tag 會觸發
 `.github/workflows/release.yml`，由 GitHub Actions 內的 **community key** 產生
 universal `field` APK。這把金鑰不是 Play upload key；兩邊的 APK 不能
 相互覆蓋安裝，這是故意的安全邊界。

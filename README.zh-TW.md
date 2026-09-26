@@ -3,21 +3,17 @@
 # Telltale
 
 > **開發主庫、Issues 與 MR：** https://gitlab.com/aa22396584/telltale  
-> **鏡像：** [GitHub](https://github.com/aa22396584/telltale) · [Codeberg](https://codeberg.org/ImL1s/telltale)  
-> 舊帳號 `ImL1s` 目前受限；以 GitLab 為主要開發中心，`aa22396584` 於 GitHub 作為備份鏡像。
+> **鏡像：** [Codeberg](https://codeberg.org/ImL1s/telltale)  
 
 > **安裝／停機指引：** 建議優先
 > **[Google Play](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)**；
-> 社群 APK **[Codeberg v1.0.14](https://codeberg.org/ImL1s/telltale/releases/tag/v1.0.14)**、
-> **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**，或
-> **[GitHub Releases（aa22396584）](https://github.com/aa22396584/telltale/releases)**；
+> 社群 APK **[Codeberg v1.0.14](https://codeberg.org/ImL1s/telltale/releases/tag/v1.0.14)**，或
+> **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**；
 > [Obtainium](https://github.com/ImranR98/Obtainium) 請指向
 > `https://codeberg.org/ImL1s/telltale/releases` 或
-> `https://github.com/aa22396584/telltale/releases`。
+> `https://gitlab.com/aa22396584/telltale/-/releases`。
 
 [![GitLab CI](https://gitlab.com/aa22396584/telltale/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/telltale/-/pipelines)
-[![CI](https://github.com/aa22396584/telltale/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aa22396584/telltale/actions/workflows/ci.yml)
-[![最新版本](https://img.shields.io/github/v/release/aa22396584/telltale?include_prereleases&sort=semver&label=latest%20release)](https://github.com/aa22396584/telltale/releases)
 [![Google Play](https://img.shields.io/badge/Google_Play-View_listing-414141?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)
 [![授權：GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
@@ -55,12 +51,12 @@ OBD2 故障診斷。它的設計原則是誠實呈現不確定性，不把格式
 
 **社群簽章 APK**（功能與 Play 版相同；原始碼目錄不含 release 產物）：
 
-1. **[GitHub aa22396584 v1.0.14](https://github.com/aa22396584/telltale/releases/tag/v1.0.14)**
+1. **[GitLab aa22396584 v1.0.14](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.14)**
 2. **[Codeberg v1.0.14](https://codeberg.org/ImL1s/telltale/releases/tag/v1.0.14)**
 3. **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**
 
 打開該版本，選擇其中的 `.apk` 檔。[Obtainium](https://github.com/ImranR98/Obtainium)
-可從 `https://github.com/aa22396584/telltale/releases` 或
+可從 `https://gitlab.com/aa22396584/telltale/-/releases` 或
 `https://codeberg.org/ImL1s/telltale/releases` 追蹤更新。
 
 社群建置使用與 Google Play **不同的簽章金鑰**，無法更新 Play 版，也無法由
@@ -139,7 +135,7 @@ Telltale 復原工作階段紀錄。
 使用固定的 Flutter 3.47.0 工具鏈：
 
 ```bash
-git clone https://github.com/aa22396584/telltale.git
+git clone https://gitlab.com/aa22396584/telltale.git
 cd telltale
 FLUTTER="$HOME/fvm/versions/3.47.0/bin/flutter"
 "$FLUTTER" pub get

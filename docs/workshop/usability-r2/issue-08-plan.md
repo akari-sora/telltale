@@ -1,6 +1,6 @@
 # Implementation plan — aa22396584/telltale #8
 
-**Issue:** [#8 [WS-00][EPIC][USABILITY-R2] 車行工作站：最大化可用性、資料狀態透明、風險分級與代理計畫](https://github.com/aa22396584/telltale/issues/8)
+**Issue:** [#8 [WS-00][EPIC][USABILITY-R2] 車行工作站：最大化可用性、資料狀態透明、風險分級與代理計畫](https://gitlab.com/aa22396584/telltale/-/issues/8)
 **Intended PR:** `ImL1s/torque` `feat/usability-r2-policy` (epic index + shared policy; stacked follow-on PRs named below)
 **Base:** current `origin/master` (do not mix the dirty local telemetry worktree)
 **Policy:** USABILITY-R2 — 未驗證 ≠ 不可用. Evidence is a label, not a read-only ban.

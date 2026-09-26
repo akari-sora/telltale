@@ -56,7 +56,7 @@ Do not treat green `flutter test` / `flutter analyze` as Play-ready.
 ## GitHub Actions billing (private `torque` CI)
 
 Private-repo CI for `feat/multiplatform-windows-linux` at `974a0ce`
-(run https://github.com/ImL1s/torque/actions/runs/33507389391 )
+(run `ImL1s/torque` )
 and the follow-up at `e75600f` did **not** execute any job steps.
 Every check-run annotation is:
 
@@ -67,7 +67,7 @@ That is not a Flutter failure. Local evidence on `974a0ce`:
 `flutter analyze` clean, `flutter test` `+1523 ~15`.
 
 Public `telltale` CI on the same app tree (`b323dbe`, run
-https://github.com/aa22396584/telltale/actions/runs/33508166605 )
+a former GitHub Actions run )
 was **8/8 green**, including Windows and Linux debug builds plus
 Demo functional smoke. torque PR #3 and telltale PR #2 were merged
 on that proxy. Restore Actions billing / spending limit on the

@@ -4,21 +4,17 @@
 
 > **Development home:** https://gitlab.com/aa22396584/telltale  
 > Please open issues and merge requests there.  
-> **Mirrors:** [GitHub](https://github.com/aa22396584/telltale) · [Codeberg](https://codeberg.org/ImL1s/telltale)  
-> Former GitHub account `ImL1s` is restricted; use GitLab for primary development and `aa22396584` on GitHub for backup mirror.
+> **Mirror:** [Codeberg](https://codeberg.org/ImL1s/telltale)  
 
 > **Install / downtime notes:** prefer
 > **[Google Play](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)**;
-> community APK **[v1.0.14 on Codeberg](https://codeberg.org/ImL1s/telltale/releases/tag/v1.0.14)**,
-> **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**, or
-> **[GitHub Releases (aa22396584)](https://github.com/aa22396584/telltale/releases)**;
+> community APK **[v1.0.14 on Codeberg](https://codeberg.org/ImL1s/telltale/releases/tag/v1.0.14)**, or
+> **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**;
 > [Obtainium](https://github.com/ImranR98/Obtainium) →
 > `https://codeberg.org/ImL1s/telltale/releases` or
-> `https://github.com/aa22396584/telltale/releases`.
+> `https://gitlab.com/aa22396584/telltale/-/releases`.
 
 [![GitLab CI](https://gitlab.com/aa22396584/telltale/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/telltale/-/pipelines)
-[![CI](https://github.com/aa22396584/telltale/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aa22396584/telltale/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/aa22396584/telltale?include_prereleases&sort=semver&label=latest%20release)](https://github.com/aa22396584/telltale/releases)
 [![Google Play](https://img.shields.io/badge/Google_Play-View_listing-414141?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
@@ -61,12 +57,12 @@ source remain free to use.
 **Community-signed APK** (same features as Play; release binaries are not stored
 in the source tree):
 
-1. **[GitHub aa22396584 v1.0.14](https://github.com/aa22396584/telltale/releases/tag/v1.0.14)**
+1. **[GitLab aa22396584 v1.0.14](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.14)**
 2. **[Codeberg v1.0.14](https://codeberg.org/ImL1s/telltale/releases/tag/v1.0.14)**
 3. **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**
 
 Open the release and select its `.apk` asset. [Obtainium](https://github.com/ImranR98/Obtainium)
-can track updates from `https://github.com/aa22396584/telltale/releases` or
+can track updates from `https://gitlab.com/aa22396584/telltale/-/releases` or
 `https://codeberg.org/ImL1s/telltale/releases`.
 
 Community APKs use a **different signing key** from Google Play. They cannot
@@ -162,7 +158,7 @@ boundary.
 Use the pinned Flutter 3.47.0 toolchain:
 
 ```bash
-git clone https://github.com/aa22396584/telltale.git
+git clone https://gitlab.com/aa22396584/telltale.git
 cd telltale
 FLUTTER="$HOME/fvm/versions/3.47.0/bin/flutter"
 "$FLUTTER" pub get
