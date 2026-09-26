@@ -18,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
 import 'package:torque_obd/obd/pid/pid_library.dart';
 import 'package:torque_obd/obd/polling_engine.dart';
+import 'package:torque_obd/obd/transport/demo_transport.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
 
 import 'support/fake_elm327.dart';
@@ -466,4 +467,46 @@ void main() {
       await client.dispose();
     },
   );
+
+  test(
+    'a preempted demo write cannot expire the reply budget before the answer is scheduled',
+    () async {
+      // The command timer used to start before `transport.write`. A host
+      // stall in that gap — long enough that the budget was already due when
+      // the isolate resumed — let that timer run ahead of the demo adapter's
+      // 18 ms reply. The handshake then failed closed even though the
+      // simulator had a prompt ready. The reply budget has to start only
+      // once the write has scheduled that answer.
+      final transport = _PreemptedDemo();
+      final client = Elm327Client(transport);
+      addTearDown(client.dispose);
+      expect(await client.connect(), isTrue);
+
+      transport.preemptNextWrite = true;
+      final response = await client.send(
+        'ATI',
+        timeout: const Duration(milliseconds: 40),
+      );
+      expect(response.isSuccess, isTrue);
+      expect(response.firstLine, contains('ELM327'));
+    },
+  );
+}
+
+/// Stalls inside [write] before the demo adapter schedules its reply timer.
+///
+/// The spin is synchronous, so the event loop cannot deliver a command timer
+/// that was armed before the write. That is the CI preemption window.
+class _PreemptedDemo extends DemoTransport {
+  var preemptNextWrite = false;
+
+  @override
+  Future<void> write(List<int> data) async {
+    if (preemptNextWrite) {
+      preemptNextWrite = false;
+      final spin = Stopwatch()..start();
+      while (spin.elapsed < const Duration(milliseconds: 80)) {}
+    }
+    await super.write(data);
+  }
 }

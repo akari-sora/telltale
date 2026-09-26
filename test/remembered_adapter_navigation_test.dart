@@ -75,7 +75,8 @@ class _ReconnectSession extends ObdSession {
       _complete(TransportKind.bluetoothLe, device.id);
 
   @override
-  Future<bool> connectDemo() => _complete(TransportKind.demo, 'demo');
+  Future<bool> connectDemo({Duration? responseLatency}) =>
+      _complete(TransportKind.demo, 'demo');
 }
 
 Future<_ReconnectSession> _pumpShortcut(

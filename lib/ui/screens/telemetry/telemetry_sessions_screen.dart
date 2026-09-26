@@ -9,6 +9,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../state/telemetry_sessions.dart';
 import '../../../telemetry/session/telemetry_session_store.dart';
 import '../../widgets/panel.dart';
+import '../../widgets/telemetry/telemetry_session_action_feedback.dart';
 import '../../widgets/telemetry/telemetry_status_copy.dart';
 import 'telemetry_source_copy.dart';
 
@@ -104,7 +105,10 @@ class _LibraryBody extends StatelessWidget {
           const SizedBox(height: Spacing.lg),
           SectionHeading(l10n.telemetrySessionsReplayable),
           for (final session in data.sessions) ...[
-            _SessionTile(session: session),
+            _SessionTile(
+              key: ValueKey('telemetry-session-tile-${session.id}'),
+              session: session,
+            ),
             const SizedBox(height: Spacing.sm),
           ],
         ],
@@ -112,7 +116,10 @@ class _LibraryBody extends StatelessWidget {
           const SizedBox(height: Spacing.lg),
           SectionHeading(l10n.telemetrySessionsDamaged),
           for (final artifact in data.damaged) ...[
-            _DamagedTile(artifact: artifact),
+            _DamagedTile(
+              key: ValueKey('telemetry-damaged-tile-${artifact.id}'),
+              artifact: artifact,
+            ),
             const SizedBox(height: Spacing.sm),
           ],
         ],
@@ -121,70 +128,85 @@ class _LibraryBody extends StatelessWidget {
   }
 }
 
-class _DamagedTile extends ConsumerWidget {
-  const _DamagedTile({required this.artifact});
+class _DamagedTile extends ConsumerStatefulWidget {
+  const _DamagedTile({super.key, required this.artifact});
 
   final DamagedTelemetryProjection artifact;
 
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    // Read before the dialog and the delete. The outcome belongs to the
-    // language that was on screen when the user asked for it.
-    final l10n = AppLocalizations.of(context);
+  @override
+  ConsumerState<_DamagedTile> createState() => _DamagedTileState();
+}
+
+class _DamagedTileState extends ConsumerState<_DamagedTile> {
+  Future<void> _delete() async {
+    final targetId = widget.artifact.id;
+    final route = ModalRoute.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.telemetryDeleteDamagedTitle),
-        content: Text(
-          l10n.telemetryDeleteDamagedBody(
-            artifact.id,
-            _localTime(artifact.filesystemModifiedAtUtc),
+      builder: (dialogContext) {
+        final dialogL10n = AppLocalizations.of(dialogContext);
+        return AlertDialog(
+          scrollable: true,
+          title: Text(dialogL10n.telemetryDeleteDamagedTitle),
+          content: Text(
+            dialogL10n.telemetryDeleteDamagedBody(
+              targetId,
+              _localTime(widget.artifact.filesystemModifiedAtUtc),
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(l10n.telemetryCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(l10n.telemetryDelete),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(dialogL10n.telemetryCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(dialogL10n.telemetryDelete),
+            ),
+          ],
+        );
+      },
     );
-    if (confirmed != true || !context.mounted) return;
+    if (confirmed != true || !mounted || widget.artifact.id != targetId) return;
+    if (route != null && !route.isCurrent) return;
     final result = await ref
         .read(telemetrySessionActionsProvider)
-        .delete(artifact.id, confirmed: true);
-    if (!context.mounted) return;
+        .delete(targetId, confirmed: true);
+    if (!mounted || widget.artifact.id != targetId) return;
+
     if (result.isSuccess) {
       ref.invalidate(telemetrySessionLibraryProvider);
-    } else {
-      if (result.failure != TelemetrySessionActionFailure.restartRequired) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.telemetryDeleteFailed(result.message(l10n))),
-          ),
-        );
-      }
+      return;
     }
+
+    if (route != null && !route.isCurrent) return;
+    if (result.failure == TelemetrySessionActionFailure.restartRequired) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: TelemetrySessionActionFeedback(
+          result: result,
+          kind: TelemetrySessionActionKind.delete,
+        ),
+      ),
+    );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Panel(
       child: ListTile(
         contentPadding: EdgeInsets.zero,
         leading: const Icon(Icons.warning_amber_rounded),
-        title: Text(artifact.id),
+        title: Text(widget.artifact.id),
         subtitle: Text(
-          '${artifact.kind == DamagedTelemetryKind.collision ? l10n.telemetryDamagedCollision : l10n.telemetryDamagedCorrupt}\n'
-          '${l10n.telemetryDamagedFileTime(_localTime(artifact.filesystemModifiedAtUtc))}',
+          '${widget.artifact.kind == DamagedTelemetryKind.collision ? l10n.telemetryDamagedCollision : l10n.telemetryDamagedCorrupt}\n'
+          '${l10n.telemetryDamagedFileTime(_localTime(widget.artifact.filesystemModifiedAtUtc))}',
         ),
         trailing: IconButton(
           tooltip: l10n.telemetryDeleteDamagedTooltip,
-          onPressed: () => _delete(context, ref),
+          onPressed: _delete,
           icon: const Icon(Icons.delete_outline),
         ),
       ),
@@ -193,7 +215,7 @@ class _DamagedTile extends ConsumerWidget {
 }
 
 class _SessionTile extends StatelessWidget {
-  const _SessionTile({required this.session});
+  const _SessionTile({super.key, required this.session});
 
   final TelemetrySessionProjection session;
 

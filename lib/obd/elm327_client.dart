@@ -1463,8 +1463,8 @@ class Elm327Client {
 
     final normalised = command.trim().toUpperCase().replaceAll(' ', '');
     // Kept for the watchdog, which must not give up before the command does.
+    // The timer itself is armed only after the write is accepted — see below.
     _pendingDeadline = timeout;
-    _armPendingTimer(timeout, _onCommandTimeout);
     final previouslyWritten =
         writeAudit?._commands.contains(normalised) ?? false;
     final previousRequested = requestedProtocol;
@@ -1568,6 +1568,20 @@ class Elm327Client {
       rethrow;
     }
 
+    // The reply budget starts when the write has been accepted, not before.
+    //
+    // Arming it first let a stall between that timer and the transport's own
+    // reply timer expire the budget while the bytes were still being handed
+    // over. On a loaded CI host that stall is a multi-second preemption: the
+    // command timer is already due, the demo adapter only then schedules its
+    // 18 ms answer, and the expired timer runs first. The reply is discarded
+    // as belonging to nobody and a field-package demo fails closed. A write
+    // that never returns is still bounded by [writeTimeout]; this timer only
+    // waits for the prompt. A transport that completed the reply during the
+    // write must not have a second timer armed over the next command.
+    if (identical(_pending, pending) && !pending.isCompleted) {
+      _armPendingTimer(timeout, _onCommandTimeout);
+    }
     final response = await pending.future;
     _applyRenderingState(normalised, response);
     return response;
