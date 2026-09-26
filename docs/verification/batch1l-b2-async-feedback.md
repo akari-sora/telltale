@@ -1,54 +1,50 @@
-# Batch 1L-B2a-R2 Verification Record: Dynamic UI Feedback & Route/Identity Guarding
+# Batch 1L-B2a-R3 Verification Record: Dynamic UI Feedback & ELM Deadline Accounting
 
-**Scope**: Issue #39 (Batch 1L-B2a-R2, coordinating #34)  
+**Scope**: Issue #39 (Batch 1L-B2a-R3, coordinating #34)  
 **MR**: !70 (`feat/i18n-history-async-feedback`)  
 **Date**: 2026-09-26  
-**Status**: 100% PASS (0 analyzer warnings, 0 skips, 0 drift, 11/11 targeted tests passing)
+**Status**: 100% PASS (0 analyzer warnings, 0 skips, 0 drift, 11/11 history feedback + 12/12 lifecycle + 18/18 glossary + 16/16 transcript tests passing)
 
 ---
 
-## 1. Rationale & Architecture Fixes (Resolving GPT-6 Pro Review & Findings F01–F06)
+## 1. Acceptance Criteria Mapping (Restoring Original F01–F06 & H01–H05)
 
-1. **F01 (Typed Restart Notice)**:
-   - Typed restart notice delivered in MR !69 / Batch 1L-B1.
+### Original Acceptance Criteria F01–F06
+| ID | Original Acceptance Responsibility | Layer / Implementation Mapping | Test Evidence |
+| :--- | :--- | :--- | :--- |
+| **F01** | Real confirmation dialog, allowed locale change, fixed target, cancel=0 / confirm=1 | Dialog open verification in `telemetry_session_detail_screen.dart` & `telemetry_sessions_screen.dart`. Dynamic locale change while dialog is still open without dismissing. | **T09, T10**: Dialog cancel = 0 dispatches; confirm = 1 dispatch; locale rebuild = 0 re-dispatches; open dialog relocalizes to zh dynamically. |
+| **F02** | Real entered/release delayed storage/share/policyChanged outcome | Barrier-controlled async actions in `TelemetrySessionActions`, `ArtifactOperationGate`, and `AppSharePolicy`. Formal state transitions recorded. | **T04, T05, T06**: Entered/release barrier with strict operation counter, freeze count assertions, and gate idle verification. |
+| **F03** | Displayed feedback redrawn under same result without re-dispatch/unlock | `TelemetrySessionActionFeedback` (`lib/ui/widgets/telemetry/telemetry_session_action_feedback.dart`) resolves localized strings at render time via `AppLocalizations.of(context)`. | **T01, T02, T03**: Active on-screen SnackBar dynamically relocalizes across `en` ↔ `zh-TW` without user re-triggering actions. |
+| **F04** | Cancel, route/target shift, dispose, late completion | Route currentness guard (`ModalRoute.of(context).isCurrent`) in detail & session screens; target ID match guard; isolated library invalidation on covered route. | **T04, T05, T06, T07, T11**: True terminal state synchronization (0 `() => true` polling; verified gate release, operation counters, and suppression). |
+| **F05** | Canonical/originals, real export, chooser cancel/cleanup-required | Reuses Batch 1L-B1 exporter/owner/worker contracts and typed results (`restartRequired`, `shareError`). | Reused B1 test evidence and verified in T01/T05. |
+| **F06** | 320dp / 2x / narrow landscape / en-zh long text / >=48dp / semantics / negative cases | Delete confirmation dialogs with `scrollable: true`; touch targets >= 48dp; landscape and 200% text scale support. | **T10**: Tested at 320dp width portrait + 568x320 landscape with 2.0 text scale in both English and Chinese without RenderFlex overflow. |
 
-2. **F02 (Issue Closing Hygiene)**:
-   - Maintained `Refs #39, #34`. `Closes #39` is strictly reserved for the final closeout slice Batch 1L-B2b (`docs/i18n-history-closure`).
-
-3. **F03 (Active SnackBar Dynamic Relocalization)**:
-   - Introduced `TelemetrySessionActionFeedback` (`lib/ui/widgets/telemetry/telemetry_session_action_feedback.dart`) — a presentation widget consuming typed `TelemetrySessionActionResult` and `TelemetrySessionActionKind`.
-   - Locale resolution happens dynamically at render-time inside the widget hierarchy via `AppLocalizations.of(context)`. Active on-screen SnackBars dynamically re-render upon language changes without requiring manual refresh.
-
-4. **F04 (Route Currentness Guard & Data Invalidation Isolation)**:
-   - Guarded asynchronous pop and feedback against route shifts: `final route = ModalRoute.of(context); if (route != null && !route.isCurrent) return;`.
-   - **Production Regression Fix**: In `_DamagedTileState._delete`, isolated cache invalidation (`ref.invalidate(telemetrySessionLibraryProvider)`) before the route currentness check. When a delete succeeds while the route is covered by another modal screen, the library cache is guaranteed to be invalidated, while the SnackBar and pop are suppressed on the inactive route.
-   - **Accessibility & Overflow Defense**: Made delete confirmation `AlertDialog`s explicitly `scrollable: true` in `telemetry_session_detail_screen.dart` and `telemetry_sessions_screen.dart`, preventing RenderFlex overflow at 320dp width and 200% text scale.
-
-5. **F05 (Identity Keys & Element Cross-Artifact Protection)**:
-   - `_DamagedTile` in `TelemetrySessionsScreen` is a `ConsumerStatefulWidget` assigned `ValueKey('telemetry-damaged-tile-${artifact.id}')`.
-   - `_SessionTile` is assigned `ValueKey('telemetry-session-tile-${session.id}')`.
-   - Changing list items forces Element retirement/replacement rather than state mutation on stale identity.
-
-6. **F06 (Target Identity Guard During Await)**:
-   - Handlers capture `targetId = widget.artifact.id` (or `widget.sessionId`) prior to async dispatches and verify `widget.artifact.id == targetId` after awaiting, discarding stale or misrouted feedback.
+### Timing Hotfix Acceptance Criteria H01–H05 (Resolving R70-04)
+| ID | Timing AC Responsibility | Implementation Mapping | Test Evidence |
+| :--- | :--- | :--- | :--- |
+| **H01** | Write consumes part of deadline budget; reply timer is clipped to remaining budget | In `lib/obd/elm327_client.dart` (`_sendNow`), post-write timer recalculates remaining deadline: `final replyTimeout = _withinDeadline(timeout); _pendingDeadline = replyTimeout; _armPendingTimer(replyTimeout, _onCommandTimeout);`. | **`test/lifecycle_test.dart` (H01)**: Verified with independent assertions before/after budget boundary (Case 1: 40ms write + 30ms reply <= 120ms succeeds; Case 2: 50ms write + 70ms reply > 100ms correctly times out at remaining 50ms). |
+| **H02** | Write budget exhaustion terminates cleanly with sent/unknown & no-replay semantics | `_sendNow` write timeout maintains `_outOfSync = true`, does not rewind audit log or fabricate non-delivery. | Existing lifecycle tests + `test/lifecycle_test.dart` write timeout cases. |
+| **H03** | Reply arriving before/during write completion does not arm spurious timer or pollute next pending | Guarded by `if (identical(_pending, pending) && !pending.isCompleted)`. | Existing lifecycle test ("a close immediately after the final prompt cannot commit a session"). |
+| **H04** | SEARCHING / response-pending deadlines and post-write timer do not mutually overwrite | `_extendTimeoutIfPending` and `_withinDeadline` anchor to common `_deadlineAt`. | Mode 04 and composite transaction test suites. |
+| **H05** | Late completion, disconnect / generation replacement, write refusal, and watchdog maintain integrity | Generation fencing (`_connectionGeneration`), lease checks, and watchdog assertions preserved. | 12/12 passing in `test/lifecycle_test.dart`. |
 
 ---
 
 ## 2. Test Matrix: `test/l10n/l05_history_async_feedback_test.dart`
 
-| ID | Test Scenario | Verified Behavior | Result |
-| :--- | :--- | :--- | :--- |
-| **T01** | Detail export failure dynamic relocalization | Active SnackBar relocalizes across `en` -> `zh-TW` -> `en` transitions | **PASS** |
-| **T02** | Detail delete failure dynamic relocalization | Active SnackBar relocalizes across `en` -> `zh-TW` -> `en` transitions | **PASS** |
-| **T03** | Damaged artifact delete failure dynamic relocalization | Active SnackBar on damaged tile deletion failure relocalizes dynamically | **PASS** |
-| **T04** | Detail delete success route guard | Pops screen when route is current; suppresses `Navigator.pop` when route is covered | **PASS** |
-| **T05** | Detail export/delete failure route suppression | Suppresses SnackBar presentation if route is no longer current | **PASS** |
-| **T06** | Damaged artifact delete failure route suppression | Suppresses SnackBar presentation if route is no longer current | **PASS** |
-| **T07** | Damaged artifact delete success invalidates library under covered route | File deleted, pop suppressed, SnackBar suppressed; library cache re-evaluates upon return | **PASS** |
-| **T08** | Damaged tile identity key & Element reuse | `ValueKey('telemetry-damaged-tile-$id')` prevents cross-artifact reuse under stable root | **PASS** |
-| **T09** | Positive control: Dialog dispatch counts | Cancel = 0 dispatches; Confirm = 1 dispatch; Locale rebuild = 0 re-dispatches | **PASS** |
-| **T10** | 320dp width, landscape & 200% text scale | Real dialog & SnackBar render with 0 RenderFlex overflow and accessible touch targets | **PASS** |
-| **T11** | Detail action sessionId shift during await | Discards feedback if target `sessionId` changes during async execution | **PASS** |
+| ID | Test Scenario | Verified Behavior | Settlement Mechanism | Result |
+| :--- | :--- | :--- | :--- | :--- |
+| **T01** | Detail export failure dynamic relocalization | Active SnackBar relocalizes across `en` -> `zh-TW` -> `en` transitions | On-screen widget text query | **PASS** |
+| **T02** | Detail delete failure dynamic relocalization | Active SnackBar relocalizes across `en` -> `zh-TW` -> `en` transitions | On-screen widget text query | **PASS** |
+| **T03** | Damaged artifact delete failure dynamic relocalization | Active SnackBar on damaged tile deletion failure relocalizes dynamically | On-screen widget text query | **PASS** |
+| **T04** | Detail delete success route guard | Pops screen when route is current; suppresses `Navigator.pop` when route is covered | Navigation stack & route count | **PASS** |
+| **T05** | Detail export/delete failure route suppression | Suppresses SnackBar presentation if route is no longer current | True terminal condition (`exportInvocations > 0`, `deleteDirCount > 0 && deleteGate.snapshot.isIdle`) | **PASS** |
+| **T06** | Damaged artifact delete failure route suppression | Suppresses SnackBar presentation if route is no longer current | True terminal condition (`deleteDirCount > 0 && deleteGate.snapshot.isIdle`) | **PASS** |
+| **T07** | Damaged artifact delete success invalidates library under covered route | File deleted, pop suppressed, SnackBar suppressed; library cache re-evaluates upon return | True terminal condition (`!damagedFile.existsSync() && deleteGate.snapshot.isIdle`), re-evaluation check | **PASS** |
+| **T08** | Damaged tile identity key & Element reuse | `ValueKey('telemetry-damaged-tile-$id')` prevents cross-artifact reuse under stable root | Widget tree inspector | **PASS** |
+| **T09** | Positive control: Dialog dispatch counts | Cancel = 0 dispatches; Confirm = 1 dispatch; Locale rebuild = 0 re-dispatches | Exact counter verification | **PASS** |
+| **T10** | 320dp width, landscape & 200% text scale in EN & ZH | Real dialog & SnackBar render with 0 RenderFlex overflow and accessible touch targets (>= 48dp) | Dynamic relocalization while dialog is open in landscape | **PASS** |
+| **T11** | Detail action sessionId shift during await | Discards feedback if target `sessionId` changes during async execution | True terminal condition (`exportInvocations > 0`) | **PASS** |
 
 ---
 
@@ -57,7 +53,7 @@
 1. **Flutter Analyzer**:
    ```bash
    fvm flutter analyze
-   # Output: No issues found! (ran in 1.7s)
+   # Output: No issues found! (ran in 2.0s, Exit 0)
    ```
 
 2. **Privacy Contract & SDK Audit Receipt**:
@@ -73,8 +69,14 @@
 3. **Targeted Test Suites**:
    ```bash
    fvm flutter test test/l10n/l05_history_async_feedback_test.dart
-   # Output: 00:01 +11: All tests passed!
+   # Output: 00:01 +11: All tests passed! (Exit 0)
+
+   fvm flutter test test/lifecycle_test.dart
+   # Output: 00:14 +12: All tests passed! (Exit 0)
+
+   fvm flutter test test/l10n/glossary_evidence_test.dart
+   # Output: 00:00 +18: All tests passed! (Exit 0)
 
    fvm flutter test test/transcript_periodic_snapshot_test.dart
-   # Output: 00:01 +16: All tests passed!
+   # Output: 00:01 +16: All tests passed! (Exit 0)
    ```
