@@ -534,6 +534,88 @@ void main() {
       expect(elapsed, lessThan(const Duration(milliseconds: 150)));
     },
   );
+
+  test(
+    'a stalled write cannot make the watchdog spend the reply budget early',
+    () async {
+      // The reply timer starts after the write is accepted. A stall in that
+      // gap ages `lastRxAt` past a short watchdog while the command is still
+      // `_pending` and the timer is not armed. The tick then dropped the
+      // session before a caller with 50 ms left could publish the resync
+      // grace, so the link died in the window that exists specifically so it
+      // can be recovered.
+      final transport = _StalledWrite(
+        protocol: BusProtocol.can11,
+        ecus: [
+          FakeEcu(
+            name: 'ECM',
+            requestId: '7E0',
+            responseId: '7E8',
+            responses: {
+              '0100': [0x41, 0x00, 0xBE, 0x3F, 0xA8, 0x13],
+              '0120': [0x41, 0x20, 0x80, 0x00, 0x00, 0x01],
+              '0140': [0x41, 0x40, 0x40, 0x00, 0x00, 0x00],
+              '010C': [0x41, 0x0C, 0x1A, 0xF8],
+              '010D': [0x41, 0x0D, 0x3C],
+              '03': [0x43, 0x00],
+            },
+          ),
+        ],
+      );
+      var lost = 0;
+      final client = Elm327Client(
+        transport,
+        commandTimeout: const Duration(milliseconds: 200),
+        watchdogTimeout: const Duration(milliseconds: 300),
+      )..onConnectionLost = () => lost++;
+      addTearDown(client.dispose);
+      expect(await client.connect(), isTrue);
+
+      transport.goSilent = true;
+      transport.stallNextWrite = true;
+      await client.send('010C').then<void>((_) {}).catchError((Object _) {});
+      expect(lost, 0, reason: 'the write stall is not a dead adapter');
+
+      await expectLater(
+        client.sendGlobal(
+          '03',
+          deadline: DateTime.now().add(const Duration(milliseconds: 50)),
+        ),
+        throwsA(anything),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(lost, 0, reason: 'the caller gave up; the link still has its window');
+      expect(client.isInitialized, isTrue);
+
+      transport.goSilent = false;
+      transport.emitBytes(ascii.encode('\r>'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final recovered = await client.send('010D');
+      expect(recovered.isSuccess, isTrue);
+    },
+  );
+}
+
+/// Stalls inside [write] before the bytes are accepted.
+///
+/// The spin is synchronous, so timers that were already due fire only once
+/// the write returns and the reply budget is armed. That is the gap in which
+/// a loaded host used to let the watchdog declare the link dead.
+class _StalledWrite extends FakeElm327 {
+  _StalledWrite({required super.protocol, required super.ecus});
+
+  var stallNextWrite = false;
+
+  @override
+  Future<void> write(List<int> data) async {
+    if (stallNextWrite) {
+      stallNextWrite = false;
+      final spin = Stopwatch()..start();
+      while (spin.elapsed < const Duration(milliseconds: 1500)) {}
+    }
+    await super.write(data);
+  }
 }
 
 /// Stalls inside [write] before the demo adapter schedules its reply timer.
