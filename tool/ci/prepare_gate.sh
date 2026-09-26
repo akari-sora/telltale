@@ -10,6 +10,10 @@ if ! command -v python3 >/dev/null 2>&1; then
   apt-get update
   apt-get install -y --no-install-recommends python3
 fi
+if ! command -v cmake >/dev/null 2>&1; then
+  apt-get update
+  apt-get install -y --no-install-recommends cmake
+fi
 if id -u ubuntu >/dev/null 2>&1; then
   NONROOT=ubuntu
 elif id -u flutter >/dev/null 2>&1; then
