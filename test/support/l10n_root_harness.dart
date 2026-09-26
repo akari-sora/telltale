@@ -113,11 +113,13 @@ class L10nRootHarness {
     });
     prefs = await SharedPreferences.getInstance();
     blePlatform = CountingBlePlatform();
+    UniversalBle.setInstance(blePlatform);
     sharePlatform = CapturingAppSharePlatform();
     _initialized = true;
   }
 
   Future<void> dispose() async {
+    UniversalBle.setInstance(CountingBlePlatform());
     AppLocalesPlatform.live = false;
     if (!_initialized) return;
     try {
@@ -212,7 +214,10 @@ class L10nRootHarness {
         child: Consumer(
           builder: (context, ref, _) {
             appRef = ref;
-            return const TorqueApp();
+            return const RepaintBoundary(
+              key: Key('app_root_repaint_boundary'),
+              child: TorqueApp(),
+            );
           },
         ),
       ),

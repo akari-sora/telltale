@@ -20,11 +20,27 @@ import sys
 # Import core oracle guard functionality
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
-from tool.oracle_guard.assert_no_skips import _parse_events, GuardError
+from tool.oracle_guard.assert_no_skips import (
+    _parse_events,
+    _require_typed_testid,
+    _strict_bool,
+    GuardError,
+)
 
 
 class L10nRequiredError(Exception):
     """Localization required gate rejection."""
+
+
+def normalize_suite_path(p: str, repo_root: Path) -> str:
+    """Normalizes a suite path to be relative to repo_root where possible."""
+    path_obj = Path(p)
+    if path_obj.is_absolute():
+        try:
+            return path_obj.resolve().relative_to(repo_root.resolve()).as_posix()
+        except ValueError:
+            return path_obj.as_posix()
+    return path_obj.as_posix()
 
 
 def verify_l10n_required(
@@ -34,8 +50,46 @@ def verify_l10n_required(
     runner_exit: int = 0,
     evidence_path: Path | None = None,
     repo_root: Path = REPO_ROOT,
+    expected_profile: str | None = None,
+    child_stderr: str = "",
 ) -> dict:
     """Verifies that the report satisfies all requirements in the manifest."""
+    try:
+        return _verify_l10n_required_inner(
+            manifest_path,
+            report_path,
+            runner_exit=runner_exit,
+            evidence_path=evidence_path,
+            repo_root=repo_root,
+            expected_profile=expected_profile,
+            child_stderr=child_stderr,
+        )
+    except Exception as exc:
+        if evidence_path:
+            failed_receipt = {
+                "status": "REJECTED",
+                "error": str(exc),
+                "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
+            try:
+                evidence_path.parent.mkdir(parents=True, exist_ok=True)
+                evidence_path.write_text(json.dumps(failed_receipt, indent=2) + "\n", encoding="utf-8")
+            except Exception:
+                if evidence_path.exists():
+                    evidence_path.unlink()
+        raise
+
+
+def _verify_l10n_required_inner(
+    manifest_path: Path,
+    report_path: Path,
+    *,
+    runner_exit: int = 0,
+    evidence_path: Path | None = None,
+    repo_root: Path = REPO_ROOT,
+    expected_profile: str | None = None,
+    child_stderr: str = "",
+) -> dict:
     if runner_exit != 0:
         raise L10nRequiredError(f"Runner failed with nonzero exit code: {runner_exit}")
 
@@ -50,9 +104,42 @@ def verify_l10n_required(
     manifest_raw = manifest_path.read_bytes()
     manifest_hash = hashlib.sha256(manifest_raw).hexdigest()
 
+    # Profile validation
+    profile = manifest.get("profile")
+    if not profile or not isinstance(profile, str) or not profile.strip():
+        raise L10nRequiredError("Manifest profile missing or empty")
+    allowed_profiles = {"software-root", "test-profile"}
+    if expected_profile is not None:
+        if profile != expected_profile:
+            raise L10nRequiredError(
+                f"Manifest profile {profile!r} does not match expected profile {expected_profile!r}"
+            )
+    elif profile not in allowed_profiles:
+        raise L10nRequiredError(f"Unrecognized manifest profile: {profile}")
+
     required_cases = [c for c in manifest.get("cases", []) if c.get("required") is True]
     if not required_cases:
         raise L10nRequiredError("Manifest contains zero required test cases")
+
+    # Reject duplicate required caseId or targets in manifest
+    seen_case_ids: set[str] = set()
+    seen_targets: set[tuple[str, str]] = set()
+    for req in required_cases:
+        case_id = req.get("caseId")
+        if not case_id:
+            raise L10nRequiredError("Required case missing caseId")
+        if case_id in seen_case_ids:
+            raise L10nRequiredError(f"Manifest duplicate required caseId: {case_id}")
+        seen_case_ids.add(case_id)
+
+        suite_path = req.get("suitePath")
+        qualified_name = req.get("qualifiedTestName")
+        if not suite_path or not qualified_name:
+            raise L10nRequiredError(f"Required case {case_id} missing suitePath or qualifiedTestName")
+        norm_target = (normalize_suite_path(suite_path, repo_root), qualified_name)
+        if norm_target in seen_targets:
+            raise L10nRequiredError(f"Manifest duplicate required test target: {norm_target}")
+        seen_targets.add(norm_target)
 
     if not report_path.exists():
         raise L10nRequiredError(f"Report not found: {report_path}")
@@ -66,48 +153,111 @@ def verify_l10n_required(
     except GuardError as exc:
         raise L10nRequiredError(f"Report JSON guard rejected report: {exc}") from exc
 
-    # Parse test starts and completions
-    test_id_to_name: dict[int, str] = {}
+    # Parse and validate events strictly
+    suite_id_to_path: dict[int, str] = {}
+    test_id_to_info: dict[int, dict] = {}
     test_id_to_outcome: dict[int, dict] = {}
-    done_success = False
+    started_test_ids: set[int] = set()
+    terminal_test_ids: set[int] = set()
+    done_seen = False
+    done_index: int | None = None
 
-    for event in events:
+    for index, event in enumerate(events):
         etype = event.get("type")
-        if etype == "testStart":
+        if done_seen:
+            if etype == "done":
+                raise L10nRequiredError("Duplicate done event")
+            raise L10nRequiredError(f"Event after terminal done ({etype})")
+
+        if etype == "suite":
+            sinfo = event.get("suite")
+            if isinstance(sinfo, dict):
+                sid = sinfo.get("id")
+                spath = sinfo.get("path", "")
+                if isinstance(sid, int) and not isinstance(sid, bool):
+                    suite_id_to_path[sid] = normalize_suite_path(spath, repo_root)
+
+        elif etype == "testStart":
             tinfo = event.get("test")
-            if isinstance(tinfo, dict):
-                tid = tinfo.get("id")
-                tname = tinfo.get("name", "")
-                if isinstance(tid, int):
-                    test_id_to_name[tid] = tname
+            if not isinstance(tinfo, dict):
+                raise L10nRequiredError("testStart missing test object")
+            raw_id = tinfo.get("id")
+            if raw_id is None or isinstance(raw_id, bool) or not isinstance(raw_id, int):
+                raise L10nRequiredError("testStart test ID must be integer")
+            tname = tinfo.get("name", "")
+            sid = tinfo.get("suiteID")
+            spath = suite_id_to_path.get(sid, "")
+            started_test_ids.add(raw_id)
+            test_id_to_info[raw_id] = {
+                "name": tname,
+                "suite_id": sid,
+                "suite_path": spath,
+            }
+
+        elif etype == "error":
+            raise L10nRequiredError(f"Report contains error event: {event.get('error', 'unknown error')}")
+
         elif etype == "testDone":
             tid = event.get("testID")
-            if isinstance(tid, int):
-                test_id_to_outcome[tid] = {
-                    "result": event.get("result"),
-                    "skipped": event.get("skipped", False),
-                    "hidden": event.get("hidden", False),
-                }
+            if tid is None or isinstance(tid, bool) or not isinstance(tid, int):
+                raise L10nRequiredError(f"testDone testID must be integer: {tid}")
+            if tid not in started_test_ids:
+                raise L10nRequiredError(f"testDone testID={tid} without testStart")
+            if tid in terminal_test_ids:
+                raise L10nRequiredError(f"Duplicate terminal for testID={tid}")
+            terminal_test_ids.add(tid)
+
+            if "result" not in event:
+                raise L10nRequiredError(f"testDone testID={tid} missing result")
+
+            try:
+                hidden = _strict_bool(event.get("hidden"), "hidden", "testDone", tid)
+                skipped = _strict_bool(event.get("skipped"), "skipped", "testDone", tid)
+            except GuardError as exc:
+                raise L10nRequiredError(f"Report JSON guard rejected testDone event: {exc}") from exc
+            result = event.get("result")
+            test_id_to_outcome[tid] = {
+                "result": result,
+                "hidden": hidden,
+                "skipped": skipped,
+            }
+
         elif etype == "done":
-            if event.get("success") is True:
-                done_success = True
+            if not started_test_ids:
+                raise L10nRequiredError("done event before any tests started")
+            if "success" not in event:
+                raise L10nRequiredError("terminal done missing success")
+            if event.get("success") is not True:
+                raise L10nRequiredError("done.success is not true")
+            unfinished = started_test_ids - terminal_test_ids
+            if unfinished:
+                raise L10nRequiredError(f"done event but tests still running: {sorted(unfinished)}")
+            done_seen = True
+            done_index = index
 
-    if not done_success:
-        raise L10nRequiredError("Report missing successful terminal 'done' event")
+    if not done_seen:
+        raise L10nRequiredError("Report missing terminal done event")
+    if done_index != len(events) - 1:
+        raise L10nRequiredError("Terminal done is not the last event")
 
-    # Match manifest required cases against actual test outcomes
+    # Match manifest required cases against actual test outcomes (1-to-1 exact matching)
     verified_cases = []
     missing_cases = []
     failed_cases = []
     skipped_cases = []
+    claimed_test_ids: set[int] = set()
 
     for req in required_cases:
         case_id = req.get("caseId")
-        qualified_name = req.get("qualifiedTestName", "")
-        # Match by caseId tag like "[C01]" or qualifiedTestName
+        expected_norm_suite = normalize_suite_path(req.get("suitePath", ""), repo_root)
+        expected_name = req.get("qualifiedTestName", "")
+
         matched_tid = None
-        for tid, name in test_id_to_name.items():
-            if f"[{case_id}]" in name or (qualified_name and qualified_name in name):
+        for tid, tinfo in test_id_to_info.items():
+            t_suite = tinfo.get("suite_path", "")
+            t_name = tinfo.get("name", "")
+            suite_match = (not expected_norm_suite) or (not t_suite) or (t_suite == expected_norm_suite)
+            if suite_match and t_name == expected_name:
                 matched_tid = tid
                 break
 
@@ -115,10 +265,19 @@ def verify_l10n_required(
             missing_cases.append(case_id)
             continue
 
+        if matched_tid in claimed_test_ids:
+            raise L10nRequiredError(
+                f"Test ID {matched_tid} already claimed by another required case (1-to-1 violation)"
+            )
+        claimed_test_ids.add(matched_tid)
+
         outcome = test_id_to_outcome.get(matched_tid)
         if not outcome:
             missing_cases.append(case_id)
             continue
+
+        if outcome.get("hidden") is True:
+            raise L10nRequiredError(f"Required case {case_id} was marked hidden")
 
         if outcome.get("skipped") is True:
             skipped_cases.append(case_id)
@@ -141,6 +300,11 @@ def verify_l10n_required(
                 raise L10nRequiredError(
                     f"Required artifact for case {case_id} is empty: {artifact_rel}"
                 )
+            if artifact_rel.endswith(".png"):
+                if not content.startswith(b"\x89PNG\r\n\x1a\n"):
+                    raise L10nRequiredError(
+                        f"Required artifact {artifact_rel} is not a valid PNG (bad magic header)"
+                    )
             ahash = hashlib.sha256(content).hexdigest()
             artifact_receipts.append({
                 "path": artifact_rel,
@@ -150,7 +314,7 @@ def verify_l10n_required(
 
         verified_cases.append({
             "caseId": case_id,
-            "qualifiedTestName": test_id_to_name.get(matched_tid),
+            "qualifiedTestName": test_id_to_info[matched_tid]["name"],
             "result": "success",
             "artifacts": artifact_receipts,
         })
@@ -175,8 +339,30 @@ def verify_l10n_required(
     }
 
     if evidence_path:
-        evidence_path.parent.mkdir(parents=True, exist_ok=True)
+        evidence_dir = evidence_path.parent
+        evidence_dir.mkdir(parents=True, exist_ok=True)
         evidence_path.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+
+        # Archive original test report and artifacts when writing to ci-artifacts or designated bundle directory
+        if "ci-artifacts" in str(evidence_dir) or evidence_dir.name not in ("evidence", "docs"):
+            try:
+                target_report = evidence_dir / "report.jsonl"
+                if report_path.resolve() != target_report.resolve():
+                    shutil.copyfile(report_path, target_report)
+                (evidence_dir / "child.exit").write_text(f"{runner_exit}\n", encoding="utf-8")
+                if child_stderr:
+                    (evidence_dir / "child.stderr.txt").write_text(child_stderr, encoding="utf-8")
+
+                # Copy verified artifacts to evidence archive
+                for vcase in verified_cases:
+                    for art in vcase.get("artifacts", []):
+                        art_src = repo_root / art["path"]
+                        art_dest = evidence_dir / art["path"]
+                        art_dest.parent.mkdir(parents=True, exist_ok=True)
+                        if art_src.resolve() != art_dest.resolve():
+                            shutil.copyfile(art_src, art_dest)
+            except Exception:
+                pass
 
     return receipt
 
@@ -223,6 +409,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Exit code of the runner process",
     )
     parser.add_argument(
+        "--expected-profile",
+        default="software-root",
+        help="Expected manifest profile (defaults to software-root)",
+    )
+    parser.add_argument(
         "--flutter",
         default=None,
         help="Path to flutter binary (defaults to auto-detection from PATH / FVM)",
@@ -231,6 +422,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report_path = args.report
     runner_exit = args.runner_exit
+    child_stderr = ""
 
     # If no report path provided, invoke flutter test
     if report_path is None:
@@ -252,6 +444,7 @@ def main(argv: list[str] | None = None) -> int:
         with open(report_path, "w", encoding="utf-8") as outfile:
             proc = subprocess.run(cmd, cwd=REPO_ROOT, stdout=outfile, stderr=subprocess.PIPE)
             runner_exit = proc.returncode
+            child_stderr = proc.stderr.decode("utf-8", errors="replace") if proc.stderr else ""
 
     try:
         receipt = verify_l10n_required(
@@ -259,6 +452,8 @@ def main(argv: list[str] | None = None) -> int:
             report_path,
             runner_exit=runner_exit,
             evidence_path=args.evidence,
+            expected_profile=args.expected_profile,
+            child_stderr=child_stderr,
         )
         print(
             f"L10n Required Gate PASSED: {receipt['requiredCasesPassed']}/"

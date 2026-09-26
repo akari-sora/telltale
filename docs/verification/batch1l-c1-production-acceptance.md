@@ -12,7 +12,7 @@
 
 | Criterion | Specification | Layer & Implementation Mapping | Test Evidence |
 | :--- | :--- | :--- | :--- |
-| **AC40-1** | Real language choice reachable before connection without account/VIN/Demo/permissions; OS locale sync; formal language guard; accessibility at 320dp/2x text scale/landscape | `lib/ui/screens/connect/connect_screen.dart`, `LanguagePicker`, `AppLocalesPlatform`, `LanguageSwitchGuard` | **C01, C07, C09.1, C09.2, C09.3, C09.4**: Bidirectional en/zh switch with 0 extra requests; guard blocks during recording & artifact-busy; 320x640 portrait & 568x320 landscape at 2.0x scale with 0 RenderFlex overflow; touch targets >= 44dp; dialog-open orientation rotation verified. |
+| **AC40-1** | Real language choice reachable before connection without account/VIN/Demo/permissions; OS locale sync; formal language guard; accessibility at 320dp/2x text scale/landscape | `lib/ui/screens/connect/connect_screen.dart`, `LanguagePicker`, `AppLocalesPlatform`, `LanguageSwitchGuard` | **C01, C07, C09.1, C09.2, C09.3, C09.4**: Bidirectional en/zh switch with 0 extra requests; guard blocks during recording & artifact-busy; 320x640 portrait & 568x320 landscape at 2.0x scale with 0 RenderFlex overflow; touch targets >= 48x48; dialog-open orientation rotation verified. |
 | **AC40-2** | Real Demo connect, session connected phase, live PIDs, read-only DTC; refusal reason & transport failure rendering without re-prompts | `ConnectScreen`, `DashboardScreen`, `DtcScreen`, `CountingBlePlatform` | **C02, C06**: Real Demo connect transitions session to connected; reads live PIDs; DTC inspection executes read-only (no clear/mode08); Bluetooth/Location refusal reasons rendered; stored failure does not re-trigger scans on locale change. |
 | **AC40-3** | Telemetry recording, session completed, history tile click opens exact session replay; late result/route protection | `telemetryRecorderControllerProvider`, `telemetry_sessions_screen.dart`, `telemetry_session_detail_screen.dart` | **C03, C08**: Recording collects real telemetry frames (`valueCount > 0`); stop settles to completed; exact session opened in replay maintaining state; rapid route switches verify route currentness without stray snackbars. |
 | **AC40-4** | Real UI export CSV & JSON, byte-identical canonical contents, gate settles, reopen same session | `TelemetrySessionActions`, `AppShareCoordinator`, `ArtifactOperationGate` | **C04**: Real UI export to CSV and JSON via isolate-backed streams; byte-identical contents verified; gate transitions to idle; reopening same session retains integrity. |
@@ -32,16 +32,16 @@
 | **C06** | Permission & Transport Failure | Refusal reasons rendered; stored failure does not re-prompt Bluetooth on locale change | `software-root` | **PASS** |
 | **C07** | Formal Language Switch Guard | Recording and artifact-busy states block switch; unblocked when idle | `software-root` | **PASS** |
 | **C08** | Late Result & Route Currentness | Rapid route transitions between shell and root routes; 0 stray snackbars or pop errors | `software-root` | **PASS** |
-| **C09.1** | 320x640 Portrait @ 2.0x Scale | Zero RenderFlex overflows in EN & ZH; touch targets >= 44dp; host PNG captured | `software-root` | **PASS** |
+| **C09.1** | 320x640 Portrait @ 2.0x Scale | Zero RenderFlex overflows in EN & ZH; touch targets >= 48x48; host PNG captured | `software-root` | **PASS** |
 | **C09.2** | 568x320 Landscape @ 2.0x Scale | Zero RenderFlex overflows in EN & ZH; host PNG captured | `software-root` | **PASS** |
 | **C09.3** | Dialog Kept Open Across Rotation | Language modal bottom sheet kept open across portrait -> landscape rotation & locale switch | `software-root` | **PASS** |
 | **C09.4** | Semantics Inspection | Key interactive controls provide valid accessibility labels and tap actions | `software-root` | **PASS** |
 
 ---
 
-## 3. Negative Controls & Mutation Matrix (M01 ~ M07)
+## 3. Negative Controls & Mutation Matrix (M01 ~ M07, G01 ~ G12)
 
-Verified via `test/tool/test_l10n_required.py`:
+Verified via `test/tool/test_l10n_required.py` (21 tests in suite):
 
 | Mutation ID | Controlled Fault Injection | Expected Failure Mode | Observed Result | Status |
 | :--- | :--- | :--- | :--- | :--- |
@@ -52,6 +52,7 @@ Verified via `test/tool/test_l10n_required.py`:
 | **M05** | Nonzero runner child exit code (`runner_exit = 1`) | `L10nRequiredError: Runner failed with nonzero exit code: 1` | Rejection | **PASS** |
 | **M06** | Required artifact file missing on disk | `L10nRequiredError: Required artifact not found` | Rejection | **PASS** |
 | **M07** | Control: Valid report + manifest + artifacts | Produces accepted structured receipt with SHA-256 digests | Acceptance | **PASS** |
+| **G01~G12** | 12 verifier stress probes (duplicate tags, wrong suite/name, early/duplicate done, unclosed test, bad bool, magic byte check, profile mismatch, duplicate manifest case, stale receipt overwrite) | `L10nRequiredError` / `{"status": "REJECTED"}` | Rejection / Invalidation | **PASS** |
 
 ---
 
@@ -61,9 +62,9 @@ Per Batch 1L-C1a exit criteria, native and hardware-bound validations are tracke
 
 | Residual ID | Description | Layer | Status in C1a | Hand-off Owner |
 | :--- | :--- | :--- | :--- | :--- |
-| **R01_NATIVE_DEVICE_BLE** | Physical Bluetooth adapter scan, pairing & connection on Android/iOS | `native-device` | `NOT_RUN` | Batch 1L-C1b / Issue #36 |
+| **R01_NATIVE_DEVICE_BLE** | Physical Bluetooth adapter scan, pairing & connection on Android/iOS | `native-device` | `NOT_RUN` | Batch 1L-C1b / Issue #36 & #91 (Platform integration #24) |
 | **R02_NATIVE_OS_LOCALE_SYNC** | Android 13+ per-app language platform broadcast & configuration sync | `native-platform` | `NOT_RUN` | Batch 1L-C1b / Issue #36 |
-| **R03_PHYSICAL_WEAR_RENDER** | Physical circular wearable display render and crown interaction | `native-wear` | `NOT_RUN` | Issue #48 / WearOS Lane |
+| **R03_PHYSICAL_WEAR_RENDER** | Physical circular wearable display render, rotary and ambient interaction | `native-wear` | `NOT_RUN` | Issue #65 (Rotary/Ambient/Provisioning) & Issue #48 (Release Evidence) |
 
 ---
 
@@ -74,3 +75,5 @@ The scoped gate runner `python3 tool/ci/run_l10n_required.py` is integrated into
 run_step l10n-required python3 tool/ci/run_l10n_required.py --evidence ci-artifacts/l10n-required/receipt.json
 ```
 Receipts, test logs, and accessibility PNG artifacts are saved and verified under `build/reports/l10n_accessibility/` and `docs/verification/evidence/l10n_production_receipt.json`.
+For acceptance hardening details, see [docs/verification/batch1l-c1a-r1-acceptance-integrity.md](file:///Users/iml1s/Documents/mine/apps/auto/torque/docs/verification/batch1l-c1a-r1-acceptance-integrity.md).
+

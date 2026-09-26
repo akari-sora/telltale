@@ -33,6 +33,8 @@ import 'package:torque_obd/ui/screens/telemetry/telemetry_export_sheet.dart';
 import 'package:torque_obd/ui/screens/telemetry/telemetry_session_detail_screen.dart';
 import 'package:torque_obd/ui/screens/telemetry/telemetry_sessions_screen.dart';
 
+import 'package:universal_ble/universal_ble.dart';
+
 import '../support/l10n_root_harness.dart';
 
 void main() {
@@ -90,33 +92,61 @@ void main() {
         // Verify on ConnectScreen with English initial locale
         expect(find.byType(ConnectScreen), findsOneWidget);
         expect(find.text(en.connectHeadline), findsOneWidget);
+        expect(find.text('Choose a connection'), findsOneWidget);
+
+        // Positive control: verify that counting platform genuinely observes scans through UniversalBle
+        final beforePositiveControl = harness.blePlatform.scanCount;
+        await UniversalBle.startScan();
+        expect(harness.blePlatform.scanCount, equals(beforePositiveControl + 1));
 
         // Record initial transport counters
         final initialScans = harness.blePlatform.scanCount;
         final initialConnects = harness.blePlatform.connectCount;
         final initialSends = harness.blePlatform.sendCount;
 
-        // Switch to Traditional Chinese
-        await harness.appRef.read(localePreferenceProvider.notifier).set(LocalePreference.traditionalChinese);
+        // Open language picker from UI entry on ConnectScreen
+        final langEntry = find.byKey(const Key('connect_language_entry'));
+        expect(langEntry, findsOneWidget);
+        await tester.tap(langEntry);
+        await tester.pumpAndSettle();
+        expect(find.byType(BottomSheet), findsOneWidget);
+
+        // Switch to Traditional Chinese via UI
+        final zhRadio = find.byKey(const Key('locale_traditionalChinese'));
+        expect(zhRadio, findsOneWidget);
+        await tester.tap(zhRadio);
         await tester.pumpAndSettle();
 
-        // Verify rendered copy transitioned to Traditional Chinese
+        // Verify rendered copy transitioned to Traditional Chinese with independent literals
+        expect(find.text('選擇連線方式'), findsOneWidget);
         expect(find.text(zh.connectHeadline), findsOneWidget);
-        expect(find.text(en.connectHeadline), findsNothing);
+        expect(find.text('Choose a connection'), findsNothing);
 
         // Assert strictly zero Bluetooth / transport calls caused by locale switch
         expect(harness.blePlatform.scanCount, equals(initialScans));
         expect(harness.blePlatform.connectCount, equals(initialConnects));
         expect(harness.blePlatform.sendCount, equals(initialSends));
 
-        // Switch back to English
-        await harness.appRef.read(localePreferenceProvider.notifier).set(LocalePreference.english);
+        // Switch back to English via UI while picker is open
+        final enRadio = find.byKey(const Key('locale_english'));
+        expect(enRadio, findsOneWidget);
+        await tester.tap(enRadio);
         await tester.pumpAndSettle();
 
+        expect(find.text('Choose a connection'), findsOneWidget);
         expect(find.text(en.connectHeadline), findsOneWidget);
         expect(harness.blePlatform.scanCount, equals(initialScans));
         expect(harness.blePlatform.connectCount, equals(initialConnects));
         expect(harness.blePlatform.sendCount, equals(initialSends));
+
+        // Dismiss sheet
+        final sheetFinder = find.byType(BottomSheet);
+        if (sheetFinder.evaluate().isNotEmpty) {
+          Navigator.of(tester.element(sheetFinder)).pop();
+          await tester.pumpAndSettle();
+        }
+        expect(find.byType(BottomSheet), findsNothing);
+        expect(find.text('Choose a connection'), findsOneWidget);
       },
     );
 

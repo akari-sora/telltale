@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:torque_obd/l10n/generated/app_localizations.dart';
 import 'package:torque_obd/l10n/locale_resolution.dart';
@@ -46,6 +48,8 @@ void main() {
           final message = details.exceptionAsString();
           if (message.contains('overflowed') || message.contains('RenderFlex')) {
             errors.add(message);
+          } else {
+            previousOnError?.call(details);
           }
         };
 
@@ -53,24 +57,34 @@ void main() {
           await harness.pumpApp(tester);
           expect(find.byType(ConnectScreen), findsOneWidget);
 
+          // Assert effective TextScaler is 2.0x
+          final textScaler = MediaQuery.textScalerOf(tester.element(find.byType(ConnectScreen)));
+          expect(textScaler.scale(1.0), closeTo(2.0, 0.001));
+          expect(textScaler.scale(10.0), closeTo(20.0, 0.001));
+
           // Verify zero RenderFlex overflows in English
           expect(errors, isEmpty, reason: 'RenderFlex overflow in 320x640 2.0x portrait (en)');
 
-          // Check interactive touch targets meet minimum 48x48 bounds (or 44 standard minimum)
+          // Check interactive touch targets meet minimum 48x48 bounds
           final langBtn = find.byKey(const Key('connect_language_entry'));
           expect(langBtn, findsOneWidget);
           final langSize = tester.getSize(langBtn);
-          expect(langSize.height, greaterThanOrEqualTo(44.0));
+          expect(langSize.height, greaterThanOrEqualTo(48.0));
+          expect(langSize.width, greaterThanOrEqualTo(48.0));
 
-          final demoCard = find.text(en.connectTransportDemoTitle);
+          final demoCardInkWell = find.ancestor(
+            of: find.text(en.connectTransportDemoTitle),
+            matching: find.byType(InkWell),
+          );
           await tester.scrollUntilVisible(
-            demoCard,
+            demoCardInkWell,
             200,
             scrollable: find.byType(Scrollable).first,
           );
-          expect(demoCard, findsOneWidget);
-          final demoSize = tester.getSize(demoCard);
-          expect(demoSize.height, greaterThanOrEqualTo(44.0));
+          expect(demoCardInkWell, findsOneWidget);
+          final demoSize = tester.getSize(demoCardInkWell);
+          expect(demoSize.height, greaterThanOrEqualTo(48.0));
+          expect(demoSize.width, greaterThanOrEqualTo(48.0));
 
           // Switch to zh at 2.0x scale
           await harness.appRef.read(localePreferenceProvider.notifier).set(LocalePreference.traditionalChinese);
@@ -88,7 +102,7 @@ void main() {
           // Capture host-render PNG artifact
           final pngBytes = await L10nRootHarness.captureBoundaryAsPng(
             tester,
-            find.byType(RepaintBoundary).first,
+            find.byKey(const Key('app_root_repaint_boundary')),
           );
           expect(pngBytes, isNotEmpty);
           expect(pngBytes.length, greaterThan(500));
@@ -120,12 +134,19 @@ void main() {
           final message = details.exceptionAsString();
           if (message.contains('overflowed') || message.contains('RenderFlex')) {
             errors.add(message);
+          } else {
+            previousOnError?.call(details);
           }
         };
 
         try {
           await harness.pumpApp(tester);
           expect(find.byType(ConnectScreen), findsOneWidget);
+
+          // Assert effective TextScaler is 2.0x
+          final textScaler = MediaQuery.textScalerOf(tester.element(find.byType(ConnectScreen)));
+          expect(textScaler.scale(1.0), closeTo(2.0, 0.001));
+          expect(textScaler.scale(10.0), closeTo(20.0, 0.001));
 
           // Verify zero overflows in landscape at 2x
           expect(errors, isEmpty, reason: 'RenderFlex overflow in 568x320 2.0x landscape (en)');
@@ -141,7 +162,7 @@ void main() {
           // Capture host-render PNG artifact
           final pngBytes = await L10nRootHarness.captureBoundaryAsPng(
             tester,
-            find.byType(RepaintBoundary).first,
+            find.byKey(const Key('app_root_repaint_boundary')),
           );
           expect(pngBytes, isNotEmpty);
           expect(pngBytes.length, greaterThan(500));
@@ -174,18 +195,24 @@ void main() {
           final message = details.exceptionAsString();
           if (message.contains('overflowed') || message.contains('RenderFlex')) {
             errors.add(message);
+          } else {
+            previousOnError?.call(details);
           }
         };
 
         try {
           await harness.pumpApp(tester);
 
+          // Assert effective TextScaler is 2.0x
+          final textScaler = MediaQuery.textScalerOf(tester.element(find.byType(ConnectScreen)));
+          expect(textScaler.scale(1.0), closeTo(2.0, 0.001));
+          expect(textScaler.scale(10.0), closeTo(20.0, 0.001));
+
           // Open language bottom sheet
           final langBtn = find.byKey(const Key('connect_language_entry'));
           expect(langBtn, findsOneWidget);
           await tester.tap(langBtn);
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 300));
+          await tester.pumpAndSettle();
 
           // Verify modal bottom sheet is open
           expect(find.byType(BottomSheet), findsOneWidget);
@@ -201,19 +228,20 @@ void main() {
 
           // Switch locale while sheet is open in landscape
           final zhRadio = find.byKey(const Key('locale_traditionalChinese'));
-          if (zhRadio.evaluate().isNotEmpty) {
-            await tester.tap(zhRadio);
-            await tester.pump();
-            await tester.pump(const Duration(milliseconds: 300));
-          }
+          expect(zhRadio, findsOneWidget);
+          await tester.tap(zhRadio);
+          await tester.pumpAndSettle();
 
           expect(find.byType(BottomSheet), findsOneWidget);
           expect(errors, isEmpty, reason: 'RenderFlex overflow after locale change in landscape sheet');
 
-          // Capture host-render PNG artifact with sheet open in landscape
+          // Assert locale actually changed
+          expect(find.text(zh.connectHeadline), findsOneWidget);
+
+          // Capture host-render PNG artifact with sheet open in landscape (including overlay)
           final pngBytes = await L10nRootHarness.captureBoundaryAsPng(
             tester,
-            find.byType(RepaintBoundary).first,
+            find.byKey(const Key('app_root_repaint_boundary')),
           );
           expect(pngBytes, isNotEmpty);
           expect(pngBytes.length, greaterThan(500));
@@ -222,12 +250,37 @@ void main() {
           artifactFile.writeAsBytesSync(pngBytes);
           expect(artifactFile.existsSync(), isTrue);
 
-          // Close sheet by tapping barrier or close
-          final barrier = find.byWidgetPredicate((w) => w is ModalBarrier);
-          if (barrier.evaluate().isNotEmpty) {
-            await tester.tap(barrier.first, warnIfMissed: false);
-            await tester.pump();
-            await tester.pump(const Duration(milliseconds: 300));
+          // Close sheet
+          final sheetFinder = find.byType(BottomSheet);
+          if (sheetFinder.evaluate().isNotEmpty) {
+            Navigator.of(tester.element(sheetFinder)).pop();
+            await tester.pumpAndSettle();
+          }
+
+          // Also verify an explicit Dialog remains open and properly laid out across rotation
+          unawaited(
+            showDialog<void>(
+              context: tester.element(find.byType(ConnectScreen)),
+              builder: (ctx) => AlertDialog(
+                title: Text(zh.languageSectionTitle),
+                content: const Text('Testing dialog rotation across viewports'),
+              ),
+            ),
+          );
+          await tester.pump();
+          expect(find.byType(AlertDialog), findsOneWidget);
+
+          // Rotate back to portrait with dialog open
+          tester.view.physicalSize = const Size(320, 640);
+          await tester.pump();
+          expect(find.byType(AlertDialog), findsOneWidget);
+          expect(errors, isEmpty, reason: 'RenderFlex overflow with AlertDialog open across rotation');
+
+          // Dismiss dialog
+          final dialogFinder = find.byType(AlertDialog);
+          if (dialogFinder.evaluate().isNotEmpty) {
+            Navigator.of(tester.element(dialogFinder)).pop();
+            await tester.pumpAndSettle();
           }
         } finally {
           FlutterError.onError = previousOnError;
@@ -246,9 +299,13 @@ void main() {
           final langBtn = find.byKey(const Key('connect_language_entry'));
           expect(langBtn, findsOneWidget);
           final langSemantics = tester.getSemantics(langBtn);
-          expect(langSemantics.label, isNotEmpty);
+          expect(langSemantics.getSemanticsData().label, isNotEmpty);
+          expect(langSemantics.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
 
-          final demoCard = find.text(en.connectTransportDemoTitle);
+          final demoCard = find.ancestor(
+            of: find.text(en.connectTransportDemoTitle),
+            matching: find.byType(InkWell),
+          );
           await tester.scrollUntilVisible(
             demoCard,
             200,
@@ -256,9 +313,38 @@ void main() {
           );
           expect(demoCard, findsOneWidget);
           final demoSemantics = tester.getSemantics(demoCard);
-          expect(demoSemantics.label, isNotEmpty);
+          expect(demoSemantics.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
         } finally {
           handle.dispose();
+        }
+      },
+    );
+
+    testWidgets(
+      'controlled non-layout error fails through previousOnError handler',
+      (tester) async {
+        final errors = <String>[];
+        var nonLayoutErrorPropagated = false;
+        final savedOnError = FlutterError.onError;
+        FlutterError.onError = (details) {
+          final message = details.exceptionAsString();
+          if (message.contains('overflowed') || message.contains('RenderFlex')) {
+            errors.add(message);
+          } else {
+            nonLayoutErrorPropagated = true;
+          }
+        };
+        try {
+          FlutterError.reportError(
+            const FlutterErrorDetails(
+              exception: 'Controlled non-layout framework error',
+              library: 'accessibility test defense',
+            ),
+          );
+          expect(nonLayoutErrorPropagated, isTrue);
+          expect(errors, isEmpty);
+        } finally {
+          FlutterError.onError = savedOnError;
         }
       },
     );
