@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:ui' show Rect;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -358,10 +359,51 @@ final class TelemetrySessionActionResult {
   }
 }
 
-// Not localized in this wave: unlike the sentences above it exists exactly
-// once, so it carries no drift risk, and it is a const default in three const
-// constructors. Wave L05 (#46) converts it together with those call sites.
+// Legacy string retained for backwards compatibility with any unmigrated tests.
 const telemetryArtifactRestartRequiredCopy = '本機檔案作業狀態無法確認；請完全關閉並重新啟動 App 後再操作';
+
+enum ArtifactNoticeReason {
+  restartRequired,
+}
+
+@immutable
+final class ArtifactNotice {
+  const ArtifactNotice({
+    required this.reason,
+    this.rawDetail,
+  });
+
+  const ArtifactNotice.restartRequired({String? rawDetail})
+      : this(
+          reason: ArtifactNoticeReason.restartRequired,
+          rawDetail: rawDetail,
+        );
+
+  final ArtifactNoticeReason reason;
+  final String? rawDetail;
+
+  String localizedMessage(AppLocalizations l10n) {
+    final base = switch (reason) {
+      ArtifactNoticeReason.restartRequired =>
+        l10n.telemetryArtifactRestartRequired,
+    };
+    if (rawDetail != null && rawDetail!.isNotEmpty) {
+      return '$base ($rawDetail)';
+    }
+    return base;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ArtifactNotice &&
+          runtimeType == other.runtimeType &&
+          reason == other.reason &&
+          rawDetail == other.rawDetail;
+
+  @override
+  int get hashCode => Object.hash(reason, rawDetail);
+}
 
 String telemetrySessionActionFailureLabel(
   AppLocalizations l10n,
@@ -382,7 +424,7 @@ String telemetrySessionActionFailureLabel(
   TelemetrySessionActionFailure.storage => l10n.telemetrySessionStorageFailed,
   TelemetrySessionActionFailure.share => l10n.telemetrySessionShareFailed,
   TelemetrySessionActionFailure.restartRequired =>
-    telemetryArtifactRestartRequiredCopy,
+    l10n.telemetryArtifactRestartRequired,
 };
 
 final class TelemetrySessionActions {
@@ -450,7 +492,6 @@ final class TelemetrySessionActions {
       _retainRestartRequirement();
       return const TelemetrySessionActionResult.failure(
         TelemetrySessionActionFailure.restartRequired,
-        userFacingMessage: telemetryArtifactRestartRequiredCopy,
       );
     }
     return TelemetrySessionActionResult.failure(
@@ -530,7 +571,6 @@ final class TelemetrySessionActions {
           _retainRestartRequirement();
           return const TelemetrySessionActionResult.failure(
             TelemetrySessionActionFailure.restartRequired,
-            userFacingMessage: telemetryArtifactRestartRequiredCopy,
           );
         }(),
       };
@@ -580,17 +620,18 @@ final class TelemetrySessionActions {
   }
 }
 
-final class TelemetryArtifactNoticeController extends Notifier<String?> {
+final class TelemetryArtifactNoticeController
+    extends Notifier<ArtifactNotice?> {
   @override
-  String? build() => null;
+  ArtifactNotice? build() => null;
 
-  void requireRestart() {
-    state = telemetryArtifactRestartRequiredCopy;
+  void requireRestart({String? rawDetail}) {
+    state = ArtifactNotice.restartRequired(rawDetail: rawDetail);
   }
 }
 
 final telemetryArtifactNoticeProvider =
-    NotifierProvider<TelemetryArtifactNoticeController, String?>(
+    NotifierProvider<TelemetryArtifactNoticeController, ArtifactNotice?>(
       TelemetryArtifactNoticeController.new,
     );
 

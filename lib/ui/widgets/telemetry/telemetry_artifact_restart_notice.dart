@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../../state/telemetry_sessions.dart';
 
 /// Process-lifetime warning for an indeterminate artifact mutation.
@@ -16,8 +17,10 @@ class TelemetryArtifactRestartNotice extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final message = ref.watch(telemetryArtifactNoticeProvider);
-    if (message == null) return const SizedBox.shrink();
+    final notice = ref.watch(telemetryArtifactNoticeProvider);
+    if (notice == null) return const SizedBox.shrink();
+    final l10n = AppLocalizations.of(context);
+    final message = notice.localizedMessage(l10n);
     return SafeArea(
       bottom: false,
       child: Material(

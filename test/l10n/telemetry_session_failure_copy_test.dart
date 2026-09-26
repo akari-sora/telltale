@@ -31,6 +31,8 @@ const _english = <TelemetrySessionActionFailure, String>{
       'This local recording was not found.',
   TelemetrySessionActionFailure.storage: 'A local storage operation failed.',
   TelemetrySessionActionFailure.share: 'Could not prepare or open sharing.',
+  TelemetrySessionActionFailure.restartRequired:
+      'The state of local file work cannot be confirmed. Quit Telltale completely and reopen it before continuing',
 };
 
 const _chinese = <TelemetrySessionActionFailure, String>{
@@ -45,6 +47,8 @@ const _chinese = <TelemetrySessionActionFailure, String>{
   TelemetrySessionActionFailure.notFound: '找不到這筆本機紀錄',
   TelemetrySessionActionFailure.storage: '本機儲存作業失敗',
   TelemetrySessionActionFailure.share: '無法準備或開啟分享',
+  TelemetrySessionActionFailure.restartRequired:
+      '本機檔案作業狀態無法確認；請完全關閉並重新啟動 App 後再操作',
 };
 
 void main() {
@@ -54,8 +58,7 @@ void main() {
   test('every localizable session failure has a handwritten English sentence', () {
     expect(
       _english.keys.toSet(),
-      TelemetrySessionActionFailure.values.toSet()
-        ..remove(TelemetrySessionActionFailure.restartRequired),
+      TelemetrySessionActionFailure.values.toSet(),
     );
     for (final failure in _english.keys) {
       expect(
@@ -99,10 +102,17 @@ void main() {
     );
   });
 
-  test('restart-required copy is still the deferred const', () {
+  test('restart-required copy is localized and dynamic', () {
     expect(
       telemetrySessionActionFailureLabel(
         en,
+        TelemetrySessionActionFailure.restartRequired,
+      ),
+      'The state of local file work cannot be confirmed. Quit Telltale completely and reopen it before continuing',
+    );
+    expect(
+      telemetrySessionActionFailureLabel(
+        zh,
         TelemetrySessionActionFailure.restartRequired,
       ),
       telemetryArtifactRestartRequiredCopy,
