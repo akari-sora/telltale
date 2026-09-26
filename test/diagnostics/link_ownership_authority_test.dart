@@ -863,22 +863,40 @@ void main() {
           vehicleYear: 2021,
         );
 
-        // 3. Wait for 22B046 to appear on wire
+        // 3. The hold starts when 22B046 itself is on the wire. stop() lets
+        // the polling loop finish a 010D it had already started, so that
+        // command can land after launch and before the probe. It is not
+        // interleaved with the slow BMS request. Counting from the first
+        // 010D made that in-flight command look like a violation on a busy
+        // runner.
         await _waitForWireCommand(adapter, command.modeAndIdentifier);
-        final duringBms010DCount = adapter.commandLog.where((c) => c == '010D').length;
+        int count010D() => adapter.commandLog.where((c) => c == '010D').length;
+        final duringBms010DCount = count010D();
+        var probeSettled = false;
+        final settled = pending.whenComplete(() {
+          probeSettled = true;
+        });
+        while (!probeSettled) {
+          expect(
+            count010D(),
+            equals(duringBms010DCount),
+            reason: 'Normal 010D polling must NOT be dispatched on wire while BMS probe is in flight',
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
         expect(
-          duringBms010DCount,
-          equals(initial010DCount),
+          count010D(),
+          equals(duringBms010DCount),
           reason: 'Normal 010D polling must NOT be dispatched on wire while BMS probe is in flight',
         );
 
         // 4. Await BMS completion
-        final result = await pending;
+        final result = await settled;
         expect(result.failure, isNull);
 
         // 5. After BMS completes and polling is restored: 010D count increases again
         await _waitForWireCommand(adapter, '010D', afterCount: duringBms010DCount);
-        final postBms010DCount = adapter.commandLog.where((c) => c == '010D').length;
+        final postBms010DCount = count010D();
         expect(
           postBms010DCount,
           greaterThan(duringBms010DCount),
