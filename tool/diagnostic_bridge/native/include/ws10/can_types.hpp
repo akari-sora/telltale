@@ -9,6 +9,8 @@
 #include <sstream>
 #include <iomanip>
 #include <type_traits>
+#include <chrono>
+#include <memory>
 
 namespace ws10 {
 
@@ -90,6 +92,16 @@ class CanEndpointSpec {
   const std::string& interface_name() const noexcept { return interface_name_; }
   const CanId& tx_id() const noexcept { return tx_id_; }
   const CanId& rx_id() const noexcept { return rx_id_; }
+
+  bool operator==(const CanEndpointSpec& other) const noexcept {
+    return interface_name_ == other.interface_name_ &&
+           tx_id_ == other.tx_id_ &&
+           rx_id_ == other.rx_id_;
+  }
+
+  bool operator!=(const CanEndpointSpec& other) const noexcept {
+    return !(*this == other);
+  }
 
  private:
   std::string interface_name_;
@@ -236,6 +248,13 @@ class ApprovedRead {
   uint16_t did() const noexcept { return did_; }
   uint8_t status_mask() const noexcept { return status_mask_; }
 
+  bool operator==(const ApprovedRead& other) const noexcept {
+    return kind_ == other.kind_ && pdu_ == other.pdu_ && did_ == other.did_ && status_mask_ == other.status_mask_;
+  }
+  bool operator!=(const ApprovedRead& other) const noexcept {
+    return !(*this == other);
+  }
+
  private:
   ApprovedReadKind kind_;
   ApplicationPdu pdu_;
@@ -306,6 +325,54 @@ struct WriteReceipt {
            disposition == other.disposition &&
            reason == other.reason;
   }
+};
+
+/// Bounded single-use diagnostic operation authorization issued by the channel owner.
+/// Freezes approved request bytes, exact target endpoint, channel generation,
+/// unique attempt ID, and monotonic expiry deadline.
+class DiagnosticAuthorization {
+ public:
+  DiagnosticAuthorization(
+      ApprovedRead request,
+      CanEndpointSpec endpoint,
+      HandleId handle,
+      AttemptId attempt_id,
+      std::chrono::steady_clock::time_point deadline,
+      std::shared_ptr<bool> cancel_flag = nullptr,
+      std::shared_ptr<bool> retired_flag = nullptr)
+      : request_(std::move(request)),
+        endpoint_(std::move(endpoint)),
+        handle_(handle),
+        attempt_id_(attempt_id),
+        deadline_(deadline),
+        cancel_flag_(std::move(cancel_flag)),
+        retired_flag_(std::move(retired_flag)) {}
+
+  const ApprovedRead& request() const noexcept { return request_; }
+  const CanEndpointSpec& endpoint() const noexcept { return endpoint_; }
+  const HandleId& handle() const noexcept { return handle_; }
+  const AttemptId& attempt_id() const noexcept { return attempt_id_; }
+  std::chrono::steady_clock::time_point deadline() const noexcept { return deadline_; }
+
+  bool is_cancelled() const noexcept { return cancel_flag_ && *cancel_flag_; }
+  bool is_retired() const noexcept { return retired_flag_ && *retired_flag_; }
+  bool is_expired(std::chrono::steady_clock::time_point now) const noexcept { return now >= deadline_; }
+
+  bool is_consumed() const noexcept { return is_consumed_; }
+  void mark_consumed() noexcept { is_consumed_ = true; }
+
+  const std::shared_ptr<bool>& cancel_flag() const noexcept { return cancel_flag_; }
+  const std::shared_ptr<bool>& retired_flag() const noexcept { return retired_flag_; }
+
+ private:
+  ApprovedRead request_;
+  CanEndpointSpec endpoint_;
+  HandleId handle_;
+  AttemptId attempt_id_;
+  std::chrono::steady_clock::time_point deadline_;
+  std::shared_ptr<bool> cancel_flag_;
+  std::shared_ptr<bool> retired_flag_;
+  bool is_consumed_{false};
 };
 
 /// Primary outcome of an ISO-TP exchange.

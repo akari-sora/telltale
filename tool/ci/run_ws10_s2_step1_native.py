@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,20 @@ import time
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NATIVE_DIR = REPO_ROOT / "tool" / "diagnostic_bridge" / "native"
+
+REQUIRED_TESTS = [
+    "ws10_isotp_unit_tests",
+    "ws10_case_u01",
+    "ws10_case_u14",
+    "ws10_case_u15",
+    "ws10_case_u16",
+    "ws10_case_u17",
+    "ws10_neg_assertion_fail",
+    "ws10_neg_unknown_case",
+    "ws10_neg_zero_match",
+    "ws10_neg_cli_unknown_case",
+    "ws10_neg_cli_unknown_flag",
+]
 
 
 def find_tool(name: str) -> str | None:
@@ -52,22 +67,28 @@ def run_configuration(cmake_bin: str, ctest_bin: str, build_type: str, output_di
         if res_build.returncode != 0:
             raise RuntimeError(f"CMake build failed for {build_type}:\nSTDOUT:\n{res_build.stdout}\nSTDERR:\n{res_build.stderr}")
 
-        ctest_cmd = [ctest_bin, "--test-dir", str(build_dir), "--output-on-failure"]
+        ctest_cmd = [
+            ctest_bin,
+            "--test-dir", str(build_dir),
+            "--output-on-failure",
+            "--no-tests=error",
+        ]
         res_ctest = subprocess.run(ctest_cmd, capture_output=True, text=True)
         if res_ctest.returncode != 0:
             raise RuntimeError(f"CTest failed for {build_type}:\nSTDOUT:\n{res_ctest.stdout}\nSTDERR:\n{res_ctest.stderr}")
 
-        # Parse test results count from CTest output
-        passed_count = 0
-        for line in res_ctest.stdout.splitlines():
-            if "100% tests passed" in line and "out of" in line:
-                # "100% tests passed, 0 tests failed out of 8"
-                parts = line.split("out of")
-                if len(parts) == 2:
-                    try:
-                        passed_count = int(parts[1].strip().split()[0])
-                    except (ValueError, IndexError):
-                        pass
+        # Strict manifest verification: parse executed and passed test names
+        test_pattern = re.compile(r"^\s*\d+/\d+\s+Test\s+#\d+:\s+(\S+)\s+\.+\s+Passed", re.MULTILINE)
+        passed_tests = test_pattern.findall(res_ctest.stdout)
+
+        missing = set(REQUIRED_TESTS) - set(passed_tests)
+        if missing:
+            raise RuntimeError(f"CTest missing required tests for {build_type}: {sorted(missing)}")
+        extra = set(passed_tests) - set(REQUIRED_TESTS)
+        if extra:
+            raise RuntimeError(f"CTest executed unapproved extra tests for {build_type}: {sorted(extra)}")
+        if len(passed_tests) != len(REQUIRED_TESTS):
+            raise RuntimeError(f"CTest test count mismatch for {build_type}: expected {len(REQUIRED_TESTS)}, got {len(passed_tests)}")
 
         log_file = output_dir / f"ctest_{build_type.lower()}.log"
         log_file.write_text(res_ctest.stdout, encoding="utf-8")
@@ -75,7 +96,8 @@ def run_configuration(cmake_bin: str, ctest_bin: str, build_type: str, output_di
         return {
             "build_type": build_type,
             "status": "PASS",
-            "tests_passed": passed_count,
+            "tests_passed": len(passed_tests),
+            "manifest": passed_tests,
             "log_path": str(log_file),
         }
 
