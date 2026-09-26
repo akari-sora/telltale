@@ -538,7 +538,11 @@ class _PidManagerScreenState extends ConsumerState<PidManagerScreen> {
                       ),
                     ),
                     const SizedBox(height: Spacing.md),
-                    Row(
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: Spacing.sm,
+                      runSpacing: Spacing.sm,
                       children: [
                         FilterChip(
                           selected: _activeOnly,
@@ -552,7 +556,6 @@ class _PidManagerScreenState extends ConsumerState<PidManagerScreen> {
                                 : palette.textSecondary,
                           ),
                         ),
-                        const Spacer(),
                         OutlinedButton.icon(
                           key: const Key('open_powertrain_battery_catalog'),
                           onPressed: () =>
