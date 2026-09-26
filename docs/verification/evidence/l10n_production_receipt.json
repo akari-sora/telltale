@@ -1,9 +1,9 @@
 {
   "status": "ACCEPTED",
   "profile": "software-root",
-  "timestampUtc": "2026-09-26T16:28:05.299964+00:00",
-  "manifestHash": "4fb734d3db5cac9207fe8ce001a7ac1c2230de3fe319961864c96a0a5483d6c8",
-  "reportHash": "378a1cc0404e3eee47a675c3f9c04691315cdcea9b547fdfd55d6f3178b5d52a",
+  "timestampUtc": "2026-09-26T18:18:22.616534+00:00",
+  "manifestHash": "866bfb57e1cd90a027f80aacc700b55df3362ea5870943f9f9c67e6ea26e5afc",
+  "reportHash": "bbbc28b68ed04c48accecff52fa5d31af9e21999ed0b1818e2fe7b0797a9e2e4",
   "requiredCasesTotal": 12,
   "requiredCasesPassed": 12,
   "cases": [
@@ -62,8 +62,8 @@
       "artifacts": [
         {
           "path": "build/reports/l10n_accessibility/c09_portrait_320x640_2x.png",
-          "bytes": 16461,
-          "sha256": "80345ecacc72da9cb048d557893e892e87f269649038256891ee1ab4d85e1663"
+          "bytes": 16650,
+          "sha256": "c57b8dc08277992a1f3f2bd48d859c1a61a7eda127d950836e70497960de4bb1"
         }
       ]
     },
@@ -86,8 +86,8 @@
       "artifacts": [
         {
           "path": "build/reports/l10n_accessibility/c09_dialog_open_landscape_rotated.png",
-          "bytes": 5724,
-          "sha256": "5ba6856019b75f6552c16549a69d7ed896f0191b9bc8a8b6a4a1f3abfbad1891"
+          "bytes": 2957,
+          "sha256": "11d48336bb5ff82ff3c2d85cfb6d492c828e7535673fbe04c8ba222078fcc580"
         }
       ]
     },
@@ -104,8 +104,8 @@
       "layer": "native-device",
       "status": "NOT_RUN",
       "requiredInC1a": false,
-      "residualOwner": "Batch 1L-C1b / Issue #36",
-      "notes": "Physical Bluetooth adapter discovery & connection on Android/iOS"
+      "residualOwner": "Batch 1L-C1b / Issue #36 & #91 (Platform integration #24)",
+      "notes": "Physical Bluetooth adapter discovery & connection on Android/iOS; physical Wear BLE owned by #91"
     },
     {
       "residualId": "R02_NATIVE_OS_LOCALE_SYNC",
@@ -113,15 +113,15 @@
       "status": "NOT_RUN",
       "requiredInC1a": false,
       "residualOwner": "Batch 1L-C1b / Issue #36",
-      "notes": "Platform channel OS locale broadcast and per-app language settings on Android 13+"
+      "notes": "Platform channel OS locale broadcast, lifecycle, and per-app language settings on Android 13+"
     },
     {
       "residualId": "R03_PHYSICAL_WEAR_RENDER",
       "layer": "native-wear",
       "status": "NOT_RUN",
       "requiredInC1a": false,
-      "residualOwner": "Issue #48 / WearOS Lane",
-      "notes": "Circular round display physical render on Galaxy Watch / Pixel Watch"
+      "residualOwner": "Issue #65 (Rotary/Ambient/Provisioning) & Issue #48 (Release Evidence)",
+      "notes": "Circular round display physical render, rotary input, ambient mode on WearOS (#65); release qualification (#48)"
     }
   ]
 }

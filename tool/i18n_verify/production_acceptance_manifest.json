@@ -3,11 +3,11 @@
   "profile": "software-root",
   "description": "Batch 1L-C1a Production Root Journeys & Accessibility Acceptance Manifest (Issue #40, Refs #40, #34)",
   "criteriaMapping": {
-    "AC40-1": "Language choice before connect, OS locale sync, accessibility and formal guards",
-    "AC40-2": "Demo connect, session phase, live PIDs, and failure handling",
-    "AC40-3": "Telemetry recording, session completion, history, and replay",
-    "AC40-4": "Export canonical CSV/JSON, gate settling, and reopen",
-    "AC40-5": "Clean UI disconnect and post-disconnect quiescent transport"
+    "AC40-1": "Language choice before connect, OS locale sync, accessibility and formal guards; per-criterion case mapping with explicit responsible layers and visible unrun native residuals",
+    "AC40-2": "Demo connect, session phase, live PIDs, and failure handling; negative control suite for keys, placeholders, meaning, malformed JSON, truncated report, and unexpected skips",
+    "AC40-3": "Telemetry recording, session completion, history, replay, en/zh routes and recovery; zero extra permission, scan, or vehicle requests caused by locale changes",
+    "AC40-4": "Export canonical CSV/JSON, gate settling, reopen; capture child exits, SDK, environment, test outcomes, and artifact hashes",
+    "AC40-5": "Clean UI disconnect and post-disconnect quiescent transport; reviewer inspection of copy and accessibility artifacts while preserving frozen canonical exports"
   },
   "cases": [
     {
@@ -115,7 +115,7 @@
         "textScale": 2.0,
         "locales": ["en", "zh-Hant-TW"],
         "maxOverflows": 0,
-        "minTouchTarget": 44.0
+        "minTouchTarget": 48.0
       },
       "artifactRoles": [
         "build/reports/l10n_accessibility/c09_portrait_320x640_2x.png"
@@ -174,8 +174,8 @@
       "layer": "native-device",
       "status": "NOT_RUN",
       "requiredInC1a": false,
-      "residualOwner": "Batch 1L-C1b / Issue #36",
-      "notes": "Physical Bluetooth adapter discovery & connection on Android/iOS"
+      "residualOwner": "Batch 1L-C1b / Issue #36 & #91 (Platform integration #24)",
+      "notes": "Physical Bluetooth adapter discovery & connection on Android/iOS; physical Wear BLE owned by #91"
     },
     {
       "residualId": "R02_NATIVE_OS_LOCALE_SYNC",
@@ -183,15 +183,15 @@
       "status": "NOT_RUN",
       "requiredInC1a": false,
       "residualOwner": "Batch 1L-C1b / Issue #36",
-      "notes": "Platform channel OS locale broadcast and per-app language settings on Android 13+"
+      "notes": "Platform channel OS locale broadcast, lifecycle, and per-app language settings on Android 13+"
     },
     {
       "residualId": "R03_PHYSICAL_WEAR_RENDER",
       "layer": "native-wear",
       "status": "NOT_RUN",
       "requiredInC1a": false,
-      "residualOwner": "Issue #48 / WearOS Lane",
-      "notes": "Circular round display physical render on Galaxy Watch / Pixel Watch"
+      "residualOwner": "Issue #65 (Rotary/Ambient/Provisioning) & Issue #48 (Release Evidence)",
+      "notes": "Circular round display physical render, rotary input, ambient mode on WearOS (#65); release qualification (#48)"
     }
   ]
 }

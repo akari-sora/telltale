@@ -81,11 +81,15 @@ class TestL10nRequiredRunner(unittest.TestCase):
         report_path = self.root / "report.jsonl"
         lines = []
 
+        # Suite events
+        lines.append(json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}))
+        lines.append(json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}))
+
         # startup / start events
         if include_c01:
-            lines.append(json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language"}}))
+            lines.append(json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}))
         if include_c09:
-            lines.append(json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y"}}))
+            lines.append(json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}))
 
         if include_c01:
             lines.append(json.dumps({
@@ -221,6 +225,242 @@ class TestL10nRequiredRunner(unittest.TestCase):
         # Fallback should return a non-empty string (either PATH, local FVM, or "flutter")
         res = find_flutter_bin()
         self.assertTrue(len(res) > 0)
+
+    def test_reject_one_test_covering_two_required_cases(self):
+        """Negative 1: Single test cannot satisfy multiple required cases (1-to-1 violation)."""
+        manifest_data = dict(self.manifest_data)
+        # Attempt to map C09.1 to the same test name as C01
+        manifest_data["cases"] = [
+            dict(manifest_data["cases"][0]),
+            {
+                "caseId": "C09.1",
+                "criterionId": "AC40-1",
+                "suitePath": "test/l10n/test_a11y.dart",
+                "qualifiedTestName": manifest_data["cases"][0]["qualifiedTestName"],
+                "layer": "software-root",
+                "required": True,
+            },
+        ]
+        manifest_file = self.root / "manifest_dup_target.json"
+        manifest_file.write_text(json.dumps(manifest_data), encoding="utf-8")
+
+        # Report has only one test
+        report_path = self.root / "report_single_test.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": manifest_data["cases"][0]["qualifiedTestName"], "suiteID": 1}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError):
+            verify_l10n_required(manifest_file, report_path, runner_exit=0, repo_root=self.root)
+
+    def test_reject_wrong_suite_or_wrong_qualified_name(self):
+        """Negative 2: Wrong suite or wrong qualified name with matching tag is rejected."""
+        report_path = self.root / "report_wrong_suite.jsonl"
+        lines = [
+            # Wrong suite path
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/other/wrong_suite.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertIn("missing", str(ctx.exception).lower())
+
+    def test_reject_done_before_tests(self):
+        """Negative 3: Done event appearing before any tests started is rejected."""
+        report_path = self.root / "report_done_first.jsonl"
+        lines = [
+            json.dumps({"type": "done", "success": True}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError):
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+
+    def test_reject_done_false_after_done_true(self):
+        """Negative 4: Events after done or duplicate done are rejected."""
+        report_path = self.root / "report_duplicate_done.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+            json.dumps({"type": "done", "success": False}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError):
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+
+    def test_reject_test_failure_overwritten_by_success(self):
+        """Negative 5: Test failure followed by success on same testID is rejected as duplicate terminal."""
+        report_path = self.root / "report_overwritten.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "failure", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError):
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+
+    def test_reject_report_with_global_error(self):
+        """Negative 6: Report containing error event is rejected."""
+        report_path = self.root / "report_error.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "error", "error": "fatal compilation problem"}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError):
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+
+    def test_reject_unclosed_started_test(self):
+        """Negative 7: Unclosed test still running at done is rejected."""
+        report_path = self.root / "report_unclosed.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "testStart", "test": {"id": 3, "name": "Extra Dangling Test", "suiteID": 1}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            # testID 3 is never closed
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertIn("still running", str(ctx.exception).lower())
+
+    def test_reject_string_skipped_or_hidden(self):
+        """Negative 8: String boolean 'true' for skipped is rejected."""
+        report_path = self.root / "report_string_skipped.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": False, "skipped": "true"}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertIn("boolean", str(ctx.exception).lower())
+
+    def test_reject_required_case_hidden(self):
+        """Negative 9: Required case marked hidden is rejected."""
+        report_path = self.root / "report_hidden.jsonl"
+        lines = [
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "test/l10n/test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "test/l10n/test_a11y.dart"}}),
+            json.dumps({"type": "testStart", "test": {"id": 1, "name": "Test Suite [C01] Language", "suiteID": 1}}),
+            json.dumps({"type": "testStart", "test": {"id": 2, "name": "Test Suite [C09.1] A11y", "suiteID": 2}}),
+            json.dumps({"type": "testDone", "testID": 1, "result": "success", "hidden": True, "skipped": False}),
+            json.dumps({"type": "testDone", "testID": 2, "result": "success", "hidden": False, "skipped": False}),
+            json.dumps({"type": "done", "success": True}),
+        ]
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report_path, runner_exit=0, repo_root=self.root)
+        self.assertIn("hidden", str(ctx.exception).lower())
+
+    def test_reject_artifact_invalid_png_magic_bytes(self):
+        """Negative 10: Artifact with non-PNG magic bytes is rejected."""
+        # Overwrite artifact with non-PNG bytes
+        self.artifact_file.write_bytes(b"NOT_A_PNG_FILE_JUST_SOME_TEXT_DATA")
+        report = self._generate_report_jsonl()
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report, runner_exit=0, repo_root=self.root)
+        self.assertIn("valid png", str(ctx.exception).lower())
+
+    def test_reject_unrecognized_or_mismatched_profile(self):
+        """Negative 11: Unrecognized or mismatched profile is rejected."""
+        bad_manifest = dict(self.manifest_data)
+        bad_manifest["profile"] = "unrecognized-unknown-profile"
+        m_file = self.root / "manifest_bad_profile.json"
+        m_file.write_text(json.dumps(bad_manifest), encoding="utf-8")
+        report = self._generate_report_jsonl()
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(m_file, report, runner_exit=0, repo_root=self.root)
+        self.assertIn("profile", str(ctx.exception).lower())
+
+        # Also test profile mismatch against expected_profile
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(
+                self.manifest_path,
+                report,
+                runner_exit=0,
+                repo_root=self.root,
+                expected_profile="hardware-profile",
+            )
+        self.assertIn("profile", str(ctx.exception).lower())
+
+    def test_reject_manifest_duplicate_required_case(self):
+        """Negative 12: Manifest duplicate required caseId is rejected."""
+        dup_manifest = dict(self.manifest_data)
+        dup_manifest["cases"] = list(self.manifest_data["cases"]) + [self.manifest_data["cases"][0]]
+        m_file = self.root / "manifest_dup_case.json"
+        m_file.write_text(json.dumps(dup_manifest), encoding="utf-8")
+        report = self._generate_report_jsonl()
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(m_file, report, runner_exit=0, repo_root=self.root)
+        self.assertIn("duplicate", str(ctx.exception).lower())
+
+    def test_failure_clears_stale_accepted_receipt(self):
+        """Receipt integrity: Verification failure overwrites stale ACCEPTED receipt."""
+        receipt_path = self.root / "receipt.json"
+        receipt_path.write_text(json.dumps({"status": "ACCEPTED"}), encoding="utf-8")
+
+        report = self._generate_report_jsonl(c01_result="failure")
+        with self.assertRaises(L10nRequiredError):
+            verify_l10n_required(
+                self.manifest_path,
+                report,
+                runner_exit=0,
+                evidence_path=receipt_path,
+                repo_root=self.root,
+            )
+
+        self.assertTrue(receipt_path.exists())
+        data = json.loads(receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["status"], "REJECTED")
 
 
 if __name__ == "__main__":
