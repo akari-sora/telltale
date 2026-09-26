@@ -5,8 +5,8 @@
 **MR**: `test(i18n): repair acceptance integrity and complete C1a evidence (Refs #40, #34)`  
 **Branch**: `fix/i18n-c1a-r1-acceptance-hardening`  
 **Base**: `6d4015d1cfea51cabe4a7c4f8f3893b5e864b16f` (`main`)  
-**Exit Level**: `C1A_SOFTWARE_ACCEPTED` (Does not imply `ISSUE40_COMPLETE`, `NATIVE_QUALIFIED`, or `RELEASED`)  
-**Status**: 100% PASS (0 analyzer warnings, 12/12 required journey/accessibility cases passing, 21/21 Python verifier unit & negative regression tests passing, fail-closed receipts generated)
+**Exit Level**: `C1A_R1_PARTIALLY_ACCEPTED` (Split into `C1a-R2a` for verifier provenance and `C1a-R2b` for C02-C08 software proof; does not imply `ISSUE40_COMPLETE`, `NATIVE_QUALIFIED`, or `RELEASED`)  
+**Status**: Merged via MR !74; Verifier hardening completed in `C1a-R2a`; C02-C08 journey proof preserved in `C1a-R2b`.
 
 ---
 
