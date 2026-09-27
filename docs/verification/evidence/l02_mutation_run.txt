@@ -1,0 +1,127 @@
+Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 103.0.0 (108.0.0 available)
+  analyzer 13.3.0 (14.4.0 available)
+  android_file_picker 1.0.1 (2.0.0 available)
+  archive 4.0.9 (4.3.0 available)
+  cli_util 0.4.2 (0.6.0 available)
+  clock 1.1.2 (1.1.3 available)
+  code_assets 1.2.1 (2.1.0 available)
+  cross_file 0.3.5+4 (0.4.0 available)
+  dbus 0.7.14 (0.8.0 available)
+  equatable 2.1.0 (3.0.0 available)
+  file_picker 12.0.0 (13.1.0 available)
+  file_picker_darwin 1.0.1 (2.1.2 available)
+  file_picker_linux 1.0.1 (2.0.1 available)
+  file_picker_platform_interface 3.0.1 (4.0.0 available)
+  file_picker_web 3.0.1 (4.0.0 available)
+  flutter_riverpod 3.4.2 (3.4.3 available)
+  glob 2.1.3 (2.2.0 available)
+  go_router 17.5.0 (18.0.1 available)
+  hooks 2.1.0 (2.2.0 available)
+  image 4.8.0 (4.10.1 available)
+  io 1.0.5 (1.1.0 available)
+  jni_flutter 1.0.2 (1.0.3 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  mime 2.0.0 (2.1.0 available)
+  objective_c 9.5.0 (9.6.0 available)
+  package_config 2.2.0 (3.0.0 available)
+  permission_handler 12.0.3 (13.0.2 available)
+  permission_handler_android 13.0.1 (14.1.0 available)
+  permission_handler_platform_interface 4.4.0 (4.4.1 available)
+  platform 3.1.6 (3.2.0 available)
+  pool 1.5.2 (1.5.3 available)
+  process 5.0.5 (5.0.6 available)
+  pub_semver 2.2.0 (2.2.1 available)
+  record_use 1.1.0 (1.1.1 available)
+  riverpod 3.4.2 (3.4.3 available)
+  shared_preferences_android 2.4.27 (2.4.28 available)
+  shared_preferences_foundation 2.5.6 (2.5.7 available)
+  source_maps 0.10.13 (0.10.14 available)
+  stack_trace 1.12.1 (1.12.2 available)
+  test 1.31.1 (1.32.0 available)
+  test_api 0.7.12 (0.7.14 available)
+  test_core 0.6.18 (0.6.20 available)
+  universal_ble 2.1.1 (2.3.0 available)
+  url_launcher_linux 3.2.2 (3.2.3 available)
+  url_launcher_windows 3.1.5 (3.1.6 available)
+  vector_math 2.4.2 (2.4.3 available)
+  vm_service 15.2.0 (15.3.0 available)
+  wakelock_plus 1.7.0 (1.8.0 available)
+  wakelock_plus_platform_interface 1.6.0 (1.7.0 available)
+  webdriver 3.1.0 (3.2.0 available)
+  windows_file_picker 1.0.1 (2.0.0 available)
+  xml 6.6.1 (7.0.1 available)
+  yaml 3.1.3 (3.1.4 available)
+Got dependencies!
+53 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+00:00 +0: loading /Users/iml1s/Documents/mine/apps/auto/torque/test/l10n/l07_live_artifact_guard_test.dart
+00:00 +0: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG01: live Gate reactivity updates languageSwitchBlock without manual invalidation
+00:00 +0 -1: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG01: live Gate reactivity updates languageSwitchBlock without manual invalidation [E]
+  Expected: LanguageSwitchBlock:<LanguageSwitchBlock.artifactBusy>
+    Actual: LanguageSwitchBlock:<LanguageSwitchBlock.none>
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/l10n/l07_live_artifact_guard_test.dart 311:7   main.<fn>.<fn>
+  
+00:00 +0 -1: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG02: gate/coordinator identity and active token preserved across notifications; foreign/reused release rejected
+00:00 +0 -2: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG02: gate/coordinator identity and active token preserved across notifications; foreign/reused release rejected [E]
+  Expected: 'owner-primary'
+    Actual: <null>
+     Which: not an <Instance of 'String'>
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/l10n/l07_live_artifact_guard_test.dart 359:7   main.<fn>.<fn>
+  
+00:00 +0 -2: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG03: LanguagePicker component action blocked during artifactBusy, unblocked when idle
+00:00 +1 -2: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG04a: queued setter aborts before execution if gate becomes busy while queued
+00:00 +1 -3: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG04a: queued setter aborts before execution if gate becomes busy while queued [E]
+  Expected: false
+    Actual: <true>
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/l10n/l07_live_artifact_guard_test.dart 531:7   main.<fn>.<fn>
+  
+00:00 +1 -3: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG04b: queued setter aborts across OS-get await if gate becomes busy, zero OS set and zero store writes
+00:00 +1 -4: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG04b: queued setter aborts across OS-get await if gate becomes busy, zero OS set and zero store writes [E]
+  Expected: LanguageSwitchBlock:<LanguageSwitchBlock.artifactBusy>
+    Actual: LanguageSwitchBlock:<LanguageSwitchBlock.none>
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/l10n/l07_live_artifact_guard_test.dart 646:11  main.<fn>.<fn>.<fn>
+  
+00:00 +1 -4: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG05a: gate owner and token exclusivity persist across UI mount and unmount
+00:00 +2 -4: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG05b: real pending export coordinator transaction completes after UI unmount and owner self-releases
+00:00 +3 -4: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG06: contender refusal, teardown and scope retirement do not cause duplicate notifications
+00:00 +3 -5: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG06: contender refusal, teardown and scope retirement do not cause duplicate notifications [E]
+  Expected: <1>
+    Actual: <0>
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/l10n/l07_live_artifact_guard_test.dart 934:7   main.<fn>.<fn>
+  
+00:00 +3 -5: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG07: positive control proving reactive bridge eliminates stale snapshot caching across all 9 operations
+00:00 +3 -6: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG07: positive control proving reactive bridge eliminates stale snapshot caching across all 9 operations [E]
+  Expected: LanguageSwitchBlock:<LanguageSwitchBlock.artifactBusy>
+    Actual: LanguageSwitchBlock:<LanguageSwitchBlock.none>
+  Failed for record
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/l10n/l07_live_artifact_guard_test.dart 1015:9  main.<fn>.<fn>
+  
+00:00 +3 -6: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG08: safe cleanup runner preserves resources when operation remains pending, cleans up when terminated, and preserves multi-failure stacks
+00:00 +4 -6: Some tests failed.
+
+Failing tests:
+  /Users/iml1s/Documents/mine/apps/auto/torque/test/l10n/l07_live_artifact_guard_test.dart: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG01: live Gate reactivity updates languageSwitchBlock without manual invalidation
+  /Users/iml1s/Documents/mine/apps/auto/torque/test/l10n/l07_live_artifact_guard_test.dart: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG02: gate/coordinator identity and active token preserved across notifications; foreign/reused release rejected
+  /Users/iml1s/Documents/mine/apps/auto/torque/test/l10n/l07_live_artifact_guard_test.dart: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG04a: queued setter aborts before execution if gate becomes busy while queued
+  /Users/iml1s/Documents/mine/apps/auto/torque/test/l10n/l07_live_artifact_guard_test.dart: Task TELLTALE-L02-LIVE-ARTIFACT-GUARD (Refs #36, #40, #34) LG04b: queued setter aborts across OS-get await if gate becomes busy, zero OS set and zero store writes
+  ... and 2 more

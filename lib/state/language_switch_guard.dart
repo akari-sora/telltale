@@ -64,7 +64,7 @@ final languageSwitchBlockProvider = Provider<LanguageSwitchBlock>((ref) {
       phase == TelemetryRecorderPhase.preparing ||
       phase == TelemetryRecorderPhase.recording ||
       phase == TelemetryRecorderPhase.finalizing;
-  final artifactBusy = !ref.watch(artifactOperationGateProvider).snapshot.isIdle;
+  final artifactBusy = !ref.watch(artifactOperationSnapshotProvider).isIdle;
   final pidLocked = ref.watch(pidMutationLockProvider).isLocked;
   final editorDirty = ref.watch(pidEditorDirtyProvider);
   return languageSwitchBlock(

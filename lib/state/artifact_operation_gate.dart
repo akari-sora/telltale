@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Every operation that may create, replace, move, or delete an app artifact.
@@ -25,6 +26,16 @@ class ArtifactOperationSnapshot {
   final ArtifactOperation? operation;
 
   bool get isIdle => ownerId == null;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ArtifactOperationSnapshot &&
+          other.ownerId == ownerId &&
+          other.operation == operation;
+
+  @override
+  int get hashCode => Object.hash(ownerId, operation);
 }
 
 /// Capability returned only by [ArtifactOperationGate.tryAcquire].
@@ -55,7 +66,7 @@ class ArtifactAcquireResult {
 /// Root-owned synchronous exclusion for every artifact mutation.
 ///
 /// Acquisition never awaits and contention never changes the current owner.
-class ArtifactOperationGate {
+class ArtifactOperationGate extends ChangeNotifier {
   ArtifactOperationToken? _active;
   ArtifactOperationSnapshot _snapshot = const ArtifactOperationSnapshot.idle();
 
@@ -76,6 +87,7 @@ class ArtifactOperationGate {
       ownerId: ownerId,
       operation: operation,
     );
+    notifyListeners();
     return ArtifactAcquireResult.acquired(token);
   }
 
@@ -86,12 +98,38 @@ class ArtifactOperationGate {
     }
     _active = null;
     _snapshot = const ArtifactOperationSnapshot.idle();
+    notifyListeners();
   }
 }
 
 final artifactOperationGateProvider = Provider<ArtifactOperationGate>(
   (ref) => ArtifactOperationGate(),
 );
+
+/// Observable projection of [ArtifactOperationGate.snapshot].
+///
+/// Kept separate from [artifactOperationGateProvider] so that subscribers
+/// observing snapshot changes do not force recreation of coordinators that
+/// hold the gate instance.
+final artifactOperationSnapshotProvider =
+    NotifierProvider<ArtifactOperationSnapshotNotifier, ArtifactOperationSnapshot>(
+  ArtifactOperationSnapshotNotifier.new,
+);
+
+class ArtifactOperationSnapshotNotifier
+    extends Notifier<ArtifactOperationSnapshot> {
+  @override
+  ArtifactOperationSnapshot build() {
+    final gate = ref.watch(artifactOperationGateProvider);
+    void listener() {
+      state = gate.snapshot;
+    }
+
+    gate.addListener(listener);
+    ref.onDispose(() => gate.removeListener(listener));
+    return gate.snapshot;
+  }
+}
 
 final class StartCommandToken {
   StartCommandToken._(this._mutex, this._identity);
