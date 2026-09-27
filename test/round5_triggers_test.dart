@@ -1977,23 +1977,24 @@ void main() {
       // both versions timed out first — which Codex's round-12 mutation run
       // demonstrated by reverting the clamp and watching this stay green.
       //
-      //   budget    t0 + 320 ms
-      //   markAlive t0 + 250 ms   ← unclamped, this rearms to t0 + 450 ms
-      //   43 …      t0 + 400 ms   ← in time for the rearm, too late for the
+      //   budget    t0 + 450 ms
+      //   markAlive t0 + 300 ms   ← unclamped, this rearms to t0 + 500 ms
+      //   43 …      t0 + 480 ms   ← in time for the rearm, too late for the
       //                             caller
-      transport.slowCommands['03'] = const Duration(milliseconds: 400);
+      transport.slowCommands['03'] = const Duration(milliseconds: 480);
 
       final started = DateTime.now();
       final read = engine.readDtcs(DtcKind.stored,
-          deadline: started.add(const Duration(milliseconds: 320)));
-      // The resume probe, arriving while the service is still outstanding.
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-      engine.client.markAlive();
-
-      await expectLater(read, throwsA(anything),
+          deadline: started.add(const Duration(milliseconds: 450)));
+      final expectation = expectLater(read, throwsA(anything),
           reason: 'the interruption does not extend what the caller asked for '
               '— the reply arrives in time for a fresh command timeout and '
               'too late for the budget that was set');
+      // The resume probe, arriving while the service is still outstanding.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      engine.client.markAlive();
+
+      await expectation;
       await engine.dispose();
     }, timeout: const Timeout(Duration(seconds: 20)));
 
@@ -2596,14 +2597,14 @@ void main() {
 
       await expectLater(
         client.sendGlobal('03',
-            deadline: DateTime.now().add(const Duration(milliseconds: 50))),
+            deadline: DateTime.now().add(const Duration(milliseconds: 300))),
         throwsA(anything),
       );
 
       // A watchdog tick passes first, with the link still silent. This is the
       // order that matters: the tick is where the session used to die, one
       // beat before the adapter finally answered.
-      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      await Future<void>.delayed(const Duration(milliseconds: 800));
       expect(lost, 0, reason: 'nobody was told the link died');
       expect(client.isInitialized, isTrue,
           reason: 'the caller gave up; the adapter still has its window');
@@ -2650,7 +2651,7 @@ void main() {
 
       await expectLater(
         client.sendGlobal('03',
-            deadline: DateTime.now().add(const Duration(milliseconds: 50))),
+            deadline: DateTime.now().add(const Duration(milliseconds: 250))),
         throwsA(anything),
       );
       expect(lost, 0,

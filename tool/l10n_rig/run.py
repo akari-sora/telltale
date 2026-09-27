@@ -48,6 +48,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--serial")
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--candidate-apk", type=Path)
+    parser.add_argument("--candidate-sha")
+    parser.add_argument("--source-sha")
+    parser.add_argument("--tree-sha")
+    parser.add_argument("--profile")
+    parser.add_argument("--report", type=Path)
     args = parser.parse_args(argv)
     chosen = [
         name
@@ -82,6 +88,18 @@ def main(argv: list[str] | None = None) -> int:
             forwarded.append("--execute")
         if args.serial:
             forwarded.extend(["--serial", args.serial])
+        if args.profile:
+            forwarded.extend(["--profile", args.profile])
+        if args.candidate_apk:
+            forwarded.extend(["--candidate-apk", str(args.candidate_apk)])
+        if args.candidate_sha:
+            forwarded.extend(["--candidate-sha", args.candidate_sha])
+        if args.source_sha:
+            forwarded.extend(["--source-sha", args.source_sha])
+        if args.tree_sha:
+            forwarded.extend(["--tree-sha", args.tree_sha])
+        if args.report:
+            forwarded.extend(["--report", str(args.report)])
         return android_os_locale_main(forwarded)
     if args.overflow:
         forwarded = ["--output", str(args.output)]
