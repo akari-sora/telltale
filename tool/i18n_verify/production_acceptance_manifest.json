@@ -108,7 +108,7 @@
       "criterionId": "AC40-1",
       "suitePath": "test/l10n/l06_production_accessibility_test.dart",
       "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.1] 320x640 portrait at 2.0x text scale: zero overflow, minimum touch targets, semantics, and PNG capture",
-      "layer": "software-root",
+      "layer": "host-render",
       "required": true,
       "expectations": {
         "viewport": "320x640",
@@ -126,7 +126,7 @@
       "criterionId": "AC40-1",
       "suitePath": "test/l10n/l06_production_accessibility_test.dart",
       "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.2] 568x320 landscape at 2.0x text scale: zero overflow and PNG capture",
-      "layer": "software-root",
+      "layer": "host-render",
       "required": true,
       "expectations": {
         "viewport": "568x320",
@@ -143,9 +143,10 @@
       "criterionId": "AC40-1",
       "suitePath": "test/l10n/l06_production_accessibility_test.dart",
       "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.3] Dialog kept open while rotating orientation and switching locale: zero crash and zero overflow",
-      "layer": "software-root",
+      "layer": "host-render",
       "required": true,
       "expectations": {
+        "viewport": "568x320",
         "rotation": true,
         "dialogAliveAcrossRotation": true,
         "textScale": 2.0,
@@ -161,7 +162,7 @@
       "criterionId": "AC40-1",
       "suitePath": "test/l10n/l06_production_accessibility_test.dart",
       "qualifiedTestName": "Batch 1L-C1a: Production Accessibility Acceptance [C09.4] Semantics inspection: key controls provide accessible labels and actions",
-      "layer": "software-root",
+      "layer": "host-render",
       "required": true,
       "expectations": {
         "semanticsVerified": true

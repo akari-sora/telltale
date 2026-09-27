@@ -33,6 +33,7 @@ from tool.oracle_guard.assert_no_skips import (
 
 SUPPORTED_SCHEMA_VERSIONS = {"1.0.0"}
 ALLOWED_PROFILES = {"software-root", "test-profile"}
+PROVENANCE_LEVEL = "C1A_R2B_PRODUCTION_PROOF_ACCEPTED"
 
 
 class L10nRequiredError(Exception):
@@ -56,15 +57,30 @@ def _strict_json_loads(text: str) -> dict:
         raise L10nRequiredError(f"Malformed manifest JSON: {exc}") from exc
 
 
+VALID_PNG_BIT_DEPTHS = {
+    0: {1, 2, 4, 8, 16},
+    2: {8, 16},
+    3: {1, 2, 4, 8},
+    4: {8, 16},
+    6: {8, 16},
+}
+
+MAX_PNG_DIMENSION = 0x7FFFFFFF  # RFC 2083 maximum (2^31 - 1)
+MAX_SCREENSHOT_DIMENSION = 8192  # Maximum dimension budget for UI screenshot artifacts
+MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024  # 64MB memory budget for decompressed screenshot payloads
+
+
 def normalize_suite_path(p: str, repo_root: Path) -> str:
-    """Normalizes a suite path to be relative to repo_root where possible."""
+    """Normalizes a suite path to be relative to repo_root and enforces containment."""
     path_obj = Path(p)
-    if path_obj.is_absolute():
-        try:
-            return path_obj.resolve().relative_to(repo_root.resolve()).as_posix()
-        except ValueError:
-            return path_obj.as_posix()
-    return path_obj.as_posix()
+    if not path_obj.is_absolute():
+        path_obj = (repo_root / path_obj).resolve()
+    else:
+        path_obj = path_obj.resolve()
+    try:
+        return path_obj.relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        raise L10nRequiredError(f"Suite path escapes repository root containment: {p!r}")
 
 
 def _safe_relpath(p: Path, base: Path) -> str:
@@ -82,7 +98,8 @@ def validate_and_decode_png(
     """Validates PNG magic, chunk structure, CRC32, IDAT decompressibility, IEND and dimensions.
 
     Rejects bad magic, magic+junk, truncated chunks, CRC mismatches, corrupt IDAT,
-    trailing junk after IEND, and zero/negative dimensions.
+    trailing junk after IEND, invalid RFC 2083 specs, duplicate IHDR, missing PLTE for indexed color,
+    unsupported interlace modes, resource budget overflows, and expected dimension mismatches.
     """
     if len(data) < 8 or data[:8] != b"\x89PNG\r\n\x1a\n":
         raise L10nRequiredError("Invalid PNG magic header")
@@ -90,8 +107,10 @@ def validate_and_decode_png(
     offset = 8
     ihdr_seen = False
     iend_seen = False
+    plte_seen = False
     idat_chunks: list[bytes] = []
     width, height = 0, 0
+    bit_depth, color_type, comp, filt, interlace = 0, 0, 0, 0, 0
 
     while offset < len(data):
         if offset + 8 > len(data):
@@ -112,21 +131,46 @@ def validate_and_decode_png(
                 f"CRC32 mismatch in PNG chunk {ctype.decode('latin1', errors='replace')}"
             )
 
-        if not ihdr_seen:
-            if ctype != b"IHDR":
-                raise L10nRequiredError("First chunk in PNG must be IHDR")
+        if ctype == b"IHDR":
+            if ihdr_seen:
+                raise L10nRequiredError("Duplicate IHDR chunk in PNG")
             if length != 13:
                 raise L10nRequiredError(f"IHDR chunk must be 13 bytes, got {length}")
             width, height, bit_depth, color_type, comp, filt, interlace = struct.unpack(
                 ">IIBBBBB", cdata
             )
-            if width <= 0 or height <= 0:
-                raise L10nRequiredError(f"Invalid PNG dimensions: {width}x{height}")
+            if width <= 0 or height <= 0 or width > MAX_SCREENSHOT_DIMENSION or height > MAX_SCREENSHOT_DIMENSION:
+                raise L10nRequiredError(
+                    f"Invalid PNG dimensions: {width}x{height} (budget max: {MAX_SCREENSHOT_DIMENSION})"
+                )
             if comp != 0 or filt != 0:
                 raise L10nRequiredError("Invalid PNG compression or filter method")
+            if color_type not in VALID_PNG_BIT_DEPTHS:
+                raise L10nRequiredError(f"Invalid PNG color type: {color_type}")
+            if bit_depth not in VALID_PNG_BIT_DEPTHS[color_type]:
+                raise L10nRequiredError(
+                    f"Invalid PNG bit depth {bit_depth} for color type {color_type}"
+                )
+            if interlace != 0:
+                raise L10nRequiredError(
+                    f"Unsupported PNG interlace method: {interlace} (only non-interlaced interlace=0 is supported for screenshot artifacts)"
+                )
             ihdr_seen = True
-
-        if ctype == b"IDAT":
+        elif not ihdr_seen:
+            raise L10nRequiredError("First chunk in PNG must be IHDR")
+        elif ctype == b"PLTE":
+            if plte_seen:
+                raise L10nRequiredError("Duplicate PLTE chunk in PNG")
+            if color_type in (0, 4):
+                raise L10nRequiredError(
+                    f"Grayscale PNG (color_type={color_type}) must not contain PLTE chunk"
+                )
+            if length == 0 or length % 3 != 0 or length > 256 * 3:
+                raise L10nRequiredError(f"Invalid PLTE chunk length: {length}")
+            if idat_chunks:
+                raise L10nRequiredError("PLTE chunk must precede IDAT chunks")
+            plte_seen = True
+        elif ctype == b"IDAT":
             idat_chunks.append(cdata)
         elif ctype == b"IEND":
             if length != 0:
@@ -143,13 +187,51 @@ def validate_and_decode_png(
     if not idat_chunks:
         raise L10nRequiredError("PNG missing IDAT image data")
 
+    if color_type == 3 and not plte_seen:
+        raise L10nRequiredError("Indexed-color PNG (color_type=3) requires PLTE chunk before IDAT")
+
+    # Resource budget checks
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
+    if bit_depth >= 8:
+        row_bytes = 1 + width * channels * (bit_depth // 8)
+    else:
+        row_bytes = 1 + (width * channels * bit_depth + 7) // 8
+    expected_decompressed_len = height * row_bytes
+    if expected_decompressed_len > MAX_DECOMPRESSED_BYTES:
+        raise L10nRequiredError(
+            f"Expected decompressed PNG size {expected_decompressed_len} exceeds maximum resource budget {MAX_DECOMPRESSED_BYTES}"
+        )
+
     try:
-        decompressed = zlib.decompress(b"".join(idat_chunks))
+        decompressor = zlib.decompressobj()
+        decompressed = decompressor.decompress(b"".join(idat_chunks), MAX_DECOMPRESSED_BYTES + 1)
+        if decompressor.unconsumed_tail or len(decompressed) > MAX_DECOMPRESSED_BYTES:
+            raise L10nRequiredError(
+                f"Decompressed PNG data exceeds maximum resource budget {MAX_DECOMPRESSED_BYTES}"
+            )
+        if not decompressor.eof:
+            raise L10nRequiredError("Truncated PNG IDAT zlib stream: stream did not reach end-of-stream")
+        if decompressor.unused_data:
+            raise L10nRequiredError(
+                f"Extraneous data inside PNG IDAT zlib stream after end-of-stream: {len(decompressor.unused_data)} bytes"
+            )
+    except L10nRequiredError:
+        raise
     except Exception as exc:
         raise L10nRequiredError(f"Corrupted PNG IDAT compression: {exc}") from exc
 
     if len(decompressed) == 0:
         raise L10nRequiredError("Decompressed PNG image data is empty")
+
+    if len(decompressed) != expected_decompressed_len:
+        raise L10nRequiredError(
+            f"Decompressed PNG payload length {len(decompressed)} does not match expected {expected_decompressed_len} for {width}x{height} image"
+        )
+
+    for row_idx in range(height):
+        filter_byte = decompressed[row_idx * row_bytes]
+        if filter_byte > 4:
+            raise L10nRequiredError(f"Invalid PNG filter byte {filter_byte} at scanline {row_idx}")
 
     if expected_width is not None and width != expected_width:
         raise L10nRequiredError(f"PNG width {width} does not match expected width {expected_width}")
@@ -226,7 +308,7 @@ def verify_l10n_required(
                 "status": "REJECTED",
                 "executionStatus": "EXECUTION_FAIL",
                 "reviewStatus": "PENDING_REVIEW",
-                "provenanceLevel": "C1A_R2A_VERIFIER_PROVENANCE_ACCEPTED",
+                "provenanceLevel": PROVENANCE_LEVEL,
                 "runId": run_id,
                 "error": str(exc),
                 "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -237,6 +319,41 @@ def verify_l10n_required(
             except Exception:
                 if evidence_path.exists():
                     evidence_path.unlink()
+        target_bundle = bundle_dir
+        if target_bundle is None and evidence_path is not None:
+            parent_str = str(evidence_path.parent)
+            if "ci-artifacts" in parent_str or evidence_path.parent.name not in ("evidence", "docs"):
+                target_bundle = evidence_path.parent / run_id
+
+        if target_bundle:
+            try:
+                target_bundle.mkdir(parents=True, exist_ok=True)
+                failure_info = {
+                    "attempt": 1,
+                    "runId": run_id,
+                    "status": "FAIL",
+                    "error": str(exc),
+                    "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                }
+                (target_bundle / "attempt.json").write_text(
+                    json.dumps(failure_info, indent=2) + "\n", encoding="utf-8"
+                )
+                (target_bundle / "child.exit").write_text(f"{runner_exit}\n", encoding="utf-8")
+                (target_bundle / "child.stderr.txt").write_text(child_stderr, encoding="utf-8")
+                if report_path and report_path.exists():
+                    dest_report = target_bundle / "child.stdout.jsonl"
+                    if report_path.resolve() != dest_report.resolve():
+                        shutil.copyfile(report_path, dest_report)
+                command_info = {
+                    "command": command or [],
+                    "cwd": str(repo_root),
+                    "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                }
+                (target_bundle / "command.json").write_text(
+                    json.dumps(command_info, indent=2) + "\n", encoding="utf-8"
+                )
+            except Exception:
+                pass
         raise
 
 
@@ -288,6 +405,14 @@ def _verify_l10n_required_inner(
             )
     elif profile not in ALLOWED_PROFILES:
         raise L10nRequiredError(f"Unrecognized manifest profile: {profile}")
+
+    if profile == "software-root":
+        if not source_sha or source_sha == "unknown":
+            raise L10nRequiredError("Software-root acceptance requires known Git sourceSha")
+        if not tree_sha or tree_sha == "unknown":
+            raise L10nRequiredError("Software-root acceptance requires known Git treeSha")
+        if not sdk_info or sdk_info == "flutter-unknown":
+            raise L10nRequiredError("Software-root acceptance requires known SDK info")
 
     raw_cases = manifest.get("cases")
     if not isinstance(raw_cases, list) or not raw_cases:
@@ -513,7 +638,13 @@ def _verify_l10n_required_inner(
         # Check artifact roles if specified
         artifact_receipts = []
         for artifact_rel in req.get("artifactRoles", []):
-            artifact_file = repo_root / artifact_rel
+            artifact_file = (repo_root / artifact_rel).resolve()
+            try:
+                artifact_file.relative_to(repo_root.resolve())
+            except ValueError:
+                raise L10nRequiredError(
+                    f"Artifact path escapes repository root containment: {artifact_rel!r}"
+                )
             if not artifact_file.exists():
                 raise L10nRequiredError(
                     f"Required artifact for case {case_id} not found: {artifact_rel}"
@@ -525,7 +656,18 @@ def _verify_l10n_required_inner(
                 )
             dim_str = None
             if artifact_rel.endswith(".png"):
-                w, h = validate_and_decode_png(content)
+                expected_dims = req.get("artifactDimensions", {}).get(artifact_rel)
+                if expected_dims is None and "expectations" in req and "viewport" in req["expectations"]:
+                    vp = req["expectations"]["viewport"]
+                    if isinstance(vp, str) and "x" in vp:
+                        try:
+                            parts = vp.split("x")
+                            expected_dims = [int(parts[0]), int(parts[1])]
+                        except (ValueError, IndexError):
+                            expected_dims = None
+                ew = expected_dims[0] if expected_dims else None
+                eh = expected_dims[1] if expected_dims else None
+                w, h = validate_and_decode_png(content, expected_width=ew, expected_height=eh)
                 dim_str = f"{w}x{h}"
 
             ahash = hashlib.sha256(content).hexdigest()
@@ -618,6 +760,16 @@ def _verify_l10n_required_inner(
             )
 
             # 7. artifacts and artifacts.sha256
+            seen_dest_names: dict[str, str] = {}
+            for vcase in verified_cases:
+                for art in vcase.get("artifacts", []):
+                    dest_name = Path(art["path"]).name
+                    if dest_name in seen_dest_names and seen_dest_names[dest_name] != art["sha256"]:
+                        raise L10nRequiredError(
+                            f"Conflicting artifact archive destination filename '{dest_name}' with differing digests"
+                        )
+                    seen_dest_names[dest_name] = art["sha256"]
+
             art_sha_lines = []
             for vcase in verified_cases:
                 for art in vcase.get("artifacts", []):
@@ -652,10 +804,11 @@ def _verify_l10n_required_inner(
             run_context = {
                 "runId": run_id,
                 "profile": profile,
-                "provenanceLevel": "C1A_R2A_VERIFIER_PROVENANCE_ACCEPTED",
+                "provenanceLevel": PROVENANCE_LEVEL,
                 "sourceSha": source_sha or "unknown",
                 "treeSha": tree_sha or "unknown",
                 "sdk": sdk_info or "unknown",
+                "sdkInfo": sdk_info or "unknown",
                 "argv": argv or sys.argv,
                 "manifestHash": manifest_hash,
                 "reportHash": report_hash,
@@ -671,7 +824,7 @@ def _verify_l10n_required_inner(
             verification_summary = {
                 "executionStatus": "EXECUTION_PASS",
                 "reviewStatus": "PENDING_REVIEW",
-                "provenanceLevel": "C1A_R2A_VERIFIER_PROVENANCE_ACCEPTED",
+                "provenanceLevel": PROVENANCE_LEVEL,
                 "runId": run_id,
                 "manifestHash": manifest_hash,
                 "reportHash": report_hash,
@@ -691,12 +844,14 @@ def _verify_l10n_required_inner(
         "status": "ACCEPTED",
         "executionStatus": "EXECUTION_PASS",
         "reviewStatus": "PENDING_REVIEW",
-        "provenanceLevel": "C1A_R2A_VERIFIER_PROVENANCE_ACCEPTED",
+        "provenanceLevel": PROVENANCE_LEVEL,
         "runId": run_id,
         "profile": manifest.get("profile", "software-root"),
         "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "sourceSha": source_sha or "unknown",
         "treeSha": tree_sha or "unknown",
+        "sdk": sdk_info or "unknown",
+        "sdkInfo": sdk_info or "unknown",
         "manifestHash": manifest_hash,
         "reportHash": report_hash,
         "requiredCasesTotal": len(required_cases),
@@ -759,7 +914,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--runner-exit",
         type=int,
-        default=0,
+        default=None,
         help="Exit code of the runner process",
     )
     parser.add_argument(
@@ -772,77 +927,228 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Path to flutter binary (defaults to auto-detection from PATH / FVM)",
     )
+    parser.add_argument(
+        "--source-sha",
+        default=None,
+        help="Source Git commit SHA (defaults to git rev-parse HEAD or run-context.json)",
+    )
+    parser.add_argument(
+        "--tree-sha",
+        default=None,
+        help="Tree Git SHA (defaults to git rev-parse HEAD^{tree} or run-context.json)",
+    )
+    parser.add_argument(
+        "--sdk-info",
+        default=None,
+        help="Flutter SDK info (defaults to flutter --version --machine or run-context.json)",
+    )
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Explicit Run ID (defaults to run-context.json or timestamped id)",
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=REPO_ROOT,
+        help="Repository root path",
+    )
     args = parser.parse_args(argv)
 
-    run_id = f"run_{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{os.getpid()}"
-    source_sha, tree_sha = get_git_info(REPO_ROOT)
-    flutter_bin = find_flutter_bin(args.flutter)
-    sdk_info = get_sdk_info(flutter_bin, REPO_ROOT)
-
-    report_path = args.report
-    runner_exit = args.runner_exit
-    child_stderr = ""
-    cmd: list[str] = []
-
-    # If no report path provided, invoke flutter test
-    if report_path is None:
-        report_path = REPO_ROOT / "build/reports/l10n_required_report.jsonl"
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Cleanup stale PNGs before new run
-        a11y_reports = REPO_ROOT / "build/reports/l10n_accessibility"
-        if a11y_reports.exists():
-            for p in a11y_reports.glob("*.png"):
-                try:
-                    p.unlink()
-                except OSError:
-                    pass
-
-        suites = [
-            "test/l10n/l06_production_root_journey_test.dart",
-            "test/l10n/l06_production_accessibility_test.dart",
-        ]
-        cmd = [
-            flutter_bin,
-            "test",
-            *suites,
-            "--reporter",
-            "json",
-        ]
-        print(f"Running required suites: {' '.join(cmd)}")
-        try:
-            with open(report_path, "w", encoding="utf-8") as outfile:
-                proc = subprocess.run(cmd, cwd=REPO_ROOT, stdout=outfile, stderr=subprocess.PIPE)
-                runner_exit = proc.returncode
-                child_stderr = proc.stderr.decode("utf-8", errors="replace") if proc.stderr else ""
-        except Exception as spawn_exc:
-            runner_exit = 1
-            child_stderr = f"Failed to spawn runner process: {spawn_exc}"
-            failed_receipt = {
-                "status": "REJECTED",
-                "executionStatus": "EXECUTION_FAIL",
-                "reviewStatus": "PENDING_REVIEW",
-                "provenanceLevel": "C1A_R2A_VERIFIER_PROVENANCE_ACCEPTED",
-                "runId": run_id,
-                "error": f"Child spawn failed: {spawn_exc}",
-                "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            }
-            if args.evidence:
-                try:
-                    args.evidence.parent.mkdir(parents=True, exist_ok=True)
-                    args.evidence.write_text(json.dumps(failed_receipt, indent=2) + "\n", encoding="utf-8")
-                except Exception:
-                    pass
-            print(f"L10n Required Gate FAILED: {spawn_exc}", file=sys.stderr)
-            return 1
-
-    bundle_dir: Path | None = None
-    if args.output_dir:
-        bundle_dir = args.output_dir / run_id
-    elif args.evidence and ("ci-artifacts" in str(args.evidence) or args.evidence.parent.name not in ("evidence", "docs")):
-        bundle_dir = args.evidence.parent / run_id
-
     try:
+        source_sha = args.source_sha
+        tree_sha = args.tree_sha
+        sdk_info = args.sdk_info
+        run_id = args.run_id
+        runner_exit = args.runner_exit
+
+        # If offline report provided, read provenance from original execution context if present
+        if args.report and args.report.exists():
+            candidate_context_files = [
+                args.report.parent / "run-context.json",
+                args.report.parent / "run_context.json",
+            ]
+            context_found = False
+            for ccf in candidate_context_files:
+                if ccf.exists():
+                    context_found = True
+                    try:
+                        cdata = json.loads(ccf.read_text(encoding="utf-8"))
+                    except Exception as exc:
+                        raise L10nRequiredError(f"Corrupted context file {ccf}: {exc}") from exc
+
+                    if run_id and "runId" in cdata and run_id != cdata["runId"]:
+                        raise L10nRequiredError(
+                            f"CLI run-id ({run_id}) conflicts with context runId ({cdata['runId']})"
+                        )
+                    if not run_id and "runId" in cdata:
+                        run_id = cdata["runId"]
+
+                    if source_sha and "sourceSha" in cdata and source_sha != cdata["sourceSha"]:
+                        raise L10nRequiredError(
+                            f"CLI source-sha ({source_sha}) conflicts with context sourceSha ({cdata['sourceSha']})"
+                        )
+                    if not source_sha and "sourceSha" in cdata:
+                        source_sha = cdata["sourceSha"]
+
+                    if tree_sha and "treeSha" in cdata and tree_sha != cdata["treeSha"]:
+                        raise L10nRequiredError(
+                            f"CLI tree-sha ({tree_sha}) conflicts with context treeSha ({cdata['treeSha']})"
+                        )
+                    if not tree_sha and "treeSha" in cdata:
+                        tree_sha = cdata["treeSha"]
+
+                    ctx_sdk = cdata.get("sdk") or cdata.get("sdkInfo")
+                    if sdk_info and ctx_sdk and sdk_info != ctx_sdk:
+                        raise L10nRequiredError(
+                            f"CLI sdk-info ({sdk_info}) conflicts with context sdk ({ctx_sdk})"
+                        )
+                    if not sdk_info and ctx_sdk:
+                        sdk_info = ctx_sdk
+
+                    if runner_exit is not None and "childExit" in cdata and runner_exit != cdata["childExit"]:
+                        raise L10nRequiredError(
+                            f"CLI runner-exit ({runner_exit}) conflicts with context childExit ({cdata['childExit']})"
+                        )
+                    if runner_exit is None and "childExit" in cdata:
+                        runner_exit = cdata["childExit"]
+
+                    if "reportHash" in cdata:
+                        actual_rep_hash = hashlib.sha256(args.report.read_bytes()).hexdigest()
+                        if actual_rep_hash != cdata["reportHash"]:
+                            raise L10nRequiredError(
+                                f"Report hash ({actual_rep_hash}) does not match context reportHash ({cdata['reportHash']})"
+                            )
+                    if "manifestHash" in cdata and manifest_path.exists():
+                        actual_man_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+                        if actual_man_hash != cdata["manifestHash"]:
+                            raise L10nRequiredError(
+                                f"Manifest hash ({actual_man_hash}) does not match context manifestHash ({cdata['manifestHash']})"
+                            )
+                    break
+
+            if not context_found:
+                # If no context found and provenance missing, fail closed
+                if not source_sha or not tree_sha or not sdk_info:
+                    raise L10nRequiredError(
+                        "Offline report validation requires valid run-context.json or explicit --source-sha, --tree-sha, and --sdk-info."
+                    )
+
+        if runner_exit is None:
+            runner_exit = 0
+
+        if not run_id:
+            run_id = f"run_{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{os.getpid()}"
+        if not source_sha or not tree_sha:
+            git_source, git_tree = get_git_info(args.repo_root)
+            if not source_sha:
+                source_sha = git_source
+            if not tree_sha:
+                tree_sha = git_tree
+        if not sdk_info:
+            flutter_bin = find_flutter_bin(args.flutter)
+            sdk_info = get_sdk_info(flutter_bin, args.repo_root)
+        else:
+            flutter_bin = find_flutter_bin(args.flutter)
+
+        report_path = args.report
+        child_stderr = ""
+        cmd: list[str] = []
+
+        bundle_dir: Path | None = None
+        if args.output_dir:
+            bundle_dir = args.output_dir / run_id
+        elif args.evidence and ("ci-artifacts" in str(args.evidence) or args.evidence.parent.name not in ("evidence", "docs")):
+            bundle_dir = args.evidence.parent / run_id
+
+        # Pre-create bundle directory with RUNNING status identity
+        if bundle_dir:
+            try:
+                bundle_dir.mkdir(parents=True, exist_ok=True)
+                running_info = {
+                    "attempt": 1,
+                    "runId": run_id,
+                    "status": "RUNNING",
+                    "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                }
+                (bundle_dir / "attempt.json").write_text(
+                    json.dumps(running_info, indent=2) + "\n", encoding="utf-8"
+                )
+            except Exception:
+                pass
+
+        # If no report path provided, invoke flutter test
+        if report_path is None:
+            fresh_run_dir = args.repo_root / f"build/reports/l10n_runs/{run_id}"
+            fresh_run_dir.mkdir(parents=True, exist_ok=True)
+            report_path = fresh_run_dir / "report.jsonl"
+
+            # Cleanup stale PNGs before new run without silently ignoring errors
+            a11y_reports = args.repo_root / "build/reports/l10n_accessibility"
+            if a11y_reports.exists():
+                for p in a11y_reports.glob("*.png"):
+                    p.unlink(missing_ok=True)
+                    if p.exists():
+                        raise L10nRequiredError(f"Failed to remove stale accessibility PNG: {p}")
+
+            suites = [
+                "test/l10n/l06_production_root_journey_test.dart",
+                "test/l10n/l06_production_accessibility_test.dart",
+            ]
+            cmd = [
+                flutter_bin,
+                "test",
+                *suites,
+                "--reporter",
+                "json",
+            ]
+            print(f"Running required suites: {' '.join(cmd)}")
+            try:
+                with open(report_path, "w", encoding="utf-8") as outfile:
+                    proc = subprocess.run(cmd, cwd=args.repo_root, stdout=outfile, stderr=subprocess.PIPE)
+                    runner_exit = proc.returncode
+                    child_stderr = proc.stderr.decode("utf-8", errors="replace") if proc.stderr else ""
+                    legacy_report = args.repo_root / "build/reports/l10n_required_report.jsonl"
+                    legacy_report.parent.mkdir(parents=True, exist_ok=True)
+                    if report_path.resolve() != legacy_report.resolve():
+                        shutil.copyfile(report_path, legacy_report)
+            except Exception as spawn_exc:
+                runner_exit = 1
+                child_stderr = f"Failed to spawn runner process: {spawn_exc}"
+                failed_receipt = {
+                    "status": "REJECTED",
+                    "executionStatus": "EXECUTION_FAIL",
+                    "reviewStatus": "PENDING_REVIEW",
+                    "provenanceLevel": PROVENANCE_LEVEL,
+                    "runId": run_id,
+                    "error": f"Child spawn failed: {spawn_exc}",
+                    "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                }
+                if args.evidence:
+                    try:
+                        args.evidence.parent.mkdir(parents=True, exist_ok=True)
+                        args.evidence.write_text(json.dumps(failed_receipt, indent=2) + "\n", encoding="utf-8")
+                    except Exception:
+                        pass
+                if bundle_dir:
+                    try:
+                        (bundle_dir / "child.exit").write_text(f"{runner_exit}\n", encoding="utf-8")
+                        (bundle_dir / "child.stderr.txt").write_text(child_stderr, encoding="utf-8")
+                        failure_info = {
+                            "attempt": 1,
+                            "runId": run_id,
+                            "status": "FAIL",
+                            "error": str(spawn_exc),
+                            "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        }
+                        (bundle_dir / "attempt.json").write_text(
+                            json.dumps(failure_info, indent=2) + "\n", encoding="utf-8"
+                        )
+                    except Exception:
+                        pass
+                print(f"L10n Required Gate FAILED: {spawn_exc}", file=sys.stderr)
+                return 1
+
         receipt = verify_l10n_required(
             args.manifest,
             report_path,
@@ -855,6 +1161,7 @@ def main(argv: list[str] | None = None) -> int:
             source_sha=source_sha,
             tree_sha=tree_sha,
             sdk_info=sdk_info,
+            repo_root=args.repo_root,
             argv=sys.argv if argv is None else argv,
             command=cmd,
         )

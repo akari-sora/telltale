@@ -97,11 +97,12 @@ class _ValidSharePolicy implements AppSharePolicy {
 
 class TerminalStateTracker<T> {
   TerminalStateTracker(Future<T> future) {
-    future.then(
+    _future = future.then(
       (val) {
         result = val;
         isTerminated = true;
         hasError = false;
+        return val;
       },
       onError: (Object err, StackTrace stack) {
         error = err;
@@ -112,6 +113,7 @@ class TerminalStateTracker<T> {
     );
   }
 
+  late final Future<dynamic> _future;
   bool isTerminated = false;
   bool hasError = false;
   T? result;
@@ -119,10 +121,10 @@ class TerminalStateTracker<T> {
   StackTrace? stackTrace;
 
   Future<bool> awaitTermination(Duration timeout) async {
-    final deadline = DateTime.now().add(timeout);
-    while (!isTerminated && DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-    }
+    if (isTerminated) return true;
+    try {
+      await _future.timeout(timeout);
+    } catch (_) {}
     return isTerminated;
   }
 }
@@ -1068,7 +1070,7 @@ void main() {
         ],
       );
 
-      await runner2.runCleanup(budget: const Duration(milliseconds: 50));
+      await runner2.runCleanup();
       expect(tracker2.isTerminated, isTrue);
       expect(tracker2.hasError, isFalse);
       expect(gateReleased2, isTrue);
@@ -1091,13 +1093,17 @@ void main() {
         ],
       );
 
+      Object? actualError3;
+      StackTrace? actualStack3;
       try {
-        await errorRunner3.runCleanup(budget: const Duration(milliseconds: 50));
-        fail('Expected error to be thrown');
+        await errorRunner3.runCleanup();
       } catch (e, s) {
-        expect(identical(e, sentinelError3), isTrue);
-        expect(s.toString(), contains('sentinel-stack-trace-line-3'));
+        actualError3 = e;
+        actualStack3 = s;
       }
+      expect(identical(actualError3, sentinelError3), isTrue,
+          reason: 'Expected sentinel error but caught: $actualError3\n$actualStack3');
+      expect(actualStack3.toString(), contains('sentinel-stack-trace-line-3'));
       expect(errorResourcesCleaned3, isTrue);
       expect(errorTracker3.isTerminated, isTrue);
       expect(errorTracker3.hasError, isTrue);
@@ -1115,13 +1121,17 @@ void main() {
         ],
       );
 
+      Object? actualError4;
+      StackTrace? actualStack4;
       try {
-        await runner4.runCleanup(budget: const Duration(milliseconds: 50));
-        fail('Expected teardown error to be thrown');
+        await runner4.runCleanup();
       } catch (e, s) {
-        expect(identical(e, sentinelTeardownError4), isTrue);
-        expect(s.toString(), isNotEmpty);
+        actualError4 = e;
+        actualStack4 = s;
       }
+      expect(identical(actualError4, sentinelTeardownError4), isTrue,
+          reason: 'Expected teardown error but caught: $actualError4\n$actualStack4');
+      expect(actualStack4.toString(), isNotEmpty);
 
       // Branch 5: Operation error + teardown error -> AggregateTestFailure preserves both errors & stacks
       final errorCompleter5 = Completer<void>();
@@ -1142,20 +1152,24 @@ void main() {
         ],
       );
 
+      Object? actualError5;
       try {
-        await runner5.runCleanup(budget: const Duration(milliseconds: 50));
-        fail('Expected AggregateTestFailure');
-      } on AggregateTestFailure catch (agg) {
-        expect(agg.failures.length, 2);
-        // Teardown error
-        final teardownEntry = agg.failures.firstWhere((f) => f.phase.startsWith('teardown-action'));
-        expect(identical(teardownEntry.error, sentinelTeardownError5), isTrue);
-        expect(teardownEntry.stackTrace.toString(), isNotEmpty);
-        // Tracked operation error
-        final opEntry = agg.failures.firstWhere((f) => f.phase == 'tracked-operation');
-        expect(identical(opEntry.error, sentinelOpError5), isTrue);
-        expect(opEntry.stackTrace.toString(), contains('stack-trace-op-5'));
+        await runner5.runCleanup();
+      } catch (e) {
+        actualError5 = e;
       }
+      expect(actualError5, isA<AggregateTestFailure>(),
+          reason: 'Expected AggregateTestFailure but caught: $actualError5');
+      final agg5 = actualError5 as AggregateTestFailure;
+      expect(agg5.failures.length, 2);
+      // Teardown error
+      final teardownEntry5 = agg5.failures.firstWhere((f) => f.phase.startsWith('teardown-action'));
+      expect(identical(teardownEntry5.error, sentinelTeardownError5), isTrue);
+      expect(teardownEntry5.stackTrace.toString(), isNotEmpty);
+      // Tracked operation error
+      final opEntry5 = agg5.failures.firstWhere((f) => f.phase == 'tracked-operation');
+      expect(identical(opEntry5.error, sentinelOpError5), isTrue);
+      expect(opEntry5.stackTrace.toString(), contains('stack-trace-op-5'));
       expect(actionCleaned5, isTrue);
 
       // Branch 6: Primary body failure + teardown cleanup error -> AggregateTestFailure preserves primary assertion
@@ -1172,25 +1186,29 @@ void main() {
         ],
       );
 
+      Object? actualError6;
       try {
         await runner6.runGuarded(
           body: () async {
             throw sentinelBodyError6;
           },
-          budget: const Duration(milliseconds: 50),
         );
-        fail('Expected AggregateTestFailure');
-      } on AggregateTestFailure catch (agg) {
-        expect(agg.failures.length, 2);
-        // Primary assertion failure
-        final bodyEntry = agg.failures.firstWhere((f) => f.phase == 'body');
-        expect(identical(bodyEntry.error, sentinelBodyError6), isTrue);
-        expect(bodyEntry.stackTrace.toString(), isNotEmpty);
-        // Teardown error
-        final teardownEntry = agg.failures.firstWhere((f) => f.phase.startsWith('teardown-action'));
-        expect(identical(teardownEntry.error, sentinelTeardownError6), isTrue);
-        expect(teardownEntry.stackTrace.toString(), isNotEmpty);
+      } catch (e) {
+        actualError6 = e;
       }
+      expect(actualError6, isA<AggregateTestFailure>(),
+          reason: 'Expected AggregateTestFailure but caught: $actualError6');
+      final agg6 = actualError6 as AggregateTestFailure;
+      expect(agg6.failures.length, 2);
+      // Primary assertion failure
+      final bodyEntry6 = agg6.failures.firstWhere((f) => f.phase == 'body');
+      expect(identical(bodyEntry6.error, sentinelBodyError6), isTrue);
+      expect(bodyEntry6.stackTrace.toString(), isNotEmpty);
+      // Teardown error
+      final teardownEntry6 = agg6.failures.firstWhere((f) => f.phase.startsWith('teardown-action'));
+      expect(identical(teardownEntry6.error, sentinelTeardownError6), isTrue);
+      expect(teardownEntry6.stackTrace.toString(), isNotEmpty);
+
 
       // Branch 7: Primary body failure + pending timeout -> AggregateTestFailure preserves primary assertion, strictly fail-closed (no cleanup)
       final barrier7 = Completer<void>();
