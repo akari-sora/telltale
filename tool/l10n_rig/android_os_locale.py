@@ -36,13 +36,160 @@ CASE_IDS = [
     "osLocaleEnglishConnectCopy",
     "osLocaleTraditionalChineseConnectCopy",
 ]
+CANDIDATE_CASE_IDS = [
+    "N00_candidate_provenance",
+    "N01_manifest_locale_config",
+    "N02_os_to_app_sync",
+    "N03_app_to_os_sync",
+    "N04_follow_system",
+    "N05_idle_restart_retention",
+    "N06_teardown_restoration",
+    "N07_negative_controls",
+]
 
 
 class GateError(Exception):
     """Evidence is not an honest android-os-locale pass."""
 
 
-def validate_android_os_locale_report(report: object) -> dict:
+def validate_candidate_locale_report(
+    report: object,
+    *,
+    expected_candidate_sha: str | None = None,
+    expected_source_sha: str | None = None,
+    expected_tree_sha: str | None = None,
+) -> dict:
+    if not isinstance(report, dict):
+        raise GateError("candidate-locale report is not an object")
+    if report.get("lane") not in ("android-os-locale", "android-candidate-locale"):
+        raise GateError("a software report is not a candidate-locale lane")
+    if report.get("profile") != "candidate-native-locale":
+        raise GateError("candidate report requires profile='candidate-native-locale'")
+    if report.get("provenanceLevel") != "NATIVE_LOCALE_CANDIDATE_N1_ACCEPTED":
+        raise GateError("candidate report missing NATIVE_LOCALE_CANDIDATE_N1_ACCEPTED provenance")
+
+    device = report.get("device")
+    if not isinstance(device, str) or not device.strip():
+        raise GateError("candidate-locale without an identified device is not PASS")
+    if device == FIELD_SERIAL:
+        raise GateError("android-os-locale refuses the field phone")
+    if device != ALLOWED_SERIAL:
+        raise GateError(f"android-os-locale serial {device} is not the disposable AOSP emulator")
+
+    fingerprint = report.get("fingerprint")
+    if not isinstance(fingerprint, str) or "sdk_gphone" not in fingerprint:
+        raise GateError("candidate-locale without an AOSP emulator fingerprint is not PASS")
+
+    api_level = report.get("target_api_level")
+    if not isinstance(api_level, int) or api_level < 33:
+        raise GateError(f"candidate-locale requires Android API 33+ (found: {api_level})")
+
+    # N00: Provenance & Candidate Identity
+    cand_sha = report.get("candidate_sha256")
+    if not isinstance(cand_sha, str) or not SHA256_RE.fullmatch(cand_sha):
+        raise GateError("candidate-locale missing valid 64-hex candidate_sha256")
+    if cand_sha == "0" * 64:
+        raise GateError("candidate-locale all-zero candidate_sha256 is not PASS")
+    if expected_candidate_sha and cand_sha != expected_candidate_sha:
+        raise GateError(f"candidate_sha256 {cand_sha} does not match expected {expected_candidate_sha}")
+
+    source_sha = report.get("source_sha") or report.get("runner_head_sha")
+    if not isinstance(source_sha, str) or len(source_sha) != 40:
+        raise GateError("candidate-locale missing 40-hex source_sha")
+    if expected_source_sha and source_sha != expected_source_sha:
+        raise GateError(f"source_sha {source_sha} does not match expected {expected_source_sha}")
+
+    tree_sha = report.get("tree_sha")
+    if not isinstance(tree_sha, str) or len(tree_sha) != 40:
+        raise GateError("candidate-locale missing 40-hex tree_sha")
+    if expected_tree_sha and tree_sha != expected_tree_sha:
+        raise GateError(f"tree_sha {tree_sha} does not match expected {expected_tree_sha}")
+
+    pkg = report.get("package")
+    if pkg not in (PACKAGE, "com.cbstudio.telltale"):
+        raise GateError(f"candidate-locale package must be {PACKAGE} or com.cbstudio.telltale, found {pkg}")
+
+    flavor = report.get("flavor")
+    if flavor not in ("rig", "field"):
+        raise GateError(f"candidate-locale flavor must be 'rig' or 'field', found {flavor}")
+    if (pkg == PACKAGE and flavor != "rig") or (pkg == "com.cbstudio.telltale" and flavor != "field"):
+        raise GateError(f"candidate-locale package {pkg} incompatible with flavor {flavor}")
+
+    sig = report.get("signature_digest")
+    if not isinstance(sig, str) or not SHA256_RE.fullmatch(sig) or sig == "0" * 64:
+        raise GateError("candidate-locale missing valid signature_digest")
+
+    # N01: Manifest and LocaleConfig
+    if report.get("manifest_locale_config_valid") is not True:
+        raise GateError("candidate-locale N01 failed: manifest localeConfig is invalid or missing")
+    supported = report.get("supported_locales")
+    if not isinstance(supported, list) or not {"en", "zh-Hant"}.issubset(set(supported)):
+        raise GateError("candidate-locale N01 failed: supported_locales must include en and zh-Hant")
+
+    # N02: OS -> App Sync
+    if report.get("english_seen") is not True:
+        raise GateError("candidate-locale N02 failed: English connect copy was not verified")
+    if report.get("chinese_seen") is not True:
+        raise GateError("candidate-locale N02 failed: Traditional Chinese connect copy was not verified")
+    if report.get("os_to_app_sync_verified") is not True:
+        raise GateError("candidate-locale N02 failed: OS->App sync was not verified")
+
+    # N03: App -> OS Sync
+    if report.get("app_to_os_sync_verified") is not True:
+        raise GateError("candidate-locale N03 failed: App->OS sync was not verified")
+    if report.get("sync_loop_prevented") is not True:
+        raise GateError("candidate-locale N03 failed: sync loop prevention was not verified")
+
+    # N04: Follow System
+    if report.get("follow_system_verified") is not True:
+        raise GateError("candidate-locale N04 failed: follow-system behavior was not verified")
+
+    # N05: Process Recreation & Retention
+    if report.get("process_recreated") is not True:
+        raise GateError("candidate-locale N05 failed: process recreation was not documented")
+    if report.get("state_retained") is not True:
+        raise GateError("candidate-locale N05 failed: state retention across restart was not verified")
+
+    # N06: Teardown & Restoration
+    if report.get("teardown_restored") is not True:
+        raise GateError("candidate-locale N06 failed: teardown restoration was not verified")
+
+    # N07: Exit & Case IDs & Screenshots
+    if report.get("exit") != 0:
+        raise GateError("candidate-locale nonzero exit is not PASS")
+
+    case_ids = report.get("case_ids")
+    if not isinstance(case_ids, list) or not all(c in case_ids for c in CANDIDATE_CASE_IDS):
+        raise GateError(f"candidate-locale missing required case IDs from {CANDIDATE_CASE_IDS}")
+
+    shots = report.get("screenshots")
+    if not isinstance(shots, dict) or set(shots) != {"en-US", "zh-Hant-TW"}:
+        raise GateError("candidate-locale screenshots must cover en-US and zh-Hant-TW")
+    for tag, digest in shots.items():
+        if not isinstance(digest, str) or not SHA256_RE.fullmatch(digest) or digest == "0" * 64:
+            raise GateError(f"candidate-locale {tag} screenshot hash invalid")
+
+    command = report.get("command")
+    if not isinstance(command, list) or not command:
+        raise GateError("candidate-locale missing executed command")
+
+    return report
+
+
+def validate_android_os_locale_report(
+    report: object,
+    *,
+    expected_candidate_sha: str | None = None,
+    expected_source_sha: str | None = None,
+    expected_tree_sha: str | None = None,
+) -> dict:
+    if isinstance(report, dict) and report.get("profile") == "candidate-native-locale":
+        return validate_candidate_locale_report(
+            report,
+            expected_candidate_sha=expected_candidate_sha,
+            expected_source_sha=expected_source_sha,
+            expected_tree_sha=expected_tree_sha,
+        )
     if not isinstance(report, dict):
         raise GateError("android-os-locale report is not an object")
     if report.get("lane") != "android-os-locale":
@@ -354,10 +501,42 @@ def _execute(serial: str, output: Path) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--serial")
+    parser.add_argument("--report", type=Path, help="Validate an existing report offline")
+    parser.add_argument("--profile", default="smoke", choices=["smoke", "candidate-native-locale"])
+    parser.add_argument("--candidate-apk", type=Path)
+    parser.add_argument("--candidate-sha")
+    parser.add_argument("--source-sha")
+    parser.add_argument("--tree-sha")
     args = parser.parse_args(argv)
+
+    if args.report:
+        if not args.report.exists():
+            print(f"Report not found: {args.report}", file=sys.stderr)
+            return 1
+        try:
+            report_data = json.loads(args.report.read_text(encoding="utf-8"))
+            validate_android_os_locale_report(
+                report_data,
+                expected_candidate_sha=args.candidate_sha,
+                expected_source_sha=args.source_sha,
+                expected_tree_sha=args.tree_sha,
+            )
+            print("Candidate Locale Gate PASSED: report satisfies all validation rules.")
+            return 0
+        except GateError as exc:
+            print(f"Candidate Locale Gate FAILED: {exc}", file=sys.stderr)
+            return 1
+        except Exception as exc:
+            print(f"Candidate Locale Gate FAILED: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 1
+
+    if not args.output:
+        print("android-os-locale requires --output or --report", file=sys.stderr)
+        return 2
+
     if not args.execute:
         return _not_run(
             args.output,
@@ -375,7 +554,12 @@ def main(argv: list[str] | None = None) -> int:
         fingerprint = _identify(serial)
         report = _execute(serial, args.output)
         report["fingerprint"] = fingerprint
-        validate_android_os_locale_report(report)
+        validate_android_os_locale_report(
+            report,
+            expected_candidate_sha=args.candidate_sha,
+            expected_source_sha=args.source_sha,
+            expected_tree_sha=args.tree_sha,
+        )
     except GateError as exc:
         return _not_run(args.output, str(exc))
     except Exception as exc:
