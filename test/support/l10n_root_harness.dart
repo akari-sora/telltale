@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:universal_ble/src/universal_ble_pigeon/universal_ble_pigeon_channel.dart';
 import 'package:universal_ble/universal_ble.dart';
 
 import 'package:torque_obd/app.dart';
@@ -18,7 +19,6 @@ import 'package:torque_obd/l10n/locale_resolution.dart';
 import 'package:torque_obd/state/app_runtime.dart';
 import 'package:torque_obd/state/app_share_coordinator.dart';
 import 'package:torque_obd/state/artifact_operation_gate.dart';
-import 'package:torque_obd/state/language_switch_guard.dart';
 import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/state/pid_registry.dart';
 import 'package:torque_obd/state/telemetry_recorder.dart';
@@ -30,28 +30,35 @@ import 'package:torque_obd/ui/screens/connect/connect_screen.dart';
 /// Captures shared files and metadata for verification.
 class CapturingAppSharePlatform implements AppSharePlatform {
   final List<AppSharePlatformRequest> requests = [];
+  AppShareResult nextResult = AppShareResult.selected;
 
   @override
   Future<AppShareResult> share(AppSharePlatformRequest request) async {
     requests.add(request);
-    return AppShareResult.selected;
+    return nextResult;
   }
 }
 
 /// An AppShareCoordinator that is always ready in test harnesses.
 class AlwaysReadyAppShareCoordinator extends AppShareCoordinator {
   static int _shareId = 0;
+  static var clockOffset = Duration.zero;
+
+  static void advanceClock([Duration duration = const Duration(minutes: 20)]) {
+    clockOffset += duration;
+  }
 
   AlwaysReadyAppShareCoordinator({
     required super.policy,
     required super.artifactGate,
     required Directory Function() captureDirectory,
     AppSharePlatform? platform,
+    Future<Directory> Function()? rootDirectoryOverride,
   }) : super(
-          rootDirectory: () async => captureDirectory(),
+          rootDirectory: rootDirectoryOverride ?? (() async => captureDirectory()),
           platform: platform ?? const AppSharePlatformBridge(),
           idSource: () => (++_shareId).toRadixString(16).padLeft(32, '0'),
-          nowUtc: () => DateTime.now().toUtc(),
+          nowUtc: () => DateTime.now().toUtc().add(clockOffset),
           availableBytes: (_) async => 1024 * 1024 * 100, // 100MB
         );
 }
@@ -75,8 +82,14 @@ class CountingBlePlatform extends UniversalBlePlatform {
       scanCount++;
       return Future<void>.value();
     }
+    if (name == #stopScan) {
+      return Future<void>.value();
+    }
     if (name == #connect) {
       connectCount++;
+      return Future<void>.value();
+    }
+    if (name == #disconnect) {
       return Future<void>.value();
     }
     if (name == #writeValue || name == #writeCommand) {
@@ -98,9 +111,16 @@ class L10nRootHarness {
   late CapturingAppSharePlatform sharePlatform;
   late WidgetRef appRef;
 
+  ArtifactOperationGate get artifactGate =>
+      appRef.read(artifactOperationGateProvider);
+
   bool _initialized = false;
   bool get isInitialized => _initialized;
   List<String> currentOsTags = ['en'];
+  Future<Directory> Function()? shareRootDirectoryOverride;
+
+  void advanceShareClock([Duration duration = const Duration(minutes: 20)]) =>
+      AlwaysReadyAppShareCoordinator.advanceClock(duration);
 
   Future<void> initialize({
     Map<String, Object>? initialPrefs,
@@ -119,14 +139,18 @@ class L10nRootHarness {
   }
 
   Future<void> dispose() async {
-    UniversalBle.setInstance(CountingBlePlatform());
-    AppLocalesPlatform.live = false;
     if (!_initialized) return;
     try {
       if (appRef.read(obdSessionProvider).isConnected) {
         await appRef.read(obdSessionProvider.notifier).disconnect();
       }
     } catch (_) {}
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    blePlatform.reset();
+    UniversalBle.setInstance(UniversalBlePigeonChannel.instance);
+    AlwaysReadyAppShareCoordinator.clockOffset = Duration.zero;
+    AppLocalesPlatform.live = false;
+    shareRootDirectoryOverride = null;
     try {
       if (tempTelemetryDir.existsSync()) {
         tempTelemetryDir.deleteSync(recursive: true);
@@ -197,6 +221,7 @@ class L10nRootHarness {
               artifactGate: ref.watch(artifactOperationGateProvider),
               captureDirectory: () => tempShareDir,
               platform: sharePlatform,
+              rootDirectoryOverride: shareRootDirectoryOverride,
             ),
           ),
           telemetrySessionStoreProvider.overrideWithValue(
@@ -244,7 +269,6 @@ class L10nRootHarness {
       () => find.byType(ConnectScreen).evaluate().isNotEmpty,
       timeout: const Duration(seconds: 15),
     );
-    appRef.invalidate(languageSwitchBlockProvider);
     await tester.pump();
   }
 

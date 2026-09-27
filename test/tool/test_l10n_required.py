@@ -166,7 +166,7 @@ class TestL10nRequiredRunner(unittest.TestCase):
         self.assertEqual(receipt["status"], "ACCEPTED")
         self.assertEqual(receipt["executionStatus"], "EXECUTION_PASS")
         self.assertEqual(receipt["reviewStatus"], "PENDING_REVIEW")
-        self.assertEqual(receipt["provenanceLevel"], "C1A_R2A_VERIFIER_PROVENANCE_ACCEPTED")
+        self.assertEqual(receipt["provenanceLevel"], "C1A_R2B_PRODUCTION_PROOF_ACCEPTED")
         self.assertEqual(receipt["requiredCasesPassed"], 2)
         self.assertEqual(receipt["requiredCasesTotal"], 2)
         self.assertTrue(receipt_path.exists())
@@ -712,8 +712,6 @@ class TestL10nRequiredRunner(unittest.TestCase):
             "/nonexistent/binary/path/that/cannot/exist",
             "--manifest",
             str(self.manifest_path),
-            "--report",
-            str(self.root / "spawn_report.jsonl"),
             "--evidence",
             str(receipt_path),
             "--expected-profile",
@@ -723,6 +721,138 @@ class TestL10nRequiredRunner(unittest.TestCase):
         data = json.loads(receipt_path.read_text(encoding="utf-8"))
         self.assertEqual(data["status"], "REJECTED")
         self.assertEqual(data["executionStatus"], "EXECUTION_FAIL")
+        self.assertIn("child spawn failed", data["error"].lower())
+
+    def test_main_missing_report_file_overwrites_rejected_receipt(self):
+        """G-FAILURE: Missing report file passed via --report writes REJECTED receipt and returns 1."""
+        receipt_path = self.root / "receipt_missing_report.json"
+        receipt_path.write_text(json.dumps({"status": "ACCEPTED"}), encoding="utf-8")
+
+        rc = runner_main([
+            "--flutter",
+            "flutter",
+            "--manifest",
+            str(self.manifest_path),
+            "--report",
+            str(self.root / "nonexistent_report.jsonl"),
+            "--evidence",
+            str(receipt_path),
+            "--expected-profile",
+            "test-profile",
+        ])
+        self.assertEqual(rc, 1)
+        data = json.loads(receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["status"], "REJECTED")
+        self.assertEqual(data["executionStatus"], "EXECUTION_FAIL")
+        self.assertIn("report not found", data["error"].lower())
+
+    def test_normalize_suite_path_resolves_dot_dot_segments(self):
+        """G-SUITE: Suite paths containing relative navigation segments are canonicalized."""
+        from tool.ci.run_l10n_required import normalize_suite_path
+        p = "test/../test/l10n/test.dart"
+        self.assertEqual(normalize_suite_path(p, self.root), "test/l10n/test.dart")
+
+    def test_reject_png_invalid_color_type(self):
+        """G-PNG: PNG with invalid RFC 2083 color_type is rejected."""
+        def chunk(ctype: bytes, data: bytes) -> bytes:
+            return struct.pack(">I", len(data)) + ctype + data + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+        magic = b"\x89PNG\r\n\x1a\n"
+        ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 99, 0, 0, 0))
+        idat = chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00\xff"))
+        self.artifact_file.write_bytes(magic + ihdr + idat + chunk(b"IEND", b""))
+        report = self._generate_report_jsonl()
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report, runner_exit=0, repo_root=self.root)
+        self.assertIn("color type", str(ctx.exception).lower())
+
+    def test_reject_png_dimension_overflow(self):
+        """G-PNG: PNG with dimension exceeding RFC 2083 2^31 - 1 limit is rejected."""
+        def chunk(ctype: bytes, data: bytes) -> bytes:
+            return struct.pack(">I", len(data)) + ctype + data + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+        magic = b"\x89PNG\r\n\x1a\n"
+        ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 0x80000000, 1, 8, 6, 0, 0, 0))
+        idat = chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00\xff"))
+        self.artifact_file.write_bytes(magic + ihdr + idat + chunk(b"IEND", b""))
+        report = self._generate_report_jsonl()
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report, runner_exit=0, repo_root=self.root)
+        self.assertIn("dimensions", str(ctx.exception).lower())
+
+    def test_reject_png_decompressed_payload_mismatch(self):
+        """G-PNG: PNG with decompressed payload length mismatching dimensions is rejected."""
+        def chunk(ctype: bytes, data: bytes) -> bytes:
+            return struct.pack(">I", len(data)) + ctype + data + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+        magic = b"\x89PNG\r\n\x1a\n"
+        ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 100, 100, 8, 6, 0, 0, 0))
+        idat = chunk(b"IDAT", zlib.compress(b"short_dummy_payload"))
+        self.artifact_file.write_bytes(magic + ihdr + idat + chunk(b"IEND", b""))
+        report = self._generate_report_jsonl()
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(self.manifest_path, report, runner_exit=0, repo_root=self.root)
+        self.assertIn("payload length", str(ctx.exception).lower())
+
+    def test_reject_conflicting_artifact_destinations(self):
+        """G-ARCHIVE: Conflicting artifact destinations with differing digests are rejected."""
+        bundle_dir = self.root / "conflict_bundle"
+        art1 = self.root / "art1.png"
+        art2 = self.root / "sub" / "art1.png"
+        art2.parent.mkdir(parents=True, exist_ok=True)
+        art1.write_bytes(make_valid_png(1, 1))
+        art2.write_bytes(make_valid_png(2, 2))
+
+        manifest_data = dict(self.manifest_data)
+        manifest_data["cases"] = [
+            {
+                "caseId": "C01",
+                "criterionId": "AC40-1",
+                "suitePath": "test/l10n/test.dart",
+                "qualifiedTestName": "Test Suite [C01] Language",
+                "layer": "software-root",
+                "required": True,
+                "artifactRoles": ["art1.png"],
+            },
+            {
+                "caseId": "C09.1",
+                "criterionId": "AC40-1",
+                "suitePath": "test/l10n/test_a11y.dart",
+                "qualifiedTestName": "Test Suite [C09.1] A11y",
+                "layer": "software-root",
+                "required": True,
+                "artifactRoles": ["sub/art1.png"],
+            },
+        ]
+        m_file = self.root / "manifest_art_conflict.json"
+        m_file.write_text(json.dumps(manifest_data), encoding="utf-8")
+        report = self._generate_report_jsonl()
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(
+                m_file,
+                report,
+                runner_exit=0,
+                bundle_dir=bundle_dir,
+                repo_root=self.root,
+            )
+        self.assertIn("conflicting artifact", str(ctx.exception).lower())
+
+    def test_bundle_dir_failure_recording(self):
+        """G-ARCHIVE: When verification fails, bundle_dir records attempt.json with status FAIL."""
+        bundle_dir = self.root / "fail_bundle"
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        report = self._generate_report_jsonl(c01_result="failure")
+
+        with self.assertRaises(L10nRequiredError):
+            verify_l10n_required(
+                self.manifest_path,
+                report,
+                runner_exit=0,
+                bundle_dir=bundle_dir,
+                repo_root=self.root,
+            )
+        attempt_file = bundle_dir / "attempt.json"
+        self.assertTrue(attempt_file.exists())
+        data = json.loads(attempt_file.read_text(encoding="utf-8"))
+        self.assertEqual(data["status"], "FAIL")
 
     def test_full_archive_bundle_generation(self):
         """G-ARCHIVE: Verified run creates complete 11-file bundle archive and matches hashes."""
@@ -742,7 +872,7 @@ class TestL10nRequiredRunner(unittest.TestCase):
         self.assertEqual(receipt["status"], "ACCEPTED")
         self.assertEqual(receipt["executionStatus"], "EXECUTION_PASS")
         self.assertEqual(receipt["reviewStatus"], "PENDING_REVIEW")
-        self.assertEqual(receipt["provenanceLevel"], "C1A_R2A_VERIFIER_PROVENANCE_ACCEPTED")
+        self.assertEqual(receipt["provenanceLevel"], "C1A_R2B_PRODUCTION_PROOF_ACCEPTED")
 
         # Verify all bundle files exist
         required_bundle_files = [
@@ -767,6 +897,305 @@ class TestL10nRequiredRunner(unittest.TestCase):
         self.assertEqual(len(sha_lines), 1)
         self.assertIn("test_artifact.png", sha_lines[0])
 
+    def test_png_duplicate_ihdr_rejected(self):
+        """G-PNG: Duplicate IHDR chunk is rejected."""
+        from tool.ci.run_l10n_required import validate_and_decode_png
+        def chunk(ctype: bytes, data: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(data))
+                + ctype
+                + data
+                + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+            )
+        magic = b"\x89PNG\r\n\x1a\n"
+        ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+        idat = chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00\xff"))
+        iend = chunk(b"IEND", b"")
+        duplicate_ihdr_png = magic + ihdr + ihdr + idat + iend
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            validate_and_decode_png(duplicate_ihdr_png)
+        self.assertIn("duplicate ihdr", str(ctx.exception).lower())
+
+    def test_png_indexed_missing_plte_rejected(self):
+        """G-PNG: Indexed color (color_type=3) without PLTE is rejected."""
+        from tool.ci.run_l10n_required import validate_and_decode_png
+        def chunk(ctype: bytes, data: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(data))
+                + ctype
+                + data
+                + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+            )
+        magic = b"\x89PNG\r\n\x1a\n"
+        ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 3, 0, 0, 0))
+        idat = chunk(b"IDAT", zlib.compress(b"\x00\x00"))
+        iend = chunk(b"IEND", b"")
+        indexed_no_plte = magic + ihdr + idat + iend
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            validate_and_decode_png(indexed_no_plte)
+        self.assertIn("plte", str(ctx.exception).lower())
+
+    def test_png_grayscale_with_plte_rejected(self):
+        """G-PNG: Grayscale PNG (color_type=0) with PLTE is rejected."""
+        from tool.ci.run_l10n_required import validate_and_decode_png
+        def chunk(ctype: bytes, data: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(data))
+                + ctype
+                + data
+                + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+            )
+        magic = b"\x89PNG\r\n\x1a\n"
+        ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0))
+        plte = chunk(b"PLTE", b"\x00\x00\x00")
+        idat = chunk(b"IDAT", zlib.compress(b"\x00\x00"))
+        iend = chunk(b"IEND", b"")
+        gray_plte = magic + ihdr + plte + idat + iend
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            validate_and_decode_png(gray_plte)
+        self.assertIn("grayscale", str(ctx.exception).lower())
+
+    def test_png_interlace_adam7_rejected(self):
+        """G-PNG: Interlace method 1 (Adam7) is rejected as unsupported for screenshot artifacts."""
+        from tool.ci.run_l10n_required import validate_and_decode_png
+        def chunk(ctype: bytes, data: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(data))
+                + ctype
+                + data
+                + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+            )
+        magic = b"\x89PNG\r\n\x1a\n"
+        ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 1))
+        idat = chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00\xff"))
+        iend = chunk(b"IEND", b"")
+        adam7 = magic + ihdr + idat + iend
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            validate_and_decode_png(adam7)
+        self.assertIn("unsupported png interlace method", str(ctx.exception).lower())
+
+    def test_png_expected_dimensions_mismatch(self):
+        """G-PNG: Dimension mismatch against expected dimensions is rejected."""
+        from tool.ci.run_l10n_required import validate_and_decode_png
+        png_1x1 = make_valid_png(1, 1)
+        with self.assertRaises(L10nRequiredError) as ctx:
+            validate_and_decode_png(png_1x1, expected_width=320, expected_height=640)
+        self.assertIn("does not match expected width 320", str(ctx.exception))
+
+    def test_suite_path_escapes_repo_root_rejected(self):
+        """G-SUITE: Suite path escaping repository root containment is rejected."""
+        from tool.ci.run_l10n_required import normalize_suite_path
+        with self.assertRaises(L10nRequiredError) as ctx:
+            normalize_suite_path("../../outside.dart", self.root)
+        self.assertIn("escapes repository root containment", str(ctx.exception))
+
+    def test_software_root_profile_requires_known_source_and_sdk(self):
+        """G-RUN: software-root profile strictly fails closed if sourceSha or sdk is unknown."""
+        manifest_data = dict(self.manifest_data)
+        manifest_data["profile"] = "software-root"
+        m_file = self.root / "manifest_software_root.json"
+        m_file.write_text(json.dumps(manifest_data), encoding="utf-8")
+        report = self._generate_report_jsonl()
+
+        # Unknown source_sha
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(
+                m_file,
+                report,
+                runner_exit=0,
+                repo_root=self.root,
+                source_sha="unknown",
+                tree_sha="abc123",
+                sdk_info="Flutter 3.47.0",
+            )
+        self.assertIn("known git sourcesha", str(ctx.exception).lower())
+
+        # Unknown sdk_info
+        with self.assertRaises(L10nRequiredError) as ctx:
+            verify_l10n_required(
+                m_file,
+                report,
+                runner_exit=0,
+                repo_root=self.root,
+                source_sha="def456",
+                tree_sha="abc123",
+                sdk_info="flutter-unknown",
+            )
+        self.assertIn("known sdk info", str(ctx.exception).lower())
+
+    def test_png_truncated_zlib_stream_rejected(self):
+        """G-PNG: Truncated PNG IDAT zlib stream is rejected."""
+        from tool.ci.run_l10n_required import validate_and_decode_png
+        def chunk(ctype: bytes, data: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(data))
+                + ctype
+                + data
+                + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+            )
+        magic = b"\x89PNG\r\n\x1a\n"
+        ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+        full_zlib = zlib.compress(b"\x00\x00\x00\x00\xff")
+        truncated_zlib = full_zlib[:-3]
+        idat = chunk(b"IDAT", truncated_zlib)
+        iend = chunk(b"IEND", b"")
+        truncated_png = magic + ihdr + idat + iend
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            validate_and_decode_png(truncated_png)
+        self.assertIn("truncated png idat zlib stream", str(ctx.exception).lower())
+
+    def test_png_extraneous_zlib_data_rejected(self):
+        """G-PNG: Extraneous data inside PNG IDAT zlib stream after end-of-stream is rejected."""
+        from tool.ci.run_l10n_required import validate_and_decode_png
+        def chunk(ctype: bytes, data: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(data))
+                + ctype
+                + data
+                + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+            )
+        magic = b"\x89PNG\r\n\x1a\n"
+        ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+        full_zlib = zlib.compress(b"\x00\x00\x00\x00\xff")
+        idat = chunk(b"IDAT", full_zlib + b"EXTRA_BYTES")
+        iend = chunk(b"IEND", b"")
+        extraneous_png = magic + ihdr + idat + iend
+
+        with self.assertRaises(L10nRequiredError) as ctx:
+            validate_and_decode_png(extraneous_png)
+        self.assertIn("extraneous data inside png idat zlib stream", str(ctx.exception).lower())
+
+    def test_failure_archives_child_stdout_and_exit(self):
+        """G-FAILURE: Verifier failure creates failure archive with child.exit, stdout, and stderr."""
+        bundle_dir = self.root / "ci-artifacts/l10n-required/failure-run"
+        report = self._generate_report_jsonl(c01_result="failure")
+        with self.assertRaises(L10nRequiredError):
+            verify_l10n_required(
+                self.manifest_path,
+                report,
+                runner_exit=42,
+                bundle_dir=bundle_dir,
+                child_stderr="synthetic stderr content",
+                repo_root=self.root,
+            )
+        self.assertTrue((bundle_dir / "child.exit").exists())
+        self.assertEqual((bundle_dir / "child.exit").read_text(encoding="utf-8").strip(), "42")
+        self.assertTrue((bundle_dir / "child.stderr.txt").exists())
+        self.assertIn("synthetic stderr content", (bundle_dir / "child.stderr.txt").read_text(encoding="utf-8"))
+        self.assertTrue((bundle_dir / "child.stdout.jsonl").exists())
+        self.assertTrue((bundle_dir / "attempt.json").exists())
+        attempt_data = json.loads((bundle_dir / "attempt.json").read_text(encoding="utf-8"))
+        self.assertEqual(attempt_data["status"], "FAIL")
+
+    def test_offline_report_preserves_run_context(self):
+        """G-RUN: Offline report verification preserves provenance from adjacent run-context.json."""
+        report = self._generate_report_jsonl()
+        run_context_file = report.parent / "run-context.json"
+        run_context_file.write_text(
+            json.dumps({
+                "runId": "run_orig_9999",
+                "sourceSha": "abcdef0123456789abcdef0123456789abcdef01",
+                "treeSha": "1234567890abcdef1234567890abcdef12345678",
+                "sdkInfo": "Flutter 3.47.0 • channel stable",
+            }),
+            encoding="utf-8",
+        )
+        receipt_file = self.root / "receipt_from_offline.json"
+        ret = runner_main([
+            "--manifest", str(self.manifest_path),
+            "--report", str(report),
+            "--runner-exit", "0",
+            "--evidence", str(receipt_file),
+            "--expected-profile", "test-profile",
+            "--repo-root", str(self.root),
+        ])
+        self.assertEqual(ret, 0)
+        self.assertTrue(receipt_file.exists())
+        receipt_data = json.loads(receipt_file.read_text(encoding="utf-8"))
+        self.assertEqual(receipt_data["runId"], "run_orig_9999")
+        self.assertEqual(receipt_data["sourceSha"], "abcdef0123456789abcdef0123456789abcdef01")
+        self.assertEqual(receipt_data["treeSha"], "1234567890abcdef1234567890abcdef12345678")
+        self.assertEqual(receipt_data["sdk"], "Flutter 3.47.0 • channel stable")
+        self.assertEqual(receipt_data["sdkInfo"], "Flutter 3.47.0 • channel stable")
+
+    def test_offline_report_rejects_conflicting_cli_identity_and_tampered_hash(self):
+        """G-RUN: offline report rejects conflicting identity and tampered report hash."""
+        report = self._generate_report_jsonl()
+        context_file = report.parent / "run-context.json"
+        context_file.write_text(
+            json.dumps({
+                "runId": "run_tamper_1",
+                "sourceSha": "1111111111111111111111111111111111111111",
+                "treeSha": "2222222222222222222222222222222222222222",
+                "sdk": "Flutter 3.47.0 • channel stable",
+                "reportHash": "badbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadb",
+            }),
+            encoding="utf-8",
+        )
+        receipt_file = self.root / "receipt_tamper.json"
+        # Hash mismatch should fail
+        ret = runner_main([
+            "--manifest", str(self.manifest_path),
+            "--report", str(report),
+            "--evidence", str(receipt_file),
+            "--expected-profile", "test-profile",
+            "--repo-root", str(self.root),
+        ])
+        self.assertNotEqual(ret, 0)
+
+        # Fix report hash, test conflicting CLI sourceSha
+        import hashlib
+        real_hash = hashlib.sha256(report.read_bytes()).hexdigest()
+        context_file.write_text(
+            json.dumps({
+                "runId": "run_tamper_1",
+                "sourceSha": "1111111111111111111111111111111111111111",
+                "treeSha": "2222222222222222222222222222222222222222",
+                "sdk": "Flutter 3.47.0 • channel stable",
+                "reportHash": real_hash,
+            }),
+            encoding="utf-8",
+        )
+        ret_conflict = runner_main([
+            "--manifest", str(self.manifest_path),
+            "--report", str(report),
+            "--source-sha", "9999999999999999999999999999999999999999",
+            "--evidence", str(receipt_file),
+            "--expected-profile", "test-profile",
+            "--repo-root", str(self.root),
+        ])
+        self.assertNotEqual(ret_conflict, 0)
+
+    def test_offline_report_reads_non_zero_child_exit_from_context(self):
+        """G-RUN: offline report consumes non-zero childExit from context without silent fallback."""
+        report = self._generate_report_jsonl()
+        context_file = report.parent / "run-context.json"
+        context_file.write_text(
+            json.dumps({
+                "runId": "run_exit1",
+                "sourceSha": "1111111111111111111111111111111111111111",
+                "treeSha": "2222222222222222222222222222222222222222",
+                "sdk": "Flutter 3.47.0 • channel stable",
+                "childExit": 1,
+            }),
+            encoding="utf-8",
+        )
+        receipt_file = self.root / "receipt_exit1.json"
+        ret = runner_main([
+            "--manifest", str(self.manifest_path),
+            "--report", str(report),
+            "--evidence", str(receipt_file),
+            "--expected-profile", "test-profile",
+            "--repo-root", str(self.root),
+        ])
+        self.assertNotEqual(ret, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+

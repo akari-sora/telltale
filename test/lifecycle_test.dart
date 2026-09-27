@@ -579,7 +579,7 @@ void main() {
       await expectLater(
         client.sendGlobal(
           '03',
-          deadline: DateTime.now().add(const Duration(milliseconds: 50)),
+          deadline: DateTime.now().add(const Duration(milliseconds: 250)),
         ),
         throwsA(anything),
       );

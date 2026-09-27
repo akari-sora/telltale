@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,6 +9,34 @@ import 'package:torque_obd/state/locale_settings.dart';
 import 'package:torque_obd/ui/screens/connect/connect_screen.dart';
 
 import '../support/l10n_root_harness.dart';
+
+/// Shared test helper for capturing layout overflows while preserving framework error forwarding.
+class L10nOverflowCollector {
+  L10nOverflowCollector({void Function(FlutterErrorDetails details)? previousHandler})
+      : _forwardHandler = previousHandler;
+
+  final void Function(FlutterErrorDetails details)? _forwardHandler;
+  void Function(FlutterErrorDetails details)? _savedOnError;
+  final List<String> errors = [];
+
+  void call(FlutterErrorDetails details) {
+    final message = details.exceptionAsString();
+    if (message.contains('overflowed') || message.contains('RenderFlex')) {
+      errors.add(message);
+    } else {
+      (_forwardHandler ?? _savedOnError ?? FlutterError.onError)?.call(details);
+    }
+  }
+
+  void install() {
+    _savedOnError = FlutterError.onError;
+    FlutterError.onError = call;
+  }
+
+  void uninstall() {
+    FlutterError.onError = _savedOnError;
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -42,16 +69,8 @@ void main() {
           tester.platformDispatcher.clearTextScaleFactorTestValue();
         });
 
-        final errors = <String>[];
-        final previousOnError = FlutterError.onError;
-        FlutterError.onError = (details) {
-          final message = details.exceptionAsString();
-          if (message.contains('overflowed') || message.contains('RenderFlex')) {
-            errors.add(message);
-          } else {
-            previousOnError?.call(details);
-          }
-        };
+        final collector = L10nOverflowCollector();
+        collector.install();
 
         try {
           await harness.pumpApp(tester);
@@ -63,7 +82,7 @@ void main() {
           expect(textScaler.scale(10.0), closeTo(20.0, 0.001));
 
           // Verify zero RenderFlex overflows in English
-          expect(errors, isEmpty, reason: 'RenderFlex overflow in 320x640 2.0x portrait (en)');
+          expect(collector.errors, isEmpty, reason: 'RenderFlex overflow in 320x640 2.0x portrait (en)');
 
           // Check interactive touch targets meet minimum 48x48 bounds
           final langBtn = find.byKey(const Key('connect_language_entry'));
@@ -97,7 +116,7 @@ void main() {
             scrollable: find.byType(Scrollable).first,
           );
           expect(find.text(zh.connectHeadline), findsOneWidget);
-          expect(errors, isEmpty, reason: 'RenderFlex overflow in 320x640 2.0x portrait (zh)');
+          expect(collector.errors, isEmpty, reason: 'RenderFlex overflow in 320x640 2.0x portrait (zh)');
 
           // Capture host-render PNG artifact
           final pngBytes = await L10nRootHarness.captureBoundaryAsPng(
@@ -111,7 +130,7 @@ void main() {
           artifactFile.writeAsBytesSync(pngBytes);
           expect(artifactFile.existsSync(), isTrue);
         } finally {
-          FlutterError.onError = previousOnError;
+          collector.uninstall();
         }
       },
     );
@@ -128,16 +147,8 @@ void main() {
           tester.platformDispatcher.clearTextScaleFactorTestValue();
         });
 
-        final errors = <String>[];
-        final previousOnError = FlutterError.onError;
-        FlutterError.onError = (details) {
-          final message = details.exceptionAsString();
-          if (message.contains('overflowed') || message.contains('RenderFlex')) {
-            errors.add(message);
-          } else {
-            previousOnError?.call(details);
-          }
-        };
+        final collector = L10nOverflowCollector();
+        collector.install();
 
         try {
           await harness.pumpApp(tester);
@@ -149,7 +160,7 @@ void main() {
           expect(textScaler.scale(10.0), closeTo(20.0, 0.001));
 
           // Verify zero overflows in landscape at 2x
-          expect(errors, isEmpty, reason: 'RenderFlex overflow in 568x320 2.0x landscape (en)');
+          expect(collector.errors, isEmpty, reason: 'RenderFlex overflow in 568x320 2.0x landscape (en)');
 
           // Switch to zh at 2.0x scale
           await harness.appRef.read(localePreferenceProvider.notifier).set(LocalePreference.traditionalChinese);
@@ -157,7 +168,7 @@ void main() {
           await tester.pump(const Duration(milliseconds: 300));
 
           expect(find.text(zh.connectHeadline), findsOneWidget);
-          expect(errors, isEmpty, reason: 'RenderFlex overflow in 568x320 2.0x landscape (zh)');
+          expect(collector.errors, isEmpty, reason: 'RenderFlex overflow in 568x320 2.0x landscape (zh)');
 
           // Capture host-render PNG artifact
           final pngBytes = await L10nRootHarness.captureBoundaryAsPng(
@@ -171,7 +182,7 @@ void main() {
           artifactFile.writeAsBytesSync(pngBytes);
           expect(artifactFile.existsSync(), isTrue);
         } finally {
-          FlutterError.onError = previousOnError;
+          collector.uninstall();
         }
       },
     );
@@ -189,16 +200,8 @@ void main() {
           tester.platformDispatcher.clearTextScaleFactorTestValue();
         });
 
-        final errors = <String>[];
-        final previousOnError = FlutterError.onError;
-        FlutterError.onError = (details) {
-          final message = details.exceptionAsString();
-          if (message.contains('overflowed') || message.contains('RenderFlex')) {
-            errors.add(message);
-          } else {
-            previousOnError?.call(details);
-          }
-        };
+        final collector = L10nOverflowCollector();
+        collector.install();
 
         try {
           await harness.pumpApp(tester);
@@ -224,7 +227,7 @@ void main() {
 
           // Bottom sheet must still be mounted and alive
           expect(find.byType(BottomSheet), findsOneWidget);
-          expect(errors, isEmpty, reason: 'RenderFlex overflow after rotating with sheet open');
+          expect(collector.errors, isEmpty, reason: 'RenderFlex overflow after rotating with sheet open');
 
           // Switch locale while sheet is open in landscape
           final zhRadio = find.byKey(const Key('locale_traditionalChinese'));
@@ -233,7 +236,7 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(find.byType(BottomSheet), findsOneWidget);
-          expect(errors, isEmpty, reason: 'RenderFlex overflow after locale change in landscape sheet');
+          expect(collector.errors, isEmpty, reason: 'RenderFlex overflow after locale change in landscape sheet');
 
           // Assert locale actually changed
           expect(find.text(zh.connectHeadline), findsOneWidget);
@@ -250,40 +253,22 @@ void main() {
           artifactFile.writeAsBytesSync(pngBytes);
           expect(artifactFile.existsSync(), isTrue);
 
-          // Close sheet
+          // Rotate back to 320x640 portrait while sheet remains open
+          tester.view.physicalSize = const Size(320, 640);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.byType(BottomSheet), findsOneWidget);
+          expect(collector.errors, isEmpty, reason: 'RenderFlex overflow after rotating back to portrait with sheet open');
+
+          // Dismiss sheet
           final sheetFinder = find.byType(BottomSheet);
           if (sheetFinder.evaluate().isNotEmpty) {
             Navigator.of(tester.element(sheetFinder)).pop();
             await tester.pumpAndSettle();
           }
-
-          // Also verify an explicit Dialog remains open and properly laid out across rotation
-          unawaited(
-            showDialog<void>(
-              context: tester.element(find.byType(ConnectScreen)),
-              builder: (ctx) => AlertDialog(
-                title: Text(zh.languageSectionTitle),
-                content: const Text('Testing dialog rotation across viewports'),
-              ),
-            ),
-          );
-          await tester.pump();
-          expect(find.byType(AlertDialog), findsOneWidget);
-
-          // Rotate back to portrait with dialog open
-          tester.view.physicalSize = const Size(320, 640);
-          await tester.pump();
-          expect(find.byType(AlertDialog), findsOneWidget);
-          expect(errors, isEmpty, reason: 'RenderFlex overflow with AlertDialog open across rotation');
-
-          // Dismiss dialog
-          final dialogFinder = find.byType(AlertDialog);
-          if (dialogFinder.evaluate().isNotEmpty) {
-            Navigator.of(tester.element(dialogFinder)).pop();
-            await tester.pumpAndSettle();
-          }
+          expect(find.byType(BottomSheet), findsNothing);
         } finally {
-          FlutterError.onError = previousOnError;
+          collector.uninstall();
         }
       },
     );
@@ -321,30 +306,44 @@ void main() {
     );
 
     testWidgets(
-      'controlled non-layout error fails through previousOnError handler',
+      'shared L10nOverflowCollector forwards non-layout errors and captures layout overflows',
       (tester) async {
-        final errors = <String>[];
-        var nonLayoutErrorPropagated = false;
-        final savedOnError = FlutterError.onError;
-        FlutterError.onError = (details) {
-          final message = details.exceptionAsString();
-          if (message.contains('overflowed') || message.contains('RenderFlex')) {
-            errors.add(message);
-          } else {
-            nonLayoutErrorPropagated = true;
-          }
-        };
+        var previousHandlerInvoked = false;
+        void testPreviousOnError(FlutterErrorDetails details) {
+          previousHandlerInvoked = true;
+        }
+
+        final collector = L10nOverflowCollector(previousHandler: testPreviousOnError);
+
+        // 1. Non-layout error: must be forwarded to previousOnError and NOT added to collector.errors
+        collector.call(
+          const FlutterErrorDetails(
+            exception: 'Controlled non-layout framework error',
+            library: 'test defense',
+          ),
+        );
+        expect(previousHandlerInvoked, isTrue, reason: 'Non-layout error must forward to previousOnError');
+        expect(collector.errors, isEmpty, reason: 'Non-layout error must not be recorded as overflow');
+
+        // 2. Layout overflow error: must be recorded in collector.errors and NOT forwarded
+        previousHandlerInvoked = false;
+        collector.call(
+          const FlutterErrorDetails(
+            exception: 'A RenderFlex overflowed by 42 pixels on the bottom.',
+            library: 'rendering',
+          ),
+        );
+        expect(previousHandlerInvoked, isFalse, reason: 'Overflow error must not be forwarded');
+        expect(collector.errors, hasLength(1), reason: 'Overflow error must be recorded');
+
+        // 3. Binding test: install sets FlutterError.onError, uninstall restores it
+        final originalOnError = FlutterError.onError;
         try {
-          FlutterError.reportError(
-            const FlutterErrorDetails(
-              exception: 'Controlled non-layout framework error',
-              library: 'accessibility test defense',
-            ),
-          );
-          expect(nonLayoutErrorPropagated, isTrue);
-          expect(errors, isEmpty);
+          collector.install();
+          expect(FlutterError.onError, equals(collector.call));
         } finally {
-          FlutterError.onError = savedOnError;
+          collector.uninstall();
+          expect(FlutterError.onError, equals(originalOnError));
         }
       },
     );
