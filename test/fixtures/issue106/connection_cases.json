@@ -1,0 +1,150 @@
+{
+  "version": "1.1.0",
+  "task_id": "TELLTALE-CONNECT106-CAUSAL-TRIAGE",
+  "issue_ref": 106,
+  "scenarios": [
+    {
+      "id": "CASE-01-TRANSPORT-EOF",
+      "name": "Transport termination and socket reset characterization",
+      "sub_cases": [
+        {
+          "suffix": "CASE-01-A-REMOTE-EOF",
+          "name": "Remote stream onDone (EOF) during mid-session",
+          "injected_fault": "stream_done",
+          "first_cause_classification": "TransportDrop",
+          "expected_terminal_state": "disconnected",
+          "product_reported_issue": "linkDroppedMidSession",
+          "cleanup_obligations": [
+            "client_disposed",
+            "watchdog_cancelled",
+            "transport_closed",
+            "zero_unhandled_stream_errors"
+          ]
+        },
+        {
+          "suffix": "CASE-01-B-SOCKET-RESET",
+          "name": "Remote stream onError (SocketException/Reset) during mid-session",
+          "injected_fault": "stream_error",
+          "first_cause_classification": "SocketReset",
+          "expected_terminal_state": "disconnected",
+          "product_reported_issue": "linkDroppedMidSession",
+          "cleanup_obligations": [
+            "client_disposed",
+            "watchdog_cancelled",
+            "transport_closed",
+            "zero_unhandled_stream_errors"
+          ]
+        },
+        {
+          "suffix": "CASE-01-C-CALLER-CANCEL",
+          "name": "Caller active cancellation / disconnect invocation",
+          "injected_fault": "caller_disconnect",
+          "first_cause_classification": "CallerInitiated",
+          "expected_terminal_state": "disconnected_by_app",
+          "product_reported_issue": "disconnectedByApp",
+          "cleanup_obligations": [
+            "clean_disconnect",
+            "transport_closed",
+            "no_active_requests"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CASE-02-HANDSHAKE-TIMEOUT",
+      "name": "Adapter response timeout and non-critical rejection during AT initialization",
+      "sub_cases": [
+        {
+          "suffix": "CASE-02-A-CRITICAL-AT-TIMEOUT",
+          "name": "Critical AT command (e.g. ATSP0 / ATE0) unresponsive within 4s deadline",
+          "injected_fault": "silent_stall",
+          "first_cause_classification": "HandshakeTimeout",
+          "expected_terminal_state": "handshake_failed",
+          "product_reported_issue": "commandReplyTimeout",
+          "product_reported_note": "timedOut",
+          "cleanup_obligations": [
+            "client_disposed",
+            "transport_closed",
+            "no_dangling_completer"
+          ]
+        },
+        {
+          "suffix": "CASE-02-B-NON-CRITICAL-AT-FAIL",
+          "name": "Non-critical AT probe (e.g. AT@1) returns '?' unknown command",
+          "injected_fault": "unknown_command_probe",
+          "first_cause_classification": "NonCriticalProbeRefused",
+          "expected_terminal_state": "handshake_continued",
+          "product_reported_issue": "none",
+          "cleanup_obligations": [
+            "handshake_proceeds",
+            "probe_marked_refused"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CASE-03-SLOW-RESPONSE",
+      "name": "Mode 01 PID 00 response timing, framing, and late arrival boundary",
+      "sub_cases": [
+        {
+          "suffix": "CASE-03-A-BEFORE-DEADLINE",
+          "name": "0100 response arrives within 4s deadline (e.g. 500ms)",
+          "injected_fault": "bounded_delay",
+          "first_cause_classification": "HealthyDiscovery",
+          "expected_terminal_state": "handshake_success",
+          "product_reported_issue": "none",
+          "cleanup_obligations": [
+            "protocol_confirmed",
+            "session_ready"
+          ]
+        },
+        {
+          "suffix": "CASE-03-B-AFTER-DEADLINE",
+          "name": "0100 response arrives after 4s deadline expires (late reply discard)",
+          "injected_fault": "excessive_delay",
+          "first_cause_classification": "SlowResponseTimeout",
+          "expected_terminal_state": "handshake_failed",
+          "product_reported_issue": "commandReplyTimeout",
+          "product_reported_note": "timedOut",
+          "cleanup_obligations": [
+            "late_reply_discarded",
+            "generation_fenced",
+            "no_cross_session_bleed"
+          ]
+        },
+        {
+          "suffix": "CASE-03-C-CHUNKED-LITERAL",
+          "name": "0100 response split across multiple byte chunks with CR/LF/> framing",
+          "injected_fault": "fragmented_delivery",
+          "first_cause_classification": "ChunkedFramingSuccess",
+          "expected_terminal_state": "handshake_success",
+          "product_reported_issue": "none",
+          "cleanup_obligations": [
+            "reassembled_cleanly",
+            "prompt_recognized"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CASE-04-HEALTHY-CONTROL",
+      "name": "Nominal connection, negotiation, polling, and graceful closure",
+      "sub_cases": [
+        {
+          "suffix": "CASE-04-A-FULL-CYCLE",
+          "name": "Standard happy path: connect, 13.9V ATRV, 0100 discovery, poll PID 0D, clean disconnect",
+          "injected_fault": "none",
+          "first_cause_classification": "None",
+          "expected_terminal_state": "connected_then_closed",
+          "product_reported_issue": "none",
+          "cleanup_obligations": [
+            "clean_disconnect",
+            "transport_flushed",
+            "zero_leak",
+            "zero_unhandled_stream_errors"
+          ]
+        }
+      ]
+    }
+  ]
+}
