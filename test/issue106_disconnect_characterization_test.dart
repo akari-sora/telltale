@@ -30,6 +30,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+// ignore: depend_on_referenced_packages
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1035,6 +1037,255 @@ void main() {
         reason: 'Reply before deadline must never trigger a timeout event',
       );
       expect(probe.firstTerminalCause, isNull);
+    });
+
+    test('CASE-02-A controlled boundary PRE: ATSP0 reply arriving at D - epsilon (3999ms) completes step without timeout', () {
+      fakeAsync((async) {
+        final startTime = DateTime(2026, 9, 28, 10, 0, 0);
+        final probe = Issue106TraceProbe(
+          runId: 'RUN-CASE-02-A-PRE',
+          attemptId: 'ATTEMPT-01',
+          generation: 1,
+          clock: () => startTime.add(async.elapsed),
+          elapsedMsProvider: () => async.elapsed.inMilliseconds,
+        );
+
+        final transport = ScriptedCausalTransport(name: 'atsp0_pre_deadline', probe: probe);
+        final client = Elm327Client(
+          transport,
+          clock: () => startTime.add(async.elapsed),
+          elapsed: () => async.elapsed,
+        );
+
+        final progressSub = client.initProgress.listen(probe.observeInitProgress);
+
+        bool atsp0Reached = false;
+        transport.onCommandHook = (cmd, t) {
+          final norm = cmd.toUpperCase().replaceAll(' ', '');
+          if (norm.startsWith('ATSP0')) {
+            atsp0Reached = true;
+            // Hold reply; do not answer immediately
+          } else {
+            t.defaultAnswer(cmd);
+          }
+        };
+
+        bool? connectResult;
+        unawaited(client.connect().then((val) => connectResult = val));
+
+        int pumpCount = 0;
+        while (!atsp0Reached && pumpCount < 100) {
+          async.elapse(const Duration(milliseconds: 10));
+          pumpCount++;
+        }
+        expect(atsp0Reached, isTrue, reason: 'ATSP0 must have reached wire and entered reply-wait');
+        expect(client.isInitialized, isFalse);
+
+        final atsp0StartRecord = probe.records.firstWhere(
+          (r) => r.kind == TraceEventKind.initStepStarted && r.command == 'ATSP0',
+        );
+        final t0Ms = atsp0StartRecord.elapsedMs;
+
+        final elapsedSinceT0Ms = async.elapsed.inMilliseconds - t0Ms;
+        expect(elapsedSinceT0Ms, lessThan(3999), reason: 'ATSP0 handoff must be reached before deadline');
+
+        // Advance to D - epsilon (3999ms from T0): still pending, no timeout
+        async.elapse(Duration(milliseconds: 3999 - elapsedSinceT0Ms));
+
+        expect(connectResult, isNull, reason: 'connect() must still be pending at D - epsilon');
+        expect(
+          probe.records.any((r) => r.kind == TraceEventKind.timeoutObserved),
+          isFalse,
+          reason: 'No timeoutObserved must be recorded before deadline (at D - epsilon)',
+        );
+        expect(probe.firstTerminalCause, isNull);
+        expect(probe.failedStepCommand, isNull);
+
+        // Deliver reply at D - epsilon
+        transport.sendReply('OK\r\n>');
+        int finishCount = 0;
+        while (connectResult == null && finishCount < 100) {
+          async.elapse(const Duration(milliseconds: 10));
+          finishCount++;
+        }
+
+        expect(connectResult, isTrue, reason: 'connect() must succeed when reply delivered at D - epsilon');
+        expect(client.isInitialized, isTrue);
+
+        final atsp0Completed = probe.records.firstWhere(
+          (r) => r.kind == TraceEventKind.initStepCompleted && r.command == 'ATSP0',
+        );
+        expect(atsp0Completed.details['status'], 'ok');
+        expect(atsp0StartRecord.elapsedMs, t0Ms);
+
+        expect(
+          probe.records.any((r) => r.kind == TraceEventKind.timeoutObserved),
+          isFalse,
+          reason: 'Reply processed before deadline must result in zero timeout events',
+        );
+        expect(probe.firstTerminalCause, isNull);
+
+        expect(
+          transport.writtenCommands.any((c) => c.startsWith('0100')),
+          isTrue,
+          reason: 'Subsequent handshake steps must reach wire upon ATSP0 success',
+        );
+
+        progressSub.cancel();
+        client.disconnect();
+        transport.disposeSync();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('CASE-02-A controlled boundary DUE & LATE: ATSP0 reaches exact deadline D (4000ms) with typed timeout, and late reply at D + epsilon (4001ms) cannot reverse failure', () {
+      fakeAsync((async) {
+        final startTime = DateTime(2026, 9, 28, 10, 0, 0);
+        final probe = Issue106TraceProbe(
+          runId: 'RUN-CASE-02-A-DUE-LATE',
+          attemptId: 'ATTEMPT-01',
+          generation: 1,
+          clock: () => startTime.add(async.elapsed),
+          elapsedMsProvider: () => async.elapsed.inMilliseconds,
+        );
+        probe.injectedFault = 'silent_stall';
+
+        final transport = ScriptedCausalTransport(name: 'atsp0_due_late', probe: probe);
+        final client = Elm327Client(
+          transport,
+          clock: () => startTime.add(async.elapsed),
+          elapsed: () => async.elapsed,
+        );
+
+        final progressSub = client.initProgress.listen(probe.observeInitProgress);
+
+        bool atsp0Reached = false;
+        transport.onCommandHook = (cmd, t) {
+          final norm = cmd.toUpperCase().replaceAll(' ', '');
+          if (norm.startsWith('ATSP0')) {
+            atsp0Reached = true;
+            probe.record(
+              kind: TraceEventKind.injectedFaultFired,
+              component: 'transport',
+              phase: 'atsp0',
+              command: 'ATSP0',
+              details: {'type': 'silent_stall'},
+            );
+            // Go silent: hold reply indefinitely
+          } else {
+            t.defaultAnswer(cmd);
+          }
+        };
+
+        bool? connectResult;
+        unawaited(client.connect().then((val) => connectResult = val));
+
+        int pumpCount = 0;
+        while (!atsp0Reached && pumpCount < 100) {
+          async.elapse(const Duration(milliseconds: 10));
+          pumpCount++;
+        }
+        expect(atsp0Reached, isTrue, reason: 'ATSP0 must have reached wire and entered reply-wait');
+        expect(client.isInitialized, isFalse);
+
+        final atsp0StartRecord = probe.records.firstWhere(
+          (r) => r.kind == TraceEventKind.initStepStarted && r.command == 'ATSP0',
+        );
+        final t0Ms = atsp0StartRecord.elapsedMs;
+
+        final elapsedSinceT0Ms = async.elapsed.inMilliseconds - t0Ms;
+        expect(elapsedSinceT0Ms, lessThan(3999), reason: 'ATSP0 handoff must be reached before deadline');
+
+        const epsilon = Duration(milliseconds: 1);
+
+        // 1. Advance to D - epsilon (3999ms from T0): still pending, no timeout
+        async.elapse(Duration(milliseconds: 3999 - elapsedSinceT0Ms));
+        expect(connectResult, isNull, reason: 'connect() must not have completed at D - epsilon');
+        expect(
+          probe.records.any((r) => r.kind == TraceEventKind.timeoutObserved),
+          isFalse,
+          reason: 'Typed timeout event must NOT be triggered before deadline D',
+        );
+        expect(probe.firstTerminalCause, isNull);
+
+        // 2. Advance by epsilon (1ms) to exact deadline D (4000ms from T0)
+        async.elapse(epsilon);
+
+        // DUE verification: First typed timeout event occurs precisely at D
+        expect(connectResult, isFalse, reason: 'connect() must return false at deadline D');
+        final timeoutRecords = probe.records
+            .where((r) => r.kind == TraceEventKind.timeoutObserved && r.command == 'ATSP0')
+            .toList();
+        expect(timeoutRecords.length, 1, reason: 'Exactly one typed timeout event must be recorded at deadline D');
+        final timeoutRec = timeoutRecords.first;
+        expect(timeoutRec.details['cause'], 'HandshakeTimeout');
+        expect(timeoutRec.details['cmd'], 'ATSP0');
+        expect(
+          timeoutRec.elapsedMs - t0Ms,
+          4000,
+          reason: 'Typed timeout event must fire at exactly 4000ms from ATSP0 handoff (T0)',
+        );
+
+        final failedRecords = probe.records
+            .where((r) =>
+                r.kind == TraceEventKind.initStepCompleted &&
+                r.command == 'ATSP0' &&
+                r.details['status'] == 'failed')
+            .toList();
+        expect(failedRecords.length, 1, reason: 'ATSP0 step must complete failed exactly once');
+        expect(timeoutRec.sequence, lessThan(failedRecords.first.sequence),
+            reason: 'timeoutObserved must precede initStepCompleted (failed)');
+
+        expect(client.isInitialized, isFalse);
+        expect(probe.failedStepCommand, 'ATSP0');
+        expect(probe.failedStepNote, InitNote.timedOut);
+        expect(probe.firstTerminalCause, 'HandshakeTimeout');
+
+        // Subsequent steps (such as 0100) are skipped and never sent to wire
+        expect(
+          transport.writtenCommands.any((c) => c.startsWith('0100')),
+          isFalse,
+          reason: 'Subsequent steps must not reach the wire after critical failure at DUE',
+        );
+
+        // 3. LATE verification: Advance to D + epsilon (4001ms from T0) and deliver stranded reply
+        async.elapse(epsilon);
+        transport.sendReply('OK\r\n>');
+        async.elapse(const Duration(milliseconds: 10));
+
+        // Late reply must NOT reverse failure, must NOT re-complete step, and must NOT start subsequent commands
+        expect(client.isInitialized, isFalse, reason: 'Late reply must not mark client initialized');
+        expect(probe.failedStepCommand, 'ATSP0');
+        expect(probe.failedStepNote, InitNote.timedOut);
+        expect(probe.firstTerminalCause, 'HandshakeTimeout');
+
+        final allAtsp0Completed = probe.records
+            .where((r) => r.kind == TraceEventKind.initStepCompleted && r.command == 'ATSP0')
+            .toList();
+        expect(
+          allAtsp0Completed.length,
+          1,
+          reason: 'Late reply must not re-complete the already timed out step',
+        );
+        expect(allAtsp0Completed.first.details['status'], 'failed');
+
+        expect(
+          transport.writtenCommands.any((c) => c.startsWith('0100')),
+          isFalse,
+          reason: 'Late reply must not launch subsequent initialization commands',
+        );
+
+        validateSubCaseExecution(
+          subCaseSpec: getSubCaseSpec('CASE-02-A-CRITICAL-AT-TIMEOUT'),
+          probe: probe,
+          connectOk: connectResult!,
+        );
+
+        progressSub.cancel();
+        client.disconnect();
+        transport.disposeSync();
+        async.flushMicrotasks();
+      });
     });
 
     test('CASE-02-B-NON-CRITICAL-AT-FAIL: Non-critical AT probe refusal does not abort handshake', () async {
