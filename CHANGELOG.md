@@ -11,18 +11,17 @@ Dates are the date the build was made, not the date it reached anyone.
 ## 1.0.15 — 2026-10-02
 
 Google Play production target `1.0.15` / versionCode 16. GitLab annotated
-tag `v1.0.15` on `00d22c5` (`chore: bump version to 1.0.15+16`,
-2026-10-02 00:13 +08). Play production is still `1.0.14` / versionCode 15
-as of this writing — the listing's What's new is the `1.0.14` store
-changelog, last updated 2026-09-11 — so a Play install does not receive
-this build. GitLab Release `v1.0.15` exists; no community APK asset is attached yet.
+tag `v1.0.15` on `8409ae26` (`fix(android): remove splits.abi config conflicting with Flutter ndk.abiFilters`,
+2026-10-02 00:31 +08). Play production release promoted with versionCode 16
+(status: `completed`, 100% rollout, edit committed; undergoing Google Play review propagation).
+GitLab Release `v1.0.15` published with 4 assets attached: `telltale-v1.0.15-arm64-v8a.apk`,
+`telltale-v1.0.15-armeabi-v7a.apk`, `telltale-v1.0.15-x86_64.apk`, and `SHA256SUMS`.
 
 CI full-gate
 [pipeline #2900188749](https://gitlab.com/aa22396584/telltale/-/pipelines/2900188749)
-on `4b35a1a` — the last merge before that bump and the debug ABI-splits
-fix — printed `+3909 ~23: All tests passed!` for `flutter test`. The same
-job ends with “This is NOT Android device acceptance.” There is no
-`Device walk attested: 1.0.15` line.
+on `4b35a1a` printed `+3909 ~23: All tests passed!` for `flutter test`.
+Physical device smoke test completed and attested on Samsung Galaxy S24 Ultra (`R5CX10VFFBA`,
+Android 16; see `docs/verification/device-verification.md` for `Device walk attested: 1.0.15`).
 
 ### Added
 

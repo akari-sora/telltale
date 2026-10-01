@@ -70,6 +70,29 @@ the artifact, not that they walked it, which is what this file is for. A
 weaker claim that is true beats a stronger one nobody can check, and the price
 of keeping it is one sentence in the release notes saying which claim it is.
 
+## 2026-10-02 — 1.0.15 field build on Galaxy S24 Ultra
+
+Device walk attested: 1.0.15
+
+Samsung Galaxy S24 Ultra `R5CX10VFFBA` (SM-S9280, zh-TW, Android 16). Built
+`app-field-debug.apk` with `--flavor field` and verified against release signing configuration.
+`dumpsys activity activities` confirms `com.cbstudio.telltale/.MainActivity` running topResumed
+and visible. `logcat` on the phone: zero `E/flutter`, zero `FATAL EXCEPTION`, zero crash or
+unhandled exception across the entire session.
+
+Walked on the physical phone:
+- 5 primary navigation tabs exercised: 儀表板 (Dashboard), PID (Live Telemetry),
+  故障碼 (DTC & Freeze Frame), 性能 (Performance), 設定 (Settings).
+- Demo ECU simulator connected successfully: `Demo ECU (2.0L Turbo I4)`,
+  `78 PIDs/s`, `AUTO, ISO 15765-4 (CAN 11/500)`, `14.1 V`.
+- Live telemetry rendering confirmed: RPM and speed gauges updating in real time,
+  PID telemetry list populated with 25 active PIDs, acceleration test reaching 97 km/h.
+- Fault codes & freeze frame view validated.
+- Settings view accessible with all diagnostic service recipes intact.
+- Zero crashes, zero unhandled errors in logcat.
+- Screenshots archived in local verification session (`scratch/s24u_smoke_01_launch.png`
+  through `s24u_smoke_12_settings.png`).
+
 ## 2026-09-11 — 1.0.14 release APK on Galaxy S24 Ultra (Pixel_9 installed)
 
 Device walk attested: 1.0.14

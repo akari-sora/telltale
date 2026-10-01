@@ -8,11 +8,11 @@
 
 > **Install / downtime notes:** prefer
 > **[Google Play](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)**;
-> community APK **[v1.0.14 on Codeberg](https://codeberg.org/ImL1s/telltale/releases/tag/v1.0.14)**, or
-> **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**;
+> community APK **[v1.0.15 on GitLab](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.15)**, or
+> **[Codeberg Releases](https://codeberg.org/ImL1s/telltale/releases)**;
 > [Obtainium](https://github.com/ImranR98/Obtainium) →
-> `https://codeberg.org/ImL1s/telltale/releases` or
-> `https://gitlab.com/aa22396584/telltale/-/releases`.
+> `https://gitlab.com/aa22396584/telltale/-/releases` or
+> `https://codeberg.org/ImL1s/telltale/releases`.
 
 [![GitLab CI](https://gitlab.com/aa22396584/telltale/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/telltale/-/pipelines)
 [![Google Play](https://img.shields.io/badge/Google_Play-View_listing-414141?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)

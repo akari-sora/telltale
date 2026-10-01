@@ -7,11 +7,11 @@
 
 > **安裝／停機指引：** 建議優先
 > **[Google Play](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)**；
-> 社群 APK **[Codeberg v1.0.14](https://codeberg.org/ImL1s/telltale/releases/tag/v1.0.14)**，或
-> **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**；
+> 社群 APK **[GitLab v1.0.15](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.15)**，或
+> **[Codeberg Releases](https://codeberg.org/ImL1s/telltale/releases)**；
 > [Obtainium](https://github.com/ImranR98/Obtainium) 請指向
-> `https://codeberg.org/ImL1s/telltale/releases` 或
-> `https://gitlab.com/aa22396584/telltale/-/releases`。
+> `https://gitlab.com/aa22396584/telltale/-/releases` 或
+> `https://codeberg.org/ImL1s/telltale/releases`。
 
 [![GitLab CI](https://gitlab.com/aa22396584/telltale/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/telltale/-/pipelines)
 [![Google Play](https://img.shields.io/badge/Google_Play-View_listing-414141?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)
