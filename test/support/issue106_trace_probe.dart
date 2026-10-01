@@ -513,9 +513,9 @@ class ScriptedCausalTransport extends BaseObdTransport {
     _activeAsyncOps.clear();
 
     if (_socketController != null && !_socketController!.isClosed) {
-      unawaited(_socketController!.close());
+      await _socketController!.close();
     }
-    await _socketSub?.cancel();
+    unawaited(_socketSub?.cancel());
     _socketSub = null;
     _socketController = null;
 
@@ -553,7 +553,10 @@ class ScriptedCausalTransport extends BaseObdTransport {
 
   /// Permanent teardown of transport stream controllers.
   Future<void> dispose() async {
-    disposeSync();
+    if (isDisposed) return;
+    isDisposed = true;
+    await disconnect();
+    await disposeStreams();
   }
 
   @override
