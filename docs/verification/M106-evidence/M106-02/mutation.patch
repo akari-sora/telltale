@@ -1,0 +1,13 @@
+diff --git a/lib/obd/elm327_client.dart b/lib/obd/elm327_client.dart
+index 37522c84..9d4d6597 100644
+--- a/lib/obd/elm327_client.dart
++++ b/lib/obd/elm327_client.dart
+@@ -5421,7 +5421,7 @@ class Elm327Client {
+       try {
+         final response = await send(
+           step.command,
+-          timeout: const Duration(seconds: 4),
++          timeout: const Duration(seconds: 8),
+         );
+         _captureIdentity(step.command, response);
+ 

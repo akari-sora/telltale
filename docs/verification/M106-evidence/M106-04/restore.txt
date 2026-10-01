@@ -1,0 +1,2 @@
+git checkout -- lib/obd/elm327_client.dart
+EXIT: 0

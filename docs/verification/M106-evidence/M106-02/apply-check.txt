@@ -1,0 +1,2 @@
+git apply --check M106-evidence/M106-02/mutation.patch
+EXIT: 0

@@ -1,0 +1,93 @@
+fvm flutter test test/issue106_disconnect_characterization_test.dart
+EXIT: 0
+Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 103.0.0 (108.0.0 available)
+  analyzer 13.3.0 (14.4.0 available)
+  android_file_picker 1.0.1 (2.0.0 available)
+  archive 4.0.9 (4.3.0 available)
+  cli_util 0.4.2 (0.6.0 available)
+  clock 1.1.2 (1.1.3 available)
+  code_assets 1.2.1 (2.1.0 available)
+  cross_file 0.3.5+4 (0.4.0 available)
+  dbus 0.7.14 (0.8.0 available)
+  equatable 2.1.0 (3.0.0 available)
+  file_picker 12.0.0 (13.1.0 available)
+  file_picker_darwin 1.0.1 (2.1.2 available)
+  file_picker_linux 1.0.1 (2.0.1 available)
+  file_picker_platform_interface 3.0.1 (4.0.0 available)
+  file_picker_web 3.0.1 (4.0.0 available)
+  flutter_riverpod 3.4.2 (3.4.3 available)
+  glob 2.1.3 (2.2.0 available)
+  go_router 17.5.0 (18.0.1 available)
+  hooks 2.1.0 (2.2.0 available)
+  image 4.8.0 (4.10.1 available)
+  io 1.0.5 (1.1.0 available)
+  jni_flutter 1.0.2 (1.0.3 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  mime 2.0.0 (2.1.0 available)
+  objective_c 9.5.0 (9.6.0 available)
+  package_config 2.2.0 (3.0.0 available)
+  permission_handler 12.0.3 (13.0.2 available)
+  permission_handler_android 13.0.1 (14.1.0 available)
+  permission_handler_platform_interface 4.4.0 (4.4.1 available)
+  petitparser 7.0.2 (7.1.0 available)
+  platform 3.1.6 (3.2.0 available)
+  pool 1.5.2 (1.5.3 available)
+  process 5.0.5 (5.0.6 available)
+  pub_semver 2.2.0 (2.2.1 available)
+  record_use 1.1.0 (1.1.1 available)
+  riverpod 3.4.2 (3.4.3 available)
+  shared_preferences_android 2.4.27 (2.4.28 available)
+  shared_preferences_foundation 2.5.6 (2.5.7 available)
+  source_maps 0.10.13 (0.10.14 available)
+  stack_trace 1.12.1 (1.12.2 available)
+  test 1.31.1 (1.32.0 available)
+  test_api 0.7.12 (0.7.14 available)
+  test_core 0.6.18 (0.6.20 available)
+  universal_ble 2.1.1 (2.3.0 available)
+  url_launcher_linux 3.2.2 (3.2.3 available)
+  url_launcher_windows 3.1.5 (3.1.6 available)
+  vector_math 2.4.2 (2.4.3 available)
+  vm_service 15.2.0 (15.3.0 available)
+  wakelock_plus 1.7.0 (1.8.0 available)
+  wakelock_plus_platform_interface 1.6.0 (1.7.0 available)
+  webdriver 3.1.0 (3.2.0 available)
+  windows_file_picker 1.0.1 (2.0.0 available)
+  xml 6.6.1 (7.0.1 available)
+  yaml 3.1.3 (3.1.4 available)
+Got dependencies!
+54 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+00:00 +0: loading ./test/issue106_disconnect_characterization_test.dart
+00:00 +0: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) connection_cases.json fixture contains all required sub-cases
+00:00 +1: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: Missing sub-case is detected and rejected
+00:00 +2: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: Empty cleanup obligations is rejected
+00:00 +3: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: Fault not triggered is rejected
+00:00 +4: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: Execution result mismatch is rejected
+00:00 +5: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: timedOut does not bypass issue mismatch for linkDroppedMidSession
+00:00 +6: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: Fault type mismatch is rejected
+00:00 +7: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: First terminal cause mismatch is rejected
+00:00 +8: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: unexpected product issue on nominal case expecting none is rejected
+00:00 +9: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: timedOut cannot match commandReplyTimeout when raw issue is present
+00:00 +10: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: Configured probe fault matches but fired event has wrong type is rejected
+00:00 +11: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: connectOk is false on handshake_continued is rejected
+00:00 +12: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: connectOk is false on connected_then_closed is rejected
+00:00 +13: Issue #106 Slice 1: Fixture Integrity & Negative Control (N106-05) N106-05 negative control: Injected fault on mismatched attempt is rejected
+00:00 +14: CASE-01-TRANSPORT-EOF CASE-01-A-REMOTE-EOF: Remote stream onDone triggers linkDroppedMidSession and preserves first cause
+00:00 +15: CASE-01-TRANSPORT-EOF CASE-01-B-SOCKET-RESET: Remote stream onError triggers linkDroppedMidSession and handles error safely
+00:00 +16: CASE-01-TRANSPORT-EOF CASE-01-C-CALLER-CANCEL: Active caller disconnect cleanly disposes resources with awaited cancellation
+00:00 +17: CASE-02-HANDSHAKE-TIMEOUT CASE-02-A-CRITICAL-AT-TIMEOUT: Unresponsive critical command aborts negotiation at 4s boundary from step handoff
+00:04 +18: CASE-02-HANDSHAKE-TIMEOUT CASE-02-A boundary: ATSP0 reply arriving before deadline succeeds and triggers no timeoutObserved
+00:04 +19: CASE-02-HANDSHAKE-TIMEOUT CASE-02-B-NON-CRITICAL-AT-FAIL: Non-critical AT probe refusal does not abort handshake
+00:04 +20: CASE-03-SLOW-RESPONSE CASE-03-A-BEFORE-DEADLINE: 0100 arriving within deadline completes handshake successfully
+00:04 +21: CASE-03-SLOW-RESPONSE CASE-03-B-AFTER-DEADLINE: 0100 arriving after 4s timeout is discarded and fenced from new session
+00:08 +22: CASE-03-SLOW-RESPONSE CASE-03-C-CHUNKED-LITERAL: 0100 split across fragmented chunks reassembles cleanly
+00:08 +23: CASE-04-HEALTHY-CONTROL CASE-04-A-FULL-CYCLE: Nominal handshake, 13.9V ATRV, 0100, PollingEngine speed reading, and clean closure
+00:08 +24: CASE-04-HEALTHY-CONTROL CASE-04-B-OBSERVER-TX-EQUIVALENCE: Fixed demand traffic is identical with probe/observer enabled vs disabled
+00:08 +25: Mutations & Negative Controls (M106-01 ~ M106-04) M106-01: First terminal cause cannot be overwritten by secondary cleanup
+00:08 +26: Mutations & Negative Controls (M106-01 ~ M106-04) M106-02: Fixed deadline bounding prevents timer drift or budget refresh
+00:12 +27: Mutations & Negative Controls (M106-01 ~ M106-04) M106-03: Retired client rejects wire dispatch without sending new requests
+00:12 +28: Mutations & Negative Controls (M106-01 ~ M106-04) M106-04: Chunk without prompt does not trigger early completion
+00:13 +29: Mutations & Negative Controls (M106-01 ~ M106-04) R81-3: Controlled sendChunks mid-stream abort and clean async join
+00:13 +30: All tests passed!

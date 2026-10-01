@@ -63,3 +63,19 @@ app.*.map.json
 # Kotlin compiler daemon session files. A stray one reached a commit via
 # `git add -A` on 2026-09-06; they are per-build and per-machine.
 android/.kotlin/
+
+# AI agent / review tool scratch files
+.claude/
+.gplay/
+.playwright-mcp/
+scratch/
+.prompt_gpt6_*
+.gpt6_*
+independent-results.json
+
+# Evidence archives at repo root (originals live in docs/verification/)
+/M106-evidence*
+/R80-3-evidence*
+
+# Legacy app/ directory (pre-split copy)
+app/

@@ -1,0 +1,73 @@
+{
+  "evidence_version": "1.0.0",
+  "task_id": "TELLTALE-CONNECT106-CAUSAL-TRIAGE",
+  "product_head_sha": "3998431f534c478747cdc9c6acd71212af04439b",
+  "product_tree_sha": "3de14047fe36f5323b0f53dc88ca798d86fcb184",
+  "flutter_version": "Flutter 3.47.0 \u2022 channel stable \u2022 https://github.com/flutter/flutter.git",
+  "control": {
+    "command": "fvm flutter test test/issue106_disconnect_characterization_test.dart",
+    "exit_code": 0,
+    "status": "PASS"
+  },
+  "mutations": {
+    "M106-01": {
+      "target_file": "test/support/issue106_trace_probe.dart",
+      "target_test": "M106-01",
+      "description": "Allow secondary cleanup to overwrite first terminal cause in probe",
+      "patch_sha256": "fe2439ae6e3774290d266830f202ea02ce617f75767241ed1802ef30bc999655",
+      "apply_check_exit": 0,
+      "mutant_test_exit": 1,
+      "mutant_killed": true,
+      "restore_exit": 0,
+      "working_tree_clean": true,
+      "restored_test_exit": 0,
+      "restored_test_passed": true
+    },
+    "M106-02": {
+      "target_file": "lib/obd/elm327_client.dart",
+      "target_test": "M106-02",
+      "description": "Extend init step timeout to 8 seconds on 0100, violating fixed 4s deadline budget",
+      "patch_sha256": "dbf7c23fbba6a582810b4014d2b861dd8c81691ce35ed60c18f1baf5c0da22c7",
+      "apply_check_exit": 0,
+      "mutant_test_exit": 1,
+      "mutant_killed": true,
+      "restore_exit": 0,
+      "working_tree_clean": true,
+      "restored_test_exit": 0,
+      "restored_test_passed": true
+    },
+    "M106-03": {
+      "target_file": "lib/obd/elm327_client.dart",
+      "target_test": "M106-03",
+      "description": "Bypass transport.isConnected check in send(), allowing commands after disconnect onto wire",
+      "patch_sha256": "1c02071cff194cea8115a883a83c1e6771974c9bdd02eb6806c97371448c5348",
+      "apply_check_exit": 0,
+      "mutant_test_exit": 1,
+      "mutant_killed": true,
+      "restore_exit": 0,
+      "working_tree_clean": true,
+      "restored_test_exit": 0,
+      "restored_test_passed": true
+    },
+    "M106-04": {
+      "target_file": "lib/obd/elm327_client.dart",
+      "target_test": "M106-04",
+      "description": "Treat arbitrary chunk without '>' prompt as completed reply",
+      "patch_sha256": "3ab1a39b86d16a861f019789e024aa4fc1ea86f15c550a39ce235317979a5c45",
+      "apply_check_exit": 0,
+      "mutant_test_exit": 1,
+      "mutant_killed": true,
+      "restore_exit": 0,
+      "working_tree_clean": true,
+      "restored_test_exit": 0,
+      "restored_test_passed": true
+    }
+  },
+  "negative_control": {
+    "target_file": "test/fixtures/issue106/connection_cases.json",
+    "target_test": "N106-05 negative control",
+    "command": "fvm flutter test test/issue106_disconnect_characterization_test.dart --name 'N106-05 negative control'",
+    "exit_code": 0,
+    "passed": true
+  }
+}

@@ -1,0 +1,19 @@
+diff --git a/lib/obd/elm327_client.dart b/lib/obd/elm327_client.dart
+index 37522c84..c8c3be16 100644
+--- a/lib/obd/elm327_client.dart
++++ b/lib/obd/elm327_client.dart
+@@ -1387,12 +1387,8 @@ class Elm327Client {
+     // the send timestamp must not move — leaving one behind would have the
+     // watchdog count silence against a request that was never made, and tear
+     // the link down for it five seconds later.
+-    if (!transport.isConnected) {
+-      throw const TransportException(
+-        'The connection is not established.',
+-        issue: TransportIssue.notConnected,
+-      );
+-    }
++    // Bypassed for mutant M106-03
++    if (false && !transport.isConnected) {}
+     _throwIfStickyRestoreFailed();
+     if (expectedGeneration != null &&
+         _connectionGeneration != expectedGeneration) {

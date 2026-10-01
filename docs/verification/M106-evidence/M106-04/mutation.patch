@@ -1,0 +1,13 @@
+diff --git a/lib/obd/elm327_client.dart b/lib/obd/elm327_client.dart
+index 37522c84..23c8d2fc 100644
+--- a/lib/obd/elm327_client.dart
++++ b/lib/obd/elm327_client.dart
+@@ -1049,7 +1049,7 @@ class Elm327Client {
+ 
+     // A reply is complete at the prompt. Anything after it belongs to the next
+     // reply — rare, but it happens when an adapter echoes late.
+-    final promptIndex = _buffer.indexOf(_promptByte);
++    final promptIndex = _buffer.isNotEmpty ? _buffer.length - 1 : -1;
+     if (promptIndex == -1) {
+       _extendTimeoutIfSearching();
+       _extendTimeoutIfPending();

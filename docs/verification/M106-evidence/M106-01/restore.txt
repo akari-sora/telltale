@@ -1,0 +1,2 @@
+git checkout -- test/support/issue106_trace_probe.dart
+EXIT: 0

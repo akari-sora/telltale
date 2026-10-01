@@ -1,0 +1,13 @@
+diff --git a/test/support/issue106_trace_probe.dart b/test/support/issue106_trace_probe.dart
+index 6aa809dc..1246c293 100644
+--- a/test/support/issue106_trace_probe.dart
++++ b/test/support/issue106_trace_probe.dart
+@@ -164,7 +164,7 @@ class Issue106TraceProbe {
+       // R81-1: Distinguish secondary errors from routine cleanup started/completed,
+       // ensuring cleanupStarted does not permanently mask actual cleanup failures.
+       if (kind == TraceEventKind.secondaryErrorObserved) {
+-        secondaryCleanupOutcome = details['outcome']?.toString() ?? kind.name;
++        firstTerminalCause = details['outcome']?.toString() ?? kind.name;
+       } else if (kind == TraceEventKind.cleanupStarted ||
+           kind == TraceEventKind.cleanupCompleted) {
+         secondaryCleanupOutcome ??= details['outcome']?.toString() ?? kind.name;
