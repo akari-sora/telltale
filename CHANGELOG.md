@@ -15,8 +15,7 @@ tag `v1.0.15` on `00d22c5` (`chore: bump version to 1.0.15+16`,
 2026-10-02 00:13 +08). Play production is still `1.0.14` / versionCode 15
 as of this writing — the listing's What's new is the `1.0.14` store
 changelog, last updated 2026-09-11 — so a Play install does not receive
-this build. There is no GitLab Release, and no community APK asset, for
-`v1.0.15` yet.
+this build. GitLab Release `v1.0.15` exists; no community APK asset is attached yet.
 
 CI full-gate
 [pipeline #2900188749](https://gitlab.com/aa22396584/telltale/-/pipelines/2900188749)
