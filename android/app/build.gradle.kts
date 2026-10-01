@@ -125,9 +125,14 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // ABI splits are only meaningful for release artifacts (Play Store per-ABI
+    // APKs). In debug builds Flutter sets ndk.abiFilters automatically and the
+    // two conflict, so enable splits only when a release task is requested.
     splits {
         abi {
-            isEnable = true
+            isEnable = gradle.startParameter.taskNames.any {
+                it.contains("Release", ignoreCase = true)
+            }
             reset()
             include("armeabi-v7a", "arm64-v8a", "x86_64")
             isUniversalApk = false
