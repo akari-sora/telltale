@@ -1058,83 +1058,97 @@ void main() {
         );
 
         final progressSub = client.initProgress.listen(probe.observeInitProgress);
+        try {
+          bool atsp0Reached = false;
+          transport.onCommandHook = (cmd, t) {
+            final norm = cmd.toUpperCase().replaceAll(' ', '');
+            if (norm.startsWith('ATSP0')) {
+              atsp0Reached = true;
+              // Hold reply; do not answer immediately
+            } else {
+              t.defaultAnswer(cmd);
+            }
+          };
 
-        bool atsp0Reached = false;
-        transport.onCommandHook = (cmd, t) {
-          final norm = cmd.toUpperCase().replaceAll(' ', '');
-          if (norm.startsWith('ATSP0')) {
-            atsp0Reached = true;
-            // Hold reply; do not answer immediately
-          } else {
-            t.defaultAnswer(cmd);
+          bool? connectResult;
+          unawaited(client.connect().then((val) => connectResult = val));
+
+          int pumpCount = 0;
+          while (!atsp0Reached && pumpCount < 100) {
+            async.elapse(const Duration(milliseconds: 10));
+            pumpCount++;
           }
-        };
+          expect(atsp0Reached, isTrue, reason: 'ATSP0 must have reached wire and entered reply-wait');
+          expect(client.isInitialized, isFalse);
 
-        bool? connectResult;
-        unawaited(client.connect().then((val) => connectResult = val));
+          final atsp0StartRecord = probe.records.firstWhere(
+            (r) => r.kind == TraceEventKind.initStepStarted && r.command == 'ATSP0',
+          );
+          final t0Ms = atsp0StartRecord.elapsedMs;
 
-        int pumpCount = 0;
-        while (!atsp0Reached && pumpCount < 100) {
-          async.elapse(const Duration(milliseconds: 10));
-          pumpCount++;
+          final elapsedSinceT0Ms = async.elapsed.inMilliseconds - t0Ms;
+          expect(elapsedSinceT0Ms, lessThan(3999), reason: 'ATSP0 handoff must be reached before deadline');
+
+          // Advance to D - epsilon (3999ms from T0): still pending, no timeout
+          async.elapse(Duration(milliseconds: 3999 - elapsedSinceT0Ms));
+
+          expect(connectResult, isNull, reason: 'connect() must still be pending at D - epsilon');
+          expect(
+            probe.records.any((r) => r.kind == TraceEventKind.timeoutObserved),
+            isFalse,
+            reason: 'No timeoutObserved must be recorded before deadline (at D - epsilon)',
+          );
+          expect(probe.firstTerminalCause, isNull);
+          expect(probe.failedStepCommand, isNull);
+
+          // Deliver reply at D - epsilon
+          transport.sendReply('OK\r\n>');
+          int finishCount = 0;
+          while (connectResult == null && finishCount < 100) {
+            async.elapse(const Duration(milliseconds: 10));
+            finishCount++;
+          }
+
+          expect(connectResult, isTrue, reason: 'connect() must succeed when reply delivered at D - epsilon');
+          expect(client.isInitialized, isTrue);
+
+          final atsp0Completed = probe.records.firstWhere(
+            (r) => r.kind == TraceEventKind.initStepCompleted && r.command == 'ATSP0',
+          );
+          expect(atsp0Completed.details['status'], 'ok');
+          expect(atsp0StartRecord.elapsedMs, t0Ms);
+
+          expect(
+            probe.records.any((r) => r.kind == TraceEventKind.timeoutObserved),
+            isFalse,
+            reason: 'Reply processed before deadline must result in zero timeout events',
+          );
+          expect(probe.firstTerminalCause, isNull);
+
+          expect(
+            transport.writtenCommands.any((c) => c.startsWith('0100')),
+            isTrue,
+            reason: 'Subsequent handshake steps must reach wire upon ATSP0 success',
+          );
+        } finally {
+          progressSub.cancel();
+          if (!transport.isDisposed) {
+            bool disposed = false;
+            Object? disposeError;
+            transport.dispose().then(
+              (_) => disposed = true,
+              onError: (e) {
+                disposed = true;
+                disposeError = e;
+              },
+            );
+            async.flushMicrotasks();
+            expect(disposed, isTrue, reason: 'Transport dispose must complete cleanly within fakeAsync');
+            if (disposeError != null) {
+              throw disposeError!;
+            }
+          }
         }
-        expect(atsp0Reached, isTrue, reason: 'ATSP0 must have reached wire and entered reply-wait');
-        expect(client.isInitialized, isFalse);
-
-        final atsp0StartRecord = probe.records.firstWhere(
-          (r) => r.kind == TraceEventKind.initStepStarted && r.command == 'ATSP0',
-        );
-        final t0Ms = atsp0StartRecord.elapsedMs;
-
-        final elapsedSinceT0Ms = async.elapsed.inMilliseconds - t0Ms;
-        expect(elapsedSinceT0Ms, lessThan(3999), reason: 'ATSP0 handoff must be reached before deadline');
-
-        // Advance to D - epsilon (3999ms from T0): still pending, no timeout
-        async.elapse(Duration(milliseconds: 3999 - elapsedSinceT0Ms));
-
-        expect(connectResult, isNull, reason: 'connect() must still be pending at D - epsilon');
-        expect(
-          probe.records.any((r) => r.kind == TraceEventKind.timeoutObserved),
-          isFalse,
-          reason: 'No timeoutObserved must be recorded before deadline (at D - epsilon)',
-        );
-        expect(probe.firstTerminalCause, isNull);
-        expect(probe.failedStepCommand, isNull);
-
-        // Deliver reply at D - epsilon
-        transport.sendReply('OK\r\n>');
-        int finishCount = 0;
-        while (connectResult == null && finishCount < 100) {
-          async.elapse(const Duration(milliseconds: 10));
-          finishCount++;
-        }
-
-        expect(connectResult, isTrue, reason: 'connect() must succeed when reply delivered at D - epsilon');
-        expect(client.isInitialized, isTrue);
-
-        final atsp0Completed = probe.records.firstWhere(
-          (r) => r.kind == TraceEventKind.initStepCompleted && r.command == 'ATSP0',
-        );
-        expect(atsp0Completed.details['status'], 'ok');
-        expect(atsp0StartRecord.elapsedMs, t0Ms);
-
-        expect(
-          probe.records.any((r) => r.kind == TraceEventKind.timeoutObserved),
-          isFalse,
-          reason: 'Reply processed before deadline must result in zero timeout events',
-        );
-        expect(probe.firstTerminalCause, isNull);
-
-        expect(
-          transport.writtenCommands.any((c) => c.startsWith('0100')),
-          isTrue,
-          reason: 'Subsequent handshake steps must reach wire upon ATSP0 success',
-        );
-
-        progressSub.cancel();
-        client.disconnect();
-        transport.disposeSync();
-        async.flushMicrotasks();
       });
     });
 
@@ -1158,133 +1172,147 @@ void main() {
         );
 
         final progressSub = client.initProgress.listen(probe.observeInitProgress);
+        try {
+          bool atsp0Reached = false;
+          transport.onCommandHook = (cmd, t) {
+            final norm = cmd.toUpperCase().replaceAll(' ', '');
+            if (norm.startsWith('ATSP0')) {
+              atsp0Reached = true;
+              probe.record(
+                kind: TraceEventKind.injectedFaultFired,
+                component: 'transport',
+                phase: 'atsp0',
+                command: 'ATSP0',
+                details: {'type': 'silent_stall'},
+              );
+              // Go silent: hold reply indefinitely
+            } else {
+              t.defaultAnswer(cmd);
+            }
+          };
 
-        bool atsp0Reached = false;
-        transport.onCommandHook = (cmd, t) {
-          final norm = cmd.toUpperCase().replaceAll(' ', '');
-          if (norm.startsWith('ATSP0')) {
-            atsp0Reached = true;
-            probe.record(
-              kind: TraceEventKind.injectedFaultFired,
-              component: 'transport',
-              phase: 'atsp0',
-              command: 'ATSP0',
-              details: {'type': 'silent_stall'},
-            );
-            // Go silent: hold reply indefinitely
-          } else {
-            t.defaultAnswer(cmd);
+          bool? connectResult;
+          unawaited(client.connect().then((val) => connectResult = val));
+
+          int pumpCount = 0;
+          while (!atsp0Reached && pumpCount < 100) {
+            async.elapse(const Duration(milliseconds: 10));
+            pumpCount++;
           }
-        };
+          expect(atsp0Reached, isTrue, reason: 'ATSP0 must have reached wire and entered reply-wait');
+          expect(client.isInitialized, isFalse);
 
-        bool? connectResult;
-        unawaited(client.connect().then((val) => connectResult = val));
+          final atsp0StartRecord = probe.records.firstWhere(
+            (r) => r.kind == TraceEventKind.initStepStarted && r.command == 'ATSP0',
+          );
+          final t0Ms = atsp0StartRecord.elapsedMs;
 
-        int pumpCount = 0;
-        while (!atsp0Reached && pumpCount < 100) {
+          final elapsedSinceT0Ms = async.elapsed.inMilliseconds - t0Ms;
+          expect(elapsedSinceT0Ms, lessThan(3999), reason: 'ATSP0 handoff must be reached before deadline');
+
+          const epsilon = Duration(milliseconds: 1);
+
+          // 1. Advance to D - epsilon (3999ms from T0): still pending, no timeout
+          async.elapse(Duration(milliseconds: 3999 - elapsedSinceT0Ms));
+          expect(connectResult, isNull, reason: 'connect() must not have completed at D - epsilon');
+          expect(
+            probe.records.any((r) => r.kind == TraceEventKind.timeoutObserved),
+            isFalse,
+            reason: 'Typed timeout event must NOT be triggered before deadline D',
+          );
+          expect(probe.firstTerminalCause, isNull);
+
+          // 2. Advance by epsilon (1ms) to exact deadline D (4000ms from T0)
+          async.elapse(epsilon);
+
+          // DUE verification: First typed timeout event occurs precisely at D
+          expect(connectResult, isFalse, reason: 'connect() must return false at deadline D');
+          final timeoutRecords = probe.records
+              .where((r) => r.kind == TraceEventKind.timeoutObserved && r.command == 'ATSP0')
+              .toList();
+          expect(timeoutRecords.length, 1, reason: 'Exactly one typed timeout event must be recorded at deadline D');
+          final timeoutRec = timeoutRecords.first;
+          expect(timeoutRec.details['cause'], 'HandshakeTimeout');
+          expect(timeoutRec.details['cmd'], 'ATSP0');
+          expect(
+            timeoutRec.elapsedMs - t0Ms,
+            4000,
+            reason: 'Typed timeout event must fire at exactly 4000ms from ATSP0 handoff (T0)',
+          );
+
+          final failedRecords = probe.records
+              .where((r) =>
+                  r.kind == TraceEventKind.initStepCompleted &&
+                  r.command == 'ATSP0' &&
+                  r.details['status'] == 'failed')
+              .toList();
+          expect(failedRecords.length, 1, reason: 'ATSP0 step must complete failed exactly once');
+          expect(timeoutRec.sequence, lessThan(failedRecords.first.sequence),
+              reason: 'timeoutObserved must precede initStepCompleted (failed)');
+
+          expect(client.isInitialized, isFalse);
+          expect(probe.failedStepCommand, 'ATSP0');
+          expect(probe.failedStepNote, InitNote.timedOut);
+          expect(probe.firstTerminalCause, 'HandshakeTimeout');
+
+          // Subsequent steps (such as 0100) are skipped and never sent to wire
+          expect(
+            transport.writtenCommands.any((c) => c.startsWith('0100')),
+            isFalse,
+            reason: 'Subsequent steps must not reach the wire after critical failure at DUE',
+          );
+
+          // 3. LATE verification: Advance to D + epsilon (4001ms from T0) and deliver stranded reply
+          async.elapse(epsilon);
+          transport.sendReply('OK\r\n>');
           async.elapse(const Duration(milliseconds: 10));
-          pumpCount++;
+
+          // Late reply must NOT reverse failure, must NOT re-complete step, and must NOT start subsequent commands
+          expect(client.isInitialized, isFalse, reason: 'Late reply must not mark client initialized');
+          expect(probe.failedStepCommand, 'ATSP0');
+          expect(probe.failedStepNote, InitNote.timedOut);
+          expect(probe.firstTerminalCause, 'HandshakeTimeout');
+
+          final allAtsp0Completed = probe.records
+              .where((r) => r.kind == TraceEventKind.initStepCompleted && r.command == 'ATSP0')
+              .toList();
+          expect(
+            allAtsp0Completed.length,
+            1,
+            reason: 'Late reply must not re-complete the already timed out step',
+          );
+          expect(allAtsp0Completed.first.details['status'], 'failed');
+
+          expect(
+            transport.writtenCommands.any((c) => c.startsWith('0100')),
+            isFalse,
+            reason: 'Late reply must not launch subsequent initialization commands',
+          );
+
+          validateSubCaseExecution(
+            subCaseSpec: getSubCaseSpec('CASE-02-A-CRITICAL-AT-TIMEOUT'),
+            probe: probe,
+            connectOk: connectResult!,
+          );
+        } finally {
+          progressSub.cancel();
+          if (!transport.isDisposed) {
+            bool disposed = false;
+            Object? disposeError;
+            transport.dispose().then(
+              (_) => disposed = true,
+              onError: (e) {
+                disposed = true;
+                disposeError = e;
+              },
+            );
+            async.flushMicrotasks();
+            expect(disposed, isTrue, reason: 'Transport dispose must complete cleanly within fakeAsync');
+            if (disposeError != null) {
+              throw disposeError!;
+            }
+          }
         }
-        expect(atsp0Reached, isTrue, reason: 'ATSP0 must have reached wire and entered reply-wait');
-        expect(client.isInitialized, isFalse);
-
-        final atsp0StartRecord = probe.records.firstWhere(
-          (r) => r.kind == TraceEventKind.initStepStarted && r.command == 'ATSP0',
-        );
-        final t0Ms = atsp0StartRecord.elapsedMs;
-
-        final elapsedSinceT0Ms = async.elapsed.inMilliseconds - t0Ms;
-        expect(elapsedSinceT0Ms, lessThan(3999), reason: 'ATSP0 handoff must be reached before deadline');
-
-        const epsilon = Duration(milliseconds: 1);
-
-        // 1. Advance to D - epsilon (3999ms from T0): still pending, no timeout
-        async.elapse(Duration(milliseconds: 3999 - elapsedSinceT0Ms));
-        expect(connectResult, isNull, reason: 'connect() must not have completed at D - epsilon');
-        expect(
-          probe.records.any((r) => r.kind == TraceEventKind.timeoutObserved),
-          isFalse,
-          reason: 'Typed timeout event must NOT be triggered before deadline D',
-        );
-        expect(probe.firstTerminalCause, isNull);
-
-        // 2. Advance by epsilon (1ms) to exact deadline D (4000ms from T0)
-        async.elapse(epsilon);
-
-        // DUE verification: First typed timeout event occurs precisely at D
-        expect(connectResult, isFalse, reason: 'connect() must return false at deadline D');
-        final timeoutRecords = probe.records
-            .where((r) => r.kind == TraceEventKind.timeoutObserved && r.command == 'ATSP0')
-            .toList();
-        expect(timeoutRecords.length, 1, reason: 'Exactly one typed timeout event must be recorded at deadline D');
-        final timeoutRec = timeoutRecords.first;
-        expect(timeoutRec.details['cause'], 'HandshakeTimeout');
-        expect(timeoutRec.details['cmd'], 'ATSP0');
-        expect(
-          timeoutRec.elapsedMs - t0Ms,
-          4000,
-          reason: 'Typed timeout event must fire at exactly 4000ms from ATSP0 handoff (T0)',
-        );
-
-        final failedRecords = probe.records
-            .where((r) =>
-                r.kind == TraceEventKind.initStepCompleted &&
-                r.command == 'ATSP0' &&
-                r.details['status'] == 'failed')
-            .toList();
-        expect(failedRecords.length, 1, reason: 'ATSP0 step must complete failed exactly once');
-        expect(timeoutRec.sequence, lessThan(failedRecords.first.sequence),
-            reason: 'timeoutObserved must precede initStepCompleted (failed)');
-
-        expect(client.isInitialized, isFalse);
-        expect(probe.failedStepCommand, 'ATSP0');
-        expect(probe.failedStepNote, InitNote.timedOut);
-        expect(probe.firstTerminalCause, 'HandshakeTimeout');
-
-        // Subsequent steps (such as 0100) are skipped and never sent to wire
-        expect(
-          transport.writtenCommands.any((c) => c.startsWith('0100')),
-          isFalse,
-          reason: 'Subsequent steps must not reach the wire after critical failure at DUE',
-        );
-
-        // 3. LATE verification: Advance to D + epsilon (4001ms from T0) and deliver stranded reply
-        async.elapse(epsilon);
-        transport.sendReply('OK\r\n>');
-        async.elapse(const Duration(milliseconds: 10));
-
-        // Late reply must NOT reverse failure, must NOT re-complete step, and must NOT start subsequent commands
-        expect(client.isInitialized, isFalse, reason: 'Late reply must not mark client initialized');
-        expect(probe.failedStepCommand, 'ATSP0');
-        expect(probe.failedStepNote, InitNote.timedOut);
-        expect(probe.firstTerminalCause, 'HandshakeTimeout');
-
-        final allAtsp0Completed = probe.records
-            .where((r) => r.kind == TraceEventKind.initStepCompleted && r.command == 'ATSP0')
-            .toList();
-        expect(
-          allAtsp0Completed.length,
-          1,
-          reason: 'Late reply must not re-complete the already timed out step',
-        );
-        expect(allAtsp0Completed.first.details['status'], 'failed');
-
-        expect(
-          transport.writtenCommands.any((c) => c.startsWith('0100')),
-          isFalse,
-          reason: 'Late reply must not launch subsequent initialization commands',
-        );
-
-        validateSubCaseExecution(
-          subCaseSpec: getSubCaseSpec('CASE-02-A-CRITICAL-AT-TIMEOUT'),
-          probe: probe,
-          connectOk: connectResult!,
-        );
-
-        progressSub.cancel();
-        client.disconnect();
-        transport.disposeSync();
-        async.flushMicrotasks();
       });
     });
 
@@ -1942,6 +1970,67 @@ void main() {
           reason: 'Chunks scheduled after abort must be safely suppressed');
       // 5. Probe records clean lifecycle
       expect(probe.firstTerminalCause, 'CallerInitiated');
+    });
+
+    test('R84-01: Permanent dispose restores stream completion and in-flight chunk join', () async {
+      final probe = Issue106TraceProbe(
+        runId: 'RUN-R84-01-DISPOSE-JOIN',
+        attemptId: 'ATTEMPT-01',
+        generation: 1,
+      );
+      final transport = ScriptedCausalTransport(
+        name: 'regression_dispose_join',
+        probe: probe,
+      );
+      addTearDown(() async {
+        if (!transport.isDisposed) {
+          await transport.dispose();
+        }
+      });
+
+      await transport.connect();
+      expect(transport.isConnected, isTrue);
+
+      bool incomingDone = false;
+      bool connChangesDone = false;
+      transport.incoming.listen(null, onDone: () => incomingDone = true);
+      transport.connectionChanges.listen(null, onDone: () => connChangesDone = true);
+
+      // Start multi-chunk transmission with 100ms interval
+      final sendFuture = transport.sendChunks(
+        ['chunk_0;', 'chunk_1;', 'chunk_2;', 'chunk_3;'],
+        interval: const Duration(milliseconds: 100),
+      );
+
+      // Let chunk 0 be sent
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(transport.activeTimersCount, greaterThan(0));
+      expect(transport.activeAsyncOpsCount, greaterThan(0));
+
+      bool sendCompleted = false;
+      unawaited(sendFuture.then((_) => sendCompleted = true));
+
+      // Call permanent dispose()
+      final sw = Stopwatch()..start();
+      await transport.dispose();
+      sw.stop();
+
+      // Assert completion immediately upon dispose() return, before any secondary await
+      expect(
+        sendCompleted,
+        isTrue,
+        reason: 'In-flight chunk operation must already be cleanly settled when dispose() returns',
+      );
+      expect(incomingDone, isTrue, reason: 'incoming stream must be closed on dispose');
+      expect(connChangesDone, isTrue, reason: 'connectionChanges stream must be closed on dispose');
+      expect(transport.activeTimersCount, 0, reason: 'Timers must be cleared');
+      expect(transport.activeAsyncOpsCount, 0, reason: 'Async ops must be cleared');
+      expect(transport.isDisposed, isTrue);
+      expect(transport.isConnected, isFalse);
+      expect(sw.elapsedMilliseconds, lessThan(250), reason: 'Dispose must cancel chunk interval without waiting full duration');
+
+      // Secondary join for error propagation/clean exit
+      await sendFuture;
     });
   });
 }
