@@ -78,12 +78,16 @@ class Issue106TraceProbe {
     this.runId = 'RUN-UNSPECIFIED',
     this.attemptId = 'ATTEMPT-01',
     this.generation = 1,
+    this.clock,
+    this.elapsedMsProvider,
   });
 
   final int maxCapacity;
   String runId;
   String attemptId;
   int generation;
+  final DateTime Function()? clock;
+  final int Function()? elapsedMsProvider;
 
   final Stopwatch _stopwatch = Stopwatch()..start();
   final List<TraceRecord> _records = [];
@@ -119,8 +123,8 @@ class Issue106TraceProbe {
     Map<String, Object?> details = const {},
   }) {
     final seq = ++_sequenceCounter;
-    final now = DateTime.now();
-    final elapsed = _stopwatch.elapsedMilliseconds;
+    final now = clock?.call() ?? DateTime.now();
+    final elapsed = elapsedMsProvider?.call() ?? _stopwatch.elapsedMilliseconds;
     final effRunId = runId ?? this.runId;
     final effAttemptId = attemptId ?? this.attemptId;
     final effGen = generation ?? (details['generation'] as int?) ?? this.generation;
@@ -460,6 +464,9 @@ class ScriptedCausalTransport extends BaseObdTransport {
 
   @override
   Future<void> disconnect() async {
+    if (!isConnected && _socketController == null) {
+      return;
+    }
     _aborted = true;
     _activeWriteOpId = null;
     probe?.record(
@@ -472,7 +479,6 @@ class ScriptedCausalTransport extends BaseObdTransport {
     );
     setConnected(false);
 
-    // Cancel and unblock any pending chunk intervals
     for (final cancel in List<void Function()>.from(_activeChunkCancellers)) {
       cancel();
     }
@@ -506,12 +512,11 @@ class ScriptedCausalTransport extends BaseObdTransport {
     }
     _activeAsyncOps.clear();
 
+    if (_socketController != null && !_socketController!.isClosed) {
+      unawaited(_socketController!.close());
+    }
     await _socketSub?.cancel();
     _socketSub = null;
-
-    if (_socketController != null && !_socketController!.isClosed) {
-      await _socketController!.close();
-    }
     _socketController = null;
 
     probe?.record(
@@ -524,11 +529,31 @@ class ScriptedCausalTransport extends BaseObdTransport {
     );
   }
 
+  /// Synchronous cleanup of transport resources, safe for FakeAsync environments.
+  void disposeSync() {
+    if (isDisposed) return;
+    isDisposed = true;
+    _aborted = true;
+    _activeWriteOpId = null;
+    setConnected(false);
+    for (final cancel in List<void Function()>.from(_activeChunkCancellers)) {
+      cancel();
+    }
+    _activeChunkCancellers.clear();
+    for (final timer in List<Timer>.from(_activeTimers)) {
+      timer.cancel();
+    }
+    _activeTimers.clear();
+    _activeAsyncOps.clear();
+    _socketSub?.cancel();
+    _socketSub = null;
+    _socketController?.close();
+    _socketController = null;
+  }
+
   /// Permanent teardown of transport stream controllers.
   Future<void> dispose() async {
-    isDisposed = true;
-    await disconnect();
-    await disposeStreams();
+    disposeSync();
   }
 
   @override
