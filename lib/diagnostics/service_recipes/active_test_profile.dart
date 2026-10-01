@@ -16,13 +16,6 @@ import 'dart:convert';
 
 import '../../obd/powertrain_battery/powertrain_battery_catalog.dart';
 
-/// Supported diagnostic standards for active test recipes.
-enum StandardFamily {
-  saeJ1979,
-  iso14229Uds,
-  custom,
-}
-
 /// Physical bus addressing type.
 enum BusAddressingType {
   can11Bit,
