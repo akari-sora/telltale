@@ -8,6 +8,106 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+## 1.0.15 — 2026-10-02
+
+Google Play production target `1.0.15` / versionCode 16. GitLab annotated
+tag `v1.0.15` on `00d22c5` (`chore: bump version to 1.0.15+16`,
+2026-10-02 00:13 +08). Play production is still `1.0.14` / versionCode 15
+as of this writing — the listing's What's new is the `1.0.14` store
+changelog, last updated 2026-09-11 — so a Play install does not receive
+this build. There is no GitLab Release, and no community APK asset, for
+`v1.0.15` yet.
+
+CI full-gate
+[pipeline #2900188749](https://gitlab.com/aa22396584/telltale/-/pipelines/2900188749)
+on `4b35a1a` — the last merge before that bump and the debug ABI-splits
+fix — printed `+3909 ~23: All tests passed!` for `flutter test`. The same
+job ends with “This is NOT Android device acceptance.” There is no
+`Device walk attested: 1.0.15` line.
+
+### Added
+
+- Settings opens a Service Recipes & Active Tests screen. On a live CAN
+  connection it can ask which Mode 08 test IDs the ECU reports as
+  supported, using only the standard base TID queries (`$00`, `$20`, …).
+  It does not send a runnable TID to find out whether the function
+  exists. Silence or `NO DATA` is unknown, not unsupported. Discovery
+  takes exclusive ownership of the diagnostic link, so live telemetry
+  polling is held for that window. The three bundled recipes are
+  synthetic fixtures (Mode 08 EVAP, UDS IO control, UDS routine). The
+  banner says zero live candidates: nothing in this catalog is qualified
+  to actuate a physical vehicle. (#9, #104 leftover)
+- Settings can pick a Canada-market identity from the Natural Resources
+  Canada Fuel Consumption Ratings snapshot, beside the U.S. EPA and
+  Taiwan MOEA lists. The three markets are not namesakes of each other.
+  ICE, battery-electric, and plug-in hybrid stay separate classes.
+  Displacement in litres is the same quantity and is applied when it is
+  in range; motor kilowatts is not wheel horsepower and is not applied;
+  consumption, range, and CO2 are never copied. Fuel is copied only from
+  an exact single NRCan letter on a non-hybrid ICE row (`X` regular, `Z`
+  premium, `D` diesel, `E` E85). Dual codes, electricity, natural gas,
+  BEV/PHEV rows, and conventional hybrids sitting in the ICE file stay
+  unresolved. 1995–2014 5-cycle approximations are not in the bundle.
+  The year is the NRCan model year, not a U.S. EPA configuration and not
+  a Taiwan certification year. (#348, #352)
+- A bounded read-only UDS (ISO 14229) path on the existing ELM session:
+  Service `0x22` ReadDataByIdentifier and Service `0x19`
+  ReadDTCInformation (subfunctions `0x02` and `0x0A`). NRC `0x78` waits
+  without retransmitting the trigger. This is not a new connection type,
+  not DoIP, and not a workshop actuation screen. The synthetic UDS `0x2F`
+  / `0x31` recipes in the catalog remain blocked on a live vehicle. (#13)
+- Typed ELM327 CAN addressing and host-visible ISO-TP on that same
+  session: `ATCEA` / `ATCP` / `ATCRA` apply and restore, and `ATCAF0`
+  with a bounded assembler. Vehicle profiles cannot inject AT text. An
+  adapter that answers `?` is unavailable, not a success. (#334, #367)
+
+### Fixed
+
+- Acceleration timing uses the monotonic observation clock on the speed
+  reading, not `DateTime.now()`. A wall-clock step must not change a run
+  whose observation ticks did not change. The start is still a threshold
+  after standstill, not a physically measured 0–100. (#349)
+- Experimental battery reads that pass their checks are still labelled
+  unverified on Wear and in the probe-result dialog. A passing check is
+  not a vehicle qualification. (#345, #333 leftover, #87 leftover)
+- Formula-engine exception messages that still spoke Traditional Chinese
+  in an English build are English. (#38 leftover, #72 leftover)
+- Switching language while an error, SnackBar, or history-export notice
+  is on screen redraws that sentence. It does not re-send the command or
+  re-export the file. The CSV/JSON payload stays byte-identical across
+  locales; the share subject is allowed to translate. Switching language
+  during a recording or an in-flight artifact is still refused.
+  (#34, #36, #39, #40, #72)
+- Fault-code banners that used to collapse MIL disagreement, unresolved
+  identities, and J1939 bus refusal into a generic kind now name those
+  through structured fields. (#369, #370, #372)
+- An unattested session export stays unverified. Attestation is not
+  inferred from a successful write. (#379)
+- Debug Android builds no longer enable ABI splits. Splits plus Flutter's
+  `ndk.abiFilters` were a Gradle “Conflicting configuration” on
+  `flutter run`; per-ABI APKs remain a Release-task concern.
+
+### Changed
+
+- Development home, issues, and CI are GitLab
+  (`aa22396584/telltale`). In-tree GitHub badges and clone URLs were
+  dropped or retargeted. Community APKs continue to be advertised from
+  GitLab Releases and Codeberg; this tag has not published those assets
+  yet.
+- Release Android packaging can emit per-ABI APKs (`armeabi-v7a`,
+  `arm64-v8a`, `x86_64`) with `versionCodeOverride`. That is packaging
+  for an F-Droid recipe, not an F-Droid listing.
+
+### Known, and not fixed here
+
+- Demo ECU still identifies as `Demo ECU (2.0L Turbo I4)`. That string
+  was already in `1.0.14`; this build did not add the simulator.
+- CAN Mode 06 records can be decoded fail-closed in code. There is no
+  Mode 06 screen. (#359)
+- Typed CAN / ISO-TP contracts and a native ISO-TP CTest matrix exist
+  under the diagnostic bridge. SocketCAN is not a connection method in
+  the app. (#14)
+
 ## 1.0.14 — 2026-09-11
 
 Google Play production target `1.0.14` / versionCode 15. GitHub community
