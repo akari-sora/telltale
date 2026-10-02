@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../diagnostics/service_recipes/active_test_profile.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../adaptive/adaptive_modal.dart';
 import '../../widgets/panel.dart';
 
 /// Shows the detailed specification sheet for an [ActiveTestProfile].
@@ -13,9 +14,12 @@ Future<void> showServiceRecipeDetailSheet({
   required BuildContext context,
   required ActiveTestProfile profile,
 }) =>
-    showModalBottomSheet<void>(
+    showAdaptiveModal<void>(
       context: context,
       isScrollControlled: true,
+      scrollControlledHeightFactor: 0.85,
+      widePresentation: AdaptiveModalWidePresentation.sideSheet,
+      regionPreference: AdaptiveModalRegionPreference.largest,
       builder: (context) => ServiceRecipeDetailSheet(profile: profile),
     );
 
@@ -32,17 +36,10 @@ class ServiceRecipeDetailSheet extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
 
-    return SafeArea(
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) => ListView(
-          controller: scrollController,
-          padding: const EdgeInsets.all(Spacing.lg),
-          children: [
-            Row(
+    return ListView(
+      padding: const EdgeInsets.all(Spacing.lg),
+      children: [
+        Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
@@ -192,8 +189,6 @@ class ServiceRecipeDetailSheet extends StatelessWidget {
               child: Text(l10n.serviceRecipesClose),
             ),
           ],
-        ),
-      ),
-    );
+        );
   }
 }

@@ -23,6 +23,7 @@ import '../../../state/obd_session.dart';
 import '../../../state/pid_mutation_lock.dart';
 import '../../../state/pid_registry.dart';
 import '../../adaptive/adaptive_layout.dart';
+import '../../adaptive/adaptive_modal.dart';
 import '../../adaptive/display_feature_layout.dart';
 import '../../widgets/panel.dart';
 import '../../widgets/share_copy.dart';
@@ -294,13 +295,7 @@ class _PidManagerScreenState extends ConsumerState<PidManagerScreen> {
     }
   }
 
-  Future<void> _showArrangeSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => const _ArrangeSheet(),
-    );
-  }
+  Future<void> _showArrangeSheet() => showPidArrangeSheet(context);
 
   Future<void> _importCsv() async {
     final l10n = AppLocalizations.of(context);
@@ -1106,47 +1101,41 @@ class _ArrangeSheet extends ConsumerWidget {
     final palette = context.palette;
     final active = ref.watch(activePidsProvider);
 
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      maxChildSize: 0.92,
-      builder: (context, scrollController) {
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Spacing.lg,
-                Spacing.sm,
-                Spacing.lg,
-                Spacing.md,
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Spacing.lg,
+            Spacing.sm,
+            Spacing.lg,
+            Spacing.md,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.pidManagerArrangeDashboard,
+                style: context.texts.headlineSmall,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.pidManagerArrangeDashboard,
-                    style: context.texts.headlineSmall,
+              const SizedBox(height: Spacing.xs),
+              Text(l10n.pidArrangeBody, style: context.texts.bodySmall),
+            ],
+          ),
+        ),
+        Expanded(
+          child: active.isEmpty
+              ? EmptyState(
+                  icon: Icons.tune,
+                  title: l10n.pidArrangeEmptyTitle,
+                  message: l10n.pidArrangeEmptyMessage,
+                )
+              : ReorderableListView.builder(
+                  padding: const EdgeInsets.fromLTRB(
+                    Spacing.lg,
+                    0,
+                    Spacing.lg,
+                    Spacing.xxl,
                   ),
-                  const SizedBox(height: Spacing.xs),
-                  Text(l10n.pidArrangeBody, style: context.texts.bodySmall),
-                ],
-              ),
-            ),
-            Expanded(
-              child: active.isEmpty
-                  ? EmptyState(
-                      icon: Icons.tune,
-                      title: l10n.pidArrangeEmptyTitle,
-                      message: l10n.pidArrangeEmptyMessage,
-                    )
-                  : ReorderableListView.builder(
-                      scrollController: scrollController,
-                      padding: const EdgeInsets.fromLTRB(
-                        Spacing.lg,
-                        0,
-                        Spacing.lg,
-                        Spacing.xxl,
-                      ),
                       itemCount: active.length,
                       // onReorderItem rather than the deprecated onReorder:
                       // it hands back a newIndex already adjusted for the
@@ -1239,7 +1228,16 @@ class _ArrangeSheet extends ConsumerWidget {
             ),
           ],
         );
-      },
-    );
   }
 }
+
+@visibleForTesting
+Future<void> showPidArrangeSheet(BuildContext context) =>
+    showAdaptiveModal<void>(
+      context: context,
+      isScrollControlled: true,
+      scrollControlledHeightFactor: 0.70,
+      widePresentation: AdaptiveModalWidePresentation.sideSheet,
+      regionPreference: AdaptiveModalRegionPreference.trailing,
+      builder: (context) => const _ArrangeSheet(),
+    );

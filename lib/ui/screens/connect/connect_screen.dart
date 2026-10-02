@@ -7,6 +7,7 @@ library;
 
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart'
     show DiagnosticsNode, DiagnosticsProperty, kIsWeb, visibleForTesting;
@@ -20,6 +21,10 @@ import '../../../core/serial/spp_serial_platform.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/ble_scan_permissions.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../adaptive/adaptive_layout.dart';
+import '../../adaptive/adaptive_modal.dart';
+import '../../adaptive/display_feature_layout.dart';
+import 'connect_layout.dart';
 import '../../wear/wear_permission_copy.dart';
 import '../../../obd/elm327_client.dart';
 import '../../../state/pid_registry.dart' show sharedPreferencesProvider;
@@ -378,164 +383,216 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     final l10n = AppLocalizations.of(context);
     final connection = ref.watch(obdSessionProvider);
 
+    final outerLayout = AdaptiveLayout.of(context);
+    final safePadding = MediaQuery.paddingOf(context);
+    final viewport = Rect.fromLTWH(
+      safePadding.left,
+      safePadding.top,
+      math.max(
+        0,
+        outerLayout.size.width - safePadding.left - safePadding.right,
+      ),
+      math.max(
+        0,
+        outerLayout.size.height - safePadding.top - safePadding.bottom,
+      ),
+    );
+    final localLayout = outerLayout.projectTo(viewport);
+
+    Widget buildViewport() {
+      return Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: ConnectLayout.maxContentWidth,
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: _buildWizardScrollView(context, connection, l10n),
+          ),
+        ),
+      );
+    }
+
+    final Widget body;
+    if (localLayout.hasSeparatingFeature) {
+      body = AdaptiveTwoPane(
+        primary: buildViewport(),
+        secondary: const SizedBox.shrink(),
+      );
+    } else {
+      body = buildViewport();
+    }
+
     return Scaffold(
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _Header(connection: connection)),
-            const SliverToBoxAdapter(child: TelemetryConnectRecorderStatus()),
-            const SliverToBoxAdapter(child: TelemetryStartupRecoveryNotice()),
-            if (!connection.isBusy)
-              const SliverToBoxAdapter(child: TelemetryHistoryEntry()),
-            // Above the transport list, because on the second and every later
-            // visit this is the only row that matters. The list below is a
-            // phone's bonded devices — mostly headphones — and finding the one
-            // adapter in it again, in a car park, every time, is the
-            // difference between a tool and a chore.
-            // The recording from the session that did not survive, offered
-            // where somebody actually lands.
-            //
-            // It was only in Settings, and the store's own comment claimed it
-            // was "offered back on the next launch" — which nothing did. The
-            // sequence this exists for ends with the phone killing the app in
-            // a car park; the next thing that happens is this screen, and a
-            // recovery that has to be gone looking for is one that is not
-            // found. It renders nothing when there is nothing stored.
-            if (!connection.isConnected && !connection.isBusy)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: Spacing.lg),
-                  child: RecoveredTranscriptPanel(),
-                ),
-              ),
-            if (!connection.isConnected && !connection.isBusy)
-              const SliverToBoxAdapter(child: _LastAdapterCard()),
-            // Only on the first visit, when there is nothing remembered. Once
-            // the shortcut above exists this question is already answered, and
-            // a permanent "which one is mine?" panel would be advice nobody
-            // needs occupying the top of the screen every time.
-            if (!connection.isConnected && !connection.isBusy)
-              const SliverToBoxAdapter(child: _WhichTransportCard()),
-            // Kept visible after a failure too, because *which* command died
-            // is the whole diagnosis and hiding it throws that away. What was
-            // wrong before was the framing: a fully green step list sat
-            // directly above a red "disconnected" banner and the two flatly
-            // contradicted each other. The panel now says which attempt it
-            // describes, so it reads as history rather than as current state.
-            if (connection.isBusy || connection.initSteps.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    Spacing.lg,
-                    0,
-                    Spacing.lg,
-                    Spacing.lg,
-                  ),
-                  child: _HandshakePanel(connection: connection),
-                ),
-              ),
-            if (connection.error != null)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    Spacing.lg,
-                    0,
-                    Spacing.lg,
-                    Spacing.lg,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _ErrorBanner(
-                        message:
-                            connectionIssueText(
-                              AppLocalizations.of(context),
-                              connection,
-                            ) ??
-                            AppLocalizations.of(context)
-                                .connectIssueConnectionSetupFailed,
-                        action: () {
-                          final mapped = connectionFailureAction(
-                            adapterError: connection.issueStep?.errorCode,
-                            note: connection.issueStep?.note,
-                            transport: connection.transportIssue,
-                            command: connection.issueStep?.step.command,
-                          );
-                          if (mapped == null) return null;
-                          return connectionFailureActionText(
-                            AppLocalizations.of(context),
-                            mapped,
-                          );
-                        }(),
-                      ),
-                      const SizedBox(height: Spacing.md),
-                      // Where the failure is, not two screens away behind a
-                      // connection that does not exist. This is the moment the
-                      // recording was made for.
-                      Text(
-                        AppLocalizations.of(context).connectTranscriptKept,
-                        style: context.texts.bodySmall,
-                      ),
-                      const SizedBox(height: Spacing.sm),
-                      const TranscriptExportButtons(compact: true),
-                    ],
-                  ),
-                ),
-              ),
-            SliverPadding(
+        child: AdaptiveLayoutScope(
+          layout: localLayout,
+          child: body,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWizardScrollView(
+    BuildContext context,
+    ObdConnectionState connection,
+    AppLocalizations l10n,
+  ) {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: _Header(connection: connection)),
+        const SliverToBoxAdapter(child: TelemetryConnectRecorderStatus()),
+        const SliverToBoxAdapter(child: TelemetryStartupRecoveryNotice()),
+        if (!connection.isBusy)
+          const SliverToBoxAdapter(child: TelemetryHistoryEntry()),
+        // Above the transport list, because on the second and every later
+        // visit this is the only row that matters. The list below is a
+        // phone's bonded devices — mostly headphones — and finding the one
+        // adapter in it again, in a car park, every time, is the
+        // difference between a tool and a chore.
+        // The recording from the session that did not survive, offered
+        // where somebody actually lands.
+        //
+        // It was only in Settings, and the store's own comment claimed it
+        // was "offered back on the next launch" — which nothing did. The
+        // sequence this exists for ends with the phone killing the app in
+        // a car park; the next thing that happens is this screen, and a
+        // recovery that has to be gone looking for is one that is not
+        // found. It renders nothing when there is nothing stored.
+        if (!connection.isConnected && !connection.isBusy)
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: Spacing.lg),
+              child: RecoveredTranscriptPanel(),
+            ),
+          ),
+        if (!connection.isConnected && !connection.isBusy)
+          const SliverToBoxAdapter(child: _LastAdapterCard()),
+        // Only on the first visit, when there is nothing remembered. Once
+        // the shortcut above exists this question is already answered, and
+        // a permanent "which one is mine?" panel would be advice nobody
+        // needs occupying the top of the screen every time.
+        if (!connection.isConnected && !connection.isBusy)
+          const SliverToBoxAdapter(child: _WhichTransportCard()),
+        // Kept visible after a failure too, because *which* command died
+        // is the whole diagnosis and hiding it throws that away. What was
+        // wrong before was the framing: a fully green step list sat
+        // directly above a red "disconnected" banner and the two flatly
+        // contradicted each other. The panel now says which attempt it
+        // describes, so it reads as history rather than as current state.
+        if (connection.isBusy || connection.initSteps.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(
                 Spacing.lg,
                 0,
                 Spacing.lg,
                 Spacing.lg,
               ),
-              sliver: SliverList.separated(
-                itemCount: TransportKind.values.length,
-                separatorBuilder: (_, _) => const SizedBox(height: Spacing.md),
-                itemBuilder: (context, index) {
-                  final kind = TransportKind.values[index];
-                  final unavailable = switch (kind) {
-                    TransportKind.bluetoothClassic => !_classicAvailable,
-                    TransportKind.bluetoothLe => !_bleAvailable,
-                    _ => false,
-                  };
-                  final disabledReason = switch (kind) {
-                    TransportKind.bluetoothClassic when unavailable =>
-                      classicUnavailableReason(l10n),
-                    TransportKind.bluetoothLe when unavailable =>
-                      bleUnavailableReason(l10n),
-                    _ => null,
-                  };
-                  return _TransportCard(
-                    kind: kind,
-                    isExpanded: _expanded == kind,
-                    isDisabled: unavailable || connection.isBusy,
-                    disabledReason: disabledReason,
-                    onTap: () => _select(kind),
-                    child: _bodyFor(kind, l10n),
-                  );
-                },
+              child: _HandshakePanel(connection: connection),
+            ),
+          ),
+        if (connection.error != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Spacing.lg,
+                0,
+                Spacing.lg,
+                Spacing.lg,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _ErrorBanner(
+                    message:
+                        connectionIssueText(
+                          AppLocalizations.of(context),
+                          connection,
+                        ) ??
+                        AppLocalizations.of(context)
+                            .connectIssueConnectionSetupFailed,
+                    action: () {
+                      final mapped = connectionFailureAction(
+                        adapterError: connection.issueStep?.errorCode,
+                        note: connection.issueStep?.note,
+                        transport: connection.transportIssue,
+                        command: connection.issueStep?.step.command,
+                      );
+                      if (mapped == null) return null;
+                      return connectionFailureActionText(
+                        AppLocalizations.of(context),
+                        mapped,
+                      );
+                    }(),
+                  ),
+                  const SizedBox(height: Spacing.md),
+                  // Where the failure is, not two screens away behind a
+                  // connection that does not exist. This is the moment the
+                  // recording was made for.
+                  Text(
+                    AppLocalizations.of(context).connectTranscriptKept,
+                    style: context.texts.bodySmall,
+                  ),
+                  const SizedBox(height: Spacing.sm),
+                  const TranscriptExportButtons(compact: true),
+                ],
               ),
             ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Spacing.lg,
-                  Spacing.md,
-                  Spacing.lg,
-                  Spacing.xxl,
-                ),
-                child: RecommendedPurchaseLink(
-                  onOpen: widget.onOpenRecommendedPurchase,
-                  onOpenDisclosure:
-                      widget.onOpenRecommendedPurchaseDisclosure ??
-                      () => context.go('/settings'),
-                ),
-              ),
-            ),
-          ],
+          ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            Spacing.lg,
+            0,
+            Spacing.lg,
+            Spacing.lg,
+          ),
+          sliver: SliverList.separated(
+            itemCount: TransportKind.values.length,
+            separatorBuilder: (_, _) => const SizedBox(height: Spacing.md),
+            itemBuilder: (context, index) {
+              final kind = TransportKind.values[index];
+              final unavailable = switch (kind) {
+                TransportKind.bluetoothClassic => !_classicAvailable,
+                TransportKind.bluetoothLe => !_bleAvailable,
+                _ => false,
+              };
+              final disabledReason = switch (kind) {
+                TransportKind.bluetoothClassic when unavailable =>
+                  classicUnavailableReason(l10n),
+                TransportKind.bluetoothLe when unavailable =>
+                  bleUnavailableReason(l10n),
+                _ => null,
+              };
+              return _TransportCard(
+                kind: kind,
+                isExpanded: _expanded == kind,
+                isDisabled: unavailable || connection.isBusy,
+                disabledReason: disabledReason,
+                onTap: () => _select(kind),
+                child: _bodyFor(kind, l10n),
+              );
+            },
+          ),
         ),
-      ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Spacing.lg,
+              Spacing.md,
+              Spacing.lg,
+              Spacing.xxl,
+            ),
+            child: RecommendedPurchaseLink(
+              onOpen: widget.onOpenRecommendedPurchase,
+              onOpenDisclosure:
+                  widget.onOpenRecommendedPurchaseDisclosure ??
+                  () => context.go('/settings'),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -659,16 +716,15 @@ class _Header extends StatelessWidget {
               TextButton(
                 key: const Key('connect_language_entry'),
                 onPressed: () {
-                  showModalBottomSheet<void>(
+                  showAdaptiveModal<void>(
                     context: context,
                     showDragHandle: true,
-                    isScrollControlled: true,
+                    widePresentation: AdaptiveModalWidePresentation.dialog,
+                    regionPreference: AdaptiveModalRegionPreference.leading,
                     builder: (sheetContext) {
-                      return const SafeArea(
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
-                          child: LanguagePicker(),
-                        ),
+                      return const Padding(
+                        padding: EdgeInsets.fromLTRB(24, 8, 24, 24),
+                        child: LanguagePicker(),
                       );
                     },
                   );
