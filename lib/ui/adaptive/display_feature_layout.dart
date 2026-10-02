@@ -85,28 +85,30 @@ class AdaptiveTwoPane extends StatelessWidget {
     final layout = AdaptiveLayout.of(context);
 
     if (layout.hasSeparatingFeature && layout.regions.length >= 2) {
-      return _buildHinged(layout);
+      return _buildHinged(context, layout);
     }
 
     return _buildNormal(layout);
   }
 
-  Widget _buildHinged(AdaptiveLayout layout) {
+  Widget _buildHinged(BuildContext context, AdaptiveLayout layout) {
     final feature = layout.separatingFeature!;
     final regions = layout.regions;
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
 
     if (layout.hasVerticalSeparator) {
-      // Left | hinge | Right
+      // Physical Left | hinge | Physical Right
       return Row(
+        textDirection: TextDirection.ltr,
         children: [
           SizedBox(
             width: regions[0].width,
-            child: primary,
+            child: isRtl ? secondary : primary,
           ),
           SizedBox(width: feature.bounds.width),
           SizedBox(
             width: regions[1].width,
-            child: secondary,
+            child: isRtl ? primary : secondary,
           ),
         ],
       );

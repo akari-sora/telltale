@@ -401,12 +401,15 @@ class _HingedGaugeGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+
     final leftRegion = layout.regions[0];
     final rightRegion = layout.regions[1];
     final hinge = layout.separatingFeature!;
 
-    // Pane padding per GPT-6 Pro spec Section 10:
-    // Outer edge: Spacing.lg, hinge edge: Spacing.sm.
+    // Physical pane padding:
+    // Physical left pane: outer edge is left (Spacing.lg), hinge edge is right (Spacing.sm).
+    // Physical right pane: hinge edge is left (Spacing.sm), outer edge is right (Spacing.lg).
     const leftPadding = EdgeInsets.only(left: Spacing.lg, right: Spacing.sm);
     const rightPadding = EdgeInsets.only(left: Spacing.sm, right: Spacing.lg);
 
@@ -434,12 +437,15 @@ class _HingedGaugeGrid extends StatelessWidget {
     final rightTileWidth = _computeTileWidth(rightUsableWidth, rightColumns);
 
     final split = DashboardGridLayout.stableSplitIndex(pids.length);
-    final leftPids = pids.sublist(0, split);
-    final rightPids = pids.sublist(split);
+    // In RTL, the primary (reading order) pane is the right pane; in LTR, it is the left pane.
+    final leftPids = isRtl ? pids.sublist(split) : pids.sublist(0, split);
+    final rightPids = isRtl ? pids.sublist(0, split) : pids.sublist(split);
 
     final leftRows = leftColumns > 0 ? (leftPids.length / leftColumns).ceil() : 0;
     final rightRows = rightColumns > 0 ? (rightPids.length / rightColumns).ceil() : 0;
     final rowCount = math.max(leftRows, rightRows);
+
+    final paneAlignment = isRtl ? Alignment.topRight : Alignment.topLeft;
 
     return SliverPadding(
       padding: const EdgeInsets.only(bottom: Spacing.md),
@@ -468,11 +474,15 @@ class _HingedGaugeGrid extends StatelessWidget {
                       ? rightTileWidth
                       : 0.0;
 
+          final leftOriginalStartIndex = isRtl ? split + leftStart : leftStart;
+          final rightOriginalStartIndex = isRtl ? rightStart : split + rightStart;
+
           return Padding(
             padding: EdgeInsets.only(
               bottom: rowIndex == rowCount - 1 ? 0 : Spacing.md,
             ),
             child: Row(
+              textDirection: TextDirection.ltr,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
@@ -482,11 +492,11 @@ class _HingedGaugeGrid extends StatelessWidget {
                     child: SizedBox(
                       height: rowHeight > 0 ? rowHeight : null,
                       child: Align(
-                        alignment: Alignment.topLeft,
+                        alignment: paneAlignment,
                         child: _PaneGaugeRow(
                           pids: leftPidsForRow,
                           tileWidth: leftTileWidth,
-                          originalStartIndex: leftStart,
+                          originalStartIndex: leftOriginalStartIndex,
                           snapshot: snapshot,
                           demo: demo,
                         ),
@@ -504,11 +514,11 @@ class _HingedGaugeGrid extends StatelessWidget {
                     child: SizedBox(
                       height: rowHeight > 0 ? rowHeight : null,
                       child: Align(
-                        alignment: Alignment.topLeft,
+                        alignment: paneAlignment,
                         child: _PaneGaugeRow(
                           pids: rightPidsForRow,
                           tileWidth: rightTileWidth,
-                          originalStartIndex: split + rightStart,
+                          originalStartIndex: rightOriginalStartIndex,
                           snapshot: snapshot,
                           demo: demo,
                         ),

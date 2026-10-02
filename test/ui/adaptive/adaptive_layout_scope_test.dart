@@ -54,6 +54,42 @@ void main() {
 
       expect(found.size, const Size(500, 400));
       expect(found.windowClass, AppWindowClass.compact);
+      expect(found, equals(layout));
+    });
+
+    test('AdaptiveLayout equality and hashCode', () {
+      const layout1 = AdaptiveLayout(
+        size: Size(500, 400),
+        windowClass: AppWindowClass.compact,
+        displayFeatures: [],
+        separatingFeature: null,
+        regions: [Rect.fromLTWH(0, 0, 500, 400)],
+      );
+      const layout2 = AdaptiveLayout(
+        size: Size(500, 400),
+        windowClass: AppWindowClass.compact,
+        displayFeatures: [],
+        separatingFeature: null,
+        regions: [Rect.fromLTWH(0, 0, 500, 400)],
+      );
+      const layout3 = AdaptiveLayout(
+        size: Size(600, 400),
+        windowClass: AppWindowClass.medium,
+        displayFeatures: [],
+        separatingFeature: null,
+        regions: [Rect.fromLTWH(0, 0, 600, 400)],
+      );
+
+      expect(layout1, equals(layout2));
+      expect(layout1.hashCode, equals(layout2.hashCode));
+      expect(layout1, isNot(equals(layout3)));
+
+      const scope1 = AdaptiveLayoutScope(layout: layout1, child: SizedBox());
+      const scope2 = AdaptiveLayoutScope(layout: layout2, child: SizedBox());
+      const scope3 = AdaptiveLayoutScope(layout: layout3, child: SizedBox());
+
+      expect(scope1.updateShouldNotify(scope2), isFalse);
+      expect(scope1.updateShouldNotify(scope3), isTrue);
     });
 
     test('projectTo translates hinge and clips features to viewport', () {

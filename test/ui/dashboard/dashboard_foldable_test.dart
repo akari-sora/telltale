@@ -87,6 +87,7 @@ class _FoldableHarness extends StatefulWidget {
       deviceName: 'Demo ECU',
     ),
     this.withShell = false,
+    this.textDirection = TextDirection.ltr,
   });
 
   final Size initialSize;
@@ -96,6 +97,7 @@ class _FoldableHarness extends StatefulWidget {
   final List<Pid> pids;
   final ObdConnectionState connectionState;
   final bool withShell;
+  final TextDirection textDirection;
 
   @override
   State<_FoldableHarness> createState() => _FoldableHarnessState();
@@ -139,9 +141,12 @@ class _FoldableHarnessState extends State<_FoldableHarness> {
         textScaler: textScaler,
         padding: padding,
       ),
-      child: widget.withShell
-          ? const AppShell(child: DashboardScreen())
-          : const DashboardScreen(),
+      child: Directionality(
+        textDirection: widget.textDirection,
+        child: widget.withShell
+            ? const AppShell(child: DashboardScreen())
+            : const DashboardScreen(),
+      ),
     );
   }
 }
@@ -159,6 +164,7 @@ Future<GlobalKey<_FoldableHarnessState>> _pumpFoldableDashboard(
   TextScaler textScaler = TextScaler.noScaling,
   EdgeInsets padding = EdgeInsets.zero,
   bool withShell = false,
+  TextDirection textDirection = TextDirection.ltr,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -179,6 +185,7 @@ Future<GlobalKey<_FoldableHarnessState>> _pumpFoldableDashboard(
           pids: pids,
           connectionState: connectionState,
           withShell: withShell,
+          textDirection: textDirection,
         ),
       ),
     ],
@@ -685,6 +692,90 @@ void main() {
       expect(scrollableRect.left, greaterThanOrEqualTo(24.0));
       expect(scrollableRect.right, lessThanOrEqualTo(1000.0 - 16.0));
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('D02-12: RTL directionality preserves physical hinge safety and pane order', (
+      tester,
+    ) async {
+      const globalHinge = Rect.fromLTWH(490, 0, 20, 700);
+      const hingeFeature = DisplayFeature(
+        bounds: globalHinge,
+        type: DisplayFeatureType.hinge,
+        state: DisplayFeatureState.postureFlat,
+      );
+
+      final pids = _testPids.sublist(0, 6);
+      await _pumpFoldableDashboard(
+        tester,
+        size: const Size(1000, 700),
+        displayFeatures: const [hingeFeature],
+        padding: const EdgeInsets.only(left: 24, top: 40, right: 16),
+        pids: pids,
+        withShell: true,
+        textDirection: TextDirection.rtl,
+      );
+
+      expect(tester.takeException(), isNull);
+
+      // In global coordinates, no gauge tile must ever overlap the global physical hinge 490..510
+      for (final pid in pids) {
+        final rect = tester.getRect(
+          find.byKey(ValueKey('dashboard-gauge-${pid.id}')),
+        );
+        expect(
+          rect.overlaps(globalHinge),
+          isFalse,
+          reason: 'Global gauge rect $rect must not overlap global hinge $globalHinge in RTL',
+        );
+      }
+
+      // In RTL, the primary (reading start) pane is the right pane, so the first PID must be on the right
+      final firstGaugeCenter = tester.getCenter(
+        find.byKey(ValueKey('dashboard-gauge-${pids[0].id}')),
+      );
+      expect(
+        firstGaugeCenter.dx,
+        greaterThan(510),
+        reason: 'First PID in RTL should be in the primary (right) pane',
+      );
+    });
+
+    testWidgets(
+        'D02-13: ultra-wide short landscape (2400x200) clamps to 6 columns and scrolls vertically',
+        (tester) async {
+      final pids = _testPids.sublist(0, 8);
+      await _pumpFoldableDashboard(
+        tester,
+        size: const Size(2400, 200),
+        pids: pids,
+        withShell: true,
+      );
+
+      expect(tester.takeException(), isNull);
+      // Rail used for short landscape
+      expect(find.byType(NavigationRail), findsOneWidget);
+
+      // In a 200px high viewport, scroll down past toolbar/recorder to bring gauges into view
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -350));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.takeException(), isNull);
+
+      // Verify column cap of 6
+      final firstGaugeFinder = find.byKey(ValueKey('dashboard-gauge-${pids[0].id}'));
+      expect(firstGaugeFinder, findsOneWidget);
+      final firstGaugeY = tester.getTopLeft(firstGaugeFinder).dy;
+      var topRowCount = 0;
+      for (final pid in pids) {
+        final finder = find.byKey(ValueKey('dashboard-gauge-${pid.id}'));
+        if (finder.evaluate().isNotEmpty) {
+          final top = tester.getTopLeft(finder).dy;
+          if ((top - firstGaugeY).abs() < 1.0) {
+            topRowCount++;
+          }
+        }
+      }
+      expect(topRowCount, 6);
     });
   });
 }

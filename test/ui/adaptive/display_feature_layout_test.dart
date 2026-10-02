@@ -35,6 +35,7 @@ void main() {
       List<DisplayFeature> features = const [],
       double? primaryWidth,
       double primaryFraction = 0.4,
+      TextDirection textDirection = TextDirection.ltr,
     }) {
       return MediaQuery(
         data: MediaQueryData(
@@ -42,7 +43,7 @@ void main() {
           displayFeatures: features,
         ),
         child: Directionality(
-          textDirection: TextDirection.ltr,
+          textDirection: textDirection,
           child: Material(
             child: Center(
               child: SizedBox(
@@ -123,6 +124,48 @@ void main() {
         secondaryBox.left,
         greaterThanOrEqualTo(hingeLeft + hingeWidth),
         reason: 'Secondary must start after hinge',
+      );
+    });
+
+    testWidgets(
+        'vertical hinge in RTL: primary on right, secondary on left, no overlap',
+        (tester) async {
+      const hingeLeft = 490.0;
+      const hingeWidth = 20.0;
+
+      tester.view.physicalSize = const Size(1000, 700);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(buildTwoPane(
+        size: const Size(1000, 700),
+        features: [
+          const DisplayFeature(
+            bounds: Rect.fromLTWH(hingeLeft, 0, hingeWidth, 700),
+            type: DisplayFeatureType.hinge,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ],
+        textDirection: TextDirection.rtl,
+      ));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+
+      final primaryBox = tester.getRect(find.byKey(const Key('primary')));
+      final secondaryBox = tester.getRect(find.byKey(const Key('secondary')));
+
+      // In RTL, primary is placed in the right region, secondary in the left region
+      expect(
+        secondaryBox.right,
+        lessThanOrEqualTo(hingeLeft),
+        reason: 'Secondary (left pane) must not extend into hinge',
+      );
+      expect(
+        primaryBox.left,
+        greaterThanOrEqualTo(hingeLeft + hingeWidth),
+        reason: 'Primary (right pane) must start after hinge',
       );
     });
 

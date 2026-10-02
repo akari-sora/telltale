@@ -7,6 +7,7 @@ library;
 
 import 'dart:ui' show DisplayFeature, DisplayFeatureType;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/widgets.dart';
 
 import 'app_breakpoints.dart';
@@ -31,8 +32,7 @@ class AdaptiveLayoutScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(AdaptiveLayoutScope oldWidget) =>
-      oldWidget.layout.size != layout.size ||
-      oldWidget.layout.separatingFeature != layout.separatingFeature;
+      oldWidget.layout != layout;
 }
 
 /// Immutable snapshot of the current window's adaptive properties.
@@ -231,6 +231,26 @@ class AdaptiveLayout {
       ];
     }
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AdaptiveLayout &&
+          runtimeType == other.runtimeType &&
+          size == other.size &&
+          windowClass == other.windowClass &&
+          separatingFeature == other.separatingFeature &&
+          listEquals(displayFeatures, other.displayFeatures) &&
+          listEquals(regions, other.regions);
+
+  @override
+  int get hashCode => Object.hash(
+        size,
+        windowClass,
+        separatingFeature,
+        Object.hashAll(displayFeatures),
+        Object.hashAll(regions),
+      );
 
   @override
   String toString() => 'AdaptiveLayout('
