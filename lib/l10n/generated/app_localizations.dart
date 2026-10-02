@@ -7403,6 +7403,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Choose a PID from the list to inspect its definition and live status.'**
   String get pidDetailEmptyBody;
+
+  /// Label for the gauge range row in the PID detail pane.
+  ///
+  /// In en, this message translates to:
+  /// **'Range'**
+  String get pidDetailRangeLabel;
+
+  /// Label for the polling priority row in the PID detail pane.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority'**
+  String get pidDetailPriorityLabel;
+
+  /// Label for default CAN header in the PID detail pane.
+  ///
+  /// In en, this message translates to:
+  /// **'Default ({header})'**
+  String pidDetailHeaderDefault(String header);
 }
 
 class _AppLocalizationsDelegate

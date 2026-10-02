@@ -4733,4 +4733,15 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get pidDetailEmptyBody =>
       'Choose a PID from the list to inspect its definition and live status.';
+
+  @override
+  String get pidDetailRangeLabel => 'Range';
+
+  @override
+  String get pidDetailPriorityLabel => 'Priority';
+
+  @override
+  String pidDetailHeaderDefault(String header) {
+    return 'Default ($header)';
+  }
 }

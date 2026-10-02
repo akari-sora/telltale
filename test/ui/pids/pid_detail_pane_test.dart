@@ -71,7 +71,10 @@ void main() {
       expect(find.text('3245'), findsOneWidget);
       expect(find.text(pid.modeAndPid), findsOneWidget);
       expect(find.text(pid.equation), findsOneWidget);
+      expect(find.text('Range'), findsOneWidget);
       expect(find.text('${pid.minValue} — ${pid.maxValue}'), findsOneWidget);
+      expect(find.text('Priority'), findsOneWidget);
+      expect(find.text('Default (7E0)'), findsOneWidget);
 
       // Verify switch exists and toggling works
       final switchFinder = find.byType(Switch);

@@ -17,6 +17,10 @@
 /// - F03-19: RTL layout safety across vertical hinge
 /// - F03-20: SafeArea + NavigationRail + hinge coordinate projection integration
 /// - F03-21: In-flight editor dirty draft survives fold/unfold transitions
+/// - F03-22: Creating custom PID via Add button saves and selects it in two-pane
+/// - F03-23: Active-only filter preserves inactive selection across fold/unfold
+/// - F03-24: Toggling switch in detail pane synchronizes with master row
+/// - F03-25: Empty search results display EmptyState while detail retains selection
 library;
 
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
@@ -728,6 +732,180 @@ void main() {
       expect(find.byType(PidEditorScreen), findsOneWidget);
       expect(find.text('A*2+B'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('F03-22: creating custom PID via Add button saves and selects it in two-pane',
+        (tester) async {
+      await _pumpHarness(
+        tester,
+        size: const Size(1000, 700),
+      );
+
+      // Tap New (Add) button in master pane
+      final addBtn = find.widgetWithIcon(FilledButton, Icons.add);
+      expect(addBtn, findsOneWidget);
+      await tester.tap(addBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PidEditorScreen), findsOneWidget);
+
+      // Fill in required fields
+      final nameField = find.widgetWithText(TextField, 'Name');
+      await tester.enterText(nameField, 'Turbo Boost Gauge');
+
+      final modeAndPidField = find.widgetWithText(TextField, 'Mode + PID');
+      await tester.enterText(modeAndPidField, '010B');
+
+      final equationField = find.widgetWithText(TextField, 'Expression');
+      await tester.enterText(equationField, 'A*2');
+      await tester.pumpAndSettle();
+
+      // Tap Save
+      final saveBtn = find.widgetWithText(FilledButton, 'Save');
+      await tester.scrollUntilVisible(
+        saveBtn,
+        150,
+        scrollable: find.descendant(
+          of: find.byType(PidEditorScreen),
+          matching: find.byType(Scrollable),
+        ).first,
+      );
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      // Returned to Manager screen
+      expect(find.byType(PidEditorScreen), findsNothing);
+
+      // Newly added custom PID is automatically selected in two-pane mode!
+      expect(
+        find.descendant(
+          of: find.byType(PidDetailPane),
+          matching: find.text('Turbo Boost Gauge'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('F03-23: active-only filter preserves inactive selection across fold/unfold',
+        (tester) async {
+      final harnessKey = await _pumpHarness(
+        tester,
+        size: const Size(1000, 700),
+      );
+
+      // Select RPM (which is inactive)
+      final rpmRowKey = ValueKey('pid-row-${PidLibrary.engineRpm.id}');
+      await tester.tap(find.byKey(rpmRowKey));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ValueKey('pid-detail-${PidLibrary.engineRpm.id}')),
+        findsOneWidget,
+      );
+
+      // Tap 'Enabled only' FilterChip
+      final filterChip = find.widgetWithText(FilterChip, 'Enabled only');
+      await tester.tap(filterChip);
+      await tester.pumpAndSettle();
+
+      // RPM row is now filtered out of master list
+      expect(find.byKey(rpmRowKey), findsNothing);
+
+      // But detail pane STILL displays RPM!
+      expect(
+        find.byKey(ValueKey('pid-detail-${PidLibrary.engineRpm.id}')),
+        findsOneWidget,
+      );
+
+      // Fold to compact
+      harnessKey.currentState!.updateLayout(newSize: const Size(400, 800));
+      tester.view.physicalSize = const Size(400, 800);
+      await tester.pumpAndSettle();
+
+      // Unfold back to expanded
+      harnessKey.currentState!.updateLayout(newSize: const Size(1000, 700));
+      tester.view.physicalSize = const Size(1000, 700);
+      await tester.pumpAndSettle();
+
+      // Selection remains RPM and Enabled only filter is still preserved
+      expect(
+        find.byKey(ValueKey('pid-detail-${PidLibrary.engineRpm.id}')),
+        findsOneWidget,
+      );
+      final chipWidget = tester.widget<FilterChip>(filterChip);
+      expect(chipWidget.selected, isTrue);
+    });
+
+    testWidgets('F03-24: toggling switch in detail pane synchronizes with master row',
+        (tester) async {
+      await _pumpHarness(
+        tester,
+        size: const Size(1000, 700),
+      );
+
+      final rpmRowKey = ValueKey('pid-row-${PidLibrary.engineRpm.id}');
+      await tester.tap(find.byKey(rpmRowKey));
+      await tester.pumpAndSettle();
+
+      // Master switch is false
+      final masterSwitchFinder = find.descendant(
+        of: find.byKey(rpmRowKey),
+        matching: find.byType(Switch),
+      );
+      expect(tester.widget<Switch>(masterSwitchFinder).value, isFalse);
+
+      // Detail switch is false
+      final detailSwitchFinder = find.descendant(
+        of: find.byType(PidDetailPane),
+        matching: find.byType(Switch),
+      );
+      expect(tester.widget<Switch>(detailSwitchFinder).value, isFalse);
+
+      // Toggle switch in detail pane
+      await tester.tap(detailSwitchFinder);
+      await tester.pumpAndSettle();
+
+      // Both are now true
+      expect(tester.widget<Switch>(masterSwitchFinder).value, isTrue);
+      expect(tester.widget<Switch>(detailSwitchFinder).value, isTrue);
+
+      // Toggle again
+      await tester.tap(detailSwitchFinder);
+      await tester.pumpAndSettle();
+
+      // Both are now false
+      expect(tester.widget<Switch>(masterSwitchFinder).value, isFalse);
+      expect(tester.widget<Switch>(detailSwitchFinder).value, isFalse);
+    });
+
+    testWidgets('F03-25: empty search results display EmptyState while detail retains selection',
+        (tester) async {
+      await _pumpHarness(
+        tester,
+        size: const Size(1000, 700),
+      );
+
+      // Select RPM
+      await tester.tap(find.byKey(ValueKey('pid-row-${PidLibrary.engineRpm.id}')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ValueKey('pid-detail-${PidLibrary.engineRpm.id}')),
+        findsOneWidget,
+      );
+
+      // Type nonexistent query
+      final searchField = find.byType(TextField);
+      await tester.enterText(searchField, 'xyz_does_not_exist');
+      await tester.pumpAndSettle();
+
+      // Master pane shows EmptyState
+      expect(find.byIcon(Icons.search_off), findsOneWidget);
+      expect(find.text('No matching PID'), findsOneWidget);
+
+      // Detail pane STILL displays RPM
+      expect(
+        find.byKey(ValueKey('pid-detail-${PidLibrary.engineRpm.id}')),
+        findsOneWidget,
+      );
     });
   });
 }

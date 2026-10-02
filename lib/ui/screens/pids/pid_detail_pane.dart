@@ -241,20 +241,20 @@ class PidDetailPane extends StatelessWidget {
               ),
               const SizedBox(height: Spacing.sm),
               _DetailRow(
-                label: l10n.pidEditorSectionRangeAndPriority,
+                label: l10n.pidDetailRangeLabel,
                 value: '${pid.minValue} — ${pid.maxValue}',
               ),
               const SizedBox(height: Spacing.sm),
               _DetailRow(
                 label: l10n.pidEditorFieldHeader,
                 value: pid.header.isEmpty || pid.header == kDefaultHeader
-                    ? 'Default ($kDefaultHeader)'
+                    ? l10n.pidDetailHeaderDefault(kDefaultHeader)
                     : pid.header,
                 isCode: true,
               ),
               const SizedBox(height: Spacing.sm),
               _DetailRow(
-                label: l10n.pidPriorityMedium,
+                label: l10n.pidDetailPriorityLabel,
                 value: priorityTierLabel(l10n, pid.priority),
               ),
             ],
