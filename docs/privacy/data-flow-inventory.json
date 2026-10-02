@@ -929,7 +929,7 @@
         {
           "path": "pubspec.yaml",
           "symbol": "name: torque_obd",
-          "sha256": "43297af5c59eebc778acdab9ee78cade26dd570315fab3d1e3359871613156fe",
+          "sha256": "caa70c2e73bb0d2806d1e85cd00b64c04be7915996d8593278a1d524f6f6f7d3",
           "storage_fact": "none"
         }
       ],
