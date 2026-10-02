@@ -41,6 +41,7 @@ import 'vehicle_profile_copy.dart';
 import 'adapter_concern_copy.dart';
 import 'manual_command_copy.dart';
 import '../workshop/service_recipes_screen.dart';
+import '../../adaptive/adaptive_modal.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({this.onOpenRecommendedPurchase, super.key});
@@ -166,30 +167,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _selectOfficialVehicle() async {
     if (_loadingVehicleCatalog) return;
     final l10n = AppLocalizations.of(context);
-    final market = await showModalBottomSheet<String>(
+    final market = await showAdaptiveModal<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(title: Text(l10n.settingsCatalogChooseMarket)),
-            ListTile(
-              key: const Key('catalog_market_us'),
-              title: Text(l10n.settingsCatalogMarketUs),
-              onTap: () => Navigator.pop(context, 'US'),
-            ),
-            ListTile(
-              key: const Key('catalog_market_tw'),
-              title: Text(l10n.settingsCatalogMarketTw),
-              onTap: () => Navigator.pop(context, 'TW'),
-            ),
-            ListTile(
-              key: const Key('catalog_market_ca'),
-              title: Text(l10n.settingsCatalogMarketCa),
-              onTap: () => Navigator.pop(context, 'CA'),
-            ),
-          ],
-        ),
+      widePresentation: AdaptiveModalWidePresentation.dialog,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(title: Text(l10n.settingsCatalogChooseMarket)),
+          ListTile(
+            key: const Key('catalog_market_us'),
+            title: Text(l10n.settingsCatalogMarketUs),
+            onTap: () => Navigator.pop(context, 'US'),
+          ),
+          ListTile(
+            key: const Key('catalog_market_tw'),
+            title: Text(l10n.settingsCatalogMarketTw),
+            onTap: () => Navigator.pop(context, 'TW'),
+          ),
+          ListTile(
+            key: const Key('catalog_market_ca'),
+            title: Text(l10n.settingsCatalogMarketCa),
+            onTap: () => Navigator.pop(context, 'CA'),
+          ),
+        ],
       ),
     );
     if (market == null || !mounted) return;
@@ -230,7 +230,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     if (!mounted) return;
     setState(() => _loadingVehicleCatalog = false);
-    final configuration = await showModalBottomSheet<UsEpaVehicleConfiguration>(
+    final configuration = await showAdaptiveModal<UsEpaVehicleConfiguration>(
       context: context,
       isScrollControlled: true,
       builder: (context) => _UsEpaVehiclePicker(catalog: catalog),
@@ -281,7 +281,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     if (!mounted) return;
     setState(() => _loadingVehicleCatalog = false);
-    final configuration = await showModalBottomSheet<TwVehicleConfiguration>(
+    final configuration = await showAdaptiveModal<TwVehicleConfiguration>(
       context: context,
       isScrollControlled: true,
       builder: (context) => _TwVehiclePicker(catalog: catalog),
@@ -332,7 +332,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     if (!mounted) return;
     setState(() => _loadingVehicleCatalog = false);
-    final configuration = await showModalBottomSheet<CaVehicleConfiguration>(
+    final configuration = await showAdaptiveModal<CaVehicleConfiguration>(
       context: context,
       isScrollControlled: true,
       builder: (context) => _CaVehiclePicker(catalog: catalog),
@@ -947,12 +947,9 @@ class _UsEpaVehiclePickerState extends State<_UsEpaVehiclePicker> {
         ? null
         : applyUsEpaConfiguration(widget.catalog, epaId: _configuration!.epaId);
 
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.86,
-        child: Padding(
-          padding: const EdgeInsets.all(Spacing.lg),
-          child: Column(
+    return Padding(
+      padding: const EdgeInsets.all(Spacing.lg),
+      child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -1096,9 +1093,7 @@ class _UsEpaVehiclePickerState extends State<_UsEpaVehiclePicker> {
               ),
             ],
           ),
-        ),
-      ),
-    );
+        );
   }
 
   /// Takes the localizations rather than a `BuildContext`: it is static, and
@@ -1161,12 +1156,9 @@ class _TwVehiclePickerState extends State<_TwVehiclePicker> {
         ? null
         : applyTwConfiguration(widget.catalog, twId: _configuration!.twId);
 
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.86,
-        child: Padding(
-          padding: const EdgeInsets.all(Spacing.lg),
-          child: Column(
+    return Padding(
+      padding: const EdgeInsets.all(Spacing.lg),
+      child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -1318,9 +1310,7 @@ class _TwVehiclePickerState extends State<_TwVehiclePicker> {
               ),
             ],
           ),
-        ),
-      ),
-    );
+        );
   }
 }
 
@@ -1360,12 +1350,9 @@ class _CaVehiclePickerState extends State<_CaVehiclePicker> {
         ? null
         : applyCaConfiguration(widget.catalog, caId: _configuration!.caId);
 
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.86,
-        child: Padding(
-          padding: const EdgeInsets.all(Spacing.lg),
-          child: Column(
+    return Padding(
+      padding: const EdgeInsets.all(Spacing.lg),
+      child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -1525,9 +1512,7 @@ class _CaVehiclePickerState extends State<_CaVehiclePicker> {
               ),
             ],
           ),
-        ),
-      ),
-    );
+        );
   }
 }
 
