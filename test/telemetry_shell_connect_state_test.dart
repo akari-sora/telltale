@@ -110,7 +110,7 @@ void main() {
       ),
     );
 
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byKey(const ValueKey('telemetry-shell-stop')), findsOneWidget);
     expect(find.textContaining('錄製中 00:09'), findsOneWidget);
     expect(tester.takeException(), isNull);

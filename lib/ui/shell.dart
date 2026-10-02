@@ -129,14 +129,37 @@ class _AppShellState extends ConsumerState<AppShell> {
             _Rail(index: index),
             const VerticalDivider(width: 1),
             Expanded(
-              child: Column(
-                children: [
-                  const SafeArea(
-                    bottom: false,
-                    child: TelemetryRecorderStrip(),
-                  ),
-                  Expanded(child: child),
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final fullLayout = adaptive;
+                  final contentWidth = constraints.maxWidth;
+                  final isRtl = Directionality.of(context) == TextDirection.rtl;
+                  final left = isRtl
+                      ? 0.0
+                      : fullLayout.size.width - contentWidth;
+
+                  final viewport = Rect.fromLTWH(
+                    left,
+                    0,
+                    contentWidth,
+                    fullLayout.size.height,
+                  );
+
+                  final contentLayout = fullLayout.projectTo(viewport);
+
+                  return AdaptiveLayoutScope(
+                    layout: contentLayout,
+                    child: Column(
+                      children: [
+                        const SafeArea(
+                          bottom: false,
+                          child: TelemetryRecorderStrip(),
+                        ),
+                        Expanded(child: child),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ],
@@ -145,7 +168,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
 
     return Scaffold(
-      body: child,
+      body: AdaptiveLayoutScope(
+        layout: adaptive,
+        child: child,
+      ),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
