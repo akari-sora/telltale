@@ -4811,4 +4811,11 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get mode08ReasonUnexpectedExecution =>
       'Unerwartete Ausführungsantwort auf Abfrage unterstützter TIDs';
+
+  @override
+  String get pidDetailEmptyTitle => 'PID auswählen';
+
+  @override
+  String get pidDetailEmptyBody =>
+      'Wählen Sie eine PID aus der Liste aus, um ihre Definition und ihren Live-Status anzuzeigen.';
 }

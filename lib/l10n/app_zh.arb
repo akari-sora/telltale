@@ -1261,6 +1261,8 @@
   "mode08ReasonSessionDisconnected": "探索期間連線中斷或被取代",
   "mode08ReasonUnqueriedAnnounced": "ECU 宣告但未查詢的區塊：{blocks}",
   "mode08ReasonRequiresCanBus": "Mode 08 功能探索需要解析的 OBD-II CAN 匯流排",
-  "mode08ReasonUnexpectedExecution": "查詢支援 TID 時收到非預期的執行回應"
+  "mode08ReasonUnexpectedExecution": "查詢支援 TID 時收到非預期的執行回應",
+  "pidDetailEmptyTitle": "選取 PID",
+  "pidDetailEmptyBody": "從清單中選取一個 PID 以檢視其定義與即時狀態。"
 }
 

@@ -7391,6 +7391,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unexpected execution response for supported TID query'**
   String get mode08ReasonUnexpectedExecution;
+
+  /// Title shown in the PID detail pane when no PID is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a PID'**
+  String get pidDetailEmptyTitle;
+
+  /// Body copy shown in the PID detail pane when no PID is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a PID from the list to inspect its definition and live status.'**
+  String get pidDetailEmptyBody;
 }
 
 class _AppLocalizationsDelegate

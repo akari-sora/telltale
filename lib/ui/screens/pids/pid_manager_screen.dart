@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -16,15 +17,19 @@ import '../../../obd/pid/pid.dart';
 import '../../../obd/pid/pid_csv.dart';
 import '../../../obd/polling_engine.dart';
 import '../../../obd/telemetry.dart';
+import '../../../state/app_share_coordinator.dart';
+import '../../../state/app_share_entry_controller.dart';
 import '../../../state/obd_session.dart';
 import '../../../state/pid_mutation_lock.dart';
 import '../../../state/pid_registry.dart';
-import '../../../state/app_share_coordinator.dart';
-import '../../../state/app_share_entry_controller.dart';
+import '../../adaptive/adaptive_layout.dart';
+import '../../adaptive/display_feature_layout.dart';
 import '../../widgets/panel.dart';
 import '../../widgets/share_copy.dart';
+import 'pid_detail_pane.dart';
 import 'pid_editor_screen.dart';
 import 'pid_import_copy.dart';
+import 'pid_manager_layout.dart';
 import 'pid_mutation_copy.dart';
 import 'powertrain_battery_catalog_screen.dart';
 
@@ -174,6 +179,42 @@ SupportedPidBulkPresentation supportedPidBulkPresentation({
 class _PidManagerScreenState extends ConsumerState<PidManagerScreen> {
   String _query = '';
   bool _activeOnly = false;
+  String? _selectedPidId;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _selectPid(Pid pid) {
+    if (_selectedPidId == pid.id) return;
+    setState(() {
+      _selectedPidId = pid.id;
+    });
+  }
+
+  Future<void> _createCustomPid() async {
+    final savedId = await context.push<String>(PidEditorScreen.path);
+    if (!mounted || savedId == null) return;
+    setState(() {
+      _selectedPidId = savedId;
+    });
+  }
+
+  Future<void> _editCustomPid(Pid pid) async {
+    final savedId = await context.push<String>(
+      Uri(
+        path: PidEditorScreen.path,
+        queryParameters: {'id': pid.id},
+      ).toString(),
+    );
+    if (!mounted || savedId == null) return;
+    setState(() {
+      _selectedPidId = savedId;
+    });
+  }
 
   void _snack(String message) {
     if (!mounted) return;
@@ -387,8 +428,6 @@ class _PidManagerScreenState extends ConsumerState<PidManagerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final palette = context.palette;
     final registry = ref.watch(pidRegistryProvider);
     final active = ref.watch(activePidsProvider);
     final snapshot =
@@ -413,220 +452,379 @@ class _PidManagerScreenState extends ConsumerState<PidManagerScreen> {
           pid.modeAndPid.toLowerCase().contains(query);
     }).toList();
 
+    final selectedPid = _selectedPidId == null
+        ? null
+        : registry.where((p) => p.id == _selectedPidId).firstOrNull;
+
+    if (_selectedPidId != null && selectedPid == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            _selectedPidId != null &&
+            !ref.read(pidRegistryProvider).any((p) => p.id == _selectedPidId)) {
+          setState(() => _selectedPidId = null);
+        }
+      });
+    }
+
+    final outerLayout = AdaptiveLayout.of(context);
+    final safePadding = MediaQuery.paddingOf(context);
+    final viewport = Rect.fromLTWH(
+      safePadding.left,
+      safePadding.top,
+      math.max(
+        0,
+        outerLayout.size.width - safePadding.left - safePadding.right,
+      ),
+      math.max(
+        0,
+        outerLayout.size.height - safePadding.top,
+      ),
+    );
+    final localLayout = outerLayout.projectTo(viewport);
+    final twoPane = PidManagerLayout.useTwoPane(localLayout);
+
+    final master = _PidMasterPane(
+      active: active,
+      activeIds: activeIds,
+      registry: registry,
+      summary: summary,
+      bulkPresentation: bulkPresentation,
+      snapshot: snapshot,
+      visible: visible,
+      activeOnly: _activeOnly,
+      searchController: _searchController,
+      twoPane: twoPane,
+      selectedPidId: _selectedPidId,
+      onQueryChanged: (v) => setState(() => _query = v),
+      onActiveOnlyChanged: (v) => setState(() => _activeOnly = v),
+      onAddCustom: _createCustomPid,
+      onMenuSelected: _handleMenu,
+      onAddConfirmedSupported: () => _addConfirmedSupported(summary, active),
+      onSelect: _selectPid,
+      onToggle: _togglePid,
+      onEdit: _editCustomPid,
+    );
+
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Spacing.lg,
-                  Spacing.md,
-                  Spacing.lg,
-                  Spacing.md,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        child: AdaptiveLayoutScope(
+          layout: localLayout,
+          child: twoPane
+              ? AdaptiveTwoPane(
+                  primaryWidth: PidManagerLayout.masterWidth,
+                  primary: master,
+                  secondary: _PidDetailHost(
+                    pid: selectedPid,
+                    isActive: selectedPid != null &&
+                        activeIds.contains(selectedPid.id),
+                    reading: selectedPid != null
+                        ? snapshot[selectedPid.id]
+                        : null,
+                    isStale: selectedPid != null &&
+                        snapshot.isStale(selectedPid),
+                    isUnsupported: selectedPid != null &&
+                        summary.statusFor(selectedPid) ==
+                            PidCapabilityStatus.unsupported,
+                    onToggle: selectedPid != null
+                        ? () => _togglePid(selectedPid)
+                        : () async {},
+                    onEdit: selectedPid != null && selectedPid.isCustom
+                        ? () => _editCustomPid(selectedPid)
+                        : null,
+                  ),
+                )
+              : master,
+        ),
+      ),
+    );
+  }
+}
+
+class _PidMasterPane extends StatelessWidget {
+  const _PidMasterPane({
+    required this.active,
+    required this.activeIds,
+    required this.registry,
+    required this.summary,
+    required this.bulkPresentation,
+    required this.snapshot,
+    required this.visible,
+    required this.activeOnly,
+    required this.searchController,
+    required this.twoPane,
+    required this.selectedPidId,
+    required this.onQueryChanged,
+    required this.onActiveOnlyChanged,
+    required this.onAddCustom,
+    required this.onMenuSelected,
+    required this.onAddConfirmedSupported,
+    required this.onSelect,
+    required this.onToggle,
+    required this.onEdit,
+  });
+
+  final List<Pid> active;
+  final Set<String> activeIds;
+  final List<Pid> registry;
+  final ObdCapabilitySummary summary;
+  final SupportedPidBulkPresentation bulkPresentation;
+  final TelemetrySnapshot snapshot;
+  final List<Pid> visible;
+  final bool activeOnly;
+  final TextEditingController searchController;
+  final bool twoPane;
+  final String? selectedPidId;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<bool> onActiveOnlyChanged;
+  final VoidCallback onAddCustom;
+  final ValueChanged<_PidMenuAction> onMenuSelected;
+  final VoidCallback onAddConfirmedSupported;
+  final void Function(Pid) onSelect;
+  final Future<void> Function(Pid) onToggle;
+  final void Function(Pid) onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final palette = context.palette;
+
+    return CustomScrollView(
+      key: const PageStorageKey('pid-master-scroll'),
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Spacing.lg,
+              Spacing.md,
+              Spacing.lg,
+              Spacing.md,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: Spacing.md,
+                  runSpacing: Spacing.sm,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Wrap(
-                      spacing: Spacing.md,
-                      runSpacing: Spacing.sm,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: 180),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l10n.pidManagerHeadline,
-                                style: context.texts.headlineMedium,
-                              ),
-                              Text(
-                                l10n.pidManagerCounts(
-                                  active.length,
-                                  registry.length,
-                                ),
-                                style: context.texts.bodySmall,
-                              ),
-                            ],
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(minWidth: 180),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.pidManagerHeadline,
+                            style: context.texts.headlineMedium,
                           ),
-                        ),
-                        FilledButton.icon(
-                          onPressed: () => context.push(PidEditorScreen.path),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: Text(l10n.pidManagerAdd),
-                        ),
-                        PopupMenuButton<_PidMenuAction>(
-                          onSelected: _handleMenu,
-                          tooltip: l10n.pidManagerMoreActions,
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: _PidMenuAction.arrange,
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(Icons.reorder, size: 20),
-                                title: Text(l10n.pidManagerArrangeDashboard),
-                              ),
+                          Text(
+                            l10n.pidManagerCounts(
+                              active.length,
+                              registry.length,
                             ),
-                            PopupMenuItem(
-                              value: _PidMenuAction.importCsv,
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(
-                                  Icons.file_download_outlined,
-                                  size: 20,
-                                ),
-                                title: Text(l10n.pidManagerImportCsv),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _PidMenuAction.exportCsv,
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(
-                                  Icons.file_upload_outlined,
-                                  size: 20,
-                                ),
-                                title: Text(l10n.pidManagerExportCsv),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _PidMenuAction.exportTorqueSubset,
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(
-                                  Icons.table_chart_outlined,
-                                  size: 20,
-                                ),
-                                title: Text(l10n.pidManagerExportTorqueCsv),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _PidMenuAction.exportHumanReport,
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(
-                                  Icons.description_outlined,
-                                  size: 20,
-                                ),
-                                title: Text(l10n.pidManagerExportHumanReport),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: Spacing.md),
-                    PidCapabilityPanel(
-                      summary: summary,
-                      presentation: bulkPresentation,
-                      onAdd: () => _addConfirmedSupported(summary, active),
-                    ),
-                    const SizedBox(height: Spacing.lg),
-                    TextField(
-                      onChanged: (v) => setState(() => _query = v),
-                      decoration: InputDecoration(
-                        hintText: l10n.pidManagerSearchHint,
-                        prefixIcon: const Icon(Icons.search, size: 20),
+                            style: context.texts.bodySmall,
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: Spacing.md),
-                    Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: Spacing.sm,
-                      runSpacing: Spacing.sm,
-                      children: [
-                        FilterChip(
-                          selected: _activeOnly,
-                          onSelected: (v) => setState(() => _activeOnly = v),
-                          label: Text(l10n.pidManagerActiveOnly),
-                          showCheckmark: false,
-                          selectedColor: palette.accent.withValues(alpha: 0.16),
-                          labelStyle: context.texts.labelMedium?.copyWith(
-                            color: _activeOnly
-                                ? palette.accent
-                                : palette.textSecondary,
+                    FilledButton.icon(
+                      onPressed: onAddCustom,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: Text(l10n.pidManagerAdd),
+                    ),
+                    PopupMenuButton<_PidMenuAction>(
+                      onSelected: onMenuSelected,
+                      tooltip: l10n.pidManagerMoreActions,
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: _PidMenuAction.arrange,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.reorder, size: 20),
+                            title: Text(l10n.pidManagerArrangeDashboard),
                           ),
                         ),
-                        OutlinedButton.icon(
-                          key: const Key('open_powertrain_battery_catalog'),
-                          onPressed: () =>
-                              context.push(PowertrainBatteryCatalogScreen.path),
-                          icon: const Icon(Icons.electric_car_outlined, size: 18),
-                          label: Text(l10n.pidManagerPowertrainBatteryCatalog),
+                        PopupMenuItem(
+                          value: _PidMenuAction.importCsv,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(
+                              Icons.file_download_outlined,
+                              size: 20,
+                            ),
+                            title: Text(l10n.pidManagerImportCsv),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: _PidMenuAction.exportCsv,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(
+                              Icons.file_upload_outlined,
+                              size: 20,
+                            ),
+                            title: Text(l10n.pidManagerExportCsv),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: _PidMenuAction.exportTorqueSubset,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(
+                              Icons.table_chart_outlined,
+                              size: 20,
+                            ),
+                            title: Text(l10n.pidManagerExportTorqueCsv),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: _PidMenuAction.exportHumanReport,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(
+                              Icons.description_outlined,
+                              size: 20,
+                            ),
+                            title: Text(l10n.pidManagerExportHumanReport),
+                          ),
                         ),
                       ],
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: Spacing.md),
+                PidCapabilityPanel(
+                  summary: summary,
+                  presentation: bulkPresentation,
+                  onAdd: onAddConfirmedSupported,
+                ),
+                const SizedBox(height: Spacing.lg),
+                TextField(
+                  controller: searchController,
+                  onChanged: onQueryChanged,
+                  decoration: InputDecoration(
+                    hintText: l10n.pidManagerSearchHint,
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                  ),
+                ),
+                const SizedBox(height: Spacing.md),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: Spacing.sm,
+                  runSpacing: Spacing.sm,
+                  children: [
+                    FilterChip(
+                      selected: activeOnly,
+                      onSelected: onActiveOnlyChanged,
+                      label: Text(l10n.pidManagerActiveOnly),
+                      showCheckmark: false,
+                      selectedColor: palette.accent.withValues(alpha: 0.16),
+                      labelStyle: context.texts.labelMedium?.copyWith(
+                        color: activeOnly
+                            ? palette.accent
+                            : palette.textSecondary,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('open_powertrain_battery_catalog'),
+                      onPressed: () =>
+                          context.push(PowertrainBatteryCatalogScreen.path),
+                      icon: const Icon(Icons.electric_car_outlined, size: 18),
+                      label: Text(l10n.pidManagerPowertrainBatteryCatalog),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            if (visible.isEmpty)
-              SliverFillRemaining(
-                child: EmptyState(
-                  icon: Icons.search_off,
-                  title: l10n.pidManagerNoMatchTitle,
-                  message: l10n.pidManagerNoMatchMessage,
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  Spacing.lg,
-                  0,
-                  Spacing.lg,
-                  Spacing.xxl,
-                ),
-                sliver: SliverList.separated(
-                  itemCount: visible.length,
-                  separatorBuilder: (_, _) =>
-                      const SizedBox(height: Spacing.sm),
-                  itemBuilder: (context, index) {
-                    final pid = visible[index];
-                    return _PidRow(
-                      pid: pid,
-                      isActive: activeIds.contains(pid.id),
-                      reading: snapshot[pid.id],
-                      isStale: snapshot.isStale(pid),
-                      // Only what the vehicle positively disclaimed. This
-                      // used to be "absent from the supported set", which
-                      // marks every PID in a block that failed to read —
-                      // and every custom PID the masks describe at all —
-                      // as one this car does not have.
-                      isUnsupported:
-                          summary.statusFor(pid) ==
-                          PidCapabilityStatus.unsupported,
-                      onToggle: () => _togglePid(pid),
-                      // Encoded, not interpolated. `Pid.id` ends in
-                      // `#<variant>` for an imported definition, and a
-                      // raw `#` in a location string is a URI *fragment*:
-                      // the editor received a truncated id, found nothing,
-                      // opened blank as 新增自訂 PID, and saving created an
-                      // unvarianted sibling instead of editing the PID the
-                      // user had tapped.
-                      onEdit: pid.isCustom
-                          ? () => context.push(
-                              Uri(
-                                path: PidEditorScreen.path,
-                                queryParameters: {'id': pid.id},
-                              ).toString(),
-                            )
-                          : null,
-                    );
-                  },
-                ),
-              ),
-          ],
+          ),
         ),
-      ),
+        if (visible.isEmpty)
+          SliverFillRemaining(
+            child: EmptyState(
+              icon: Icons.search_off,
+              title: l10n.pidManagerNoMatchTitle,
+              message: l10n.pidManagerNoMatchMessage,
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              Spacing.lg,
+              0,
+              Spacing.lg,
+              Spacing.xxl,
+            ),
+            sliver: SliverList.separated(
+              itemCount: visible.length,
+              separatorBuilder: (_, _) =>
+                  const SizedBox(height: Spacing.sm),
+              itemBuilder: (context, index) {
+                final pid = visible[index];
+                return _PidRow(
+                  pid: pid,
+                  isActive: activeIds.contains(pid.id),
+                  selected: selectedPidId == pid.id,
+                  twoPane: twoPane,
+                  reading: snapshot[pid.id],
+                  isStale: snapshot.isStale(pid),
+                  isUnsupported: summary.statusFor(pid) ==
+                      PidCapabilityStatus.unsupported,
+                  onToggle: () => onToggle(pid),
+                  onSelect: () => onSelect(pid),
+                  onEdit: pid.isCustom ? () => onEdit(pid) : null,
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _PidDetailHost extends StatelessWidget {
+  const _PidDetailHost({
+    required this.pid,
+    required this.isActive,
+    required this.reading,
+    required this.isStale,
+    required this.isUnsupported,
+    required this.onToggle,
+    this.onEdit,
+  });
+
+  final Pid? pid;
+  final bool isActive;
+  final Reading? reading;
+  final bool isStale;
+  final bool isUnsupported;
+  final Future<void> Function() onToggle;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedPid = pid;
+    return AnimatedSwitcher(
+      duration: Motion.fast,
+      child: selectedPid == null
+          ? const PidDetailPlaceholder(
+              key: ValueKey('pid-detail-empty'),
+            )
+          : PidDetailPane(
+              key: ValueKey('pid-detail-${selectedPid.id}'),
+              pid: selectedPid,
+              isActive: isActive,
+              reading: reading,
+              isStale: isStale,
+              isUnsupported: isUnsupported,
+              onToggle: onToggle,
+              onEdit: onEdit,
+            ),
     );
   }
 }
@@ -718,15 +916,20 @@ class _PidRow extends StatelessWidget {
   const _PidRow({
     required this.pid,
     required this.isActive,
+    required this.selected,
+    required this.twoPane,
     required this.reading,
     required this.isStale,
     required this.isUnsupported,
     required this.onToggle,
+    required this.onSelect,
     required this.onEdit,
   });
 
   final Pid pid;
   final bool isActive;
+  final bool selected;
+  final bool twoPane;
   final Reading? reading;
 
   /// Whether [reading] is too old to present as live.
@@ -740,6 +943,7 @@ class _PidRow extends StatelessWidget {
 
   final bool isUnsupported;
   final Future<void> Function() onToggle;
+  final VoidCallback onSelect;
   final VoidCallback? onEdit;
 
   @override
@@ -748,10 +952,10 @@ class _PidRow extends StatelessWidget {
     final palette = context.palette;
     final accent = context.gaugeColors(GaugeHue.forKey(pid.id)).bright;
 
-    return Panel(
+    final panel = Panel(
       accent: accent,
       isActive: isActive,
-      onTap: () => unawaited(onToggle()),
+      onTap: twoPane ? onSelect : () => unawaited(onToggle()),
       padding: const EdgeInsets.symmetric(
         horizontal: Spacing.lg,
         vertical: Spacing.md,
@@ -865,6 +1069,24 @@ class _PidRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+
+    final rowItem = selected
+        ? DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: Radii.cardRadius,
+              border: Border.all(
+                color: palette.accent,
+                width: 2,
+              ),
+            ),
+            child: panel,
+          )
+        : panel;
+
+    return KeyedSubtree(
+      key: ValueKey('pid-row-${pid.id}'),
+      child: rowItem,
     );
   }
 }

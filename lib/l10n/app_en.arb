@@ -4066,6 +4066,14 @@
     }
   },
   "mode08ReasonRequiresCanBus": "Mode 08 capability discovery requires a resolved OBD-II CAN bus",
-  "mode08ReasonUnexpectedExecution": "Unexpected execution response for supported TID query"
+  "mode08ReasonUnexpectedExecution": "Unexpected execution response for supported TID query",
+  "pidDetailEmptyTitle": "Select a PID",
+  "@pidDetailEmptyTitle": {
+    "description": "Title shown in the PID detail pane when no PID is selected."
+  },
+  "pidDetailEmptyBody": "Choose a PID from the list to inspect its definition and live status.",
+  "@pidDetailEmptyBody": {
+    "description": "Body copy shown in the PID detail pane when no PID is selected."
+  }
 }
 
