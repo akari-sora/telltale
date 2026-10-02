@@ -4222,6 +4222,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mode08ReasonUnexpectedExecution => '查詢支援 TID 時收到非預期的執行回應';
+
+  @override
+  String get pidDetailEmptyTitle => '選取 PID';
+
+  @override
+  String get pidDetailEmptyBody => '從清單中選取一個 PID 以檢視其定義與即時狀態。';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -8441,4 +8447,10 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get mode08ReasonUnexpectedExecution => '查詢支援 TID 時收到非預期的執行回應';
+
+  @override
+  String get pidDetailEmptyTitle => '選取 PID';
+
+  @override
+  String get pidDetailEmptyBody => '從清單中選取一個 PID 以檢視其定義與即時狀態。';
 }

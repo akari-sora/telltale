@@ -324,7 +324,7 @@ class _PidEditorScreenState extends ConsumerState<PidEditorScreen> {
       if (mounted) _showMutationLocked(l10n, failure);
       return;
     }
-    if (mounted) context.pop();
+    if (mounted) context.pop(pid.id);
   }
 
   Future<void> _delete() async {
