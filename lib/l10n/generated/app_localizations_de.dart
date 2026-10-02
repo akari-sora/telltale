@@ -4829,4 +4829,21 @@ class AppLocalizationsDe extends AppLocalizations {
   String pidDetailHeaderDefault(String header) {
     return 'Standard ($header)';
   }
+
+  @override
+  String get dtcSystemOverview => 'Systemübersicht';
+
+  @override
+  String get dtcPartialObservationBadge => 'Teilweiser Scan';
+
+  @override
+  String get dtcPartialObservationBody =>
+      'Dieser Fehlercode wurde gelesen, aber der Scan für diese Kategorie wurde nicht über alle Steuergeräte abgeschlossen.';
+
+  @override
+  String get dtcLinkedFreezeFrameTitle => 'Zugehöriger Freeze-Frame';
+
+  @override
+  String get dtcNoLinkedFreezeFrame =>
+      'Dieser Scan enthält kein Freeze-Frame, das diesem Fehlercode und Steuergerät sicher zugeordnet werden kann.';
 }

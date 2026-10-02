@@ -1263,5 +1263,10 @@
   "pidDetailEmptyBody": "Wählen Sie eine PID aus der Liste aus, um ihre Definition und ihren Live-Status anzuzeigen.",
   "pidDetailRangeLabel": "Bereich",
   "pidDetailPriorityLabel": "Priorität",
-  "pidDetailHeaderDefault": "Standard ({header})"
+  "pidDetailHeaderDefault": "Standard ({header})",
+"dtcSystemOverview": "Systemübersicht",
+  "dtcPartialObservationBadge": "Teilweiser Scan",
+  "dtcPartialObservationBody": "Dieser Fehlercode wurde gelesen, aber der Scan für diese Kategorie wurde nicht über alle Steuergeräte abgeschlossen.",
+  "dtcLinkedFreezeFrameTitle": "Zugehöriger Freeze-Frame",
+  "dtcNoLinkedFreezeFrame": "Dieser Scan enthält kein Freeze-Frame, das diesem Fehlercode und Steuergerät sicher zugeordnet werden kann."
 }

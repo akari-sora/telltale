@@ -4744,4 +4744,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String pidDetailHeaderDefault(String header) {
     return 'Default ($header)';
   }
+
+  @override
+  String get dtcSystemOverview => 'System overview';
+
+  @override
+  String get dtcPartialObservationBadge => 'Partial scan';
+
+  @override
+  String get dtcPartialObservationBody =>
+      'This fault code was read, but the scan for this category did not complete across all controllers.';
+
+  @override
+  String get dtcLinkedFreezeFrameTitle => 'Associated freeze frame';
+
+  @override
+  String get dtcNoLinkedFreezeFrame =>
+      'This scan has no freeze frame that can be safely associated with this fault code and controller.';
 }

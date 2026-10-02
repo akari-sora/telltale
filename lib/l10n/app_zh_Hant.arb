@@ -1266,6 +1266,10 @@
   "pidDetailEmptyBody": "從清單中選取一個 PID 以檢視其定義與即時狀態。",
   "pidDetailRangeLabel": "範圍",
   "pidDetailPriorityLabel": "優先權",
-  "pidDetailHeaderDefault": "預設 ({header})"
+  "pidDetailHeaderDefault": "預設 ({header})",
+"dtcSystemOverview": "系統總覽",
+  "dtcPartialObservationBadge": "部分掃描",
+  "dtcPartialObservationBody": "此故障碼已讀取，但該類別在所有控制器間的掃描未完整完成。",
+  "dtcLinkedFreezeFrameTitle": "關聯凍結幀",
+  "dtcNoLinkedFreezeFrame": "這次掃描沒有可安全歸屬於此故障碼與控制器的凍結幀。"
 }
-
