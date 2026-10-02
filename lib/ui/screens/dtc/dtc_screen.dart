@@ -2,23 +2,27 @@
 /// clear the ones that can be cleared.
 library;
 
-import 'dart:async';
+import "dart:async";
+import "dart:math" as math;
 
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../l10n/generated/app_localizations.dart';
-import '../../../obd/dtc/dtc.dart';
-import '../../../obd/freeze_frame.dart';
-import '../../../obd/polling_engine.dart';
-import '../../../obd/readiness.dart';
-import '../../../state/dtc_scan.dart';
-import '../../../state/obd_session.dart';
-import '../../widgets/panel.dart';
-import 'dtc_copy.dart';
-import 'readiness_copy.dart';
+import "../../../core/theme/app_colors.dart";
+import "../../../core/theme/app_theme.dart";
+import "../../../l10n/generated/app_localizations.dart";
+import "../../../obd/dtc/dtc.dart";
+import "../../../obd/freeze_frame.dart";
+import "../../../obd/polling_engine.dart";
+import "../../../obd/readiness.dart";
+import "../../../state/dtc_scan.dart";
+import "../../../state/obd_session.dart";
+import "../../adaptive/adaptive_layout.dart";
+import "../../adaptive/display_feature_layout.dart";
+import "../../widgets/panel.dart";
+import "dtc_copy.dart";
+import "dtc_layout.dart";
+import "readiness_copy.dart";
 
 class DtcScreen extends ConsumerStatefulWidget {
   const DtcScreen({super.key});
@@ -37,49 +41,18 @@ class DtcScreen extends ConsumerStatefulWidget {
 /// old all-or-nothing loop discarded two successful reads because the third
 /// was unsupported.
 class _DtcScreenState extends ConsumerState<DtcScreen> {
-  // The clear's outcome and its two safety flags used to live here. They do
-  // not any more, and the reason is the one this file's sibling
-  // (`state/dtc_scan.dart`) records in its own header: the shell is an
-  // ordinary `ShellRoute` driven by `context.go`, so switching tabs disposes
-  // this state. A glance at the dashboard and back rebuilt it with the
-  // repeat-lock cleared and the warning gone, over codes that were still on
-  // screen — and the next tap sent a second global `04`.
+  DtcSelectionKey? _selectedDtcKey;
 
   Future<void> _clear() async {
-    // Read before the dialog is awaited, not after. Reading `context` across
-    // the await trips use_build_context_synchronously, and the warning belongs
-    // to the language that was on screen when the button was pressed.
     final l10n = AppLocalizations.of(context);
-    // What the scan could not establish, said at the point of no return.
-    //
-    // The dialog listed the consequences of clearing and nothing about the
-    // evidence it is being decided on. A scan where Mode 03 completed with a
-    // P0300 while Modes 07 and 0A timed out passes every engine-side guard —
-    // every census controller answered Mode 03 — so the clear proceeds, and
-    // the automatic rescan afterwards can return the same silent categories,
-    // which reads as confirmation that it worked everywhere. Clearing is not
-    // undoable and it costs the vehicle a drive cycle; the one screen that
-    // asks before doing it should say what is unknown.
     final scan = ref.read(dtcScanProvider);
     final unanswered = scan.unanswered
         .map((e) => dtcKindLabel(l10n, e.key))
         .toList(growable: false);
-    // The frames this clear is about to destroy, named at the point of no
-    // return.
-    //
-    // The card that shows a freeze frame says clearing destroys it. That card
-    // is somewhere above this button, possibly scrolled off, and this dialog is
-    // where the decision actually happens — it already lists what the scan
-    // could not establish, and the frame is the one thing on this screen that
-    // cannot be read again afterwards. Fault codes come back if the fault
-    // recurs; the snapshot of the moment it first happened does not.
     final frames = scan.freezeFrames
         .map((f) => f.cause.code)
         .toSet()
         .toList(growable: false);
-    // Built as one string rather than nested ternaries so the blank line
-    // between each warning stays in the code and out of the ARB, where a
-    // translator could drop it without the sentence looking wrong.
     final body = StringBuffer(l10n.dtcClearDialogBody);
     if (frames.isNotEmpty) {
       body
@@ -88,13 +61,6 @@ class _DtcScreenState extends ConsumerState<DtcScreen> {
           l10n.dtcClearDialogFrames(frames.join(l10n.dtcListSeparator)),
         );
     }
-    // The frame that may be there and was not read.
-    //
-    // The warning panel higher up says this, and by the time somebody
-    // reaches this button it may have scrolled away. This dialog's own
-    // comment says it exists because the frame is the one thing that
-    // cannot be read again afterwards — and it was silent in exactly the
-    // case where nobody knows whether there is one.
     if (scan.freezeFrameUnread) {
       body
         ..write('\n\n')
@@ -128,16 +94,20 @@ class _DtcScreenState extends ConsumerState<DtcScreen> {
       ),
     );
     if (confirmed != true) return;
+    setState(() => _selectedDtcKey = null);
     await ref.read(dtcScanProvider.notifier).clear();
   }
 
-  /// Rescans, which is also the only thing that re-enables the clear.
-  ///
-  /// A rescan turns "part of the vehicle was cleared, the rest is unknown"
-  /// back into a state somebody can act on — it is the action every one of
-  /// those messages asks for. `scan()` rebuilds the state wholesale, so the
-  /// latch goes with it.
-  Future<void> _rescan() => ref.read(dtcScanProvider.notifier).scan();
+  Future<void> _rescan() {
+    setState(() => _selectedDtcKey = null);
+    return ref.read(dtcScanProvider.notifier).scan();
+  }
+
+  Color _toneForKind(AppPalette palette, DtcKind kind) => switch (kind) {
+        DtcKind.stored => palette.danger,
+        DtcKind.pending => palette.warning,
+        DtcKind.permanent => palette.derived,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -145,9 +115,6 @@ class _DtcScreenState extends ConsumerState<DtcScreen> {
     final l10n = AppLocalizations.of(context);
     final connected = ref.watch(obdSessionProvider).isConnected;
 
-    // Held in a provider rather than in this State, because the shell is an
-    // ordinary ShellRoute and a tab switch disposes the screen — a ten-second
-    // scan on a real car did not survive a glance at the dashboard.
     final scan = ref.watch(dtcScanProvider);
     final results = scan.results;
     final verdict = scan.verdict;
@@ -156,381 +123,1113 @@ class _DtcScreenState extends ConsumerState<DtcScreen> {
         .map((k) => dtcKindLabel(l10n, k))
         .join(l10n.dtcListSeparator);
 
+    final outerLayout = AdaptiveLayout.of(context);
+    final safePadding = MediaQuery.paddingOf(context);
+    final viewport = Rect.fromLTWH(
+      safePadding.left,
+      safePadding.top,
+      math.max(
+        0,
+        outerLayout.size.width - safePadding.left - safePadding.right,
+      ),
+      math.max(
+        0,
+        outerLayout.size.height - safePadding.top,
+      ),
+    );
+    final localLayout = outerLayout.projectTo(viewport);
+    final useResultsTwoPane =
+        DtcLayout.useTwoPane(localLayout) && connected && scan.hasScanned;
+
+    final observations = collectDtcObservations(results);
+
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          key: const ValueKey('dtc-page-scroll'),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Spacing.lg,
-                  Spacing.md,
-                  Spacing.lg,
-                  Spacing.md,
+        child: AdaptiveLayoutScope(
+          layout: localLayout,
+          child: useResultsTwoPane
+              ? AdaptiveTwoPane(
+                  primaryWidth: DtcLayout.masterWidth,
+                  primary: _buildMasterPane(
+                    context: context,
+                    palette: palette,
+                    l10n: l10n,
+                    scan: scan,
+                    observations: observations,
+                  ),
+                  secondary: _buildDetailPane(
+                    context: context,
+                    palette: palette,
+                    l10n: l10n,
+                    scan: scan,
+                    observations: observations,
+                    unansweredLabel: unansweredLabel,
+                  ),
+                )
+              : _buildSinglePane(
+                  context: context,
+                  palette: palette,
+                  l10n: l10n,
+                  connected: connected,
+                  scan: scan,
+                  results: results,
+                  verdict: verdict,
+                  unansweredLabel: unansweredLabel,
                 ),
-                child: Row(
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMasterPane({
+    required BuildContext context,
+    required AppPalette palette,
+    required AppLocalizations l10n,
+    required DtcScanState scan,
+    required List<DtcObservation> observations,
+  }) {
+    final verdict = scan.verdict;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Spacing.lg,
+            Spacing.md,
+            Spacing.lg,
+            Spacing.md,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            l10n.dtcHeadline,
-                            style: context.texts.headlineMedium,
-                          ),
-                          Text(
-                            !scan.hasScanned
-                                ? l10n.dtcNotScanned
-                                : scan.totalCodes > 0
-                                    ? l10n.dtcTotalCodes(scan.totalCodes)
-                                    : switch (verdict) {
-                                        // The panel below has always said what
-                                        // this actually establishes — that the
-                                        // controllers which *replied* reported
-                                        // nothing. The header said 未偵測到故障碼,
-                                        // an unqualified statement about the
-                                        // vehicle, and it is the line a glance
-                                        // lands on. Somebody could drive away on
-                                        // it while the hedge sits in body text
-                                        // two paragraphs down.
-                                        ScanVerdict.completeClean =>
-                                          l10n.dtcVerdictCompleteClean,
-                                        ScanVerdict.partialClean =>
-                                          l10n.dtcVerdictPartialClean,
-                                        _ => l10n.dtcUnconfirmed,
-                                      },
-                            style: context.texts.bodySmall,
-                          ),
-                        ],
-                      ),
+                    Text(
+                      l10n.dtcHeadline,
+                      style: context.texts.headlineMedium,
                     ),
-                    if (scan.hasScanned && scan.totalCodes > 0)
-                      OutlinedButton.icon(
-                        onPressed: scan.loading ||
-                                scan.clearing ||
-                                scan.clearRepeatWouldHarm
-                            ? null
-                            : _clear,
-                        icon: scan.clearing
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.delete_sweep_outlined, size: 18),
-                        // Says why it cannot be pressed, and what makes it
-                        // pressable again. A control that is merely dead invites
-                        // the reading that the app has stopped working, on the
-                        // screen where that guess is most expensive.
-                        label: Text(scan.clearing
-                            ? l10n.dtcClearing
-                            : scan.clearRepeatWouldHarm
-                                ? l10n.dtcRescanFirst
-                                : l10n.dtcClear),
-                      ),
+                    Text(
+                      !scan.hasScanned
+                          ? l10n.dtcNotScanned
+                          : scan.totalCodes > 0
+                              ? l10n.dtcTotalCodes(scan.totalCodes)
+                              : switch (verdict) {
+                                  ScanVerdict.completeClean =>
+                                    l10n.dtcVerdictCompleteClean,
+                                  ScanVerdict.partialClean =>
+                                    l10n.dtcVerdictPartialClean,
+                                  _ => l10n.dtcUnconfirmed,
+                                },
+                      style: context.texts.bodySmall,
+                    ),
                   ],
                 ),
               ),
+              if (scan.hasScanned && scan.totalCodes > 0)
+                OutlinedButton.icon(
+                  onPressed: scan.loading ||
+                          scan.clearing ||
+                          scan.clearRepeatWouldHarm
+                      ? null
+                      : _clear,
+                  icon: scan.clearing
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.delete_sweep_outlined, size: 18),
+                  label: Text(scan.clearing
+                      ? l10n.dtcClearing
+                      : scan.clearRepeatWouldHarm
+                          ? l10n.dtcRescanFirst
+                          : l10n.dtcClear),
+                ),
+            ],
+          ),
+        ),
+        if (scan.clearNotice != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Spacing.lg,
+              0,
+              Spacing.lg,
+              Spacing.md,
             ),
-            // The clear's own outcome, held until the next one replaces it.
-            if (scan.clearNotice != null)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    Spacing.lg,
-                    0,
-                    Spacing.lg,
-                    Spacing.md,
+            child: Panel(
+              accent: scan.clearWorked ? palette.success : palette.warning,
+              isActive: true,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    scan.clearWorked
+                        ? Icons.check_circle_outline
+                        : Icons.error_outline,
+                    color: scan.clearWorked ? palette.success : palette.warning,
+                    size: 22,
                   ),
-                  child: Panel(
-                    accent: scan.clearWorked ? palette.success : palette.warning,
-                    isActive: true,
-                    child: Row(
+                  const SizedBox(width: Spacing.md),
+                  Expanded(
+                    child: SelectableText(
+                      dtcClearNoticeText(
+                        l10n,
+                        scan.clearNotice,
+                      )!,
+                      style: context.texts.bodySmall,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => ref
+                        .read(dtcScanProvider.notifier)
+                        .dismissClearMessage(),
+                    icon: const Icon(Icons.close, size: 18),
+                    tooltip: l10n.dtcDismiss,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (scan.vin != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Spacing.lg,
+              0,
+              Spacing.lg,
+              Spacing.md,
+            ),
+            child: Panel(
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.directions_car_outlined,
+                    size: 18,
+                    color: palette.textSecondary,
+                  ),
+                  const SizedBox(width: Spacing.md),
+                  Text('VIN', style: context.texts.labelSmall),
+                  const SizedBox(width: Spacing.md),
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        scan.vin!,
+                        style: AppTypography.code(
+                          palette,
+                          size: 13,
+                          color: palette.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _rescan,
+            child: ListView(
+              key: const ValueKey('dtc-master-list'),
+              padding: const EdgeInsets.fromLTRB(
+                Spacing.lg,
+                0,
+                Spacing.lg,
+                Spacing.xxl,
+              ),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Spacing.md),
+                  child: InkWell(
+                    key: const ValueKey('dtc-item-system-overview'),
+                    onTap: () => setState(() => _selectedDtcKey = null),
+                    borderRadius: BorderRadius.circular(Radii.md),
+                    child: Panel(
+                      accent: _selectedDtcKey == null ? palette.accent : null,
+                      isActive: _selectedDtcKey == null,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.fact_check_outlined,
+                            size: 20,
+                            color: _selectedDtcKey == null
+                                ? palette.accent
+                                : palette.textSecondary,
+                          ),
+                          const SizedBox(width: Spacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  l10n.dtcSystemOverview,
+                                  style: context.texts.titleSmall?.copyWith(
+                                    color: _selectedDtcKey == null
+                                        ? palette.accent
+                                        : palette.textPrimary,
+                                    fontWeight: _selectedDtcKey == null
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: Spacing.xs),
+                                Text(
+                                  scan.totalCodes > 0
+                                      ? l10n.dtcTotalCodes(scan.totalCodes)
+                                      : (verdict == ScanVerdict.completeClean
+                                          ? l10n.dtcVerdictCompleteClean
+                                          : (verdict == ScanVerdict.partialClean
+                                              ? l10n.dtcVerdictPartialClean
+                                              : l10n.dtcUnconfirmed)),
+                                  style: context.texts.bodySmall?.copyWith(
+                                    color: palette.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_selectedDtcKey == null)
+                            Icon(
+                              Icons.arrow_forward_ios,
+                              size: 14,
+                              color: palette.accent,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                for (final kind in DtcKind.values) ...[
+                  () {
+                    final kindObs = observations
+                        .where((o) => o.dtc.kind == kind)
+                        .toList();
+                    if (kindObs.isEmpty) return const SizedBox.shrink();
+                    final tone = _toneForKind(palette, kind);
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          scan.clearWorked
-                              ? Icons.check_circle_outline
-                              : Icons.error_outline,
-                          color: scan.clearWorked ? palette.success : palette.warning,
-                          size: 22,
-                        ),
-                        const SizedBox(width: Spacing.md),
-                        Expanded(
-                          child: SelectableText(
-                            dtcClearNoticeText(
-                              l10n,
-                              scan.clearNotice,
-                            )!,
-                            style: context.texts.bodySmall,
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            top: Spacing.sm,
+                            bottom: Spacing.sm,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: tone,
+                                ),
+                              ),
+                              const SizedBox(width: Spacing.sm),
+                              Text(
+                                l10n.dtcGroupHeader(
+                                  dtcKindLabel(l10n, kind),
+                                  kind.mode,
+                                  kindObs.length,
+                                ),
+                                style: context.texts.labelSmall?.copyWith(
+                                  color: tone,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        IconButton(
-                          // Dismisses the message, not the lock. Closing a
-                          // panel is not the same as learning what happened, and
-                          // only a rescan is.
-                          onPressed: () => ref
-                              .read(dtcScanProvider.notifier)
-                              .dismissClearMessage(),
-                          icon: const Icon(Icons.close, size: 18),
-                          tooltip: l10n.dtcDismiss,
+                        for (final obs in kindObs)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: Spacing.sm),
+                            child: _MasterDtcCard(
+                              observation: obs,
+                              isSelected: _selectedDtcKey == obs.key,
+                              tone: tone,
+                              onTap: () => setState(
+                                () => _selectedDtcKey = obs.key,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  }(),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailPane({
+    required BuildContext context,
+    required AppPalette palette,
+    required AppLocalizations l10n,
+    required DtcScanState scan,
+    required List<DtcObservation> observations,
+    required String unansweredLabel,
+  }) {
+    if (_selectedDtcKey == null) {
+      return _buildSystemOverview(
+        context: context,
+        palette: palette,
+        l10n: l10n,
+        scan: scan,
+        unansweredLabel: unansweredLabel,
+      );
+    }
+
+    final selectedObs = observations
+        .cast<DtcObservation?>()
+        .firstWhere((o) => o?.key == _selectedDtcKey, orElse: () => null);
+
+    if (selectedObs == null) {
+      return _buildSystemOverview(
+        context: context,
+        palette: palette,
+        l10n: l10n,
+        scan: scan,
+        unansweredLabel: unansweredLabel,
+      );
+    }
+
+    return _buildDtcDetail(
+      context: context,
+      palette: palette,
+      l10n: l10n,
+      scan: scan,
+      observation: selectedObs,
+    );
+  }
+
+  Widget _buildSystemOverview({
+    required BuildContext context,
+    required AppPalette palette,
+    required AppLocalizations l10n,
+    required DtcScanState scan,
+    required String unansweredLabel,
+  }) {
+    final verdict = scan.verdict;
+    return ListView(
+      key: const ValueKey('dtc-system-overview-pane'),
+      padding: const EdgeInsets.fromLTRB(
+        Spacing.lg,
+        Spacing.md,
+        Spacing.lg,
+        Spacing.xxl,
+      ),
+      children: [
+        Text(
+          l10n.dtcSystemOverview,
+          style: context.texts.headlineSmall,
+        ),
+        const SizedBox(height: Spacing.md),
+        if (scan.freezeFrameUnread) ...[
+          Panel(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.help_outline, size: 18, color: palette.warning),
+                const SizedBox(width: Spacing.xs),
+                Expanded(
+                  child: Text(
+                    l10n.dtcFreezeFrameUnreadPanel,
+                    style: context.texts.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Spacing.lg),
+        ],
+        for (final frame in scan.freezeFrames) ...[
+          _FreezeFrameCard(frame: frame),
+          const SizedBox(height: Spacing.lg),
+        ],
+        if (scan.mil != null) ...[
+          _ReadinessCard(status: scan.mil!),
+          const SizedBox(height: Spacing.lg),
+        ],
+        for (final entry in scan.unanswered)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Spacing.md),
+            child: _UnansweredCategory(
+              storedAnswered:
+                  scan.results[DtcKind.stored]?.heardFromAnyone ?? false,
+              kind: entry.key,
+              result: entry.value,
+            ),
+          ),
+        if (verdict == ScanVerdict.completeClean)
+          Panel(
+            accent: palette.success,
+            isActive: true,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.verified_outlined,
+                  color: palette.success,
+                  size: 22,
+                ),
+                const SizedBox(width: Spacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.dtcCompleteCleanTitle,
+                        style: context.texts.titleSmall,
+                      ),
+                      const SizedBox(height: Spacing.xs),
+                      Text(
+                        l10n.dtcCompleteCleanBody,
+                        style: context.texts.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        else if (verdict == ScanVerdict.partialClean)
+          Panel(
+            accent: palette.warning,
+            isActive: true,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.help_outline,
+                  color: palette.warning,
+                  size: 22,
+                ),
+                const SizedBox(width: Spacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.dtcPartialCleanTitle,
+                        style: context.texts.titleSmall,
+                      ),
+                      const SizedBox(height: Spacing.xs),
+                      if (unansweredLabel.isEmpty &&
+                          scan.optionalGaps.isNotEmpty)
+                        Text(
+                          l10n.dtcPartialCleanOptionalGaps(
+                            scan.optionalGaps.length,
+                            scan.optionalGaps.join(l10n.dtcListSeparator),
+                          ),
+                          style: context.texts.bodySmall,
+                        )
+                      else
+                        Text(
+                          l10n.dtcPartialCleanUnanswered(unansweredLabel),
+                          style: context.texts.bodySmall,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDtcDetail({
+    required BuildContext context,
+    required AppPalette palette,
+    required AppLocalizations l10n,
+    required DtcScanState scan,
+    required DtcObservation observation,
+  }) {
+    final dtc = observation.dtc;
+    final tone = _toneForKind(palette, dtc.kind);
+    final description = dtcCodeDescription(l10n, dtc) ??
+        (dtc.isManufacturerSpecific
+            ? l10n.dtcManufacturerSpecific
+            : dtc.subsystem != null
+                ? l10n.dtcNoDescriptionForSubsystem(
+                    dtcSubsystemLabel(l10n, dtc.subsystem!),
+                  )
+                : l10n.dtcCategoryFault(dtcSystemLabel(l10n, dtc.category)));
+
+    final linkedFrames =
+        scan.freezeFrames.where((f) => f.cause == dtc).toList();
+
+    return ListView(
+      key: const ValueKey('dtc-detail-pane'),
+      padding: const EdgeInsets.fromLTRB(
+        Spacing.lg,
+        Spacing.md,
+        Spacing.lg,
+        Spacing.xxl,
+      ),
+      children: [
+        Panel(
+          accent: tone,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Spacing.md,
+                      vertical: Spacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tone.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(Radii.sm),
+                      border: Border.all(color: tone.withValues(alpha: 0.40)),
+                    ),
+                    child: Text(
+                      dtc.code,
+                      style: AppTypography.code(palette, size: 20, color: tone)
+                          .copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(width: Spacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${dtcKindLabel(l10n, dtc.kind)} · ${dtc.kind.mode}',
+                          style: context.texts.labelSmall?.copyWith(color: tone),
+                        ),
+                        const SizedBox(height: Spacing.xs),
+                        Text(
+                          dtc.sourceId == null
+                              ? dtcSystemLabel(l10n, dtc.category)
+                              : '${dtcSystemLabel(l10n, dtc.category)} · '
+                                  '${l10n.dtcControllerLabel(dtc.sourceId!)}',
+                          style: context.texts.titleSmall,
                         ),
                       ],
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: Spacing.md),
+              Text(
+                description,
+                style: context.texts.bodyLarge?.copyWith(
+                  color: palette.textPrimary,
                 ),
               ),
-            SliverFillRemaining(
-              child: !connected
+              if (dtc.subsystem != null) ...[
+                const SizedBox(height: Spacing.sm),
+                Text(
+                  dtcSubsystemLabel(l10n, dtc.subsystem!),
+                  style: context.texts.labelSmall?.copyWith(
+                    color: palette.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: Spacing.lg),
+
+        if (observation.completeness ==
+            DtcObservationCompleteness.partial) ...[
+          Panel(
+            accent: palette.warning,
+            isActive: true,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: palette.warning,
+                  size: 20,
+                ),
+                const SizedBox(width: Spacing.md),
+                Expanded(
+                  child: Text(
+                    l10n.dtcPartialObservationBody,
+                    style: context.texts.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Spacing.lg),
+        ],
+
+        Text(
+          l10n.dtcLinkedFreezeFrameTitle,
+          style: context.texts.titleSmall,
+        ),
+        const SizedBox(height: Spacing.sm),
+        if (linkedFrames.isNotEmpty) ...[
+          for (final frame in linkedFrames) ...[
+            _FreezeFrameCard(frame: frame),
+            const SizedBox(height: Spacing.md),
+          ],
+        ] else ...[
+          Panel(
+            child: Text(
+              l10n.dtcNoLinkedFreezeFrame,
+              style: context.texts.bodySmall?.copyWith(
+                color: palette.textSecondary,
+              ),
+            ),
+          ),
+          if (scan.freezeFrameUnread) ...[
+            const SizedBox(height: Spacing.sm),
+            Panel(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.help_outline, size: 18, color: palette.warning),
+                  const SizedBox(width: Spacing.xs),
+                  Expanded(
+                    child: Text(
+                      l10n.dtcFreezeFrameUnreadPanel,
+                      style: context.texts.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSinglePane({
+    required BuildContext context,
+    required AppPalette palette,
+    required AppLocalizations l10n,
+    required bool connected,
+    required DtcScanState scan,
+    required Map<DtcKind, DtcCategoryResult> results,
+    required ScanVerdict verdict,
+    required String unansweredLabel,
+  }) {
+    return CustomScrollView(
+      key: const ValueKey('dtc-page-scroll'),
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Spacing.lg,
+              Spacing.md,
+              Spacing.lg,
+              Spacing.md,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.dtcHeadline,
+                        style: context.texts.headlineMedium,
+                      ),
+                      Text(
+                        !scan.hasScanned
+                            ? l10n.dtcNotScanned
+                            : scan.totalCodes > 0
+                                ? l10n.dtcTotalCodes(scan.totalCodes)
+                                : switch (verdict) {
+                                    ScanVerdict.completeClean =>
+                                      l10n.dtcVerdictCompleteClean,
+                                    ScanVerdict.partialClean =>
+                                      l10n.dtcVerdictPartialClean,
+                                    _ => l10n.dtcUnconfirmed,
+                                  },
+                        style: context.texts.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                if (scan.hasScanned && scan.totalCodes > 0)
+                  OutlinedButton.icon(
+                    onPressed: scan.loading ||
+                            scan.clearing ||
+                            scan.clearRepeatWouldHarm
+                        ? null
+                        : _clear,
+                    icon: scan.clearing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_sweep_outlined, size: 18),
+                    label: Text(scan.clearing
+                        ? l10n.dtcClearing
+                        : scan.clearRepeatWouldHarm
+                            ? l10n.dtcRescanFirst
+                            : l10n.dtcClear),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        if (scan.clearNotice != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Spacing.lg,
+                0,
+                Spacing.lg,
+                Spacing.md,
+              ),
+              child: Panel(
+                accent: scan.clearWorked ? palette.success : palette.warning,
+                isActive: true,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      scan.clearWorked
+                          ? Icons.check_circle_outline
+                          : Icons.error_outline,
+                      color: scan.clearWorked ? palette.success : palette.warning,
+                      size: 22,
+                    ),
+                    const SizedBox(width: Spacing.md),
+                    Expanded(
+                      child: SelectableText(
+                        dtcClearNoticeText(
+                          l10n,
+                          scan.clearNotice,
+                        )!,
+                        style: context.texts.bodySmall,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => ref
+                          .read(dtcScanProvider.notifier)
+                          .dismissClearMessage(),
+                      icon: const Icon(Icons.close, size: 18),
+                      tooltip: l10n.dtcDismiss,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        SliverFillRemaining(
+          child: !connected
+              ? EmptyState(
+                  icon: Icons.link_off,
+                  title: l10n.dtcNotConnectedTitle,
+                  message: l10n.dtcNotConnectedBody,
+                )
+              : !scan.hasScanned
                   ? EmptyState(
-                      icon: Icons.link_off,
-                      title: l10n.dtcNotConnectedTitle,
-                      message: l10n.dtcNotConnectedBody,
+                      icon: scan.scanBanner == null
+                          ? Icons.search
+                          : Icons.error_outline,
+                      title: scan.scanBanner == null
+                          ? l10n.dtcScanTitle
+                          : l10n.dtcReadFailed,
+                      message: dtcScanBannerText(l10n, scan.scanBanner) ??
+                          l10n.dtcScanBody,
+                      action: FilledButton.icon(
+                        onPressed: scan.loading ? null : _rescan,
+                        icon: scan.loading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.search, size: 20),
+                        label: Text(
+                          scan.loading
+                              ? l10n.dtcScanning
+                              : (scan.scanBanner == null
+                                  ? l10n.dtcStartScan
+                                  : l10n.dtcRetry),
+                        ),
+                      ),
                     )
-                  : !scan.hasScanned
-                      ? EmptyState(
-                          icon: scan.scanBanner == null ? Icons.search : Icons.error_outline,
-                          title: scan.scanBanner == null
-                              ? l10n.dtcScanTitle
-                              : l10n.dtcReadFailed,
-                          message: dtcScanBannerText(l10n, scan.scanBanner) ??
-                              l10n.dtcScanBody,
-                          action: FilledButton.icon(
-                            onPressed: scan.loading ? null : _rescan,
-                            icon: scan.loading
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.search, size: 20),
-                            label: Text(
-                              scan.loading
-                                  ? l10n.dtcScanning
-                                  : (scan.scanBanner == null
-                                      ? l10n.dtcStartScan
-                                      : l10n.dtcRetry),
-                            ),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _rescan,
-                          child: ListView(
-                            padding: const EdgeInsets.fromLTRB(
-                              Spacing.lg,
-                              0,
-                              Spacing.lg,
-                              Spacing.xxl,
-                            ),
-                            children: [
-                              if (scan.vin != null) ...[
-                                Panel(
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.directions_car_outlined,
-                                        size: 18,
-                                        color: palette.textSecondary,
-                                      ),
-                                      const SizedBox(width: Spacing.md),
-                                      Text('VIN', style: context.texts.labelSmall),
-                                      const SizedBox(width: Spacing.md),
-                                      // A 17-character VIN in a monospace face
-                                      // beside a label, both growing with the
-                                      // system text scale, overflowed the row
-                                      // at 2× — yellow-and-black stripes across
-                                      // the panel, seen on a device. Shrinking
-                                      // the value keeps it readable and whole;
-                                      // wrapping a VIN would be worse, since it
-                                      // is one identifier and people read it a
-                                      // character at a time.
-                                      Expanded(
-                                        child: FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          alignment: Alignment.centerRight,
-                                          child: Text(
-                                            scan.vin!,
-                                            style: AppTypography.code(
-                                              palette,
-                                              size: 13,
-                                              color: palette.textPrimary,
-                                            ),
-                                          ),
+                  : RefreshIndicator(
+                      onRefresh: _rescan,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(
+                          Spacing.lg,
+                          0,
+                          Spacing.lg,
+                          Spacing.xxl,
+                        ),
+                        children: [
+                          if (scan.vin != null) ...[
+                            Panel(
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.directions_car_outlined,
+                                    size: 18,
+                                    color: palette.textSecondary,
+                                  ),
+                                  const SizedBox(width: Spacing.md),
+                                  Text('VIN', style: context.texts.labelSmall),
+                                  const SizedBox(width: Spacing.md),
+                                  Expanded(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        scan.vin!,
+                                        style: AppTypography.code(
+                                          palette,
+                                          size: 13,
+                                          color: palette.textPrimary,
                                         ),
                                       ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: Spacing.lg),
-                              ],
-                              // The read that did not happen, said out loud.
-                              //
-                              // Without this the screen showed nothing, which
-                              // is exactly what a controller with no stored
-                              // frame shows — and FIELD_GUIDE tells the reader
-                              // that means no frame was stored and is not bad
-                              // news. The next control on this screen destroys
-                              // the frame permanently. One Mode 02 timeout was
-                              // enough to walk somebody through that.
-                              if (scan.freezeFrameUnread) ...[
-                                Panel(
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Icon(Icons.help_outline,
-                                          size: 18, color: palette.warning),
-                                      const SizedBox(width: Spacing.xs),
-                                      Expanded(
-                                        child: Text(
-                                          l10n.dtcFreezeFrameUnreadPanel,
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: Spacing.lg),
+                          ],
+                          if (scan.freezeFrameUnread) ...[
+                            Panel(
+                              child: Row(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.help_outline,
+                                      size: 18, color: palette.warning),
+                                  const SizedBox(width: Spacing.xs),
+                                  Expanded(
+                                    child: Text(
+                                      l10n.dtcFreezeFrameUnreadPanel,
+                                      style: context.texts.bodySmall,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: Spacing.lg),
+                          ],
+                          for (final frame in scan.freezeFrames) ...[
+                            _FreezeFrameCard(frame: frame),
+                            const SizedBox(height: Spacing.lg),
+                          ],
+                          if (scan.mil != null) ...[
+                            _ReadinessCard(status: scan.mil!),
+                            const SizedBox(height: Spacing.lg),
+                          ],
+                          for (final entry in scan.unanswered)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: Spacing.md),
+                              child: _UnansweredCategory(
+                                storedAnswered: results[DtcKind.stored]
+                                        ?.heardFromAnyone ??
+                                    false,
+                                kind: entry.key,
+                                result: entry.value,
+                              ),
+                            ),
+                          if (verdict == ScanVerdict.completeClean)
+                            Panel(
+                              accent: palette.success,
+                              isActive: true,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.verified_outlined,
+                                    color: palette.success,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: Spacing.md),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          l10n.dtcCompleteCleanTitle,
+                                          style: context.texts.titleSmall,
+                                        ),
+                                        const SizedBox(height: Spacing.xs),
+                                        Text(
+                                          l10n.dtcCompleteCleanBody,
                                           style: context.texts.bodySmall,
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: Spacing.lg),
-                              ],
-                              // Above the readiness card, because it is about
-                              // the fault somebody came here for, and readiness
-                              // is about a test they may take later.
-                              for (final frame in scan.freezeFrames) ...[
-                                _FreezeFrameCard(frame: frame),
-                                const SizedBox(height: Spacing.lg),
-                              ],
-                              if (scan.mil != null) ...[
-                                _ReadinessCard(status: scan.mil!),
-                                const SizedBox(height: Spacing.lg),
-                              ],
-                              for (final entry in scan.unanswered)
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.only(bottom: Spacing.md),
-                                  child: _UnansweredCategory(
-                                    // Heard from, not completed. See
-                                    // `heardFromAnyone`.
-                                    storedAnswered: results[DtcKind.stored]
-                                            ?.heardFromAnyone ??
-                                        false,
-                                    kind: entry.key,
-                                    result: entry.value,
-                                  ),
-                                ),
-                              if (verdict == ScanVerdict.completeClean)
-                                Panel(
-                                  accent: palette.success,
-                                  isActive: true,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.verified_outlined,
-                                        color: palette.success,
-                                        size: 22,
-                                      ),
-                                      const SizedBox(width: Spacing.md),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              l10n.dtcCompleteCleanTitle,
-                                              style: context.texts.titleSmall,
-                                            ),
-                                            const SizedBox(height: Spacing.xs),
-                                            // The previous wording — 沒有偵測到
-                                            // 任何故障碼 — described the whole
-                                            // vehicle, which is more than the
-                                            // scan establishes. A controller
-                                            // whose reply is lost outright
-                                            // leaves nothing to count as
-                                            // missing, and the app has no
-                                            // inventory of who should have
-                                            // answered.
-                                            Text(
-                                              l10n.dtcCompleteCleanBody,
-                                              style: context.texts.bodySmall,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              else if (verdict == ScanVerdict.partialClean)
-                                Panel(
-                                  accent: palette.warning,
-                                  isActive: true,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.help_outline,
-                                        color: palette.warning,
-                                        size: 22,
-                                      ),
-                                      const SizedBox(width: Spacing.md),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              l10n.dtcPartialCleanTitle,
-                                              style: context.texts.titleSmall,
-                                            ),
-                                            const SizedBox(height: Spacing.xs),
-                                            // Two different situations wore the
-                                            // same sentence, and one of them is
-                                            // an ordinary healthy car.
-                                            //
-                                            // Modes 07 and 0A are optional in
-                                            // J1979. A vehicle whose
-                                            // transmission answers Mode 03 and
-                                            // implements neither is compliant
-                                            // and fine — and reading 沒有回應，
-                                            // 狀態無法確認 next to it sends
-                                            // somebody debugging behaviour that
-                                            // is correct. That is different
-                                            // from a class nobody answered at
-                                            // all, which is a real gap.
-                                            if (unansweredLabel.isEmpty &&
-                                                scan.optionalGaps.isNotEmpty)
-                                              Text(
-                                                l10n.dtcPartialCleanOptionalGaps(
-                                                  scan.optionalGaps.length,
-                                                  scan.optionalGaps.join(
-                                                    l10n.dtcListSeparator,
-                                                  ),
-                                                ),
-                                                style: context.texts.bodySmall,
-                                              )
-                                            else
-                                              Text(
-                                                l10n.dtcPartialCleanUnanswered(
-                                                  unansweredLabel,
-                                                ),
-                                                style: context.texts.bodySmall,
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              else
-                                for (final kind in DtcKind.values)
-                                  if ((results[kind]?.codes ?? const [])
-                                      .isNotEmpty)
-                                    _DtcGroup(
-                                      kind: kind,
-                                      codes: results[kind]!.codes,
+                                      ],
                                     ),
-                            ],
+                                  ),
+                                ],
+                              ),
+                            )
+                          else if (verdict == ScanVerdict.partialClean)
+                            Panel(
+                              accent: palette.warning,
+                              isActive: true,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.help_outline,
+                                    color: palette.warning,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: Spacing.md),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          l10n.dtcPartialCleanTitle,
+                                          style: context.texts.titleSmall,
+                                        ),
+                                        const SizedBox(height: Spacing.xs),
+                                        if (unansweredLabel.isEmpty &&
+                                            scan.optionalGaps.isNotEmpty)
+                                          Text(
+                                            l10n.dtcPartialCleanOptionalGaps(
+                                              scan.optionalGaps.length,
+                                              scan.optionalGaps.join(
+                                                l10n.dtcListSeparator,
+                                              ),
+                                            ),
+                                            style: context.texts.bodySmall,
+                                          )
+                                        else
+                                          Text(
+                                            l10n.dtcPartialCleanUnanswered(
+                                              unansweredLabel,
+                                            ),
+                                            style: context.texts.bodySmall,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            for (final kind in DtcKind.values)
+                              if ((results[kind]?.codes ?? const [])
+                                  .isNotEmpty)
+                                _DtcGroup(
+                                  kind: kind,
+                                  codes: results[kind]!.codes,
+                                ),
+                        ],
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MasterDtcCard extends StatelessWidget {
+  const _MasterDtcCard({
+    required this.observation,
+    required this.isSelected,
+    required this.tone,
+    required this.onTap,
+  });
+
+  final DtcObservation observation;
+  final bool isSelected;
+  final Color tone;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final dtc = observation.dtc;
+    final palette = context.palette;
+    final l10n = AppLocalizations.of(context);
+
+    return InkWell(
+      key: ValueKey('dtc-card-${dtc.code}-${dtc.sourceId ?? "any"}'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(Radii.md),
+      child: Panel(
+        accent: isSelected ? tone : null,
+        isActive: isSelected,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Spacing.md,
+                vertical: Spacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: tone.withValues(alpha: isSelected ? 0.25 : 0.13),
+                borderRadius: BorderRadius.circular(Radii.sm),
+                border: Border.all(
+                  color: isSelected ? tone : tone.withValues(alpha: 0.30),
+                  width: isSelected ? 1.5 : 1.0,
+                ),
+              ),
+              child: Text(
+                dtc.code,
+                style: AppTypography.code(palette, size: 15, color: tone)
+                    .copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: Spacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          dtcCodeDescription(l10n, dtc) ??
+                              (dtc.isManufacturerSpecific
+                                  ? l10n.dtcManufacturerSpecific
+                                  : dtc.subsystem != null
+                                      ? l10n.dtcNoDescriptionForSubsystem(
+                                          dtcSubsystemLabel(
+                                            l10n,
+                                            dtc.subsystem!,
+                                          ),
+                                        )
+                                      : l10n.dtcCategoryFault(
+                                          dtcSystemLabel(l10n, dtc.category),
+                                        )),
+                          style: context.texts.bodyMedium?.copyWith(
+                            color: palette.textPrimary,
+                            fontWeight:
+                                isSelected ? FontWeight.w600 : FontWeight.w400,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                      if (observation.completeness ==
+                          DtcObservationCompleteness.partial) ...[
+                        const SizedBox(width: Spacing.xs),
+                        StatusPill(
+                          label: l10n.dtcPartialObservationBadge,
+                          tone: StatusTone.warn,
+                          dense: true,
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: Spacing.xs),
+                  Text(
+                    dtc.sourceId == null
+                        ? dtcSystemLabel(l10n, dtc.category)
+                        : '${dtcSystemLabel(l10n, dtc.category)} · '
+                            '${l10n.dtcControllerLabel(dtc.sourceId!)}',
+                    style: context.texts.labelSmall,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -538,6 +1237,7 @@ class _DtcScreenState extends ConsumerState<DtcScreen> {
     );
   }
 }
+
 
 class _DtcGroup extends StatelessWidget {
   const _DtcGroup({required this.kind, required this.codes});

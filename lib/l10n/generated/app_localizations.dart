@@ -7421,6 +7421,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Default ({header})'**
   String pidDetailHeaderDefault(String header);
+
+  /// Item in DTC master pane to return to whole-vehicle health and readiness overview.
+  ///
+  /// In en, this message translates to:
+  /// **'System overview'**
+  String get dtcSystemOverview;
+
+  /// Badge indicating that this fault code was read during an incomplete category scan.
+  ///
+  /// In en, this message translates to:
+  /// **'Partial scan'**
+  String get dtcPartialObservationBadge;
+
+  /// Warning in detail pane when viewing a DTC that came from an incomplete category read.
+  ///
+  /// In en, this message translates to:
+  /// **'This fault code was read, but the scan for this category did not complete across all controllers.'**
+  String get dtcPartialObservationBody;
+
+  /// Header for freeze frame snapshot directly associated with the selected DTC.
+  ///
+  /// In en, this message translates to:
+  /// **'Associated freeze frame'**
+  String get dtcLinkedFreezeFrameTitle;
+
+  /// Note in detail pane when no freeze frame matches the selected DTC.
+  ///
+  /// In en, this message translates to:
+  /// **'This scan has no freeze frame that can be safely associated with this fault code and controller.'**
+  String get dtcNoLinkedFreezeFrame;
 }
 
 class _AppLocalizationsDelegate

@@ -4239,6 +4239,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String pidDetailHeaderDefault(String header) {
     return '預設 ($header)';
   }
+
+  @override
+  String get dtcSystemOverview => '系統總覽';
+
+  @override
+  String get dtcPartialObservationBadge => '部分掃描';
+
+  @override
+  String get dtcPartialObservationBody => '此故障碼已讀取，但該類別在所有控制器間的掃描未完整完成。';
+
+  @override
+  String get dtcLinkedFreezeFrameTitle => '關聯凍結幀';
+
+  @override
+  String get dtcNoLinkedFreezeFrame => '這次掃描沒有可安全歸屬於此故障碼與控制器的凍結幀。';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -8475,4 +8490,19 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String pidDetailHeaderDefault(String header) {
     return '預設 ($header)';
   }
+
+  @override
+  String get dtcSystemOverview => '系統總覽';
+
+  @override
+  String get dtcPartialObservationBadge => '部分掃描';
+
+  @override
+  String get dtcPartialObservationBody => '此故障碼已讀取，但該類別在所有控制器間的掃描未完整完成。';
+
+  @override
+  String get dtcLinkedFreezeFrameTitle => '關聯凍結幀';
+
+  @override
+  String get dtcNoLinkedFreezeFrame => '這次掃描沒有可安全歸屬於此故障碼與控制器的凍結幀。';
 }
