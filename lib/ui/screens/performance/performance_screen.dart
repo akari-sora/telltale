@@ -19,7 +19,10 @@ import '../../../obd/telemetry.dart';
 import '../../../state/obd_session.dart';
 import '../../widgets/gauges/dial_gauge.dart';
 import '../../widgets/panel.dart';
+import '../../adaptive/adaptive_layout.dart';
+import '../../adaptive/display_feature_layout.dart';
 import 'acceleration_run_controller.dart';
+import 'performance_layout.dart';
 
 class PerformanceScreen extends ConsumerStatefulWidget {
   const PerformanceScreen({super.key});
@@ -128,195 +131,462 @@ class _PerformanceScreenState extends ConsumerState<PerformanceScreen> {
       );
     }
 
+    final outerLayout = AdaptiveLayout.of(context);
+    final safePadding = MediaQuery.paddingOf(context);
+    final viewport = Rect.fromLTWH(
+      safePadding.left,
+      safePadding.top,
+      math.max(
+        0,
+        outerLayout.size.width - safePadding.left - safePadding.right,
+      ),
+      math.max(
+        0,
+        outerLayout.size.height - safePadding.top,
+      ),
+    );
+    final localLayout = outerLayout.projectTo(viewport);
+    final useTwoPane = PerformanceLayout.useTwoPane(localLayout);
+
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            Spacing.lg,
-            Spacing.md,
-            Spacing.lg,
-            Spacing.xxl,
-          ),
-          children: [
-            Text(l10n.performanceHeadline, style: context.texts.headlineMedium),
-            // Says what the number is before the number appears: one timed run
-            // that begins at rest. Nothing on this screen is a rated figure.
-            Text(l10n.performanceSubhead, style: context.texts.bodySmall),
-            const SizedBox(height: Spacing.xl),
+        child: AdaptiveLayoutScope(
+          layout: localLayout,
+          child: useTwoPane
+              ? AdaptiveTwoPane(
+                  primaryWidth: PerformanceLayout.primaryWidth,
+                  primary: _buildPrimaryPane(
+                    context: context,
+                    palette: palette,
+                    l10n: l10n,
+                    speed: speed,
+                    hasSpeed: hasSpeed,
+                  ),
+                  secondary: _buildSecondaryPane(
+                    context: context,
+                    palette: palette,
+                    l10n: l10n,
+                  ),
+                )
+              : _buildSinglePane(
+                  context: context,
+                  palette: palette,
+                  l10n: l10n,
+                  speed: speed,
+                  hasSpeed: hasSpeed,
+                ),
+        ),
+      ),
+    );
+  }
 
-            Center(
-              child: SizedBox(
-                width: 230,
-                height: 230,
-                child: DialGauge(
-                  value: speed,
-                  minValue: 0,
-                  // The needle pins at the top of the scale while the readout
-                  // keeps climbing unless the scale can hold the whole run.
-                  maxValue: math.max(_target.toDouble() * 1.3, 260),
-                  label: l10n.performanceSpeedGaugeLabel,
-                  units: 'km/h',
-                  hue: GaugeHue.blue,
-                  isStale: !hasSpeed,
+  Widget _buildStatusPanel({
+    required BuildContext context,
+    required AppPalette palette,
+    required AppLocalizations l10n,
+    required double? speed,
+    required bool hasSpeed,
+  }) {
+    return Panel(
+      accent: switch (_state) {
+        AccelerationRunState.running => palette.warning,
+        AccelerationRunState.finished => palette.success,
+        AccelerationRunState.aborted => palette.danger,
+        _ => palette.accent,
+      },
+      isActive: _state != AccelerationRunState.idle,
+      child: Column(
+        children: [
+          Text(
+            switch (_state) {
+              AccelerationRunState.idle => l10n.performanceStateIdle,
+              // Two different sentences on purpose. A speed that reads
+              // above standstill is an observation; no speed at all is
+              // the app admitting it cannot tell, and a driver must be
+              // able to tell those apart from the panel alone.
+              AccelerationRunState.awaitingStandstill => speed != null
+                  ? l10n.performanceStateAwaitingStandstill(
+                      speed.toStringAsFixed(0),
+                    )
+                  : l10n.performanceStateAwaitingSpeedSignal,
+              AccelerationRunState.staged =>
+                l10n.performanceStateStaged,
+              AccelerationRunState.running =>
+                l10n.performanceStateRunning,
+              AccelerationRunState.finished =>
+                l10n.performanceStateFinished(_target),
+              AccelerationRunState.aborted =>
+                l10n.performanceStateAborted,
+            },
+            style: context.texts.labelSmall,
+          ),
+          const SizedBox(height: Spacing.sm),
+          Text(
+            _format(_elapsed),
+            style: AppTypography.readout(palette, 56).copyWith(
+              color: switch (_state) {
+                AccelerationRunState.finished => palette.success,
+                AccelerationRunState.running => palette.warning,
+                AccelerationRunState.aborted => palette.danger,
+                _ => palette.textPrimary,
+              },
+            ),
+          ),
+          Text(
+            l10n.performanceSecondsUnit,
+            style: context.texts.labelMedium,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSplitsPanel({
+    required BuildContext context,
+    required AppPalette palette,
+    required AppLocalizations l10n,
+  }) {
+    return Panel(
+      child: Column(
+        children: [
+          for (final target in AccelerationRunController.splitTargetsKmh)
+            if (_splits.containsKey(target))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
+                child: Row(
+                  children: [
+                    Text('0 → $target km/h', style: context.texts.bodyMedium),
+                    const Spacer(),
+                    Text(
+                      '${_format(_splits[target])} s',
+                      style: AppTypography.readout(palette, 17),
+                    ),
+                  ],
                 ),
               ),
+          Divider(color: palette.hairline),
+          Padding(
+            padding: const EdgeInsets.only(top: Spacing.sm),
+            child: Row(
+              children: [
+                Text(
+                  l10n.performancePeakSpeed,
+                  style: context.texts.bodyMedium,
+                ),
+                const Spacer(),
+                Text(
+                  '${_peakSpeed.toStringAsFixed(0)} km/h',
+                  style: AppTypography.readout(palette, 17),
+                ),
+              ],
             ),
-            const SizedBox(height: Spacing.xl),
+          ),
+        ],
+      ),
+    );
+  }
 
-            Panel(
-              accent: switch (_state) {
-                AccelerationRunState.running => palette.warning,
-                AccelerationRunState.finished => palette.success,
-                AccelerationRunState.aborted => palette.danger,
-                _ => palette.accent,
-              },
-              isActive: _state != AccelerationRunState.idle,
-              child: Column(
-                children: [
-                  Text(
-                    switch (_state) {
-                      AccelerationRunState.idle => l10n.performanceStateIdle,
-                      // Two different sentences on purpose. A speed that reads
-                      // above standstill is an observation; no speed at all is
-                      // the app admitting it cannot tell, and a driver must be
-                      // able to tell those apart from the panel alone.
-                      AccelerationRunState.awaitingStandstill => hasSpeed
-                          ? l10n.performanceStateAwaitingStandstill(
-                              speed.toStringAsFixed(0),
-                            )
-                          : l10n.performanceStateAwaitingSpeedSignal,
-                      AccelerationRunState.staged =>
-                        l10n.performanceStateStaged,
-                      AccelerationRunState.running =>
-                        l10n.performanceStateRunning,
-                      AccelerationRunState.finished =>
-                        l10n.performanceStateFinished(_target),
-                      AccelerationRunState.aborted =>
-                        l10n.performanceStateAborted,
-                    },
-                    style: context.texts.labelSmall,
-                  ),
-                  const SizedBox(height: Spacing.sm),
-                  Text(
-                    _format(_elapsed),
-                    style: AppTypography.readout(palette, 56).copyWith(
-                      color: switch (_state) {
-                        AccelerationRunState.finished => palette.success,
-                        AccelerationRunState.running => palette.warning,
-                        AccelerationRunState.aborted => palette.danger,
-                        _ => palette.textPrimary,
-                      },
-                    ),
-                  ),
-                  Text(
-                    l10n.performanceSecondsUnit,
-                    style: context.texts.labelMedium,
-                  ),
-                ],
+  Widget _buildSinglePane({
+    required BuildContext context,
+    required AppPalette palette,
+    required AppLocalizations l10n,
+    required double? speed,
+    required bool hasSpeed,
+  }) {
+    return ListView(
+      key: const ValueKey('performance-page-scroll'),
+      padding: const EdgeInsets.fromLTRB(
+        Spacing.lg,
+        Spacing.md,
+        Spacing.lg,
+        Spacing.xxl,
+      ),
+      children: [
+        Text(l10n.performanceHeadline, style: context.texts.headlineMedium),
+        // Says what the number is before the number appears: one timed run
+        // that begins at rest. Nothing on this screen is a rated figure.
+        Text(l10n.performanceSubhead, style: context.texts.bodySmall),
+        const SizedBox(height: Spacing.xl),
+
+        Center(
+          child: SizedBox(
+            width: 230,
+            height: 230,
+            child: DialGauge(
+              value: speed,
+              minValue: 0,
+              // The needle pins at the top of the scale while the readout
+              // keeps climbing unless the scale can hold the whole run.
+              maxValue: math.max(_target.toDouble() * 1.3, 260),
+              label: l10n.performanceSpeedGaugeLabel,
+              units: 'km/h',
+              hue: GaugeHue.blue,
+              isStale: !hasSpeed,
+            ),
+          ),
+        ),
+        const SizedBox(height: Spacing.xl),
+
+        _buildStatusPanel(
+          context: context,
+          palette: palette,
+          l10n: l10n,
+          speed: speed,
+          hasSpeed: hasSpeed,
+        ),
+        const SizedBox(height: Spacing.lg),
+
+        SectionHeading(l10n.performanceTargetSpeedHeading),
+        SegmentedButton<int>(
+          segments: [
+            for (final target in AccelerationRunController.splitTargetsKmh)
+              ButtonSegment(value: target, label: Text('$target')),
+          ],
+          selected: {_target},
+          onSelectionChanged: _state == AccelerationRunState.running
+              ? null
+              : (s) => setState(() => _run.targetKmh = s.first),
+          showSelectedIcon: false,
+        ),
+        const SizedBox(height: Spacing.lg),
+
+        if (_trace.length > 1) ...[
+          SectionHeading(l10n.performanceSpeedTraceHeading),
+          Panel(
+            child: SizedBox(
+              height: 170,
+              child: _SpeedTrace(spots: _trace, target: _target.toDouble()),
+            ),
+          ),
+          const SizedBox(height: Spacing.lg),
+        ],
+
+        if (_splits.isNotEmpty) ...[
+          SectionHeading(l10n.performanceSplitsHeading),
+          _buildSplitsPanel(
+            context: context,
+            palette: palette,
+            l10n: l10n,
+          ),
+          const SizedBox(height: Spacing.lg),
+        ],
+
+        if (_state == AccelerationRunState.idle) ...[
+          FilledButton.icon(
+            // Arming without a live speed stream produces a run that never
+            // starts, or one that starts on whichever number arrives first.
+            onPressed: hasSpeed ? _arm : null,
+            icon: const Icon(Icons.play_arrow, size: 20),
+            label: Text(l10n.performanceArm),
+          ),
+          if (!hasSpeed) ...[
+            const SizedBox(height: Spacing.md),
+            Text(
+              l10n.performanceNoSpeedSignal,
+              textAlign: TextAlign.center,
+              style: context.texts.bodySmall,
+            ),
+          ],
+        ] else
+          OutlinedButton.icon(
+            onPressed: _reset,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: Text(l10n.performanceReset),
+          ),
+
+        const SizedBox(height: Spacing.lg),
+        // The hedge, not a footnote: this is a timed observation off one
+        // speed signal, not a measurement of what the car can do.
+        Text(l10n.performanceDisclaimer, style: context.texts.bodySmall),
+      ],
+    );
+  }
+
+  Widget _buildPrimaryPane({
+    required BuildContext context,
+    required AppPalette palette,
+    required AppLocalizations l10n,
+    required double? speed,
+    required bool hasSpeed,
+  }) {
+    return Container(
+      key: const ValueKey('performance-primary-pane'),
+      child: ListView(
+        key: const PageStorageKey('performance-primary-scroll'),
+        padding: const EdgeInsets.fromLTRB(
+          Spacing.lg,
+          Spacing.md,
+          Spacing.lg,
+          Spacing.xxl,
+        ),
+        children: [
+          Text(l10n.performanceHeadline, style: context.texts.headlineMedium),
+          Text(l10n.performanceSubhead, style: context.texts.bodySmall),
+          const SizedBox(height: Spacing.xl),
+
+          Center(
+            child: SizedBox(
+              width: 230,
+              height: 230,
+              child: DialGauge(
+                value: speed,
+                minValue: 0,
+                maxValue: math.max(_target.toDouble() * 1.3, 260),
+                label: l10n.performanceSpeedGaugeLabel,
+                units: 'km/h',
+                hue: GaugeHue.blue,
+                isStale: !hasSpeed,
               ),
             ),
-            const SizedBox(height: Spacing.lg),
+          ),
+          const SizedBox(height: Spacing.xl),
 
-            SectionHeading(l10n.performanceTargetSpeedHeading),
-            SegmentedButton<int>(
-              segments: [
-                for (final target in AccelerationRunController.splitTargetsKmh)
-                  ButtonSegment(value: target, label: Text('$target')),
-              ],
-              selected: {_target},
-              onSelectionChanged: _state == AccelerationRunState.running
-                  ? null
-                  : (s) => setState(() => _run.targetKmh = s.first),
-              showSelectedIcon: false,
+          _buildStatusPanel(
+            context: context,
+            palette: palette,
+            l10n: l10n,
+            speed: speed,
+            hasSpeed: hasSpeed,
+          ),
+          const SizedBox(height: Spacing.lg),
+
+          SectionHeading(l10n.performanceTargetSpeedHeading),
+          SegmentedButton<int>(
+            segments: [
+              for (final target in AccelerationRunController.splitTargetsKmh)
+                ButtonSegment(value: target, label: Text('$target')),
+            ],
+            selected: {_target},
+            onSelectionChanged: _state == AccelerationRunState.running
+                ? null
+                : (s) => setState(() => _run.targetKmh = s.first),
+            showSelectedIcon: false,
+          ),
+          const SizedBox(height: Spacing.lg),
+
+          if (_state == AccelerationRunState.idle) ...[
+            FilledButton.icon(
+              onPressed: hasSpeed ? _arm : null,
+              icon: const Icon(Icons.play_arrow, size: 20),
+              label: Text(l10n.performanceArm),
             ),
-            const SizedBox(height: Spacing.lg),
+            if (!hasSpeed) ...[
+              const SizedBox(height: Spacing.md),
+              Text(
+                l10n.performanceNoSpeedSignal,
+                textAlign: TextAlign.center,
+                style: context.texts.bodySmall,
+              ),
+            ],
+          ] else
+            OutlinedButton.icon(
+              onPressed: _reset,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: Text(l10n.performanceReset),
+            ),
+        ],
+      ),
+    );
+  }
 
-            if (_trace.length > 1) ...[
+  Widget _buildSecondaryPane({
+    required BuildContext context,
+    required AppPalette palette,
+    required AppLocalizations l10n,
+  }) {
+    final hasTrace = _trace.length > 1;
+    final hasSplits = _splits.isNotEmpty;
+    final hasEvidence = hasTrace || hasSplits;
+    final isRunningWithoutTrace =
+        _state == AccelerationRunState.running && !hasTrace;
+    final isAbortedWithoutEvidence =
+        _state == AccelerationRunState.aborted && !hasEvidence;
+
+    return Container(
+      key: const ValueKey('performance-secondary-pane'),
+      child: ListView(
+        key: const PageStorageKey('performance-secondary-scroll'),
+        padding: const EdgeInsets.fromLTRB(
+          Spacing.lg,
+          Spacing.md,
+          Spacing.lg,
+          Spacing.xxl,
+        ),
+        children: [
+          if (hasEvidence) ...[
+            if (hasTrace) ...[
               SectionHeading(l10n.performanceSpeedTraceHeading),
               Panel(
                 child: SizedBox(
-                  height: 170,
+                  height: 200,
                   child: _SpeedTrace(spots: _trace, target: _target.toDouble()),
                 ),
               ),
               const SizedBox(height: Spacing.lg),
             ],
-
-            if (_splits.isNotEmpty) ...[
+            if (hasSplits) ...[
               SectionHeading(l10n.performanceSplitsHeading),
-              Panel(
-                child: Column(
-                  children: [
-                    for (final target
-                        in AccelerationRunController.splitTargetsKmh)
-                      if (_splits.containsKey(target))
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
-                          child: Row(
-                            children: [
-                              Text('0 → $target km/h', style: context.texts.bodyMedium),
-                              const Spacer(),
-                              Text(
-                                '${_format(_splits[target])} s',
-                                style: AppTypography.readout(palette, 17),
-                              ),
-                            ],
-                          ),
-                        ),
-                    Divider(color: palette.hairline),
-                    Padding(
-                      padding: const EdgeInsets.only(top: Spacing.sm),
-                      child: Row(
-                        children: [
-                          Text(
-                            l10n.performancePeakSpeed,
-                            style: context.texts.bodyMedium,
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${_peakSpeed.toStringAsFixed(0)} km/h',
-                            style: AppTypography.readout(palette, 17),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              _buildSplitsPanel(
+                context: context,
+                palette: palette,
+                l10n: l10n,
               ),
               const SizedBox(height: Spacing.lg),
             ],
-
-            if (_state == AccelerationRunState.idle) ...[
-              FilledButton.icon(
-                // Arming without a live speed stream produces a run that never
-                // starts, or one that starts on whichever number arrives first.
-                onPressed: hasSpeed ? _arm : null,
-                icon: const Icon(Icons.play_arrow, size: 20),
-                label: Text(l10n.performanceArm),
+            Text(l10n.performanceDisclaimer, style: context.texts.bodySmall),
+          ] else if (isRunningWithoutTrace) ...[
+            Panel(
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                  const SizedBox(width: Spacing.md),
+                  Expanded(
+                    child: Text(
+                      l10n.performanceRecordingTrace,
+                      style: context.texts.bodyMedium,
+                    ),
+                  ),
+                ],
               ),
-              if (!hasSpeed) ...[
-                const SizedBox(height: Spacing.md),
-                Text(
-                  l10n.performanceNoSpeedSignal,
-                  textAlign: TextAlign.center,
-                  style: context.texts.bodySmall,
-                ),
-              ],
-            ]
-            else
-              OutlinedButton.icon(
-                onPressed: _reset,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: Text(l10n.performanceReset),
-              ),
-
+            ),
             const SizedBox(height: Spacing.lg),
-            // The hedge, not a footnote: this is a timed observation off one
-            // speed signal, not a measurement of what the car can do.
+            Text(l10n.performanceDisclaimer, style: context.texts.bodySmall),
+          ] else if (isAbortedWithoutEvidence) ...[
+            SectionHeading(l10n.performanceNoAnalysisTitle),
+            Panel(
+              accent: palette.danger,
+              child: Text(
+                l10n.performanceNoAnalysisBody,
+                style: context.texts.bodyMedium,
+              ),
+            ),
+            const SizedBox(height: Spacing.lg),
+            Text(l10n.performanceDisclaimer, style: context.texts.bodySmall),
+          ] else ...[
+            SectionHeading(l10n.performanceGuideTitle),
+            Panel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l10n.performanceGuideStep1, style: context.texts.bodyMedium),
+                  const SizedBox(height: Spacing.sm),
+                  Text(l10n.performanceGuideStep2, style: context.texts.bodyMedium),
+                  const SizedBox(height: Spacing.sm),
+                  Text(l10n.performanceGuideStep3, style: context.texts.bodyMedium),
+                  const SizedBox(height: Spacing.sm),
+                  Text(l10n.performanceGuideStep4, style: context.texts.bodyMedium),
+                ],
+              ),
+            ),
+            const SizedBox(height: Spacing.lg),
             Text(l10n.performanceDisclaimer, style: context.texts.bodySmall),
           ],
-        ),
+        ],
       ),
     );
   }

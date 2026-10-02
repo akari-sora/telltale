@@ -4846,4 +4846,34 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get dtcNoLinkedFreezeFrame =>
       'Dieser Scan enthält kein Freeze-Frame, das diesem Fehlercode und Steuergerät sicher zugeordnet werden kann.';
+
+  @override
+  String get performanceGuideTitle => 'Beschleunigungsmessung Anleitung';
+
+  @override
+  String get performanceGuideStep1 =>
+      '1. Wählen Sie eine Sollgeschwindigkeit und aktivieren Sie den Timer';
+
+  @override
+  String get performanceGuideStep2 =>
+      '2. Halten Sie vollständig an und warten Sie, bis der Lauf bereit ist';
+
+  @override
+  String get performanceGuideStep3 =>
+      '3. Beschleunigen Sie; die Zeitmessung startet automatisch bei erkannter Bewegung';
+
+  @override
+  String get performanceGuideStep4 =>
+      '4. Erreichen Sie die Sollgeschwindigkeit, um den Lauf abzuschließen';
+
+  @override
+  String get performanceRecordingTrace =>
+      'Beschleunigung läuft... Geschwindigkeitskurve wird aufgezeichnet';
+
+  @override
+  String get performanceNoAnalysisTitle => 'Keine Analysedaten';
+
+  @override
+  String get performanceNoAnalysisBody =>
+      'Dieser Lauf wurde gestoppt, bevor genügend Geschwindigkeitsproben aufgezeichnet wurden, um ein Diagramm oder Teilergebnis zu erstellen.';
 }

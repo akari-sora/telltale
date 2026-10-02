@@ -4254,6 +4254,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dtcNoLinkedFreezeFrame => '這次掃描沒有可安全歸屬於此故障碼與控制器的凍結幀。';
+
+  @override
+  String get performanceGuideTitle => '起步加速測試指南';
+
+  @override
+  String get performanceGuideStep1 => '1. 選擇目標車速，然後準備計時';
+
+  @override
+  String get performanceGuideStep2 => '2. 將車輛完全停妥，等待畫面顯示已就緒';
+
+  @override
+  String get performanceGuideStep3 => '3. 開始加速；偵測到起步後會自動開始計時';
+
+  @override
+  String get performanceGuideStep4 => '4. 到達目標車速後即完成本次計時';
+
+  @override
+  String get performanceRecordingTrace => '加速中... 正在記錄速度點位';
+
+  @override
+  String get performanceNoAnalysisTitle => '沒有足夠的分析資料';
+
+  @override
+  String get performanceNoAnalysisBody => '本次計時在取得足夠的車速樣本前已中止，因此無法產生速度軌跡或分段成績。';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -8505,4 +8529,28 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get dtcNoLinkedFreezeFrame => '這次掃描沒有可安全歸屬於此故障碼與控制器的凍結幀。';
+
+  @override
+  String get performanceGuideTitle => '起步加速測試指南';
+
+  @override
+  String get performanceGuideStep1 => '1. 選擇目標車速，然後準備計時';
+
+  @override
+  String get performanceGuideStep2 => '2. 將車輛完全停妥，等待畫面顯示已就緒';
+
+  @override
+  String get performanceGuideStep3 => '3. 開始加速；偵測到起步後會自動開始計時';
+
+  @override
+  String get performanceGuideStep4 => '4. 到達目標車速後即完成本次計時';
+
+  @override
+  String get performanceRecordingTrace => '加速中... 正在記錄速度點位';
+
+  @override
+  String get performanceNoAnalysisTitle => '沒有足夠的分析資料';
+
+  @override
+  String get performanceNoAnalysisBody => '本次計時在取得足夠的車速樣本前已中止，因此無法產生速度軌跡或分段成績。';
 }

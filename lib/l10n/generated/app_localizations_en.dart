@@ -4761,4 +4761,34 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get dtcNoLinkedFreezeFrame =>
       'This scan has no freeze frame that can be safely associated with this fault code and controller.';
+
+  @override
+  String get performanceGuideTitle => 'Acceleration run guide';
+
+  @override
+  String get performanceGuideStep1 =>
+      '1. Choose a target speed, then arm the timer';
+
+  @override
+  String get performanceGuideStep2 =>
+      '2. Bring vehicle to a full stop and wait until the run is ready';
+
+  @override
+  String get performanceGuideStep3 =>
+      '3. Start accelerating; timing begins automatically when movement is detected';
+
+  @override
+  String get performanceGuideStep4 =>
+      '4. Reach the target speed to complete the run';
+
+  @override
+  String get performanceRecordingTrace =>
+      'Accelerating... recording speed trace';
+
+  @override
+  String get performanceNoAnalysisTitle => 'No analysis data';
+
+  @override
+  String get performanceNoAnalysisBody =>
+      'This run stopped before enough speed samples were recorded to build a trace or split result.';
 }
