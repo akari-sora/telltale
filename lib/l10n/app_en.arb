@@ -4109,5 +4109,38 @@
   "dtcNoLinkedFreezeFrame": "This scan has no freeze frame that can be safely associated with this fault code and controller.",
   "@dtcNoLinkedFreezeFrame": {
     "description": "Note in detail pane when no freeze frame matches the selected DTC."
+  },
+  "performanceGuideTitle": "Acceleration run guide",
+  "@performanceGuideTitle": {
+    "description": "Title of the acceleration run instructions panel in performance screen secondary pane."
+  },
+  "performanceGuideStep1": "1. Choose a target speed, then arm the timer",
+  "@performanceGuideStep1": {
+    "description": "Step 1 of acceleration run instructions."
+  },
+  "performanceGuideStep2": "2. Bring vehicle to a full stop and wait until the run is ready",
+  "@performanceGuideStep2": {
+    "description": "Step 2 of acceleration run instructions."
+  },
+  "performanceGuideStep3": "3. Start accelerating; timing begins automatically when movement is detected",
+  "@performanceGuideStep3": {
+    "description": "Step 3 of acceleration run instructions."
+  },
+  "performanceGuideStep4": "4. Reach the target speed to complete the run",
+  "@performanceGuideStep4": {
+    "description": "Step 4 of acceleration run instructions."
+  },
+  "performanceRecordingTrace": "Accelerating... recording speed trace",
+  "@performanceRecordingTrace": {
+    "description": "Status in secondary pane when run is actively underway and initial points are gathering."
+  },
+  "performanceNoAnalysisTitle": "No analysis data",
+  "@performanceNoAnalysisTitle": {
+    "description": "Heading in secondary pane when run is aborted before sufficient data was gathered."
+  },
+  "performanceNoAnalysisBody": "This run stopped before enough speed samples were recorded to build a trace or split result.",
+  "@performanceNoAnalysisBody": {
+    "description": "Body in secondary pane explaining why no speed trace or splits are shown after an aborted run."
   }
 }
+

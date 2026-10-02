@@ -1268,5 +1268,14 @@
   "dtcPartialObservationBadge": "Teilweiser Scan",
   "dtcPartialObservationBody": "Dieser Fehlercode wurde gelesen, aber der Scan für diese Kategorie wurde nicht über alle Steuergeräte abgeschlossen.",
   "dtcLinkedFreezeFrameTitle": "Zugehöriger Freeze-Frame",
-  "dtcNoLinkedFreezeFrame": "Dieser Scan enthält kein Freeze-Frame, das diesem Fehlercode und Steuergerät sicher zugeordnet werden kann."
+  "dtcNoLinkedFreezeFrame": "Dieser Scan enthält kein Freeze-Frame, das diesem Fehlercode und Steuergerät sicher zugeordnet werden kann.",
+  "performanceGuideTitle": "Beschleunigungsmessung Anleitung",
+  "performanceGuideStep1": "1. Wählen Sie eine Sollgeschwindigkeit und aktivieren Sie den Timer",
+  "performanceGuideStep2": "2. Halten Sie vollständig an und warten Sie, bis der Lauf bereit ist",
+  "performanceGuideStep3": "3. Beschleunigen Sie; die Zeitmessung startet automatisch bei erkannter Bewegung",
+  "performanceGuideStep4": "4. Erreichen Sie die Sollgeschwindigkeit, um den Lauf abzuschließen",
+  "performanceRecordingTrace": "Beschleunigung läuft... Geschwindigkeitskurve wird aufgezeichnet",
+  "performanceNoAnalysisTitle": "Keine Analysedaten",
+  "performanceNoAnalysisBody": "Dieser Lauf wurde gestoppt, bevor genügend Geschwindigkeitsproben aufgezeichnet wurden, um ein Diagramm oder Teilergebnis zu erstellen."
 }
+

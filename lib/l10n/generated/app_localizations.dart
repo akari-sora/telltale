@@ -7451,6 +7451,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This scan has no freeze frame that can be safely associated with this fault code and controller.'**
   String get dtcNoLinkedFreezeFrame;
+
+  /// Title of the acceleration run instructions panel in performance screen secondary pane.
+  ///
+  /// In en, this message translates to:
+  /// **'Acceleration run guide'**
+  String get performanceGuideTitle;
+
+  /// Step 1 of acceleration run instructions.
+  ///
+  /// In en, this message translates to:
+  /// **'1. Choose a target speed, then arm the timer'**
+  String get performanceGuideStep1;
+
+  /// Step 2 of acceleration run instructions.
+  ///
+  /// In en, this message translates to:
+  /// **'2. Bring vehicle to a full stop and wait until the run is ready'**
+  String get performanceGuideStep2;
+
+  /// Step 3 of acceleration run instructions.
+  ///
+  /// In en, this message translates to:
+  /// **'3. Start accelerating; timing begins automatically when movement is detected'**
+  String get performanceGuideStep3;
+
+  /// Step 4 of acceleration run instructions.
+  ///
+  /// In en, this message translates to:
+  /// **'4. Reach the target speed to complete the run'**
+  String get performanceGuideStep4;
+
+  /// Status in secondary pane when run is actively underway and initial points are gathering.
+  ///
+  /// In en, this message translates to:
+  /// **'Accelerating... recording speed trace'**
+  String get performanceRecordingTrace;
+
+  /// Heading in secondary pane when run is aborted before sufficient data was gathered.
+  ///
+  /// In en, this message translates to:
+  /// **'No analysis data'**
+  String get performanceNoAnalysisTitle;
+
+  /// Body in secondary pane explaining why no speed trace or splits are shown after an aborted run.
+  ///
+  /// In en, this message translates to:
+  /// **'This run stopped before enough speed samples were recorded to build a trace or split result.'**
+  String get performanceNoAnalysisBody;
 }
 
 class _AppLocalizationsDelegate

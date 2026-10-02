@@ -1271,5 +1271,14 @@
   "dtcPartialObservationBadge": "部分掃描",
   "dtcPartialObservationBody": "此故障碼已讀取，但該類別在所有控制器間的掃描未完整完成。",
   "dtcLinkedFreezeFrameTitle": "關聯凍結幀",
-  "dtcNoLinkedFreezeFrame": "這次掃描沒有可安全歸屬於此故障碼與控制器的凍結幀。"
+  "dtcNoLinkedFreezeFrame": "這次掃描沒有可安全歸屬於此故障碼與控制器的凍結幀。",
+  "performanceGuideTitle": "起步加速測試指南",
+  "performanceGuideStep1": "1. 選擇目標車速，然後準備計時",
+  "performanceGuideStep2": "2. 將車輛完全停妥，等待畫面顯示已就緒",
+  "performanceGuideStep3": "3. 開始加速；偵測到起步後會自動開始計時",
+  "performanceGuideStep4": "4. 到達目標車速後即完成本次計時",
+  "performanceRecordingTrace": "加速中... 正在記錄速度點位",
+  "performanceNoAnalysisTitle": "沒有足夠的分析資料",
+  "performanceNoAnalysisBody": "本次計時在取得足夠的車速樣本前已中止，因此無法產生速度軌跡或分段成績。"
 }
+
