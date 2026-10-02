@@ -1260,5 +1260,8 @@
   "mode08ReasonRequiresCanBus": "Mode 08-Funktionserkennung erfordert einen aufgelösten OBD-II CAN-Bus",
   "mode08ReasonUnexpectedExecution": "Unerwartete Ausführungsantwort auf Abfrage unterstützter TIDs",
   "pidDetailEmptyTitle": "PID auswählen",
-  "pidDetailEmptyBody": "Wählen Sie eine PID aus der Liste aus, um ihre Definition und ihren Live-Status anzuzeigen."
+  "pidDetailEmptyBody": "Wählen Sie eine PID aus der Liste aus, um ihre Definition und ihren Live-Status anzuzeigen.",
+  "pidDetailRangeLabel": "Bereich",
+  "pidDetailPriorityLabel": "Priorität",
+  "pidDetailHeaderDefault": "Standard ({header})"
 }

@@ -4818,4 +4818,15 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get pidDetailEmptyBody =>
       'Wählen Sie eine PID aus der Liste aus, um ihre Definition und ihren Live-Status anzuzeigen.';
+
+  @override
+  String get pidDetailRangeLabel => 'Bereich';
+
+  @override
+  String get pidDetailPriorityLabel => 'Priorität';
+
+  @override
+  String pidDetailHeaderDefault(String header) {
+    return 'Standard ($header)';
+  }
 }

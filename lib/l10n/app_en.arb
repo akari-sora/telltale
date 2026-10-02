@@ -4074,6 +4074,21 @@
   "pidDetailEmptyBody": "Choose a PID from the list to inspect its definition and live status.",
   "@pidDetailEmptyBody": {
     "description": "Body copy shown in the PID detail pane when no PID is selected."
+  },
+  "pidDetailRangeLabel": "Range",
+  "@pidDetailRangeLabel": {
+    "description": "Label for the gauge range row in the PID detail pane."
+  },
+  "pidDetailPriorityLabel": "Priority",
+  "@pidDetailPriorityLabel": {
+    "description": "Label for the polling priority row in the PID detail pane."
+  },
+  "pidDetailHeaderDefault": "Default ({header})",
+  "@pidDetailHeaderDefault": {
+    "description": "Label for default CAN header in the PID detail pane.",
+    "placeholders": {
+      "header": { "type": "String" }
+    }
   }
 }
 
