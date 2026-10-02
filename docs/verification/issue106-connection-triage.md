@@ -157,5 +157,46 @@ Issue #106 使用者回報：在 Android 車機使用廉價藍牙 ELM327 轉接�
 | **Point 2** | Session Generation 實際計數對齊 (`CASE-03-B`) | 對齊 production `ObdSession` 計數規則（初始 0，首次連線 1，中斷 2，二次連線 3），動態計算 `attempt2Gen = session.generation + 1` 並綁定 transport 與 observer；補齊正控制斷言，驗證 Attempt 2 真 `initStepStarted` 與 `initStepCompleted` 確實被 observer 接收。 |
 | **Point 3** | Phase-deadline 邊界確認 (`CASE-02-A`) | 於 `CASE-02-A` 補齊三個時序階段確認：(1) deadline 前（2000ms mid-window）無 timeoutObserved 事件觸發；(2) 剛超時（~4000ms）首個 typed `TraceEventKind.timeoutObserved` 觸發並命中 [3800, 4800]ms 邊界；(3) 超時後 sequence 嚴格小於 failed completion 且後續指令不上 wire；並補齊早於 deadline 回覆的對照測試。 |
 
+---
+
+## 10. Slice 2 實作與根因修復總結 (MR !88)
+
+### 10.1 根因判定提升 (Root-Cause Promotion)
+- **分析與歸因定位**：
+  在 Slice 1 的因果特徵分析基礎上，確認了代碼層級的脆弱點：`ATSP0` 僅武裝自動協定搜尋，ELM327 直到收到第一個實際車載探測 `0100` 時才真正遍歷所有協定（CAN、K-Line、J1850 等）。在 Android 車機搭配廉價 Bluetooth clone 上，此搜尋過程可長達 15–30 秒。
+- **舊代碼缺失**：
+  1. `_runInitSequence()` 原先對所有步驟無差別套用 4 秒逾時；只有轉接器在 4 秒內先吐出 `SEARCHING...` 時，`_extendTimeoutIfSearching()` 才有機會續期至 25 秒。若轉接器搜尋時完全靜默或 `SEARCHING...` 因緩衝片斷延遲，即在 4 秒被強制斷線。
+  2. 部分 ECU 於冷車喚醒初期可能先回傳一次暫態 `NO DATA`，原代碼直接判定 critical step 失敗中斷握手。
+- **歸因邊界**：
+  *Root-cause candidate promoted from plausible to code-confirmed vulnerability; reporter-specific attribution remains pending physical reproduction.* （代碼層級漏洞已完全確認並根治；特定回報者實機歸因仍待實體重現數據進一步印證）。
+
+### 10.2 Production 修改範圍 (`lib/obd/elm327_client.dart` 嚴格 1 個檔案)
+1. **InitStep 逾時覆蓋契約**：
+   `InitStep` 增加可選 `timeout` 參數。初始化序列中的 `0100` 探測設定為 `protocolSearchTimeout`（25 秒）；其餘本機 AT 指令仍維持預設 4 秒。
+2. **單次窄域 NO DATA 重試與絕對截止時間共用**：
+   僅在步驟為 `0100` 且回應為 `Elm327ErrorCode.noData` 時進行單次立即重試。兩次嘗試透過 `send(deadline: stepDeadline)` 嚴格共用同一個 25 秒絕對 deadline，確保包含底層寫入逾時（`_withinDeadline`）在內的整體耗時絕不超過 25 秒封套（杜絕 25s + 25s 漂移）。
+3. **未觸碰範圍 (Zero Collateral)**：
+   未更動任何通用 `send()` / `_resync()`、`PollingEngine`、watchdog 政策、`_requireSupportMask()` 驗證邏輯或 transport 傳輸層。
+
+### 10.3 迴歸測試套件 (`test/issue106_protocol_search_regression_test.dart`)
+新增 8 組專屬迴歸測試，覆蓋率 100% 通過：
+- **S2-01**：超過舊 4 秒邊界（6s 延遲）、無 `SEARCHING...`、0100 最終獲取合法 `4100` 成功（0100 TX 嚴格為 1 次）。
+- **S2-02**：片斷 `SEARCHING...` chunk + 8s 慢速協定搜尋成功。
+- **S2-03**：第 1 次 0100 回傳 `NO DATA`，第 2 次回傳合法 `4100`，連線成功（0100 TX 嚴格為 2 次）。
+- **S2-04**：連續 2 次 `NO DATA`，握手判定失敗（0100 TX 嚴格為 2 次）。
+- **S2-05**：0100 回傳 `UNABLE TO CONNECT` 致命錯誤，立即失敗不重試（0100 TX 嚴格為 1 次）。
+- **S2-06**：0100 回傳 `CAN ERROR` 致命錯誤，立即失敗不重試（0100 TX 嚴格為 1 次）。
+- **S2-07**：0100 超過 25 秒持續靜默，有界逾時判定失敗。
+- **S2-08**：0100 第 1 次耗費 20 秒取得 `NO DATA`，第 2 次嘗試僅獲剩餘 ~5 秒預算後逾時，總耗時小於 28 秒（證明絕無刷新 25s 預算）。
+- **M106-02**：更新 Slice 1 characterization suite 中的 M106-02 邊界斷言以適配 25s 預算，33/33 tests 維持全綠。
+
+### 10.4 GPT-6 Pro 審查與 GitLab MR !88 簽核
+- **審查迭代**：
+  - Round 1: 提出 Blocking 問題（`send()` 直接帶 25s 導致 retry 重新刷新整個 25 秒預算，違反 M106-02 邊界不變性）→ 裁定 `REQUEST CHANGES`。
+  - Round 2: 指出 Stopwatch 方案未能約束底層 `_withinDeadline(writeTimeout)`，建議改用原生的 `stepDeadline` 傳入兩次 `send()` → 裁定 `REQUEST CHANGES`。
+  - Round 3: 確認 `stepDeadline` 徹底封閉寫入超時溢出漏洞，S2-08 收緊至 `< 28s`，程式碼與測試全數合規 → 正式授予 **`APPROVE`**。
+- **合併結果**：
+  GitLab MR [!88](https://gitlab.com/aa22396584/telltale/-/merge_requests/88) 透過 `glab mr merge 88 --squash --remove-source-branch` 順利 Squash Merge 合入 `main`。
+
 
 

@@ -149,9 +149,12 @@ ATZ ATE0 ATL0 ATM0 ATS0 ATAT1 ATST66 ATSP0 ATI AT@1 ATRV 0100 ATDP ATDPN
 
 ### 3.1 `ATSP0` 之後的協定搜尋會遠超一般逾時
 
-自動協定搜尋（`ATSP0`）後的第一次查詢，ELM327 會逐一嘗試各種匯流排協定，先回 `SEARCHING...` 才給答案；冷車或較舊的車輛可能超過 10 秒。用一般的 5 秒逾時會在連線其實即將成功時把它砍掉。
+自動協定搜尋（`ATSP0`）後的第一次查詢，ELM327 會逐一嘗試各種匯流排協定，先回 `SEARCHING...` 才給答案；冷車或較舊的車輛可能超過 10 秒。更嚴重的是，許多廉價 Bluetooth clone 在協定搜尋期間**完全靜默**（根本不吐出 `SEARCHING...`），或 `SEARCHING...` 的文字被切片延遲抵達。若僅用預設 4 秒逾時，轉接器尚未完成匯流排探測就會被判定失敗並斷線（Issue #106 的典型症狀）。
 
-**處理**：`Elm327Client._extendTimeoutIfSearching()` — 在緩衝區出現 `SEARCHING` 時把該指令的期限延長到 `protocolSearchTimeout`（25 秒）。`SEARCHING` 本身就是轉接器仍在工作的正面證據。
+**處理**：
+1. **探測指令專屬預算**：`InitStep` 支援個別設定 `timeout`。初始序列中的 `0100` 探測直接綁定 `protocolSearchTimeout`（25 秒），從送出起即享有足夠搜尋視窗，無須依賴「必須先在 4 秒內收到 `SEARCHING...`」的前提。一般本機 AT 指令則維持 4 秒逾時不變。
+2. **搜尋中動態續期**：`Elm327Client._extendTimeoutIfSearching()` 依然生效——若在緩衝區中觀察到 `SEARCHING`，將該指令的 reply timer 延長到 `protocolSearchTimeout`，作為協定搜尋進行中的存活訊號。
+3. **窄域 `NO DATA` 重試（共享絕對截止時間）**：部分車輛 ECU 於冷車或剛開電門時反應較慢，首次 `0100` 可能回傳暫態 `NO DATA`。系統僅針對初始化中的首次 `0100` 且錯誤碼嚴格為 `Elm327ErrorCode.noData` 時提供單次立即重試。兩次嘗試透過 `send(deadline: stepDeadline)` 嚴格共用同一個 25 秒絕對 deadline（包含底層 write 逾時約束），絕不重新分配新的 25 秒；若為 `UNABLE TO CONNECT`、`CAN ERROR` 或語法錯誤等則立即終止，且 `NO DATA` 絕不視為成功，最終仍必須取得合法的 Mode 01 PID 00 support mask。
 
 ### 3.2 `ATE0` 生效前，回音仍然開著
 
