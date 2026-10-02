@@ -327,6 +327,21 @@ class InitStep {
   final String command;
   final bool isCritical;
 
+  /// Per-step timeout override.
+  ///
+  /// When null, `_runInitSequence` uses the default 4-second budget — the
+  /// right window for an AT command that the adapter answers locally. The
+  /// `0100` probe is fundamentally different: `ATSP0` only *arms* automatic
+  /// protocol search, and the adapter does not actually try any bus until
+  /// `0100` forces the issue. On a cheap Bluetooth clone, searching every
+  /// protocol can take 15–30 seconds — far longer than the default, and the
+  /// reason Issue #106 reported an immediate disconnect after seeing battery
+  /// voltage.
+  ///
+  /// Setting [timeout] to [protocolSearchTimeout] gives `0100` its own
+  /// budget without touching any shared timer, watchdog or resync logic.
+  final Duration? timeout;
+
   /// Proof beyond "the adapter did not print an error string".
   ///
   /// [ObdResponse.isSuccess] answers a much weaker question than the handshake
@@ -338,7 +353,12 @@ class InitStep {
   /// Returns null when the reply is acceptable, or the reason it is not.
   final InitNote? Function(ObdResponse response)? validate;
 
-  const InitStep(this.command, {this.isCritical = false, this.validate});
+  const InitStep(
+    this.command, {
+    this.isCritical = false,
+    this.timeout,
+    this.validate,
+  });
 }
 
 /// Why a handshake step ended the way it did, when the reason is the app's
@@ -570,7 +590,10 @@ class Elm327Client {
     //
     // It is also the only step that proves a *vehicle* is there. Every AT
     // command answers happily with the ignition off; `0100` does not.
-    InitStep('0100', isCritical: true, validate: _requireSupportMask),
+    InitStep('0100',
+        isCritical: true,
+        validate: _requireSupportMask,
+        timeout: protocolSearchTimeout),
     InitStep('ATDP'),
     InitStep('ATDPN'),
     // `ATSH 7E0` used to be sent here, unconditionally, and it is the reason a
@@ -5419,10 +5442,35 @@ class Elm327Client {
       _emitProgress(step, i, InitStatus.running);
 
       try {
-        final response = await send(
+        final stepTimeout = step.timeout ?? const Duration(seconds: 4);
+        final stepDeadline = DateTime.now().add(stepTimeout);
+        var response = await send(
           step.command,
-          timeout: const Duration(seconds: 4),
+          timeout: stepTimeout,
+          deadline: stepDeadline,
         );
+
+        // Narrow retry: only the first `0100` during initialisation may
+        // receive a transient `NO DATA` while the ECU is still waking up.
+        // One immediate retry — no sleep, no open-ended loop — is cheaper
+        // and safer than an arbitrary timer. Any other error code (CAN
+        // ERROR, UNABLE TO CONNECT, ?, timeout, etc.) fails immediately.
+        //
+        // Both attempts share one absolute [stepDeadline]. Passing the
+        // same deadline to the retry means `send()` — and, critically,
+        // `_sendNow()`'s `_withinDeadline(writeTimeout)` — cannot exceed
+        // the step's 25-second envelope even if the first NO DATA consumed
+        // most of the budget. This preserves the M106-02 invariant that a
+        // single init step cannot drift beyond its allocated window.
+        if (step.command == '0100' &&
+            response.errorCode == Elm327ErrorCode.noData) {
+          response = await send(
+            step.command,
+            timeout: stepTimeout,
+            deadline: stepDeadline,
+          );
+        }
+
         _captureIdentity(step.command, response);
 
         // `?` from an optional probe such as AT@1 means "this adapter does not

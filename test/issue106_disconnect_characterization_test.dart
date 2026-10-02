@@ -1828,8 +1828,9 @@ void main() {
         await transport.dispose();
       });
 
-      // Hook 0100 to never answer: must fail strictly within 4000ms deadline,
-      // not drifting or granting an additional 4000ms.
+      // Hook 0100 to never answer: must fail strictly within the
+      // protocolSearchTimeout (25 s) budget, not drifting or granting an
+      // additional budget. Prior to Slice 2 this was 4 s; see Issue #106.
       transport.onCommandHook = (cmd, t) {
         final normalized = cmd.toUpperCase().replaceAll(' ', '');
         if (normalized.startsWith('0100')) {
@@ -1844,11 +1845,15 @@ void main() {
       sw.stop();
 
       expect(ok, isFalse);
-      expect(sw.elapsedMilliseconds, greaterThanOrEqualTo(3800));
+      // Slice 2 gives 0100 a 25 s protocolSearchTimeout. The elapsed time
+      // must be at least ~24.8 s (the budget minus margin) and at most ~28 s
+      // (budget + AT-level overhead + scheduling slack, but never a second
+      // full budget).
+      expect(sw.elapsedMilliseconds, greaterThanOrEqualTo(24500));
       expect(
         sw.elapsedMilliseconds,
-        lessThan(6500),
-        reason: 'Must fail within fixed 4s budget without unexpected refresh',
+        lessThan(30000),
+        reason: 'Must fail within protocolSearchTimeout budget without unexpected refresh',
       );
     });
 
