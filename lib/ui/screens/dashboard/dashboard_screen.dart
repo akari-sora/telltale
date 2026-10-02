@@ -6,6 +6,7 @@
 /// wider layout automatically.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -14,7 +15,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../adaptive/adaptive_layout.dart';
 import '../../../diagnostics/availability.dart';
+import 'dashboard_grid_layout.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../obd/physics/physics_engine.dart';
 import '../../../obd/pid/pid.dart';
@@ -56,6 +59,13 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   DashboardWorkspaceMode _mode = DashboardWorkspaceMode.gauges;
   bool _routeModeApplied = false;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -83,12 +93,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final historyAccess = ref.watch(telemetryHistoryAccessProvider);
     final snapshot = telemetry.value ?? const TelemetrySnapshot();
     final l10n = AppLocalizations.of(context);
+    final adaptive = AdaptiveLayout.of(context);
+    final safePadding = MediaQuery.paddingOf(context);
+
+    // SafeArea(bottom: false) projects the dashboard viewport
+    final dashboardViewport = Rect.fromLTWH(
+      safePadding.left,
+      safePadding.top,
+      math.max(0.0, adaptive.size.width - safePadding.left - safePadding.right),
+      math.max(0.0, adaptive.size.height - safePadding.top),
+    );
+    final dashboardLayout = adaptive.projectTo(dashboardViewport);
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
+        child: AdaptiveLayoutScope(
+          layout: dashboardLayout,
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
             SliverToBoxAdapter(
               child: _StatusStrip(connection: connection, snapshot: snapshot),
             ),
@@ -141,18 +165,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               )
             else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  Spacing.lg,
-                  0,
-                  Spacing.lg,
-                  Spacing.md,
-                ),
-                sliver: _GaugeGrid(
-                  pids: activePids,
-                  snapshot: snapshot,
-                  demo: connection.kind == TransportKind.demo,
-                ),
+              _GaugeGrid(
+                pids: activePids,
+                snapshot: snapshot,
+                demo: connection.kind == TransportKind.demo,
+                layout: dashboardLayout,
               ),
             if (_mode == DashboardWorkspaceMode.gauges)
               SliverToBoxAdapter(child: _DerivedStrip(snapshot: snapshot)),
@@ -166,7 +183,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }
 
@@ -263,6 +281,46 @@ class _GaugeGrid extends StatelessWidget {
   const _GaugeGrid({
     required this.pids,
     required this.snapshot,
+    required this.layout,
+    this.demo = false,
+  });
+
+  final List<Pid> pids;
+  final TelemetrySnapshot snapshot;
+  final AdaptiveLayout layout;
+  final bool demo;
+
+  @override
+  Widget build(BuildContext context) {
+    if (layout.hasVerticalSeparator && layout.regions.length == 2) {
+      return _HingedGaugeGrid(
+        pids: pids,
+        snapshot: snapshot,
+        layout: layout,
+        demo: demo,
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(
+        Spacing.lg,
+        0,
+        Spacing.lg,
+        Spacing.md,
+      ),
+      sliver: _StandardGaugeGrid(
+        pids: pids,
+        snapshot: snapshot,
+        demo: demo,
+      ),
+    );
+  }
+}
+
+class _StandardGaugeGrid extends StatelessWidget {
+  const _StandardGaugeGrid({
+    required this.pids,
+    required this.snapshot,
     this.demo = false,
   });
 
@@ -275,55 +333,253 @@ class _GaugeGrid extends StatelessWidget {
     return SliverLayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.crossAxisExtent;
-        // The dial's readout is sized from the tile, not from the text scale,
-        // so honouring an accessibility setting means giving each tile more
-        // room rather than growing type inside a fixed box. At 2x scale on a
-        // narrow phone this correctly drops to a single column of large dials
-        // instead of two cramped ones.
+        // Sizing follows DashboardGridLayout.columnsForWidth with a 6-column cap
+        // and spacing-aware threshold while preserving the 156 * textScale minimum.
         final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
         final minWidth = DashboardScreen._minTileWidth * scale;
-        final columns = math.max(1, (width / minWidth).floor());
+        final columns = DashboardGridLayout.columnsForWidth(
+          width: width,
+          minTileWidth: minWidth,
+          spacing: Spacing.md,
+        );
 
         return SliverGrid(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
             mainAxisSpacing: Spacing.md,
             crossAxisSpacing: Spacing.md,
-            // Square tiles: the dial is circular and its label and units live
-            // inside the ring, so extra vertical room would only be padding.
             childAspectRatio: 1,
           ),
-          delegate: SliverChildBuilderDelegate(childCount: pids.length, (
-            context,
-            index,
-          ) {
-            final pid = pids[index];
-            final reading = snapshot[pid.id];
-            final fault = snapshot.faults[pid.id];
-            final stale = snapshot.isStale(pid);
-            return _GaugeTile(
-              pid: pid,
-              reading: reading,
-              fault: fault,
-              isStale: stale,
-              status: AvailabilityPolicy.forPid(
+          delegate: SliverChildBuilderDelegate(
+            childCount: pids.length,
+            (context, index) {
+              final pid = pids[index];
+              final reading = snapshot[pid.id];
+              final fault = snapshot.faults[pid.id];
+              final stale = snapshot.isStale(pid);
+              return _GaugeTile(
+                key: ValueKey('dashboard-gauge-${pid.id}'),
                 pid: pid,
                 reading: reading,
                 fault: fault,
                 isStale: stale,
+                status: AvailabilityPolicy.forPid(
+                  pid: pid,
+                  reading: reading,
+                  fault: fault,
+                  isStale: stale,
+                  demo: demo,
+                  catalogStatus: switch (pid.evidenceKind) {
+                    'community' => PowertrainProfileStatus.community,
+                    'experimental' => PowertrainProfileStatus.experimental,
+                    'ready' => PowertrainProfileStatus.ready,
+                    _ => null,
+                  },
+                ),
+                delay: Duration(milliseconds: 28 * index),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HingedGaugeGrid extends StatelessWidget {
+  const _HingedGaugeGrid({
+    required this.pids,
+    required this.snapshot,
+    required this.layout,
+    this.demo = false,
+  });
+
+  final List<Pid> pids;
+  final TelemetrySnapshot snapshot;
+  final AdaptiveLayout layout;
+  final bool demo;
+
+  @override
+  Widget build(BuildContext context) {
+    final leftRegion = layout.regions[0];
+    final rightRegion = layout.regions[1];
+    final hinge = layout.separatingFeature!;
+
+    // Pane padding per GPT-6 Pro spec Section 10:
+    // Outer edge: Spacing.lg, hinge edge: Spacing.sm.
+    const leftPadding = EdgeInsets.only(left: Spacing.lg, right: Spacing.sm);
+    const rightPadding = EdgeInsets.only(left: Spacing.sm, right: Spacing.lg);
+
+    final leftUsableWidth = math.max(0.0, leftRegion.width - (Spacing.lg + Spacing.sm));
+    final rightUsableWidth = math.max(0.0, rightRegion.width - (Spacing.sm + Spacing.lg));
+
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    final minWidth = DashboardScreen._minTileWidth * scale;
+
+    final leftColumns = DashboardGridLayout.columnsForWidth(
+      width: leftUsableWidth,
+      minTileWidth: minWidth,
+      spacing: Spacing.md,
+      maxColumns: DashboardGridLayout.maxColumnsPerHingePane,
+    );
+
+    final rightColumns = DashboardGridLayout.columnsForWidth(
+      width: rightUsableWidth,
+      minTileWidth: minWidth,
+      spacing: Spacing.md,
+      maxColumns: DashboardGridLayout.maxColumnsPerHingePane,
+    );
+
+    final leftTileWidth = _computeTileWidth(leftUsableWidth, leftColumns);
+    final rightTileWidth = _computeTileWidth(rightUsableWidth, rightColumns);
+
+    final split = DashboardGridLayout.stableSplitIndex(pids.length);
+    final leftPids = pids.sublist(0, split);
+    final rightPids = pids.sublist(split);
+
+    final leftRows = leftColumns > 0 ? (leftPids.length / leftColumns).ceil() : 0;
+    final rightRows = rightColumns > 0 ? (rightPids.length / rightColumns).ceil() : 0;
+    final rowCount = math.max(leftRows, rightRows);
+
+    return SliverPadding(
+      padding: const EdgeInsets.only(bottom: Spacing.md),
+      sliver: SliverList.builder(
+        itemCount: rowCount,
+        itemBuilder: (context, rowIndex) {
+          final leftStart = rowIndex * leftColumns;
+          final leftEnd = math.min(leftStart + leftColumns, leftPids.length);
+          final leftPidsForRow = leftStart < leftPids.length
+              ? leftPids.sublist(leftStart, leftEnd)
+              : const <Pid>[];
+
+          final rightStart = rowIndex * rightColumns;
+          final rightEnd = math.min(rightStart + rightColumns, rightPids.length);
+          final rightPidsForRow = rightStart < rightPids.length
+              ? rightPids.sublist(rightStart, rightEnd)
+              : const <Pid>[];
+
+          final hasLeft = leftPidsForRow.isNotEmpty;
+          final hasRight = rightPidsForRow.isNotEmpty;
+          final rowHeight = (hasLeft && hasRight)
+              ? math.max(leftTileWidth, rightTileWidth)
+              : hasLeft
+                  ? leftTileWidth
+                  : hasRight
+                      ? rightTileWidth
+                      : 0.0;
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: rowIndex == rowCount - 1 ? 0 : Spacing.md,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: leftRegion.width,
+                  child: Padding(
+                    padding: leftPadding,
+                    child: SizedBox(
+                      height: rowHeight > 0 ? rowHeight : null,
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: _PaneGaugeRow(
+                          pids: leftPidsForRow,
+                          tileWidth: leftTileWidth,
+                          originalStartIndex: leftStart,
+                          snapshot: snapshot,
+                          demo: demo,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: hinge.bounds.width,
+                ),
+                SizedBox(
+                  width: rightRegion.width,
+                  child: Padding(
+                    padding: rightPadding,
+                    child: SizedBox(
+                      height: rowHeight > 0 ? rowHeight : null,
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: _PaneGaugeRow(
+                          pids: rightPidsForRow,
+                          tileWidth: rightTileWidth,
+                          originalStartIndex: split + rightStart,
+                          snapshot: snapshot,
+                          demo: demo,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  static double _computeTileWidth(double paneWidth, int columns) {
+    if (columns <= 0) return 0;
+    return math.max(0.0, (paneWidth - (columns - 1) * Spacing.md) / columns);
+  }
+}
+
+class _PaneGaugeRow extends StatelessWidget {
+  const _PaneGaugeRow({
+    required this.pids,
+    required this.tileWidth,
+    required this.originalStartIndex,
+    required this.snapshot,
+    required this.demo,
+  });
+
+  final List<Pid> pids;
+  final double tileWidth;
+  final int originalStartIndex;
+  final TelemetrySnapshot snapshot;
+  final bool demo;
+
+  @override
+  Widget build(BuildContext context) {
+    if (pids.isEmpty) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < pids.length; i++) ...[
+          if (i > 0) const SizedBox(width: Spacing.md),
+          SizedBox.square(
+            dimension: tileWidth,
+            child: _GaugeTile(
+              key: ValueKey('dashboard-gauge-${pids[i].id}'),
+              pid: pids[i],
+              reading: snapshot[pids[i].id],
+              fault: snapshot.faults[pids[i].id],
+              isStale: snapshot.isStale(pids[i]),
+              status: AvailabilityPolicy.forPid(
+                pid: pids[i],
+                reading: snapshot[pids[i].id],
+                fault: snapshot.faults[pids[i].id],
+                isStale: snapshot.isStale(pids[i]),
                 demo: demo,
-                catalogStatus: switch (pid.evidenceKind) {
+                catalogStatus: switch (pids[i].evidenceKind) {
                   'community' => PowertrainProfileStatus.community,
                   'experimental' => PowertrainProfileStatus.experimental,
                   'ready' => PowertrainProfileStatus.ready,
                   _ => null,
                 },
               ),
-              delay: Duration(milliseconds: 28 * index),
-            );
-          }),
-        );
-      },
+              delay: Duration(milliseconds: 28 * (originalStartIndex + i)),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -355,6 +611,7 @@ String? _gaugeFootnote(
 
 class _GaugeTile extends StatelessWidget {
   const _GaugeTile({
+    super.key,
     required this.pid,
     required this.reading,
     required this.fault,
@@ -1268,17 +1525,23 @@ class _FadeInUpState extends State<_FadeInUp>
     vsync: this,
     duration: Motion.slow,
   );
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(widget.delay, () {
-      if (mounted) _controller.forward();
-    });
+    if (widget.delay == Duration.zero) {
+      _controller.forward();
+    } else {
+      _timer = Timer(widget.delay, () {
+        if (mounted) _controller.forward();
+      });
+    }
   }
 
   @override
   void dispose() {
+    _timer?.cancel();
     _controller.dispose();
     super.dispose();
   }

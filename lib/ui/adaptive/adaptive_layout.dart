@@ -11,6 +11,30 @@ import 'package:flutter/widgets.dart';
 
 import 'app_breakpoints.dart';
 
+/// An [InheritedWidget] providing an [AdaptiveLayout] to its subtree.
+///
+/// Used by shell and container widgets to expose content-viewport-localized
+/// layouts to child screens when chrome (e.g. NavigationRail) consumes space.
+class AdaptiveLayoutScope extends InheritedWidget {
+  const AdaptiveLayoutScope({
+    required this.layout,
+    required super.child,
+    super.key,
+  });
+
+  final AdaptiveLayout layout;
+
+  static AdaptiveLayout? maybeOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<AdaptiveLayoutScope>()
+          ?.layout;
+
+  @override
+  bool updateShouldNotify(AdaptiveLayoutScope oldWidget) =>
+      oldWidget.layout.size != layout.size ||
+      oldWidget.layout.separatingFeature != layout.separatingFeature;
+}
+
 /// Immutable snapshot of the current window's adaptive properties.
 ///
 /// Constructed via [AdaptiveLayout.of] which reads [MediaQuery] once
@@ -27,39 +51,74 @@ class AdaptiveLayout {
     required this.regions,
   });
 
-  /// Reads [MediaQuery] and computes all adaptive properties.
-  ///
-  /// This is the primary entry point. Call it at the top of `build`:
-  /// ```dart
-  /// final layout = AdaptiveLayout.of(context);
-  /// ```
-  factory AdaptiveLayout.of(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final features = MediaQuery.displayFeaturesOf(context);
+  /// Computes adaptive properties from explicit size and display features.
+  factory AdaptiveLayout.fromValues({
+    required Size size,
+    required List<DisplayFeature> displayFeatures,
+  }) {
     final windowClass = AppBreakpoints.widthClass(size.width);
 
-    // Find the first obstructing feature that actually separates the
-    // window into two usable halves (spans nearly the full height or
-    // width).
     DisplayFeature? separator;
-    for (final f in features) {
+    for (final f in displayFeatures) {
       if (_isObstructing(f) && _isSeparating(f, size)) {
         separator = f;
         break;
       }
     }
 
-    // Compute usable regions. When there is no separator the entire
-    // window is one region. When a vertical separator exists we get
-    // left + right; horizontal gives top + bottom.
     final regions = _computeRegions(separator, size);
 
     return AdaptiveLayout(
       size: size,
       windowClass: windowClass,
-      displayFeatures: features,
+      displayFeatures: displayFeatures,
       separatingFeature: separator,
       regions: regions,
+    );
+  }
+
+  /// Reads [MediaQuery] or [AdaptiveLayoutScope] and computes adaptive properties.
+  ///
+  /// This is the primary entry point. Call it at the top of `build`:
+  /// ```dart
+  /// final layout = AdaptiveLayout.of(context);
+  /// ```
+  factory AdaptiveLayout.of(BuildContext context) {
+    final scoped = AdaptiveLayoutScope.maybeOf(context);
+    if (scoped != null) return scoped;
+
+    return AdaptiveLayout.fromValues(
+      size: MediaQuery.sizeOf(context),
+      displayFeatures: MediaQuery.displayFeaturesOf(context),
+    );
+  }
+
+  /// Projects this layout into a local [viewport] within the window.
+  ///
+  /// Used when child content does not occupy the full window (for example,
+  /// when a [NavigationRail] occupies the left edge). Display features are
+  /// clipped to the viewport, shifted to local coordinates (origin at
+  /// `viewport.topLeft`), and adaptive regions/breakpoints are recomputed.
+  AdaptiveLayout projectTo(Rect viewport) {
+    final localSize = viewport.size;
+    final localFeatures = <DisplayFeature>[];
+
+    for (final feature in displayFeatures) {
+      final intersection = feature.bounds.intersect(viewport);
+      if (intersection.isEmpty) continue;
+
+      localFeatures.add(
+        DisplayFeature(
+          bounds: intersection.shift(-viewport.topLeft),
+          type: feature.type,
+          state: feature.state,
+        ),
+      );
+    }
+
+    return AdaptiveLayout.fromValues(
+      size: localSize,
+      displayFeatures: localFeatures,
     );
   }
 
