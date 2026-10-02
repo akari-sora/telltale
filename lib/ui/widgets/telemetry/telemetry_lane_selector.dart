@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../obd/pid/pid.dart';
 import '../../../state/telemetry_trends.dart';
+import '../../adaptive/adaptive_modal.dart';
 
 /// Why a selection was not applied, or null when it was.
 ///
@@ -115,9 +116,12 @@ class TelemetryLaneSelector extends ConsumerWidget {
   Future<void> _showSelector(BuildContext context, WidgetRef ref) async {
     final l10n = AppLocalizations.of(context);
     final initial = selectedIds.toSet();
-    final result = await showModalBottomSheet<List<String>>(
+    final result = await showAdaptiveModal<List<String>>(
       context: context,
       isScrollControlled: true,
+      scrollControlledHeightFactor: 0.72,
+      widePresentation: AdaptiveModalWidePresentation.sideSheet,
+      regionPreference: AdaptiveModalRegionPreference.largest,
       builder: (context) => _TelemetryLaneSheet(
         activePids: activePids,
         initialSelection: initial,
@@ -166,100 +170,92 @@ class _TelemetryLaneSheetState extends State<_TelemetryLaneSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return SafeArea(
-      child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.72,
-        maxChildSize: 0.94,
-        builder: (context, controller) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Spacing.lg,
-                Spacing.sm,
-                Spacing.lg,
-                Spacing.md,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Spacing.lg,
+            Spacing.sm,
+            Spacing.lg,
+            Spacing.md,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.trendSignalsHeading,
+                style: context.texts.headlineSmall,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.trendSignalsHeading,
-                    style: context.texts.headlineSmall,
-                  ),
-                  const SizedBox(height: Spacing.xs),
-                  Text(
-                    l10n.trendSheetBody(maximumTelemetryTrendLanes),
-                    style: context.texts.bodySmall,
-                  ),
-                ],
+              const SizedBox(height: Spacing.xs),
+              Text(
+                l10n.trendSheetBody(maximumTelemetryTrendLanes),
+                style: context.texts.bodySmall,
               ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                controller: controller,
-                itemCount: widget.activePids.length,
-                itemBuilder: (context, index) {
-                  final pid = widget.activePids[index];
-                  final selected = _selected.contains(pid.id);
-                  return CheckboxListTile(
-                    value: selected,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text(
-                      pid.shortName.isEmpty ? pid.name : pid.shortName,
-                    ),
-                    subtitle: Text(
-                      pid.units.isEmpty
-                          ? pid.modeAndPid
-                          : '${pid.modeAndPid} · ${pid.units}',
-                    ),
-                    onChanged: (value) {
-                      if (value == true &&
-                          _selected.length >= maximumTelemetryTrendLanes) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              l10n.trendTooManySelected(
-                                maximumTelemetryTrendLanes,
-                              ),
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-                      setState(() {
-                        if (value == true) {
-                          _selected.add(pid.id);
-                        } else {
-                          _selected.remove(pid.id);
-                        }
-                      });
-                    },
-                  );
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(Spacing.lg),
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(
-                  widget.activePids
-                      .where((pid) => _selected.contains(pid.id))
-                      .map((pid) => pid.id)
-                      .toList(),
-                ),
-                child: Text(
-                  l10n.trendSheetDone(
-                    _selected.length,
-                    maximumTelemetryTrendLanes,
-                  ),
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: widget.activePids.length,
+            itemBuilder: (context, index) {
+              final pid = widget.activePids[index];
+              final selected = _selected.contains(pid.id);
+              return CheckboxListTile(
+                value: selected,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(
+                  pid.shortName.isEmpty ? pid.name : pid.shortName,
+                ),
+                subtitle: Text(
+                  pid.units.isEmpty
+                      ? pid.modeAndPid
+                      : '${pid.modeAndPid} · ${pid.units}',
+                ),
+                onChanged: (value) {
+                  if (value == true &&
+                      _selected.length >= maximumTelemetryTrendLanes) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          l10n.trendTooManySelected(
+                            maximumTelemetryTrendLanes,
+                          ),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  setState(() {
+                    if (value == true) {
+                      _selected.add(pid.id);
+                    } else {
+                      _selected.remove(pid.id);
+                    }
+                  });
+                },
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(Spacing.lg),
+          child: FilledButton(
+            onPressed: () => Navigator.of(context).pop(
+              widget.activePids
+                  .where((pid) => _selected.contains(pid.id))
+                  .map((pid) => pid.id)
+                  .toList(),
+            ),
+            child: Text(
+              l10n.trendSheetDone(
+                _selected.length,
+                maximumTelemetryTrendLanes,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

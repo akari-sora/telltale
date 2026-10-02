@@ -259,9 +259,14 @@ abstract final class AdaptiveModalPolicy {
     final isMedium = size.width >= AppBreakpoints.medium;
     final maxAllowedW =
         isMedium ? math.min(mediumMaxWidth, safeRect.width) : safeRect.width;
-    final maxAllowedH = isScrollControlled
-        ? safeRect.height * scrollControlledHeightFactor
-        : safeRect.height * 0.90;
+    final isShortLandscape =
+        size.width > size.height &&
+        size.height <= AppBreakpoints.shortLandscapeHeight;
+    final maxAllowedH = isShortLandscape
+        ? safeRect.height
+        : (isScrollControlled
+            ? safeRect.height * scrollControlledHeightFactor
+            : safeRect.height * 0.90);
 
     final panelConstraints = applyCallerConstraints(
       safe: BoxConstraints(
@@ -393,7 +398,7 @@ class _AdaptiveModalRoute<T> extends PopupRoute<T> {
   }
 }
 
-class _AdaptiveModalHost extends StatelessWidget {
+class _AdaptiveModalHost extends StatefulWidget {
   const _AdaptiveModalHost({
     required this.builder,
     required this.isScrollControlled,
@@ -417,9 +422,16 @@ class _AdaptiveModalHost extends StatelessWidget {
   final BoxConstraints? constraints;
 
   @override
+  State<_AdaptiveModalHost> createState() => _AdaptiveModalHostState();
+}
+
+class _AdaptiveModalHostState extends State<_AdaptiveModalHost> {
+  final GlobalKey _contentKey = GlobalKey();
+
+  @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final textDir = textDirection;
+    final textDir = widget.textDirection;
 
     final layout = AdaptiveModalPolicy.resolve(
       size: media.size,
@@ -427,35 +439,40 @@ class _AdaptiveModalHost extends StatelessWidget {
       viewInsets: media.viewInsets,
       displayFeatures: media.displayFeatures,
       textDirection: textDir,
-      isScrollControlled: isScrollControlled,
-      widePresentation: widePresentation,
-      regionPreference: regionPreference,
-      constraints: constraints,
-      scrollControlledHeightFactor: scrollControlledHeightFactor,
+      isScrollControlled: widget.isScrollControlled,
+      widePresentation: widget.widePresentation,
+      regionPreference: widget.regionPreference,
+      constraints: widget.constraints,
+      scrollControlledHeightFactor: widget.scrollControlledHeightFactor,
     );
 
     final theme = Theme.of(context);
 
+    final content = KeyedSubtree(
+      key: _contentKey,
+      child: Builder(builder: widget.builder),
+    );
+
     Widget buildPanel() {
       switch (layout.surface) {
         case AdaptiveModalSurface.bottomSheet:
-          final childContent = isScrollControlled
+          final childContent = widget.isScrollControlled
               ? SizedBox(
                   height: layout.panelConstraints.maxHeight,
                   width: layout.panelConstraints.maxWidth,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (showDragHandle) _buildDragHandle(theme),
-                      Expanded(child: builder(context)),
+                      if (widget.showDragHandle) _buildDragHandle(theme),
+                      Expanded(child: content),
                     ],
                   ),
                 )
               : Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (showDragHandle) _buildDragHandle(theme),
-                    Flexible(child: builder(context)),
+                    if (widget.showDragHandle) _buildDragHandle(theme),
+                    Flexible(child: content),
                   ],
                 );
 
@@ -463,15 +480,17 @@ class _AdaptiveModalHost extends StatelessWidget {
             alignment: Alignment.bottomCenter,
             child: ConstrainedBox(
               constraints: layout.panelConstraints,
-              child: Material(
+              child: BottomSheet(
                 key: const ValueKey('adaptive-modal-bottom-sheet'),
                 elevation: 8,
-                color: theme.colorScheme.surface,
+                backgroundColor: theme.colorScheme.surface,
                 clipBehavior: Clip.antiAlias,
                 shape: const RoundedRectangleBorder(
                   borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
-                child: childContent,
+                enableDrag: false,
+                onClosing: () {},
+                builder: (context) => childContent,
               ),
             ),
           );
@@ -490,7 +509,7 @@ class _AdaptiveModalHost extends StatelessWidget {
                 child: SizedBox(
                   height: layout.panelConstraints.maxHeight,
                   width: layout.panelConstraints.maxWidth,
-                  child: builder(context),
+                  child: content,
                 ),
               ),
             ),
@@ -507,12 +526,12 @@ class _AdaptiveModalHost extends StatelessWidget {
                 color: theme.colorScheme.surface,
                 clipBehavior: Clip.antiAlias,
                 borderRadius: BorderRadius.circular(24),
-                child: isScrollControlled
+                child: widget.isScrollControlled
                     ? SizedBox(
                         height: layout.panelConstraints.maxHeight,
-                        child: builder(context),
+                        child: content,
                       )
-                    : builder(context),
+                    : content,
               ),
             ),
           );
@@ -522,10 +541,10 @@ class _AdaptiveModalHost extends StatelessWidget {
     final isBottomSheet = layout.surface == AdaptiveModalSurface.bottomSheet;
 
     return Directionality(
-      textDirection: textDirection,
+      textDirection: widget.textDirection,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: barrierDismissible ? () => Navigator.of(context).pop() : null,
+        onTap: widget.barrierDismissible ? () => Navigator.of(context).pop() : null,
         child: Stack(
           children: [
             Positioned.fromRect(
