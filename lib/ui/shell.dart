@@ -12,6 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/app_wakelock.dart';
+import 'adaptive/adaptive_layout.dart';
+import 'adaptive/app_breakpoints.dart';
 import '../core/theme/app_theme.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../state/obd_session.dart';
@@ -102,7 +104,11 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final index = _indexFor(context);
-    final useRail = MediaQuery.sizeOf(context).width >= 720;
+    final adaptive = AdaptiveLayout.of(context);
+    final useRail = shouldUseNavigationRail(
+      adaptive.windowClass,
+      adaptive.isShortLandscape,
+    );
     final child = widget.child;
 
     _syncWakelock(ref.watch(obdSessionProvider).isConnected);
