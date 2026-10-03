@@ -25,6 +25,11 @@ run_step pub-get flutter pub get
 run_step analyze flutter analyze
 run_step python-tools python3 -m unittest discover -s test/tool -p 'test_*.py'
 run_step python-mode08 python3 -m unittest discover -s tool/obd_test_rig -p 'test_mode08_replay_reference.py'
+run_step car-core-unit ./android/gradlew -p android :car-core:testDebugUnitTest
+run_step car-projected-build ./android/gradlew -p android :app:assembleCarProtoDebug
+run_step car-aaos-build ./android/gradlew -p android :automotive:assembleDebug
+run_step car-field-manifest ./android/gradlew -p android :app:processFieldDebugMainManifest
+run_step car-manifest-isolation python3 tool/ci/verify_car_manifest_isolation.py
 run_step foldable-quality flutter test test/ui/foldable_quality_gate_test.dart --reporter expanded
 run_step flutter-tests flutter test --reporter expanded
 run_step mode08-required python3 tool/ci/run_mode08_required.py --output-dir ci-artifacts/mode08-required
