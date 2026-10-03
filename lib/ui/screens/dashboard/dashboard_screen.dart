@@ -1246,10 +1246,12 @@ class _DerivedStrip extends ConsumerWidget {
                   children: [
                     Icon(Icons.functions, size: 15, color: palette.derived),
                     const SizedBox(width: Spacing.sm),
-                    Text(
-                      l10n.derivedEstimatesTitle,
-                      style: context.texts.labelSmall?.copyWith(
-                        color: palette.derived,
+                    Flexible(
+                      child: Text(
+                        l10n.derivedEstimatesTitle,
+                        style: context.texts.labelSmall?.copyWith(
+                          color: palette.derived,
+                        ),
                       ),
                     ),
                   ],

@@ -955,114 +955,152 @@ class _PidRow extends StatelessWidget {
         horizontal: Spacing.lg,
         vertical: Spacing.md,
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 34,
-            decoration: BoxDecoration(
-              color: isActive ? accent : palette.hairline,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: Spacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        pid.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.texts.titleSmall,
-                      ),
-                    ),
-                    if (pid.isCustom) ...[
-                      const SizedBox(width: Spacing.sm),
-                      StatusPill(
-                        label: l10n.pidPillCustom,
-                        tone: StatusTone.accent,
-                        dense: true,
-                      ),
-                    ],
-                    if (isUnsupported) ...[
-                      const SizedBox(width: Spacing.sm),
-                      StatusPill(
-                        label: l10n.pidPillUnsupported,
-                        tone: StatusTone.warn,
-                        dense: true,
-                      ),
-                    ],
-                  ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final textScale = MediaQuery.textScalerOf(context).scale(1);
+          final isNarrow = constraints.maxWidth < 280 ||
+              (textScale > 1.3 && constraints.maxWidth < 500);
+          return Row(
+            crossAxisAlignment: isNarrow
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 4,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: isActive ? accent : palette.hairline,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const SizedBox(height: 3),
-                Row(
+              ),
+              const SizedBox(width: Spacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      pid.modeAndPid,
-                      style: AppTypography.code(palette, size: 11.5),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            pid.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.texts.titleSmall,
+                          ),
+                        ),
+                        if (pid.isCustom) ...[
+                          const SizedBox(width: Spacing.sm),
+                          StatusPill(
+                            label: l10n.pidPillCustom,
+                            tone: StatusTone.accent,
+                            dense: true,
+                          ),
+                        ],
+                        if (isUnsupported) ...[
+                          const SizedBox(width: Spacing.sm),
+                          StatusPill(
+                            label: l10n.pidPillUnsupported,
+                            tone: StatusTone.warn,
+                            dense: true,
+                          ),
+                        ],
+                      ],
                     ),
-                    Text('  ·  ', style: context.texts.bodySmall),
-                    Flexible(
-                      child: Text(
-                        pid.equation,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.code(
-                          palette,
-                          size: 11.5,
-                          color: palette.textTertiary,
+                    const SizedBox(height: 3),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: pid.modeAndPid,
+                            style: AppTypography.code(palette, size: 11.5),
+                          ),
+                          TextSpan(
+                            text: '  ·  ',
+                            style: context.texts.bodySmall,
+                          ),
+                          TextSpan(
+                            text: pid.equation,
+                            style: AppTypography.code(
+                              palette,
+                              size: 11.5,
+                              color: palette.textTertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (isNarrow && reading != null) ...[
+                      const SizedBox(height: Spacing.xs),
+                      Opacity(
+                        opacity: isStale ? kStaleOpacity : 1,
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: reading!.formatted,
+                                style: AppTypography.readout(palette, 15),
+                              ),
+                              const TextSpan(text: ' '),
+                              TextSpan(
+                                text: isStale
+                                    ? l10n.pidRowStaleUnits(pid.units)
+                                    : pid.units,
+                                style: context.texts.labelSmall,
+                              ),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
-              ],
-            ),
-          ),
-          if (reading != null) ...[
-            const SizedBox(width: Spacing.sm),
-            Opacity(
-              // The same treatment the gauges use: a value that is no longer
-              // arriving is dimmed rather than shown as though it were.
-              opacity: isStale ? kStaleOpacity : 1,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    reading!.formatted,
-                    style: AppTypography.readout(palette, 17),
-                  ),
-                  Text(
-                    isStale ? l10n.pidRowStaleUnits(pid.units) : pid.units,
-                    style: context.texts.labelSmall,
-                  ),
-                ],
               ),
-            ),
-          ],
-          if (onEdit != null)
-            IconButton(
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined, size: 18),
-              tooltip: l10n.pidRowEdit,
-            ),
-          // A bare switch announces only "on"/"off" with no subject. In a
-          // list of twenty-three rows that is not enough to act on.
-          //
-          // `pid.name` is the author's own text and goes through verbatim in
-          // either language; it is data, never a key.
-          Semantics(
-            label: l10n.pidRowShowOnDashboard(pid.name),
-            child: Switch(
-              value: isActive,
-              onChanged: (_) => unawaited(onToggle()),
-            ),
-          ),
-        ],
+              if (!isNarrow && reading != null) ...[
+                const SizedBox(width: Spacing.sm),
+                Opacity(
+                  // The same treatment the gauges use: a value that is no longer
+                  // arriving is dimmed rather than shown as though it were.
+                  opacity: isStale ? kStaleOpacity : 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        reading!.formatted,
+                        style: AppTypography.readout(palette, 17),
+                      ),
+                      Text(
+                        isStale ? l10n.pidRowStaleUnits(pid.units) : pid.units,
+                        style: context.texts.labelSmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (onEdit != null)
+                IconButton(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  tooltip: l10n.pidRowEdit,
+                ),
+              // A bare switch announces only "on"/"off" with no subject. In a
+              // list of twenty-three rows that is not enough to act on.
+              //
+              // `pid.name` is the author's own text and goes through verbatim in
+              // either language; it is data, never a key.
+              Semantics(
+                label: l10n.pidRowShowOnDashboard(pid.name),
+                child: Switch(
+                  value: isActive,
+                  onChanged: (_) => unawaited(onToggle()),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
 

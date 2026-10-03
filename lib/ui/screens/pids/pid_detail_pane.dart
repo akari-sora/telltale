@@ -180,24 +180,36 @@ class PidDetailPane extends StatelessWidget {
               if (reading != null)
                 Opacity(
                   opacity: isStale ? kStaleOpacity : 1.0,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        reading!.formatted,
-                        style: AppTypography.readout(palette, 32),
-                      ),
-                      const SizedBox(width: Spacing.sm),
-                      Text(
-                        isStale
-                            ? l10n.pidRowStaleUnits(pid.units)
-                            : pid.units,
-                        style: context.texts.bodyMedium?.copyWith(
-                          color: palette.textSecondary,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: Spacing.sm,
+                      runSpacing: Spacing.xs,
+                      children: [
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              reading!.formatted,
+                              style: AppTypography.readout(palette, 32),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                          child: Text(
+                            isStale
+                                ? l10n.pidRowStaleUnits(pid.units)
+                                : pid.units,
+                            style: context.texts.bodyMedium?.copyWith(
+                              color: palette.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 )
               else
@@ -279,27 +291,51 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 130,
-          child: Text(
-            label,
-            style: context.texts.bodySmall?.copyWith(
-              color: palette.textSecondary,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 220) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: context.texts.bodySmall?.copyWith(
+                  color: palette.textSecondary,
+                ),
+              ),
+              const SizedBox(height: Spacing.xs),
+              Text(
+                value,
+                style: isCode
+                    ? AppTypography.code(palette, size: 12)
+                    : context.texts.bodySmall,
+              ),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 130,
+              child: Text(
+                label,
+                style: context.texts.bodySmall?.copyWith(
+                  color: palette.textSecondary,
+                ),
+              ),
             ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: isCode
-                ? AppTypography.code(palette, size: 12)
-                : context.texts.bodySmall,
-          ),
-        ),
-      ],
+            Expanded(
+              child: Text(
+                value,
+                style: isCode
+                    ? AppTypography.code(palette, size: 12)
+                    : context.texts.bodySmall,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
