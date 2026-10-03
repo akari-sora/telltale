@@ -8,6 +8,68 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+## 1.0.16 — 2026-10-03
+
+Google Play production target `1.0.16` / versionCode 17.
+
+### Added
+
+- Foldable and large-screen layouts. Window width decides the layout:
+  below 600 dp is the existing phone layout with a bottom navigation
+  bar; 600–839 dp switches to a navigation rail; 840 dp and up allows
+  two panes. A separating hinge reported by the system is treated as
+  unusable space: no gauge, list row, or button is placed across it.
+  This is width- and hinge-driven, not a per-model list. (FOLD-01)
+- Dashboard caps the gauge grid at 6 columns, so a wide window gives
+  readable tiles rather than many tiny ones. Across a vertical hinge the
+  gauges are split into two contiguous halves in the same order; in a
+  right-to-left language the first half sits on the right. (FOLD-02)
+- PID manager, fault codes, and the acceleration timer show a list and
+  a detail side by side on wide windows and across a vertical hinge.
+  Selecting a row shows its detail; the dashboard switch on a PID row
+  still only toggles the gauge. A fault code is identified by its code,
+  kind, and reporting controller, so the same code from two controllers
+  stays two rows. The fault-code list never auto-selects the first entry.
+  The PID editor is still a full screen, not an inline pane. (FOLD-03,
+  FOLD-05, FOLD-06)
+- Pickers that used to be bottom sheets open as a side sheet or a dialog
+  on wide windows, and avoid a hinge. Destructive confirmations (clearing
+  fault codes) are still ordinary dialogs. (FOLD-04, FOLD-07)
+- The connection screen keeps a single column at most 600 dp wide,
+  centred, instead of stretching across a tablet or an unfolded screen.
+  (FOLD-07)
+
+### Fixed
+
+- Folding, unfolding, or rotating keeps the selected PID, the selected
+  fault code, the dashboard mode and scroll position, and a running
+  acceleration run. A layout change does not reconnect to the adapter.
+- The first `0100` after `ATSP0` gets up to 25 seconds instead of the
+  4-second budget used for local AT commands. Automatic protocol search
+  on a slow adapter can take that long, and the old budget ended the
+  handshake right after the battery voltage appeared. A first `NO DATA`
+  gets exactly one immediate retry inside the same 25-second deadline;
+  `UNABLE TO CONNECT`, `CAN ERROR`, and a timeout are not retried. (#106)
+- Found on the release device walk, before tagging: the new adaptive
+  pickers were laid out against the whole window but placed inside the
+  tab area, so on a phone the bottom of a sheet slid under the navigation
+  bar (the last row could not be tapped) and on a wide window a dialog
+  was shifted sideways by the navigation rail's width. They now open
+  over the whole window like any other modal.
+  (`test/ui/adaptive/adaptive_modal_nested_navigator_test.dart`)
+
+### Known, and not fixed here
+
+- On a phone-width PID manager the header's overflow menu wraps onto its
+  own line and the supported-PID card does not span the full width. Same
+  layout as 1.0.15; cosmetic.
+- The foldable layouts are covered by widget tests that inject display
+  features (`test/ui/foldable_quality_gate_test.dart`) and were run on an
+  Android emulator configured as a Pixel 9 Pro Fold. They have not been
+  run on a physical foldable phone.
+- A horizontal (tabletop) hinge keeps a single pane on the screens that
+  split; there is no dedicated top/bottom posture mode.
+
 ## 1.0.15 — 2026-10-02
 
 Google Play production target `1.0.15` / versionCode 16. GitLab annotated
