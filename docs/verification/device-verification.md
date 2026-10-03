@@ -70,6 +70,66 @@ the artifact, not that they walked it, which is what this file is for. A
 weaker claim that is true beats a stronger one nobody can check, and the price
 of keeping it is one sentence in the release notes saying which claim it is.
 
+## 2026-10-03 — 1.0.16 release build on Galaxy S24 Ultra and a Pixel 9 Pro Fold emulator
+
+Device walk attested: 1.0.16
+
+Samsung Galaxy S24 Ultra `R5CX10VFFBA` (SM-S9280, zh-TW, Android 16) and
+`emulator-5554` (AVD `Foldable_Test`, Pixel 9 Pro Fold profile, en, Android
+16). Built `app-field-release.apk` (`--release --flavor field`) with
+`-PallowUnsignedRelease=true` and `android/key.properties` moved aside for
+the build, so it could overlay the debug-signed 1.0.14 on the phone without
+uninstalling — uninstalling would wipe the phone's PIDs, dashboard and
+vehicle settings, and the walk confirms they survived (last adapter and the
+2026/09/13 session record still listed). **The walked binary is
+debug-signed and is not the artifact Play publishes**; it establishes
+behaviour, not the release signature. `dumpsys package` on both devices:
+`versionCode=17 versionName=1.0.16`.
+
+**The walk found a regression, and it was fixed before tagging.** The
+first build walked put the new adaptive pickers inside go_router's tab
+navigator while sizing them against the whole window: on the phone the
+Settings market sheet slid under the bottom navigation bar (加拿大（NRCan）
+hidden, not tappable); on the unfolded emulator the same picker opened as a
+dialog centred at x=1254 px instead of the window centre 1038 px — shifted
+by the navigation rail. `showAdaptiveModal` now defaults to the root
+navigator; `test/ui/adaptive/adaptive_modal_nested_navigator_test.dart`
+fails on the old code (dialog centre 800 vs 600, last row untappable) and
+passes on the new. Full suite after the fix: `+4180 ~23: All tests
+passed!`, `flutter analyze` clean. The fixed build was reinstalled on both
+devices and the pickers re-walked: phone sheet shows all three markets
+above the gesture bar and the scroll-controlled Taiwan picker keeps its
+bottom action button on screen; emulator dialog spans 356–1721 px, centred.
+
+Walked on the phone (compact layout, bottom navigation): Demo ECU
+(`Demo ECU (2.0L Turbo I4)`, `AUTO, ISO 15765-4 (CAN 11/500)`, 批次讀取,
+`78 PIDs/s`, `14.2 V`), two-column gauges; PID 管理 list with the
+supported-PID panel (確認 23 項); 故障碼 scan: 3 codes, VIN
+`1D4GP00R55B123456`, freeze frame for `P0301`, readiness monitors; 性能
+acceleration screen; 設定 market picker and Taiwan catalog picker.
+
+Walked on the emulator, unfolded (inner display 2076×2152, navigation
+rail): connection screen as one centred column (307–1769 px); dashboard
+with four gauge columns; PID manager, fault codes (scan, 3 codes),
+acceleration timer, Settings. The inner display reports a fold, not a
+separating hinge, and its content width is under 840 dp, so these screens
+stay single-pane here — the two-pane paths were not exercised on a
+device. Folded to the outer display (`hinge-angle0 0`, 1080×2424) with the
+fault-code results on screen: same `ActivityRecord`, no reconnect, the 3
+codes and freeze frame still shown, bottom navigation; dashboard still
+`Demo ECU` connected and polling. Tabletop (`90`) and unfolded again
+(`180`): same window and `ActivityRecord`, still connected. `logcat` on
+both devices across the session: zero `E/flutter`, zero `FATAL EXCEPTION`,
+zero `RenderFlex overflowed`.
+
+Not walked: a physical foldable; a vertical separating hinge (two-pane
+across a hinge is widget-tested only, `test/ui/foldable_quality_gate_test.dart`);
+right-to-left; a real adapter or vehicle, so the #106 `0100` budget change
+is covered by `test/issue106_protocol_search_regression_test.dart`, not
+by this walk. Seen and left as is: on the phone the PID manager header's
+overflow menu wraps to its own line and the supported-PID card is not full
+width — the same layout code as 1.0.15.
+
 ## 2026-10-02 — 1.0.15 field build on Galaxy S24 Ultra
 
 Device walk attested: 1.0.15

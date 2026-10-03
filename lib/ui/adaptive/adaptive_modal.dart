@@ -297,12 +297,20 @@ abstract final class AdaptiveModalPolicy {
 /// Across fold/unfold dynamic transitions, all surfaces share a single unified route,
 /// dynamically recalculating geometry and morphing between BottomSheet, SideSheet,
 /// and Dialog without destroying child widget state.
+///
+/// [useRootNavigator] defaults to `true`, unlike Material's modal sheet. The
+/// layout policy measures the full window (`MediaQuery` size, padding and
+/// display features), so the route has to be laid out in the full-window
+/// overlay. The app's tabs live inside go_router's ShellRoute navigator, which
+/// is smaller than the window: pushed there, a compact sheet slid under the
+/// bottom NavigationBar and an expanded dialog was shifted by the rail width
+/// (found on the 1.0.16 release device walk).
 Future<T?> showAdaptiveModal<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool isScrollControlled = false,
   bool barrierDismissible = true,
-  bool useRootNavigator = false,
+  bool useRootNavigator = true,
   BoxConstraints? constraints,
   AdaptiveModalWidePresentation widePresentation =
       AdaptiveModalWidePresentation.sideSheet,

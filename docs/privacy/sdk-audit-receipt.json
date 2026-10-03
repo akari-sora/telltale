@@ -175,7 +175,7 @@
     "lib/telemetry/session/timeline_downsampler.dart": "73bfd27760d6f9729bd473576c21bd9d50e8d9db8a3afa2fea2c8f4dc8951d9b",
     "lib/trips/trip_accumulator.dart": "af6f7eb9dcf995a41150eda669759261e350509e7dc8400570e09447aaa6560a",
     "lib/ui/adaptive/adaptive_layout.dart": "ea1843d12ef58967e5c3788f3d20e9a1a96a2614a160141d61a3efa8a5720eeb",
-    "lib/ui/adaptive/adaptive_modal.dart": "e886e0e0ff9f16635ab2e2b9c56074e5b3ffc9f6e09faea14dee3ae60dcd93be",
+    "lib/ui/adaptive/adaptive_modal.dart": "3555cb07f119acd7854215bd033f4a97c8eb2af91282e53b4f8731dda2d37fa5",
     "lib/ui/adaptive/app_breakpoints.dart": "33c44a236af7e761f1fa1301477534a5b7fa3d8313168e5331396479d8859018",
     "lib/ui/adaptive/display_feature_layout.dart": "6453bfb56e7c49613bf6026395ac14dfe6143040d61a511007c7583bd3df37de",
     "lib/ui/screens/connect/connect_layout.dart": "c8ef8e4703ba550f15047b99e4daa6e2391439dc4600b2c889c1f3b8e9356998",
@@ -242,7 +242,7 @@
     "lib/ui/widgets/telemetry/telemetry_status_copy.dart": "7d1b7898638cab522859f047103e27c0c098fe72539cffb69b5ed8e74fd92e34",
     "lib/ui/widgets/transcript_export.dart": "892ae443512db9278b4462f9c438a3b14a21b139ef99d960bd428a7fc8ae3bdb",
     "pubspec.lock": "0c59c66b40489b3490b71b64be682387dd27ebde0db6205f73bc4c87d585b90c",
-    "pubspec.yaml": "caa70c2e73bb0d2806d1e85cd00b64c04be7915996d8593278a1d524f6f6f7d3"
+    "pubspec.yaml": "7e472c44b3d98a38fdf8e76881b0e17ebf82706027bda87633d64180109a9aa5"
   },
   "summary": "Verified zero third-party telemetry, tracking, advertising, analytics, or crash reporting dependencies across pubspec.yaml, pubspec.lock, lib, and build.gradle.kts."
 }
