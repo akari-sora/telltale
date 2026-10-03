@@ -161,6 +161,15 @@ android {
             // src/wear/ adds the watch feature and standalone declaration.
             versionNameSuffix = "-wear"
         }
+        create("carProto") {
+            dimension = "environment"
+            // AA-00 / AA-01 only.
+            //
+            // This deliberately DOES NOT use the production package while
+            // the Android for Cars category eligibility is unverified.
+            applicationIdSuffix = ".carproto"
+            versionNameSuffix = "-carproto"
+        }
     }
 
     buildTypes {
@@ -251,6 +260,12 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test:runner:1.3.0")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.2.0")
+
+    add("carProtoImplementation", project(":car-core"))
+    add(
+        "carProtoImplementation",
+        "androidx.car.app:app-projected:1.7.0",
+    )
 }
 
 flutter {

@@ -78,4 +78,4 @@ independent-results.json
 /R80-3-evidence*
 
 # Legacy app/ directory (pre-split copy)
-app/
+/app/

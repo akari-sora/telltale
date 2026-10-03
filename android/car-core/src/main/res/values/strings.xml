@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="car_app_name">Telltale</string>
+    <string name="car_home_status_title">Vehicle monitor</string>
+    <string name="car_home_status_body">Android for Cars skeleton is active</string>
+    <string name="car_home_data_title">Vehicle data</string>
+    <string name="car_home_data_body">Telemetry bridge is not connected in AA-01</string>
+    <string name="car_home_safety_title">Read-only projection</string>
+    <string name="car_home_safety_body">No vehicle commands or destructive actions are available</string>
+</resources>

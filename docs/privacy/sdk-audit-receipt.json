@@ -28,7 +28,7 @@
   "scope_and_limitations": "Formal gate audit is bounded to 215 source file digests, pubspec.lock SHA-256 match, and 7 prohibited SDK pattern regex scans executed by tool/workshop/validate_privacy_contract.py. Unverified pub-deps string claims are excluded from gate acceptance evidence.",
   "audited_sources_count": 215,
   "audited_sources": {
-    "android/app/build.gradle.kts": "06017ce899b06ffadf5362dfcbe97870c7486e1f13621a21f94e4a1cfc1208d1",
+    "android/app/build.gradle.kts": "4d21975c360af640576204e341336a15f8570e117e55f20feade3409fd1a3ded",
     "lib/app.dart": "e59f5b61beae59d8b6ed22f9dc589bba094817789c221cb9e3df1dfcbcf1fa30",
     "lib/core/affiliate/recommended_purchases.dart": "1b6a7706eaf78e9f7af7cdb45da441be8ef4f5efa3ed8767ea3ad6d763b50771",
     "lib/core/app_locales_platform.dart": "8718c9d53474dbbb4b79a55fc7fc21f0c7e99a9c24fb132c5ca02c3dc3c6316a",

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+
+        <!--
+          AA-00 PROVISIONAL CATEGORY ONLY.
+
+          androidx.car.app.category.IOT is used only by the isolated
+          carProto / automotive prototype artifacts while Play eligibility
+          for a read-only vehicle-monitoring experience is being validated.
+
+          This module MUST NOT be a dependency of field/rig/wear.
+        -->
+        <service
+            android:name="com.cbstudio.telltale.car.TelltaleCarAppService"
+            android:exported="true"
+            android:label="@string/car_app_name">
+
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.IOT" />
+            </intent-filter>
+        </service>
+    </application>
+
+</manifest>
