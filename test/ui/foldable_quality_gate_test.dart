@@ -1705,6 +1705,9 @@ void main() {
         initialLocation: DashboardScreen.path,
       );
 
+      // Verify visible zh-Hant localization copy
+      expect(find.text('儀表'), findsWidgets);
+
       // Scroll to lazy section to ensure derived estimates render without overflow
       final derivedFinder = find.byIcon(Icons.functions);
       for (var i = 0; i < 8 && derivedFinder.evaluate().isEmpty; i++) {
@@ -1718,6 +1721,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.tune_outlined));
       await tester.pumpAndSettle();
       expect(find.byType(PidManagerScreen), findsOneWidget);
+      expect(find.text('PID 管理'), findsOneWidget);
       await tester.drag(find.byKey(const PageStorageKey('pid-master-scroll')), const Offset(0, -300));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(ValueKey('pid-row-${PidLibrary.engineRpm.id}')));
@@ -1728,6 +1732,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.warning_amber_outlined));
       await tester.pumpAndSettle();
       expect(find.byType(DtcScreen), findsOneWidget);
+      expect(find.text('故障碼'), findsWidgets);
       await tester.tap(find.byKey(const ValueKey('dtc-card-P0300-7E8')));
       await tester.pumpAndSettle();
       expectNoLayoutErrors(tester);
@@ -1736,6 +1741,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.timer_outlined));
       await tester.pumpAndSettle();
       expect(find.byType(PerformanceScreen), findsOneWidget);
+      expect(find.text('加速測試'), findsOneWidget);
       expectNoLayoutErrors(tester);
     });
 
@@ -1751,6 +1757,7 @@ void main() {
         initialProfile: germanA11yHingeProfile,
         initialLocation: PerformanceScreen.path,
       );
+      expect(find.text('Beschleunigungstest'), findsOneWidget);
       expectNoHingeOverlap(tester, find.byKey(const ValueKey('performance-primary-pane')), hinge);
       expectNoHingeOverlap(tester, find.byKey(const ValueKey('performance-secondary-pane')), hinge);
       expectNoLayoutErrors(tester);
@@ -1758,6 +1765,7 @@ void main() {
       // 2. PID Manager in German
       await tester.tap(find.byIcon(Icons.tune_outlined));
       await tester.pumpAndSettle();
+      expect(find.text('PID-Manager'), findsOneWidget);
       final rpmRowFinder38 = find.byKey(ValueKey('pid-row-${PidLibrary.engineRpm.id}'));
       for (var i = 0; i < 15 && rpmRowFinder38.hitTestable().evaluate().isEmpty; i++) {
         await tester.dragFrom(const Offset(380, 600), const Offset(0, -500));
@@ -1773,6 +1781,7 @@ void main() {
       // 3. DTC in German
       await tester.tap(find.byIcon(Icons.warning_amber_outlined));
       await tester.pumpAndSettle();
+      expect(find.text('Fehlercodes'), findsWidgets);
       final dtcCardFinder38 = find.byKey(const ValueKey('dtc-card-P0300-7E8'));
       for (var i = 0; i < 10 && dtcCardFinder38.hitTestable().evaluate().isEmpty; i++) {
         await tester.dragFrom(const Offset(380, 600), const Offset(0, -400));
@@ -1788,10 +1797,10 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  // Static Integrity Audit
+  // Static Integrity Audit (F08-39 ~ F08-40)
   // ---------------------------------------------------------------------------
-  group('Static Integrity Audit', () {
-    test('Zero occurrences of showModalBottomSheet in production lib/', () {
+  group('Static Integrity Audit (F08-39 ~ F08-40)', () {
+    test('F08-39: Zero occurrences of showModalBottomSheet in production lib/', () {
       final libDir = Directory('lib');
       expect(libDir.existsSync(), isTrue);
 
@@ -1814,7 +1823,7 @@ void main() {
       );
     });
 
-    test('Zero occurrences of DraggableScrollableSheet in production lib/', () {
+    test('F08-40: Zero occurrences of DraggableScrollableSheet in production lib/', () {
       final libDir = Directory('lib');
       expect(libDir.existsSync(), isTrue);
 
