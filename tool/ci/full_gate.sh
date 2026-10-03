@@ -25,6 +25,7 @@ run_step pub-get flutter pub get
 run_step analyze flutter analyze
 run_step python-tools python3 -m unittest discover -s test/tool -p 'test_*.py'
 run_step python-mode08 python3 -m unittest discover -s tool/obd_test_rig -p 'test_mode08_replay_reference.py'
+run_step foldable-quality flutter test test/ui/foldable_quality_gate_test.dart --reporter expanded
 run_step flutter-tests flutter test --reporter expanded
 run_step mode08-required python3 tool/ci/run_mode08_required.py --output-dir ci-artifacts/mode08-required
 run_step ws10-s1-required python3 tool/ci/run_ws10_s1_required.py --output-dir ci-artifacts/ws10-s1-required

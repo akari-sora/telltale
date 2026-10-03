@@ -190,156 +190,214 @@ class _DtcScreenState extends ConsumerState<DtcScreen> {
     required List<DtcObservation> observations,
   }) {
     final verdict = scan.verdict;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Spacing.lg,
-            Spacing.md,
-            Spacing.lg,
-            Spacing.md,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.dtcHeadline,
-                      style: context.texts.headlineMedium,
-                    ),
-                    Text(
-                      !scan.hasScanned
-                          ? l10n.dtcNotScanned
-                          : scan.totalCodes > 0
-                              ? l10n.dtcTotalCodes(scan.totalCodes)
-                              : switch (verdict) {
-                                  ScanVerdict.completeClean =>
-                                    l10n.dtcVerdictCompleteClean,
-                                  ScanVerdict.partialClean =>
-                                    l10n.dtcVerdictPartialClean,
-                                  _ => l10n.dtcUnconfirmed,
-                                },
-                      style: context.texts.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              if (scan.hasScanned && scan.totalCodes > 0)
-                OutlinedButton.icon(
-                  onPressed: scan.loading ||
-                          scan.clearing ||
-                          scan.clearRepeatWouldHarm
-                      ? null
-                      : _clear,
-                  icon: scan.clearing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.delete_sweep_outlined, size: 18),
-                  label: Text(scan.clearing
-                      ? l10n.dtcClearing
-                      : scan.clearRepeatWouldHarm
-                          ? l10n.dtcRescanFirst
-                          : l10n.dtcClear),
-                ),
-            ],
-          ),
-        ),
-        if (scan.clearNotice != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Spacing.lg,
-              0,
-              Spacing.lg,
-              Spacing.md,
-            ),
-            child: Panel(
-              accent: scan.clearWorked ? palette.success : palette.warning,
-              isActive: true,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    scan.clearWorked
-                        ? Icons.check_circle_outline
-                        : Icons.error_outline,
-                    color: scan.clearWorked ? palette.success : palette.warning,
-                    size: 22,
-                  ),
-                  const SizedBox(width: Spacing.md),
-                  Expanded(
-                    child: SelectableText(
-                      dtcClearNoticeText(
-                        l10n,
-                        scan.clearNotice,
-                      )!,
-                      style: context.texts.bodySmall,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => ref
-                        .read(dtcScanProvider.notifier)
-                        .dismissClearMessage(),
-                    icon: const Icon(Icons.close, size: 18),
-                    tooltip: l10n.dtcDismiss,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        if (scan.vin != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Spacing.lg,
-              0,
-              Spacing.lg,
-              Spacing.md,
-            ),
-            child: Panel(
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.directions_car_outlined,
-                    size: 18,
-                    color: palette.textSecondary,
-                  ),
-                  const SizedBox(width: Spacing.md),
-                  Text('VIN', style: context.texts.labelSmall),
-                  const SizedBox(width: Spacing.md),
-                  Expanded(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        scan.vin!,
-                        style: AppTypography.code(
-                          palette,
-                          size: 13,
-                          color: palette.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _rescan,
-            child: ListView(
-              key: const ValueKey('dtc-master-list'),
+    return RefreshIndicator(
+      onRefresh: _rescan,
+      child: CustomScrollView(
+        key: const ValueKey('dtc-master-list'),
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(
                 Spacing.lg,
-                0,
+                Spacing.md,
                 Spacing.lg,
-                Spacing.xxl,
+                Spacing.md,
               ),
-              children: [
+              child: Wrap(
+                spacing: Spacing.md,
+                runSpacing: Spacing.sm,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.spaceBetween,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 140),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.dtcHeadline,
+                          style: context.texts.headlineMedium,
+                        ),
+                        Text(
+                          !scan.hasScanned
+                              ? l10n.dtcNotScanned
+                              : scan.totalCodes > 0
+                                  ? l10n.dtcTotalCodes(scan.totalCodes)
+                                  : switch (verdict) {
+                                      ScanVerdict.completeClean =>
+                                        l10n.dtcVerdictCompleteClean,
+                                      ScanVerdict.partialClean =>
+                                        l10n.dtcVerdictPartialClean,
+                                      _ => l10n.dtcUnconfirmed,
+                                    },
+                          style: context.texts.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (scan.hasScanned && scan.totalCodes > 0)
+                    OutlinedButton.icon(
+                      onPressed: scan.loading ||
+                              scan.clearing ||
+                              scan.clearRepeatWouldHarm
+                          ? null
+                          : _clear,
+                      icon: scan.clearing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.delete_sweep_outlined, size: 18),
+                      label: Text(scan.clearing
+                          ? l10n.dtcClearing
+                          : scan.clearRepeatWouldHarm
+                              ? l10n.dtcRescanFirst
+                              : l10n.dtcClear),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (scan.clearNotice != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Spacing.lg,
+                  0,
+                  Spacing.lg,
+                  Spacing.md,
+                ),
+                child: Panel(
+                  accent: scan.clearWorked ? palette.success : palette.warning,
+                  isActive: true,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        scan.clearWorked
+                            ? Icons.check_circle_outline
+                            : Icons.error_outline,
+                        color:
+                            scan.clearWorked ? palette.success : palette.warning,
+                        size: 22,
+                      ),
+                      const SizedBox(width: Spacing.md),
+                      Expanded(
+                        child: SelectableText(
+                          dtcClearNoticeText(
+                            l10n,
+                            scan.clearNotice,
+                          )!,
+                          style: context.texts.bodySmall,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => ref
+                            .read(dtcScanProvider.notifier)
+                            .dismissClearMessage(),
+                        icon: const Icon(Icons.close, size: 18),
+                        tooltip: l10n.dtcDismiss,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (scan.vin != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Spacing.lg,
+                  0,
+                  Spacing.lg,
+                  Spacing.md,
+                ),
+                child: Panel(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isCompact = constraints.maxWidth < 200;
+                      if (isCompact) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.directions_car_outlined,
+                                  size: 16,
+                                  color: palette.textSecondary,
+                                ),
+                                const SizedBox(width: Spacing.xs),
+                                Flexible(
+                                  child: Text(
+                                    'VIN',
+                                    style: context.texts.labelSmall,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: Spacing.xs),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  scan.vin!,
+                                  style: AppTypography.code(
+                                    palette,
+                                    size: 13,
+                                    color: palette.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Icon(
+                            Icons.directions_car_outlined,
+                            size: 18,
+                            color: palette.textSecondary,
+                          ),
+                          const SizedBox(width: Spacing.md),
+                          Text('VIN', style: context.texts.labelSmall),
+                          const SizedBox(width: Spacing.md),
+                          Expanded(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                scan.vin!,
+                                style: AppTypography.code(
+                                  palette,
+                                  size: 13,
+                                  color: palette.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              Spacing.lg,
+              0,
+              Spacing.lg,
+              Spacing.xxl,
+            ),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
                 Padding(
                   padding: const EdgeInsets.only(bottom: Spacing.md),
                   child: InkWell(
@@ -427,14 +485,16 @@ class _DtcScreenState extends ConsumerState<DtcScreen> {
                                 ),
                               ),
                               const SizedBox(width: Spacing.sm),
-                              Text(
-                                l10n.dtcGroupHeader(
-                                  dtcKindLabel(l10n, kind),
-                                  kind.mode,
-                                  kindObs.length,
-                                ),
-                                style: context.texts.labelSmall?.copyWith(
-                                  color: tone,
+                              Expanded(
+                                child: Text(
+                                  l10n.dtcGroupHeader(
+                                    dtcKindLabel(l10n, kind),
+                                    kind.mode,
+                                    kindObs.length,
+                                  ),
+                                  style: context.texts.labelSmall?.copyWith(
+                                    color: tone,
+                                  ),
                                 ),
                               ),
                             ],
@@ -456,11 +516,11 @@ class _DtcScreenState extends ConsumerState<DtcScreen> {
                     );
                   }(),
                 ],
-              ],
+              ]),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -824,9 +884,14 @@ class _DtcScreenState extends ConsumerState<DtcScreen> {
               Spacing.lg,
               Spacing.md,
             ),
-            child: Row(
+            child: Wrap(
+              spacing: Spacing.md,
+              runSpacing: Spacing.sm,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              alignment: WrapAlignment.spaceBetween,
               children: [
-                Expanded(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 140),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1156,80 +1221,72 @@ class _MasterDtcCard extends StatelessWidget {
       child: Panel(
         accent: isSelected ? tone : null,
         isActive: isSelected,
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Spacing.md,
-                vertical: Spacing.sm,
-              ),
-              decoration: BoxDecoration(
-                color: tone.withValues(alpha: isSelected ? 0.25 : 0.13),
-                borderRadius: BorderRadius.circular(Radii.sm),
-                border: Border.all(
-                  color: isSelected ? tone : tone.withValues(alpha: 0.30),
-                  width: isSelected ? 1.5 : 1.0,
+            Wrap(
+              spacing: Spacing.sm,
+              runSpacing: Spacing.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Spacing.md,
+                    vertical: Spacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: tone.withValues(alpha: isSelected ? 0.25 : 0.13),
+                    borderRadius: BorderRadius.circular(Radii.sm),
+                    border: Border.all(
+                      color: isSelected ? tone : tone.withValues(alpha: 0.30),
+                      width: isSelected ? 1.5 : 1.0,
+                    ),
+                  ),
+                  child: Text(
+                    dtc.code,
+                    style: AppTypography.code(palette, size: 15, color: tone)
+                        .copyWith(fontWeight: FontWeight.w700),
+                  ),
                 ),
-              ),
-              child: Text(
-                dtc.code,
-                style: AppTypography.code(palette, size: 15, color: tone)
-                    .copyWith(fontWeight: FontWeight.w700),
-              ),
+                if (observation.completeness ==
+                    DtcObservationCompleteness.partial)
+                  StatusPill(
+                    label: l10n.dtcPartialObservationBadge,
+                    tone: StatusTone.warn,
+                    dense: true,
+                  ),
+              ],
             ),
-            const SizedBox(width: Spacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          dtcCodeDescription(l10n, dtc) ??
-                              (dtc.isManufacturerSpecific
-                                  ? l10n.dtcManufacturerSpecific
-                                  : dtc.subsystem != null
-                                      ? l10n.dtcNoDescriptionForSubsystem(
-                                          dtcSubsystemLabel(
-                                            l10n,
-                                            dtc.subsystem!,
-                                          ),
-                                        )
-                                      : l10n.dtcCategoryFault(
-                                          dtcSystemLabel(l10n, dtc.category),
-                                        )),
-                          style: context.texts.bodyMedium?.copyWith(
-                            color: palette.textPrimary,
-                            fontWeight:
-                                isSelected ? FontWeight.w600 : FontWeight.w400,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (observation.completeness ==
-                          DtcObservationCompleteness.partial) ...[
-                        const SizedBox(width: Spacing.xs),
-                        StatusPill(
-                          label: l10n.dtcPartialObservationBadge,
-                          tone: StatusTone.warn,
-                          dense: true,
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: Spacing.xs),
-                  Text(
-                    dtc.sourceId == null
-                        ? dtcSystemLabel(l10n, dtc.category)
-                        : '${dtcSystemLabel(l10n, dtc.category)} · '
-                            '${l10n.dtcControllerLabel(dtc.sourceId!)}',
-                    style: context.texts.labelSmall,
-                  ),
-                ],
+            const SizedBox(height: Spacing.xs),
+            Text(
+              dtcCodeDescription(l10n, dtc) ??
+                  (dtc.isManufacturerSpecific
+                      ? l10n.dtcManufacturerSpecific
+                      : dtc.subsystem != null
+                          ? l10n.dtcNoDescriptionForSubsystem(
+                              dtcSubsystemLabel(
+                                l10n,
+                                dtc.subsystem!,
+                              ),
+                            )
+                          : l10n.dtcCategoryFault(
+                              dtcSystemLabel(l10n, dtc.category),
+                            )),
+              style: context.texts.bodyMedium?.copyWith(
+                color: palette.textPrimary,
+                fontWeight:
+                    isSelected ? FontWeight.w600 : FontWeight.w400,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: Spacing.xs),
+            Text(
+              dtc.sourceId == null
+                  ? dtcSystemLabel(l10n, dtc.category)
+                  : '${dtcSystemLabel(l10n, dtc.category)} · '
+                      '${l10n.dtcControllerLabel(dtc.sourceId!)}',
+              style: context.texts.labelSmall,
             ),
           ],
         ),
@@ -1237,7 +1294,6 @@ class _MasterDtcCard extends StatelessWidget {
     );
   }
 }
-
 
 class _DtcGroup extends StatelessWidget {
   const _DtcGroup({required this.kind, required this.codes});
@@ -1268,13 +1324,15 @@ class _DtcGroup extends StatelessWidget {
                 decoration: BoxDecoration(shape: BoxShape.circle, color: tone),
               ),
               const SizedBox(width: Spacing.sm),
-              Text(
-                l10n.dtcGroupHeader(
-                  dtcKindLabel(l10n, kind),
-                  kind.mode,
-                  codes.length,
+              Expanded(
+                child: Text(
+                  l10n.dtcGroupHeader(
+                    dtcKindLabel(l10n, kind),
+                    kind.mode,
+                    codes.length,
+                  ),
+                  style: context.texts.labelSmall?.copyWith(color: tone),
                 ),
-                style: context.texts.labelSmall?.copyWith(color: tone),
               ),
             ],
           ),
@@ -1285,8 +1343,9 @@ class _DtcGroup extends StatelessWidget {
           (dtc) => Padding(
             padding: const EdgeInsets.only(bottom: Spacing.sm),
             child: Panel(
+              key: ValueKey('dtc-card-${dtc.code}-${dtc.sourceId ?? "any"}'),
               accent: tone,
-              child: Row(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
@@ -1305,51 +1364,32 @@ class _DtcGroup extends StatelessWidget {
                           .copyWith(fontWeight: FontWeight.w700),
                     ),
                   ),
-                  const SizedBox(width: Spacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          // A code with no description shows the raw code and
-                          // says the description is missing. Never an invented
-                          // one.
-                          dtcCodeDescription(l10n, dtc) ??
-                              (dtc.isManufacturerSpecific
-                                  ? l10n.dtcManufacturerSpecific
-                                  // The subsystem where the code's own third
-                                  // digit gives one. 動力系統相關故障 is true
-                                  // of every code on this screen and therefore
-                                  // tells nobody anything.
-                                  : dtc.subsystem != null
-                                      ? l10n.dtcNoDescriptionForSubsystem(
-                                          dtcSubsystemLabel(
-                                            l10n,
-                                            dtc.subsystem!,
-                                          ),
-                                        )
-                                      : l10n.dtcCategoryFault(
-                                          dtcSystemLabel(l10n, dtc.category),
-                                        )),
-                          style: context.texts.bodyMedium?.copyWith(
-                            color: palette.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: Spacing.xs),
-                        Text(
-                          // Named where the reply carried a header. Two
-                          // modules reporting the same code is two of them
-                          // seeing the fault, which is usually the difference
-                          // between one problem and two — and the parser knew
-                          // it all along.
-                          dtc.sourceId == null
-                              ? dtcSystemLabel(l10n, dtc.category)
-                              : '${dtcSystemLabel(l10n, dtc.category)} · '
-                                  '${l10n.dtcControllerLabel(dtc.sourceId!)}',
-                          style: context.texts.labelSmall,
-                        ),
-                      ],
+                  const SizedBox(height: Spacing.xs),
+                  Text(
+                    dtcCodeDescription(l10n, dtc) ??
+                        (dtc.isManufacturerSpecific
+                            ? l10n.dtcManufacturerSpecific
+                            : dtc.subsystem != null
+                                ? l10n.dtcNoDescriptionForSubsystem(
+                                    dtcSubsystemLabel(
+                                      l10n,
+                                      dtc.subsystem!,
+                                    ),
+                                  )
+                                : l10n.dtcCategoryFault(
+                                    dtcSystemLabel(l10n, dtc.category),
+                                  )),
+                    style: context.texts.bodyMedium?.copyWith(
+                      color: palette.textPrimary,
                     ),
+                  ),
+                  const SizedBox(height: Spacing.xs),
+                  Text(
+                    dtc.sourceId == null
+                        ? dtcSystemLabel(l10n, dtc.category)
+                        : '${dtcSystemLabel(l10n, dtc.category)} · '
+                            '${l10n.dtcControllerLabel(dtc.sourceId!)}',
+                    style: context.texts.labelSmall,
                   ),
                 ],
               ),
