@@ -110,6 +110,29 @@ class VerifyCarManifestIsolationTest(unittest.TestCase):
             self.assertEqual(len(errors), 1)
             self.assertIn("CarAppService", errors[0])
 
+    def test_comment_containing_forbidden_token_does_not_fail(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest = Path(tmpdir) / "AndroidManifest.xml"
+            manifest.write_text(
+                """<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Note: CarAppService and category.IOT are strictly isolated and forbidden in production -->
+    <application android:name="io.flutter.app.FlutterApplication">
+        <activity android:name=".MainActivity"/>
+    </application>
+</manifest>""",
+                encoding="utf-8",
+            )
+            errors = verify_manifest(
+                name="comment test",
+                path=manifest,
+                must_contain=[],
+                must_not_contain=[
+                    "CarAppService",
+                    "category.IOT",
+                ],
+            )
+            self.assertEqual(errors, [])
+
 
 if __name__ == "__main__":
     unittest.main()

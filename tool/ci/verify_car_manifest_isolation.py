@@ -24,6 +24,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -41,16 +42,19 @@ def ensure_manifests():
         "build/app/intermediates/merged_manifest/carProtoDebug/processCarProtoDebugMainManifest/AndroidManifest.xml",
         "build/app/intermediates/merged_manifests/carProtoDebug/processCarProtoDebugManifest/AndroidManifest.xml",
         "android/app/build/intermediates/merged_manifest/carProtoDebug/processCarProtoDebugMainManifest/AndroidManifest.xml",
+        "android/app/build/intermediates/merged_manifests/carProtoDebug/processCarProtoDebugManifest/AndroidManifest.xml",
     ]
     candidates_field = [
         "build/app/intermediates/merged_manifest/fieldDebug/processFieldDebugMainManifest/AndroidManifest.xml",
         "build/app/intermediates/merged_manifests/fieldDebug/processFieldDebugManifest/AndroidManifest.xml",
         "android/app/build/intermediates/merged_manifest/fieldDebug/processFieldDebugMainManifest/AndroidManifest.xml",
+        "android/app/build/intermediates/merged_manifests/fieldDebug/processFieldDebugManifest/AndroidManifest.xml",
     ]
     candidates_auto = [
         "build/automotive/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml",
         "build/automotive/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml",
         "android/automotive/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml",
+        "android/automotive/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml",
     ]
 
     p_car = find_manifest(candidates_car)
@@ -86,14 +90,37 @@ def ensure_manifests():
     return p_car, p_field, p_auto
 
 
+def extract_manifest_tokens(path: Path) -> set[str]:
+    """Parse AndroidManifest XML and extract all active tags, attributes, and text.
+
+    Comments are excluded by ElementTree, preventing non-code commentary from
+    triggering false-positive leak errors while ensuring all real XML tags,
+    intent filters, categories, and metadata are strictly inspected.
+    """
+    try:
+        tree = ET.parse(path)
+        root = tree.getroot()
+        tokens = set()
+        for elem in root.iter():
+            tokens.add(elem.tag)
+            for k, v in elem.attrib.items():
+                tokens.add(k)
+                tokens.add(v)
+            if elem.text and elem.text.strip():
+                tokens.add(elem.text.strip())
+        return tokens
+    except ET.ParseError:
+        return set(path.read_text(encoding="utf-8").split())
+
+
 def verify_manifest(name: str, path: Path, must_contain: list[str], must_not_contain: list[str]) -> list[str]:
     errors = []
-    content = path.read_text(encoding="utf-8")
+    tokens = extract_manifest_tokens(path)
     display_path = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
     print(f"\n--- Checking {name} merged manifest: {display_path} ---")
 
     for token in must_contain:
-        if token not in content:
+        if not any(token in t for t in tokens):
             err = f"[{name} FAIL] Expected token {token!r} NOT found in merged manifest {path}"
             print(f"  ❌ {err}")
             errors.append(err)
@@ -101,7 +128,7 @@ def verify_manifest(name: str, path: Path, must_contain: list[str], must_not_con
             print(f"  ✅ MUST contain: {token}")
 
     for token in must_not_contain:
-        if token in content:
+        if any(token in t for t in tokens):
             err = f"[{name} FAIL] Forbidden token {token!r} leaked into merged manifest {path}"
             print(f"  ❌ {err}")
             errors.append(err)
@@ -155,6 +182,30 @@ def main():
             ],
         )
     )
+
+    # Check fieldRelease merged manifest if present
+    candidates_field_release = [
+        "build/app/intermediates/merged_manifest/fieldRelease/processFieldReleaseMainManifest/AndroidManifest.xml",
+        "build/app/intermediates/merged_manifests/fieldRelease/processFieldReleaseManifest/arm64-v8a/AndroidManifest.xml",
+        "android/app/build/intermediates/merged_manifest/fieldRelease/processFieldReleaseMainManifest/AndroidManifest.xml",
+        "android/app/build/intermediates/merged_manifests/fieldRelease/processFieldReleaseManifest/arm64-v8a/AndroidManifest.xml",
+    ]
+    p_field_release = find_manifest(candidates_field_release)
+    if p_field_release:
+        all_errors.extend(
+            verify_manifest(
+                name="AA01-09 fieldRelease (production)",
+                path=p_field_release,
+                must_contain=[],
+                must_not_contain=[
+                    "CarAppService",
+                    "category.IOT",
+                    "com.google.android.gms.car.application",
+                    "com.android.automotive",
+                    "CarAppActivity",
+                ],
+            )
+        )
 
     # AA01-10 automotive merged manifest:
     # MUST contain CarAppService

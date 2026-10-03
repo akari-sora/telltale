@@ -9,21 +9,33 @@ class CarSkeletonContractTest(unittest.TestCase):
     def read(self, relative: str) -> str:
         return (ROOT / relative).read_text(encoding="utf-8")
 
-    def test_production_main_manifest_has_no_android_auto_metadata(self):
-        manifest = self.read("android/app/src/main/AndroidManifest.xml")
-
-        self.assertNotIn(
+    def test_production_and_variant_manifests_have_no_car_metadata(self):
+        non_car_manifests = [
+            "android/app/src/main/AndroidManifest.xml",
+            "android/app/src/rig/AndroidManifest.xml",
+            "android/app/src/wear/AndroidManifest.xml",
+            "android/app/src/debug/AndroidManifest.xml",
+            "android/app/src/profile/AndroidManifest.xml",
+        ]
+        forbidden = [
             "com.google.android.gms.car.application",
-            manifest,
-        )
-        self.assertNotIn(
             "androidx.car.app.CarAppService",
-            manifest,
-        )
-        self.assertNotIn(
             "androidx.car.app.category.IOT",
-            manifest,
-        )
+            "com.android.automotive",
+            "CarAppActivity",
+        ]
+
+        for path in non_car_manifests:
+            manifest_file = ROOT / path
+            if not manifest_file.is_file():
+                continue
+            manifest = manifest_file.read_text(encoding="utf-8")
+            for token in forbidden:
+                self.assertNotIn(
+                    token,
+                    manifest,
+                    msg=f"Forbidden car token {token!r} found in {path}",
+                )
 
     def test_android_auto_metadata_is_isolated_to_car_proto(self):
         manifest = self.read(
@@ -53,11 +65,30 @@ class CarSkeletonContractTest(unittest.TestCase):
             'add("carProtoImplementation", project(":car-core"))',
             gradle,
         )
-
-        self.assertNotIn(
-            'implementation(project(":car-core"))',
+        self.assertIn(
+            'add(\n        "carProtoImplementation",\n        "androidx.car.app:app-projected:1.7.0",\n    )',
             gradle,
         )
+
+        # Ensure :car-core and androidx.car.app are not linked into non-car scopes
+        forbidden_scopes = [
+            'implementation(project(":car-core"))',
+            'api(project(":car-core"))',
+            'fieldImplementation(project(":car-core"))',
+            'rigImplementation(project(":car-core"))',
+            'wearImplementation(project(":car-core"))',
+            'releaseImplementation(project(":car-core"))',
+            'implementation("androidx.car.app',
+            'fieldImplementation("androidx.car.app',
+            'rigImplementation("androidx.car.app',
+            'wearImplementation("androidx.car.app',
+        ]
+        for pattern in forbidden_scopes:
+            self.assertNotIn(
+                pattern,
+                gradle,
+                msg=f"Forbidden dependency wiring {pattern!r} leaked into android/app/build.gradle.kts",
+            )
 
     def test_car_core_contains_no_obd_protocol_code(self):
         car_core = ROOT / "android/car-core"
