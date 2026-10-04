@@ -119,6 +119,32 @@ class CarSkeletonContractTest(unittest.TestCase):
                     msg=f"{token!r} leaked into {file}",
                 )
 
+    def test_prototype_application_ids_are_isolated(self):
+        app_gradle = self.read("android/app/build.gradle.kts")
+        auto_gradle = self.read("android/automotive/build.gradle.kts")
+
+        projected_suffix = 'applicationIdSuffix = ".carproto"'
+        aaos_id = 'applicationId = "com.cbstudio.telltale.carproto.aaos"'
+
+        self.assertIn(projected_suffix, app_gradle)
+        self.assertIn(aaos_id, auto_gradle)
+
+        # Full projected applicationId = base ("com.cbstudio.telltale") + suffix (".carproto")
+        projected_full_id = "com.cbstudio.telltale.carproto"
+        aaos_full_id = "com.cbstudio.telltale.carproto.aaos"
+
+        self.assertNotEqual(
+            projected_full_id,
+            aaos_full_id,
+            "Projected and AAOS prototype applicationIds MUST be distinct to allow dual-install and clear test isolation",
+        )
+        self.assertNotIn(
+            'applicationId = "com.cbstudio.telltale.carproto"',
+            auto_gradle,
+            "AAOS prototype MUST NOT reuse the projected carProto applicationId",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+

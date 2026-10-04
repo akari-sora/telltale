@@ -54,6 +54,14 @@ It MUST NOT expose:
 - performance timing
 - destructive vehicle commands
 
+## Prototype identities
+
+| Target | Artifact | applicationId | Purpose |
+| :--- | :--- | :--- | :--- |
+| Projected Prototype | `app-carProto-debug.apk` | `com.cbstudio.telltale.carproto` | Android Auto phone projection test vehicle |
+| AAOS Prototype | `automotive-debug.apk` | `com.cbstudio.telltale.carproto.aaos` | Standalone Android Automotive OS test vehicle |
+| Production ID | Release artifacts | Deferred until eligibility decision | Subject to Google Play single-listing vs separate-listing review |
+
 ## Promotion criteria
 
 Production Android Auto/AAOS support may not be enabled until all of:

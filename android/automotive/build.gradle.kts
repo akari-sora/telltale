@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         // Prototype identity until AA-00 category eligibility is accepted.
-        applicationId = "com.cbstudio.telltale.carproto"
+        applicationId = "com.cbstudio.telltale.carproto.aaos"
 
         minSdk = 29
         targetSdk = 36

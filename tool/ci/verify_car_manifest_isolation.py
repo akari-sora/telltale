@@ -57,17 +57,26 @@ def ensure_manifests():
         "android/automotive/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml",
     ]
 
+    candidates_field_release = [
+        "build/app/intermediates/merged_manifest/fieldRelease/processFieldReleaseMainManifest/AndroidManifest.xml",
+        "build/app/intermediates/merged_manifests/fieldRelease/processFieldReleaseManifest/arm64-v8a/AndroidManifest.xml",
+        "android/app/build/intermediates/merged_manifest/fieldRelease/processFieldReleaseMainManifest/AndroidManifest.xml",
+        "android/app/build/intermediates/merged_manifests/fieldRelease/processFieldReleaseManifest/arm64-v8a/AndroidManifest.xml",
+    ]
+
     p_car = find_manifest(candidates_car)
     p_field = find_manifest(candidates_field)
     p_auto = find_manifest(candidates_auto)
+    p_field_release = find_manifest(candidates_field_release)
 
-    if not (p_car and p_field and p_auto):
+    if not (p_car and p_field and p_auto and p_field_release):
         print("[INFO] One or more merged manifests missing; invoking Gradle to generate them...")
         cmd = [
             "./android/gradlew",
             "-p",
             "android",
             ":app:processFieldDebugMainManifest",
+            ":app:processFieldReleaseMainManifest",
             ":app:processCarProtoDebugMainManifest",
             ":automotive:processDebugMainManifest",
         ]
@@ -79,6 +88,7 @@ def ensure_manifests():
         p_car = find_manifest(candidates_car)
         p_field = find_manifest(candidates_field)
         p_auto = find_manifest(candidates_auto)
+        p_field_release = find_manifest(candidates_field_release)
 
     if not p_car:
         raise FileNotFoundError(f"carProto merged manifest not found in: {candidates_car}")
@@ -86,8 +96,10 @@ def ensure_manifests():
         raise FileNotFoundError(f"field merged manifest not found in: {candidates_field}")
     if not p_auto:
         raise FileNotFoundError(f"automotive merged manifest not found in: {candidates_auto}")
+    if not p_field_release:
+        raise FileNotFoundError(f"fieldRelease merged manifest not found in: {candidates_field_release}")
 
-    return p_car, p_field, p_auto
+    return p_car, p_field, p_auto, p_field_release
 
 
 def extract_manifest_tokens(path: Path) -> set[str]:
@@ -109,8 +121,9 @@ def extract_manifest_tokens(path: Path) -> set[str]:
             if elem.text and elem.text.strip():
                 tokens.add(elem.text.strip())
         return tokens
-    except ET.ParseError:
-        return set(path.read_text(encoding="utf-8").split())
+    except ET.ParseError as exc:
+        raise RuntimeError(f"Failed to parse XML from {path}: {exc}")
+
 
 
 def verify_manifest(name: str, path: Path, must_contain: list[str], must_not_contain: list[str]) -> list[str]:
@@ -140,7 +153,7 @@ def verify_manifest(name: str, path: Path, must_contain: list[str], must_not_con
 
 def main():
     print("=== Verifying Car Merged Manifest Isolation ===")
-    p_car, p_field, p_auto = ensure_manifests()
+    p_car, p_field, p_auto, p_field_release = ensure_manifests()
 
     all_errors = []
 
@@ -164,13 +177,13 @@ def main():
         )
     )
 
-    # AA01-09 field merged manifest:
+    # AA01-09 fieldDebug merged manifest:
     # MUST NOT contain CarAppService
     # MUST NOT contain category.IOT
     # MUST NOT contain com.google.android.gms.car.application
     all_errors.extend(
         verify_manifest(
-            name="AA01-09 field (production)",
+            name="AA01-09 fieldDebug (production)",
             path=p_field,
             must_contain=[],
             must_not_contain=[
@@ -183,29 +196,24 @@ def main():
         )
     )
 
-    # Check fieldRelease merged manifest if present
-    candidates_field_release = [
-        "build/app/intermediates/merged_manifest/fieldRelease/processFieldReleaseMainManifest/AndroidManifest.xml",
-        "build/app/intermediates/merged_manifests/fieldRelease/processFieldReleaseManifest/arm64-v8a/AndroidManifest.xml",
-        "android/app/build/intermediates/merged_manifest/fieldRelease/processFieldReleaseMainManifest/AndroidManifest.xml",
-        "android/app/build/intermediates/merged_manifests/fieldRelease/processFieldReleaseManifest/arm64-v8a/AndroidManifest.xml",
-    ]
-    p_field_release = find_manifest(candidates_field_release)
-    if p_field_release:
-        all_errors.extend(
-            verify_manifest(
-                name="AA01-09 fieldRelease (production)",
-                path=p_field_release,
-                must_contain=[],
-                must_not_contain=[
-                    "CarAppService",
-                    "category.IOT",
-                    "com.google.android.gms.car.application",
-                    "com.android.automotive",
-                    "CarAppActivity",
-                ],
-            )
+    # AA01-R05 fieldRelease merged manifest (mandatory gate):
+    # MUST NOT contain CarAppService
+    # MUST NOT contain category.IOT
+    # MUST NOT contain com.google.android.gms.car.application
+    all_errors.extend(
+        verify_manifest(
+            name="AA01-R05 fieldRelease (production)",
+            path=p_field_release,
+            must_contain=[],
+            must_not_contain=[
+                "CarAppService",
+                "category.IOT",
+                "com.google.android.gms.car.application",
+                "com.android.automotive",
+                "CarAppActivity",
+            ],
         )
+    )
 
     # AA01-10 automotive merged manifest:
     # MUST contain CarAppService

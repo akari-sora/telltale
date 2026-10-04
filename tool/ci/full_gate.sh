@@ -29,6 +29,7 @@ run_step car-core-unit ./android/gradlew -p android :car-core:testDebugUnitTest
 run_step car-projected-build ./android/gradlew -p android :app:assembleCarProtoDebug
 run_step car-aaos-build ./android/gradlew -p android :automotive:assembleDebug
 run_step car-field-manifest ./android/gradlew -p android :app:processFieldDebugMainManifest
+run_step car-field-release-manifest ./android/gradlew -p android :app:processFieldReleaseMainManifest
 run_step car-manifest-isolation python3 tool/ci/verify_car_manifest_isolation.py
 run_step foldable-quality flutter test test/ui/foldable_quality_gate_test.dart --reporter expanded
 run_step flutter-tests flutter test --reporter expanded
