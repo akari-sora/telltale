@@ -266,6 +266,12 @@ dependencies {
         "carProtoImplementation",
         "androidx.car.app:app-projected:1.7.0",
     )
+    // AA-02 HostApi adapter test (src/testCarProto) drives the car-core
+    // repository on virtual time. carProto-only, like everything car.
+    add(
+        "testCarProtoImplementation",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+    )
 }
 
 flutter {

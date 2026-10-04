@@ -103,6 +103,11 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
   # Persist-false SharedPreferences store for custom-PID commit tests.
   shared_preferences_platform_interface: 2.4.2
+  # Generates the typed one-way Dart -> Kotlin car telemetry bridge
+  # (pigeons/car_telemetry.dart). Exact pin, never a caret range: Pigeon does
+  # not define behaviour when the Dart and Kotlin halves come from different
+  # generator versions. A bump is its own MR: regenerate, drift gate, tests.
+  pigeon: 29.0.6
 
 # Launcher icons are generated from assets/icon/*.svg via Chrome headless into
 # the matching PNGs, then expanded to every density by:
