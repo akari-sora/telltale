@@ -45,6 +45,11 @@ Future<void> main() async {
     '(${platformMetadata.rendererReason}); '
     'engine reports ${platformMetadata.rendererObserved}',
   );
+  final carProjection = isCarProjectionEligible(platformMetadata);
+  debugPrint(
+    'car projection: ${carProjection.reason} '
+    '(enabled: ${carProjection.enabled})',
+  );
   final rigShareCaptureEnabled = isRigShareCaptureEligible(
     metadata: platformMetadata,
     buildFlag: isObdTestRigBuild,
@@ -79,10 +84,10 @@ Future<void> main() async {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         // AA-02: only the projected Android Auto prototype hosts the one-way
-        // car telemetry producer. Decided from the native applicationId that
-        // was already prefetched, never from a failed channel call.
+        // car telemetry producer. Evaluated from platform and flavor identity,
+        // failing open to keep car screen alive if platform metadata timed out.
         carProjectionEnabledProvider.overrideWithValue(
-          isCarProjectionEligible(platformMetadata),
+          carProjection.enabled,
         ),
         telemetryRecorderRuntimeProvider.overrideWith(
           (ref) => ref.watch(productionTelemetryRecorderRuntimeProvider),
