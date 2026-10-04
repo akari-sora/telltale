@@ -910,7 +910,7 @@
         ],
         "audit_command": "flutter pub deps --style=compact",
         "receipt_file": "docs/privacy/sdk-audit-receipt.json",
-        "target_source_lock_sha256": "0c59c66b40489b3490b71b64be682387dd27ebde0db6205f73bc4c87d585b90c",
+        "target_source_lock_sha256": "8cb7876cb7f2d393a9a65e56d365382cf0075922e8b76c0eed12390749910240",
         "status": "PASS",
         "exit_code": 0,
         "hits_count": 0,
@@ -929,7 +929,7 @@
         {
           "path": "pubspec.yaml",
           "symbol": "name: torque_obd",
-          "sha256": "7e472c44b3d98a38fdf8e76881b0e17ebf82706027bda87633d64180109a9aa5",
+          "sha256": "2a6221f0a4fb3e4534c70e6eacb153f9512db7f3136d34f90d8b5ad66863d816",
           "storage_fact": "none"
         }
       ],

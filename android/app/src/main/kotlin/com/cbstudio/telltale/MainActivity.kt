@@ -184,6 +184,11 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // Flavor-provided, resolved at compile time. carProto registers the
+        // one-way car telemetry bridge; field / rig / wear compile a no-op.
+        // src/main must never name car types directly.
+        FlavorPlatformRegistrar.register(flutterEngine)
     }
 
     /**

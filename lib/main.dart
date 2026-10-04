@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'car/car_projection_runtime.dart';
 import 'core/app_locales_platform.dart';
 import 'core/field_evidence/platform_metadata.dart';
 import 'core/form_factor.dart';
@@ -77,6 +78,12 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
+        // AA-02: only the projected Android Auto prototype hosts the one-way
+        // car telemetry producer. Decided from the native applicationId that
+        // was already prefetched, never from a failed channel call.
+        carProjectionEnabledProvider.overrideWithValue(
+          isCarProjectionEligible(platformMetadata),
+        ),
         telemetryRecorderRuntimeProvider.overrideWith(
           (ref) => ref.watch(productionTelemetryRecorderRuntimeProvider),
         ),

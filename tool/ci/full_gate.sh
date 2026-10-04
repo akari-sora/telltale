@@ -22,10 +22,12 @@ run_step flutter-config flutter config --no-analytics
 run_step sdk flutter --version --machine
 run_step sdk-pin python3 -c 'import json; from pathlib import Path; actual=json.loads(Path("ci-artifacts/sdk.stdout").read_text()); expected=json.loads(Path(".fvmrc").read_text())["flutter"]; assert actual["frameworkVersion"]==expected, (actual, expected); print("Pinned Flutter:", expected)'
 run_step pub-get flutter pub get
+run_step car-pigeon-codegen bash tool/ci/verify_car_pigeon_codegen.sh
 run_step analyze flutter analyze
 run_step python-tools python3 -m unittest discover -s test/tool -p 'test_*.py'
 run_step python-mode08 python3 -m unittest discover -s tool/obd_test_rig -p 'test_mode08_replay_reference.py'
 run_step car-core-unit ./android/gradlew -p android :car-core:testDebugUnitTest
+run_step car-proto-unit ./android/gradlew -p android :app:testCarProtoDebugUnitTest
 run_step car-projected-build ./android/gradlew -p android :app:assembleCarProtoDebug
 run_step car-aaos-build ./android/gradlew -p android :automotive:assembleDebug
 run_step car-field-manifest ./android/gradlew -p android :app:processFieldDebugMainManifest
