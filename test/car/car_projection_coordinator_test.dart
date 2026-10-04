@@ -196,7 +196,7 @@ void main() {
   });
 
   group('runtime gating (AA02-05 / AA02-06)', () {
-    test('eligibility is the exact carProto applicationId on Android', () {
+    test('arbitration gate matrix returns decision object and enforces rules', () {
       PlatformMetadata meta(String id) => PlatformMetadata(
         applicationId: id,
         appVersion: 'v',
@@ -208,41 +208,111 @@ void main() {
         sdkInt: '36',
       );
       expect(androidCarProtoApplicationId, 'com.cbstudio.telltale.carproto');
-      // AA02-05
-      expect(
-        isCarProjectionEligible(
-          meta(androidCarProtoApplicationId),
-          isAndroid: true,
-        ),
-        isTrue,
+
+      // 1. identity_verified: Android + carProto + exact applicationId
+      final verified = isCarProjectionEligible(
+        meta(androidCarProtoApplicationId),
+        isAndroid: true,
+        flavor: 'carProto',
       );
-      // AA02-06: field, rig, wear (same id as field), unknown, AAOS prototype
+      expect(verified.enabled, isTrue);
+      expect(verified.reason, CarProjectionReason.identityVerified);
+      expect(
+        verified,
+        const CarProjectionDecision(
+          enabled: true,
+          reason: 'identity_verified',
+        ),
+      );
+
+      // 2. metadata_unavailable: Android + carProto + timeout/fallback unknown
+      final fallback = isCarProjectionEligible(
+        meta(unknownPlatformMetadata),
+        isAndroid: true,
+        flavor: 'carProto',
+      );
+      expect(fallback.enabled, isTrue);
+      expect(fallback.reason, CarProjectionReason.metadataUnavailable);
+      expect(
+        fallback,
+        const CarProjectionDecision(
+          enabled: true,
+          reason: 'metadata_unavailable',
+        ),
+      );
+
+      // 3. identity_conflict: Android + carProto + conflicting applicationIds
       for (final id in [
         androidFieldApplicationId,
         androidRigApplicationId,
-        unknownPlatformMetadata,
         'com.cbstudio.telltale.carproto.aaos',
         'com.cbstudio.telltale.carproto.debug',
+        'com.example.conflicting',
       ]) {
+        final conflict = isCarProjectionEligible(
+          meta(id),
+          isAndroid: true,
+          flavor: 'carProto',
+        );
+        expect(conflict.enabled, isFalse, reason: id);
+        expect(conflict.reason, CarProjectionReason.identityConflict, reason: id);
+      }
+
+      // 4. flavor_ineligible: Android + non-carProto flavors
+      for (final flavor in ['field', 'rig', 'wear', '', 'other', null]) {
+        final ineligible = isCarProjectionEligible(
+          meta(androidCarProtoApplicationId),
+          isAndroid: true,
+          flavor: flavor,
+        );
+        expect(ineligible.enabled, isFalse, reason: 'flavor: $flavor');
         expect(
-          isCarProjectionEligible(meta(id), isAndroid: true),
-          isFalse,
-          reason: id,
+          ineligible.reason,
+          CarProjectionReason.flavorIneligible,
+          reason: 'flavor: $flavor',
+        );
+
+        // Even with unknown metadata, ineligible flavor fails closed.
+        final unknownWithWrongFlavor = isCarProjectionEligible(
+          meta(unknownPlatformMetadata),
+          isAndroid: true,
+          flavor: flavor,
+        );
+        expect(unknownWithWrongFlavor.enabled, isFalse, reason: 'flavor: $flavor');
+        expect(
+          unknownWithWrongFlavor.reason,
+          CarProjectionReason.flavorIneligible,
+          reason: 'flavor: $flavor',
         );
       }
-      // Non-Android never, even with the carProto id.
-      expect(
-        isCarProjectionEligible(
+
+      // 5. non_android: non-Android platform always fails closed
+      for (final flavor in ['carProto', 'field', null]) {
+        final nonAndroid = isCarProjectionEligible(
           meta(androidCarProtoApplicationId),
           isAndroid: false,
-        ),
-        isFalse,
+          flavor: flavor,
+        );
+        expect(nonAndroid.enabled, isFalse);
+        expect(nonAndroid.reason, CarProjectionReason.nonAndroid);
+      }
+
+      // Real host running this test is not Android.
+      final hostDecision = isCarProjectionEligible(
+        meta(androidCarProtoApplicationId),
+        flavor: 'carProto',
       );
-      // The real host running this test is not Android.
-      expect(
-        isCarProjectionEligible(meta(androidCarProtoApplicationId)),
-        isFalse,
-      );
+      expect(hostDecision.enabled, isFalse);
+      expect(hostDecision.reason, CarProjectionReason.nonAndroid);
+
+      // 6. Decision object equality, hashCode, and toString
+      const d1 = CarProjectionDecision(enabled: true, reason: 'identity_verified');
+      const d2 = CarProjectionDecision(enabled: true, reason: 'identity_verified');
+      const d3 = CarProjectionDecision(enabled: false, reason: 'flavor_ineligible');
+      expect(d1, equals(d2));
+      expect(d1.hashCode, equals(d2.hashCode));
+      expect(d1, isNot(equals(d3)));
+      expect(d1.toString(), 'CarProjectionDecision(enabled: true, reason: identity_verified)');
     });
 
     test('disabled: no coordinator, no transport, no listeners', () async {
