@@ -165,7 +165,12 @@ class CarHomeScreen(
 
     fun resolveContentLimit(): Int {
         if (contentLimitProvider != null) {
-            return capPaneLimit(contentLimitProvider.invoke())
+            val provided = try {
+                contentLimitProvider.invoke()
+            } catch (_: Throwable) {
+                DEFAULT_PANE_LIMIT
+            }
+            return capPaneLimit(provided)
         }
         val manager = constraintManager ?: try {
             carContext.getCarService(ConstraintManager::class.java)
@@ -203,7 +208,9 @@ class CarHomeScreen(
 
         fun formatSignal(signal: CarSignalValue?, unit: String, format: String): String {
             return when (state) {
-                is CarTelemetryState.Stale -> staleText
+                is CarTelemetryState.Stale -> {
+                    if (state.lastReceivedAtElapsedMs != null) staleText else missingText
+                }
                 is CarTelemetryState.Awaiting, is CarTelemetryState.Incompatible -> missingText
                 is CarTelemetryState.Current -> {
                     if (signal == null) {
@@ -213,7 +220,13 @@ class CarHomeScreen(
                             CarSignalStatus.LIVE -> {
                                 val value = signal.value
                                 if (value != null && value.isFinite()) {
-                                    format.format(Locale.US, value) + " " + unit
+                                    val formatted = format.format(Locale.US, value)
+                                    val cleanFormatted = if (formatted == "-0" || formatted == "-0.0") {
+                                        formatted.removePrefix("-")
+                                    } else {
+                                        formatted
+                                    }
+                                    "$cleanFormatted $unit"
                                 } else {
                                     missingText
                                 }
