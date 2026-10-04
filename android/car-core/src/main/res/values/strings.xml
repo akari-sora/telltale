@@ -7,4 +7,12 @@
     <string name="car_home_data_body">Telemetry bridge is not connected in AA-01</string>
     <string name="car_home_safety_title">Read-only projection</string>
     <string name="car_home_safety_body">No vehicle commands or destructive actions are available</string>
+    <string name="car_home_speed_title">Speed</string>
+    <string name="car_home_rpm_title">RPM</string>
+    <string name="car_home_coolant_title">Coolant</string>
+    <string name="car_home_voltage_title">Module Voltage</string>
+    <string name="car_home_boost_title">Boost</string>
+    <string name="car_home_load_title">Engine Load</string>
+    <string name="car_signal_missing">--</string>
+    <string name="car_signal_stale">Stale</string>
 </resources>
