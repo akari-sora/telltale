@@ -94,7 +94,7 @@ class VerifyCarManifestIsolationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             manifest = Path(tmpdir) / "AndroidManifest.xml"
             manifest.write_text(
-                """<manifest>
+                """<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <service android:name="androidx.car.app.CarAppService"/>
     </application>
@@ -133,6 +133,45 @@ class VerifyCarManifestIsolationTest(unittest.TestCase):
             )
             self.assertEqual(errors, [])
 
+    def test_field_release_contract_fixture(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest = Path(tmpdir) / "AndroidManifest.xml"
+            manifest.write_text(
+                """<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:name="io.flutter.app.FlutterApplication">
+        <activity android:name=".MainActivity"/>
+    </application>
+</manifest>""",
+                encoding="utf-8",
+            )
+            errors = verify_manifest(
+                name="fieldRelease test",
+                path=manifest,
+                must_contain=[],
+                must_not_contain=[
+                    "CarAppService",
+                    "category.IOT",
+                    "com.google.android.gms.car.application",
+                    "com.android.automotive",
+                    "CarAppActivity",
+                ],
+            )
+            self.assertEqual(errors, [])
+
+    def test_malformed_xml_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest = Path(tmpdir) / "AndroidManifest.xml"
+            manifest.write_text("<manifest><unclosed", encoding="utf-8")
+            with self.assertRaises(RuntimeError) as ctx:
+                verify_manifest(
+                    name="malformed test",
+                    path=manifest,
+                    must_contain=[],
+                    must_not_contain=["CarAppService"],
+                )
+            self.assertIn("Failed to parse XML", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
+
