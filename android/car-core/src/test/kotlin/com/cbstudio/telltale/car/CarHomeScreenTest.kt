@@ -11,6 +11,7 @@ import com.cbstudio.telltale.car.telemetry.CarSignalInput
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
 import com.cbstudio.telltale.car.telemetry.CarTelemetryFrameInput
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
+import com.cbstudio.telltale.car.telemetry.CarTelemetryState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -571,5 +572,152 @@ class CarHomeScreenTest {
         @Suppress("DEPRECATION")
         template = screen.onGetTemplate() as PaneTemplate
         assertEquals("70 km/h", template.pane.rows[0].texts[0].toString())
+    }
+
+    @Test
+    fun homeScreen_negativeZeroSanitizedToPositiveZero() = runTest {
+        val repo = createRepository()
+        repo.submit(
+            frameInput(
+                speedKmh = live(-0.0),
+                rpm = live(-0.0),
+                coolantC = live(-0.0),
+                controlModuleVoltageV = live(-0.0),
+            ),
+        )
+
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            contentLimitProvider = { 4 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val rows = template.pane.rows
+
+        assertEquals("0 km/h", rows[0].texts[0].toString())
+        assertEquals("0 RPM", rows[1].texts[0].toString())
+        assertEquals("0 °C", rows[2].texts[0].toString())
+        assertEquals("0.0 V", rows[3].texts[0].toString())
+        assertNotEquals("-0 km/h", rows[0].texts[0].toString())
+        assertNotEquals("-0.0 V", rows[3].texts[0].toString())
+    }
+
+    @Test
+    fun homeScreen_incompatibleStateDisplaysMissingAndNeverFictitiousValues() = runTest {
+        val repo = createRepository()
+        // Submit frame with unsupported schema version 99
+        repo.submit(frameInput(schemaVersion = 99))
+        assertTrue(repo.state.value is CarTelemetryState.Incompatible)
+
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        for (row in template.pane.rows) {
+            val text = row.texts[0].toString()
+            assertEquals("Incompatible schema must display --", "--", text)
+            assertNotEquals("0", text)
+        }
+    }
+
+    @Test
+    fun homeScreen_staleWithoutPreviousReceivedTimestampDisplaysMissing() = runTest {
+        // Construct a Stale state where no frame was ever received
+        val staleWithoutFrames = CarTelemetryState.Stale(
+            connectionEpoch = null,
+            lastReceivedAtElapsedMs = null,
+        )
+
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            contentLimitProvider = { 6 },
+        )
+        val model = screen.buildDisplayModel(staleWithoutFrames)
+        for (row in model.rows) {
+            assertEquals("Stale without prior frames must display --", "--", row.text)
+            assertNotEquals("Stale", row.text)
+        }
+    }
+
+    @Test
+    fun homeScreen_resumedLifecycleAfterStopPicksUpAccumulatedUpdates() = runTest {
+        val repo = createRepository()
+        var invalidationCount = 0
+
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            contentLimitProvider = { 4 },
+            clock = { testScheduler.currentTime },
+            coroutineScope = backgroundScope,
+        ).apply {
+            onInvalidateListener = { invalidationCount++ }
+        }
+
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        // Initial update
+        advanceTimeBy(100)
+        repo.submit(frameInput(sequence = 1, speedKmh = live(10.0)))
+        runCurrent()
+        assertEquals(1, invalidationCount)
+
+        // Stop the screen
+        controller.moveToState(Lifecycle.State.CREATED)
+
+        // Submit new telemetry while stopped
+        advanceTimeBy(1_500)
+        repo.submit(frameInput(sequence = 2, speedKmh = live(55.0)))
+        runCurrent()
+        assertEquals("Must not invalidate while stopped", 1, invalidationCount)
+
+        // Resume the screen
+        controller.moveToState(Lifecycle.State.RESUMED)
+        runCurrent()
+
+        assertEquals("Must invalidate immediately upon resuming with fresh data", 2, invalidationCount)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        assertEquals("55 km/h", template.pane.rows[0].texts[0].toString())
+    }
+
+    @Test
+    fun homeScreen_providerThrowingExceptionFallsBackToDefaultLimit() = runTest {
+        val repo = createRepository()
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            contentLimitProvider = { throw RuntimeException("Host connection lost") },
+        )
+        assertEquals(CarHomeScreen.DEFAULT_PANE_LIMIT, screen.resolveContentLimit())
+    }
+
+    @Test
+    fun homeScreen_dynamicRowLimit_oneRow() = runTest {
+        val repo = createRepository()
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            contentLimitProvider = { 1 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        assertEquals(1, template.pane.rows.size)
+        assertEquals("Speed", template.pane.rows[0].title?.toString())
     }
 }
