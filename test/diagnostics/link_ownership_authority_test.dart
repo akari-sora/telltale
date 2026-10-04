@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,20 +17,17 @@ import 'package:torque_obd/state/powertrain_battery_profiles.dart';
 
 import '../support/fake_elm327.dart';
 
-Future<ProviderContainer> _createContainer(Map<String, Object> prefsValues) async {
+Future<ProviderContainer> _createContainer(
+  Map<String, Object> prefsValues,
+) async {
   SharedPreferences.setMockInitialValues(prefsValues);
   final prefs = await SharedPreferences.getInstance();
   return ProviderContainer(
-    overrides: [
-      sharedPreferencesProvider.overrideWithValue(prefs),
-    ],
+    overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
   );
 }
 
-FakeElm327 _createBmsAdapter({
-  String responder = '789',
-  List<int>? response,
-}) =>
+FakeElm327 _createBmsAdapter({String responder = '789', List<int>? response}) =>
     FakeElm327(
       protocol: BusProtocol.can11,
       ecus: [
@@ -51,15 +50,44 @@ FakeElm327 _createBmsAdapter({
       ],
     );
 
+/// Deadlock watchdog only. It is never the correctness oracle: every waiter
+/// below completes on an observed event (a command reaching the adapter, a
+/// displaced-polling restoration), so a slow runner only makes it later, not
+/// wrong. Issue #107: a 2 s wall-clock deadline here flaked on a busy runner.
+const _eventWatchdog = Duration(seconds: 20);
+
+String _wireTail(FakeElm327 adapter, [int n = 24]) {
+  final log = adapter.commandLog;
+  return log.sublist(log.length > n ? log.length - n : 0).join(' ');
+}
+
+/// Completes once more than [afterCount] copies of [command] have reached
+/// the adapter. Driven by [FakeElm327.onCommandWritten], chaining (and then
+/// restoring) whatever observer was already installed.
 Future<void> _waitForWireCommand(
   FakeElm327 adapter,
   String command, {
   int afterCount = 0,
 }) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 2));
   int count() => adapter.commandLog.where((wire) => wire == command).length;
-  while (count() <= afterCount && DateTime.now().isBefore(deadline)) {
-    await Future<void>.delayed(const Duration(milliseconds: 5));
+  if (count() <= afterCount) {
+    final seen = Completer<void>();
+    final previous = adapter.onCommandWritten;
+    adapter.onCommandWritten = (wire) {
+      previous?.call(wire);
+      if (!seen.isCompleted && count() > afterCount) seen.complete();
+    };
+    try {
+      await seen.future.timeout(
+        _eventWatchdog,
+        onTimeout: () => fail(
+          'watchdog: $command never exceeded $afterCount on the wire; '
+          'last commands: ${_wireTail(adapter)}',
+        ),
+      );
+    } finally {
+      adapter.onCommandWritten = previous;
+    }
   }
   expect(count(), greaterThan(afterCount));
 }
@@ -93,7 +121,11 @@ void main() {
       final result = await authority.runOneShot<String>(
         operationName: 'testAction',
         action: () async {
-          expect(pollingRunning, isFalse, reason: 'Polling must be stopped before action begins');
+          expect(
+            pollingRunning,
+            isFalse,
+            reason: 'Polling must be stopped before action begins',
+          );
           expect(authority.hasDisplacedPolling, isTrue);
           expect(authority.activeTakeovers, 1);
           timeline.add('action');
@@ -143,7 +175,11 @@ void main() {
       );
 
       expect(actionExecuted, isFalse);
-      expect(restoredCallbackFired, isFalse, reason: 'Must not fire callback if pause fails');
+      expect(
+        restoredCallbackFired,
+        isFalse,
+        reason: 'Must not fire callback if pause fails',
+      );
       expect(authority.displacedRestorationCount, 0);
       expect(authority.activeTakeovers, 0);
     });
@@ -189,47 +225,56 @@ void main() {
       expect(results, [1, 2, 3]);
       expect(maxConcurrent, 1, reason: 'Max active takeover actions must be 1');
 
-      expect(
-        timeline,
-        [
-          'pause', 'action1-start', 'action1-end', 'resume',
-          'pause', 'action2-start', 'action2-end', 'resume',
-          'pause', 'action3-start', 'action3-end', 'resume',
-        ],
-      );
+      expect(timeline, [
+        'pause',
+        'action1-start',
+        'action1-end',
+        'resume',
+        'pause',
+        'action2-start',
+        'action2-end',
+        'resume',
+        'pause',
+        'action3-start',
+        'action3-end',
+        'resume',
+      ]);
     });
 
-    test('B4: failed first action does not poison queued second action', () async {
-      bool pollingRunning = true;
-      final authority = DiagnosticLinkOwnershipAuthority(
-        pollingIsRunning: () => pollingRunning,
-        pausePolling: () async {
-          pollingRunning = false;
-        },
-        resumePolling: () {
-          pollingRunning = true;
-        },
-        canRestorePolling: () => true,
-      );
+    test(
+      'B4: failed first action does not poison queued second action',
+      () async {
+        bool pollingRunning = true;
+        final authority = DiagnosticLinkOwnershipAuthority(
+          pollingIsRunning: () => pollingRunning,
+          pausePolling: () async {
+            pollingRunning = false;
+          },
+          resumePolling: () {
+            pollingRunning = true;
+          },
+          canRestorePolling: () => true,
+        );
 
-      final f1 = authority.runOneShot<String>(
-        operationName: 'failingAction',
-        action: () async {
-          throw StateError('Action 1 failed');
-        },
-      );
+        final f1 = authority.runOneShot<String>(
+          operationName: 'failingAction',
+          action: () async {
+            throw StateError('Action 1 failed');
+          },
+        );
 
-      final f2 = authority.runOneShot<String>(
-        operationName: 'succeedingAction',
-        action: () async {
-          return 'Action 2 success';
-        },
-      );
+        final f2 = authority.runOneShot<String>(
+          operationName: 'succeedingAction',
+          action: () async {
+            return 'Action 2 success';
+          },
+        );
 
-      await expectLater(f1, throwsA(isA<StateError>()));
-      expect(await f2, 'Action 2 success');
-      expect(pollingRunning, isTrue);
-    });
+        await expectLater(f1, throwsA(isA<StateError>()));
+        expect(await f2, 'Action 2 success');
+        expect(pollingRunning, isTrue);
+      },
+    );
 
     test('B5: action failure restores displaced polling and preserves original error', () async {
       bool pollingRunning = true;
@@ -267,8 +312,16 @@ void main() {
         ),
       );
 
-      expect(resumed, isTrue, reason: 'Displaced polling must be restored on error');
-      expect(restoredCallbackFired, isTrue, reason: 'onDisplacedPollingRestored must be invoked when displaced polling is restored after error');
+      expect(
+        resumed,
+        isTrue,
+        reason: 'Displaced polling must be restored on error',
+      );
+      expect(
+        restoredCallbackFired,
+        isTrue,
+        reason: 'onDisplacedPollingRestored must be invoked when displaced polling is restored after error',
+      );
       expect(authority.displacedRestorationCount, 1);
       expect(pollingRunning, isTrue);
     });
@@ -302,9 +355,17 @@ void main() {
       );
 
       expect(result, 42);
-      expect(timeline, ['action'], reason: 'No pause or resume fabricated if polling was already stopped');
+      expect(
+        timeline,
+        ['action'],
+        reason: 'No pause or resume fabricated if polling was already stopped',
+      );
       expect(pollingRunning, isFalse);
-      expect(restoredCallbackFired, isFalse, reason: 'onDisplacedPollingRestored must not fire when polling was not displaced');
+      expect(
+        restoredCallbackFired,
+        isFalse,
+        reason: 'onDisplacedPollingRestored must not fire when polling was not displaced',
+      );
       expect(authority.displacedRestorationCount, 0);
     });
 
@@ -337,8 +398,16 @@ void main() {
         },
       );
 
-      expect(resumed, isFalse, reason: 'Polling must NOT be resumed if canRestorePolling is false');
-      expect(restoredCallbackFired, isFalse, reason: 'onDisplacedPollingRestored must not fire when polling restoration is suppressed');
+      expect(
+        resumed,
+        isFalse,
+        reason: 'Polling must NOT be resumed if canRestorePolling is false',
+      );
+      expect(
+        restoredCallbackFired,
+        isFalse,
+        reason: 'onDisplacedPollingRestored must not fire when polling restoration is suppressed',
+      );
       expect(authority.displacedRestorationCount, 0);
       expect(pollingRunning, isFalse);
     });
@@ -357,21 +426,38 @@ void main() {
       );
 
       // 1. Displaced + canRestore true -> triggers callback and increments counter
-      await authority.runOneShot(operationName: 'successRestore', action: () async => 'ok');
+      await authority.runOneShot(
+        operationName: 'successRestore',
+        action: () async => 'ok',
+      );
       expect(callbackCount, 1);
       expect(authority.displacedRestorationCount, 1);
 
       // 2. Not displaced (polling is already stopped) -> does NOT trigger callback
       running = false;
-      await authority.runOneShot(operationName: 'notDisplaced', action: () async => 'ok');
-      expect(callbackCount, 1, reason: 'Must not trigger if polling was not displaced');
+      await authority.runOneShot(
+        operationName: 'notDisplaced',
+        action: () async => 'ok',
+      );
+      expect(
+        callbackCount,
+        1,
+        reason: 'Must not trigger if polling was not displaced',
+      );
       expect(authority.displacedRestorationCount, 1);
 
       // 3. Displaced but restoration suppressed by canRestorePolling returning false -> does NOT trigger callback
       running = true;
       canRestore = false;
-      await authority.runOneShot(operationName: 'suppressedRestore', action: () async => 'ok');
-      expect(callbackCount, 1, reason: 'Must not trigger if restoration is suppressed');
+      await authority.runOneShot(
+        operationName: 'suppressedRestore',
+        action: () async => 'ok',
+      );
+      expect(
+        callbackCount,
+        1,
+        reason: 'Must not trigger if restoration is suppressed',
+      );
       expect(authority.displacedRestorationCount, 1);
 
       // 4. Displaced but authority is disposed during action execution -> does NOT trigger callback
@@ -383,7 +469,11 @@ void main() {
           authority.dispose();
         },
       );
-      expect(callbackCount, 1, reason: 'Must not trigger if authority was disposed');
+      expect(
+        callbackCount,
+        1,
+        reason: 'Must not trigger if authority was disposed',
+      );
       expect(authority.displacedRestorationCount, 1);
     });
 
@@ -448,211 +538,211 @@ void main() {
       expect(actionCalled, isFalse);
     });
 
-    test('In-queue cancellation throws cancelled without running action', () async {
-      bool pollingRunning = true;
-      final authority = DiagnosticLinkOwnershipAuthority(
-        pollingIsRunning: () => pollingRunning,
-        pausePolling: () async => pollingRunning = false,
-        resumePolling: () => pollingRunning = true,
-        canRestorePolling: () => true,
-      );
+    test(
+      'In-queue cancellation throws cancelled without running action',
+      () async {
+        bool pollingRunning = true;
+        final authority = DiagnosticLinkOwnershipAuthority(
+          pollingIsRunning: () => pollingRunning,
+          pausePolling: () async => pollingRunning = false,
+          resumePolling: () => pollingRunning = true,
+          canRestorePolling: () => true,
+        );
 
-      final cts = DiagnosticCancellationTokenSource();
+        final cts = DiagnosticCancellationTokenSource();
 
-      final first = authority.runOneShot<void>(
-        operationName: 'longFirst',
-        action: () async {
-          await Future<void>.delayed(const Duration(milliseconds: 40));
-        },
-      );
+        final first = authority.runOneShot<void>(
+          operationName: 'longFirst',
+          action: () async {
+            await Future<void>.delayed(const Duration(milliseconds: 40));
+          },
+        );
 
-      final second = authority.runOneShot<void>(
-        operationName: 'cancelledSecond',
-        action: () async {},
-        cancellation: cts.token,
-      );
-
-      cts.cancel();
-      await first;
-
-      await expectLater(
-        second,
-        throwsA(
-          isA<DiagnosticLinkException>().having(
-            (e) => e.kind,
-            'kind',
-            DiagnosticFailureKind.cancelled,
-          ),
-        ),
-      );
-    });
-
-    test('Disposed authority rejects new takeovers with retiredOperation', () async {
-      final authority = DiagnosticLinkOwnershipAuthority(
-        pollingIsRunning: () => true,
-        pausePolling: () async {},
-        resumePolling: () {},
-        canRestorePolling: () => true,
-      );
-
-      authority.dispose();
-
-      await expectLater(
-        authority.runOneShot<void>(
-          operationName: 'afterDispose',
+        final second = authority.runOneShot<void>(
+          operationName: 'cancelledSecond',
           action: () async {},
-        ),
-        throwsA(
-          isA<DiagnosticLinkException>().having(
-            (e) => e.kind,
-            'kind',
-            DiagnosticFailureKind.retiredOperation,
-          ),
-        ),
-      );
-    });
-  });
-
-  group('ObdSession DiagnosticLinkOwnership Authority Integration (B8~B13)', () {
-    test(
-      'B8 & B9: slow BMS one-shot pauses polling in-flight, returns same result, and restores polling',
-      () async {
-        final container = await _createContainer({
-          'powertrain_battery_experiments_enabled_v1': true,
-        });
-        addTearDown(container.dispose);
-
-        final snapshot = await PowertrainBatteryCatalogAsset.load();
-        final profile = snapshot.catalog.profiles.singleWhere(
-          (p) => p.id == 'mg-zs-ev-au-2021',
-        );
-        final command = profile.commands.singleWhere(
-          (c) => c.modeAndIdentifier == '22B046',
+          cancellation: cts.token,
         );
 
-        final adapter = _createBmsAdapter(
-          response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
-        );
-        adapter.slowCommands[command.modeAndIdentifier] = const Duration(
-          milliseconds: 150,
-        );
-
-        final session = container.read(obdSessionProvider.notifier);
-        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
-
-        final consents = container.read(
-          powertrainExperimentalProbeConsentsProvider.notifier,
-        );
-        consents.authorize(
-          snapshot: snapshot,
-          profileId: profile.id,
-          commandKey: command.wireKey,
-          vehicleYear: 2021,
-          connectionGeneration: session.connectionGeneration,
-        );
-
-        // Before probe: polling engine is running
-        expect(session.engine?.isRunning, isTrue);
-
-        final pending = session.probePowertrainBatteryCommand(
-          snapshot: snapshot,
-          profileId: profile.id,
-          commandKey: command.wireKey,
-          vehicleYear: 2021,
-        );
-
-        // Wait for the BMS command to reach the wire
-        await _waitForWireCommand(adapter, command.modeAndIdentifier);
-
-        // While BMS probe is in flight: polling engine MUST be stopped
-        expect(session.engine?.isRunning, isFalse);
-
-        final result = await pending;
-        expect(result.failure, isNull);
-
-        // After BMS probe completes: polling engine MUST be restored
-        expect(session.engine?.isRunning, isTrue);
-
-        await session.disconnect();
-      },
-    );
-
-    test(
-      'B11: BMS + lifecycle pause discards result, clears consent, and does not restart polling in background',
-      () async {
-        final container = await _createContainer({
-          'powertrain_battery_experiments_enabled_v1': true,
-        });
-        addTearDown(container.dispose);
-
-        final snapshot = await PowertrainBatteryCatalogAsset.load();
-        final profile = snapshot.catalog.profiles.singleWhere(
-          (p) => p.id == 'mg-zs-ev-au-2021',
-        );
-        final command = profile.commands.singleWhere(
-          (c) => c.modeAndIdentifier == '22B046',
-        );
-
-        final adapter = _createBmsAdapter(
-          response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
-        );
-        adapter.slowCommands[command.modeAndIdentifier] = const Duration(
-          milliseconds: 200,
-        );
-
-        final session = container.read(obdSessionProvider.notifier);
-        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
-
-        final consents = container.read(
-          powertrainExperimentalProbeConsentsProvider.notifier,
-        );
-        consents.authorize(
-          snapshot: snapshot,
-          profileId: profile.id,
-          commandKey: command.wireKey,
-          vehicleYear: 2021,
-          connectionGeneration: session.connectionGeneration,
-        );
-
-        final pending = session.probePowertrainBatteryCommand(
-          snapshot: snapshot,
-          profileId: profile.id,
-          commandKey: command.wireKey,
-          vehicleYear: 2021,
-        );
-
-        await _waitForWireCommand(adapter, command.modeAndIdentifier);
-
-        final binding = TestWidgetsFlutterBinding.ensureInitialized();
-        binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-        binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-        binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        cts.cancel();
+        await first;
 
         await expectLater(
-          pending,
+          second,
           throwsA(
-            isA<PowertrainProbeRefusedException>().having(
-              (e) => e.refusal,
-              'refusal',
-              PowertrainProbeRefusal.discardedAtLifecycleBoundary,
+            isA<DiagnosticLinkException>().having(
+              (e) => e.kind,
+              'kind',
+              DiagnosticFailureKind.cancelled,
             ),
           ),
         );
-
-        expect(
-          container.read(powertrainExperimentalProbeConsentsProvider),
-          isEmpty,
-        );
-
-        // While in background: polling must NOT be running
-        expect(session.engine?.isRunning, isFalse);
-
-        binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-        binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-        await session.disconnect();
       },
     );
+
+    test(
+      'Disposed authority rejects new takeovers with retiredOperation',
+      () async {
+        final authority = DiagnosticLinkOwnershipAuthority(
+          pollingIsRunning: () => true,
+          pausePolling: () async {},
+          resumePolling: () {},
+          canRestorePolling: () => true,
+        );
+
+        authority.dispose();
+
+        await expectLater(
+          authority.runOneShot<void>(
+            operationName: 'afterDispose',
+            action: () async {},
+          ),
+          throwsA(
+            isA<DiagnosticLinkException>().having(
+              (e) => e.kind,
+              'kind',
+              DiagnosticFailureKind.retiredOperation,
+            ),
+          ),
+        );
+      },
+    );
+  });
+
+  group('ObdSession DiagnosticLinkOwnership Authority Integration (B8~B13)', () {
+    test('B8 & B9: slow BMS one-shot pauses polling in-flight, returns same result, and restores polling', () async {
+      final container = await _createContainer({
+        'powertrain_battery_experiments_enabled_v1': true,
+      });
+      addTearDown(container.dispose);
+
+      final snapshot = await PowertrainBatteryCatalogAsset.load();
+      final profile = snapshot.catalog.profiles.singleWhere(
+        (p) => p.id == 'mg-zs-ev-au-2021',
+      );
+      final command = profile.commands.singleWhere(
+        (c) => c.modeAndIdentifier == '22B046',
+      );
+
+      final adapter = _createBmsAdapter(
+        response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
+      );
+      adapter.slowCommands[command.modeAndIdentifier] = const Duration(
+        milliseconds: 150,
+      );
+
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+
+      final consents = container.read(
+        powertrainExperimentalProbeConsentsProvider.notifier,
+      );
+      consents.authorize(
+        snapshot: snapshot,
+        profileId: profile.id,
+        commandKey: command.wireKey,
+        vehicleYear: 2021,
+        connectionGeneration: session.connectionGeneration,
+      );
+
+      // Before probe: polling engine is running
+      expect(session.engine?.isRunning, isTrue);
+
+      final pending = session.probePowertrainBatteryCommand(
+        snapshot: snapshot,
+        profileId: profile.id,
+        commandKey: command.wireKey,
+        vehicleYear: 2021,
+      );
+
+      // Wait for the BMS command to reach the wire
+      await _waitForWireCommand(adapter, command.modeAndIdentifier);
+
+      // While BMS probe is in flight: polling engine MUST be stopped
+      expect(session.engine?.isRunning, isFalse);
+
+      final result = await pending;
+      expect(result.failure, isNull);
+
+      // After BMS probe completes: polling engine MUST be restored
+      expect(session.engine?.isRunning, isTrue);
+
+      await session.disconnect();
+    });
+
+    test('B11: BMS + lifecycle pause discards result, clears consent, and does not restart polling in background', () async {
+      final container = await _createContainer({
+        'powertrain_battery_experiments_enabled_v1': true,
+      });
+      addTearDown(container.dispose);
+
+      final snapshot = await PowertrainBatteryCatalogAsset.load();
+      final profile = snapshot.catalog.profiles.singleWhere(
+        (p) => p.id == 'mg-zs-ev-au-2021',
+      );
+      final command = profile.commands.singleWhere(
+        (c) => c.modeAndIdentifier == '22B046',
+      );
+
+      final adapter = _createBmsAdapter(
+        response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
+      );
+      adapter.slowCommands[command.modeAndIdentifier] = const Duration(
+        milliseconds: 200,
+      );
+
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+
+      final consents = container.read(
+        powertrainExperimentalProbeConsentsProvider.notifier,
+      );
+      consents.authorize(
+        snapshot: snapshot,
+        profileId: profile.id,
+        commandKey: command.wireKey,
+        vehicleYear: 2021,
+        connectionGeneration: session.connectionGeneration,
+      );
+
+      final pending = session.probePowertrainBatteryCommand(
+        snapshot: snapshot,
+        profileId: profile.id,
+        commandKey: command.wireKey,
+        vehicleYear: 2021,
+      );
+
+      await _waitForWireCommand(adapter, command.modeAndIdentifier);
+
+      final binding = TestWidgetsFlutterBinding.ensureInitialized();
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+
+      await expectLater(
+        pending,
+        throwsA(
+          isA<PowertrainProbeRefusedException>().having(
+            (e) => e.refusal,
+            'refusal',
+            PowertrainProbeRefusal.discardedAtLifecycleBoundary,
+          ),
+        ),
+      );
+
+      expect(
+        container.read(powertrainExperimentalProbeConsentsProvider),
+        isEmpty,
+      );
+
+      // While in background: polling must NOT be running
+      expect(session.engine?.isRunning, isFalse);
+
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await session.disconnect();
+    });
 
     test('B12: session responder census pauses polling in-flight and restores polling', () async {
       final container = await _createContainer({});
@@ -705,7 +795,8 @@ void main() {
       expect(
         engine.supportDiscoveryComplete,
         isFalse,
-        reason: 'Support discovery must be incomplete before diagnostic takeover',
+        reason:
+            'Support discovery must be incomplete before diagnostic takeover',
       );
       expect(
         engine.capabilitySummary.phase,
@@ -765,84 +856,173 @@ void main() {
       await session.disconnect();
     });
 
-    test(
-      'Initial post-connect census automatically executes under authority and populates responders',
-      () async {
-        final container = await _createContainer({});
-        addTearDown(container.dispose);
+    test('Initial post-connect census automatically executes under authority and populates responders', () async {
+      final container = await _createContainer({});
+      addTearDown(container.dispose);
 
-        final adapter = _createBmsAdapter();
-        adapter.slowCommands['0100'] = const Duration(milliseconds: 50);
+      final adapter = _createBmsAdapter();
+      adapter.slowCommands['0100'] = const Duration(milliseconds: 50);
 
-        final session = container.read(obdSessionProvider.notifier);
-        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
 
-        final authority = session.linkOwnership;
-        expect(authority, isNotNull);
+      final authority = session.linkOwnership;
+      expect(authority, isNotNull);
 
-        // Do NOT call ensureResponderCensus() manually!
-        // Initial post-connect census runs automatically under authority.
-        await _waitForWireCommand(adapter, '0100');
-        expect(
-          session.engine?.isRunning,
-          isFalse,
-          reason: 'Polling engine must be paused while initial census is on wire',
-        );
+      final censusRestored = Completer<void>();
+      final origRestored = authority!.onDisplacedPollingRestored;
+      authority.onDisplacedPollingRestored = () {
+        origRestored?.call();
+        if (!censusRestored.isCompleted) censusRestored.complete();
+      };
 
-        final deadline = DateTime.now().add(const Duration(seconds: 2));
-        while (session.engine?.responders == null && DateTime.now().isBefore(deadline)) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
+      // Do NOT call ensureResponderCensus() manually!
+      // Initial post-connect census runs automatically under authority.
+      await _waitForWireCommand(adapter, '0100');
+      expect(
+        session.engine?.isRunning,
+        isFalse,
+        reason: 'Polling engine must be paused while initial census is on wire',
+      );
+
+      try {
+        if (authority.displacedRestorationCount < 1) {
+          await censusRestored.future.timeout(
+            _eventWatchdog,
+            onTimeout: () => fail(
+              'watchdog: initial census restoration never observed; '
+              'last commands: ${_wireTail(adapter)}',
+            ),
+          );
         }
+      } finally {
+        authority.onDisplacedPollingRestored = origRestored;
+      }
 
-        expect(session.engine?.responders, contains('7E8'));
-        expect(
-          authority!.displacedRestorationCount,
-          1,
-          reason: 'Authority must have completed displaced polling restoration for initial census',
+      expect(session.engine?.responders, contains('7E8'));
+      expect(
+        authority.displacedRestorationCount,
+        1,
+        reason: 'Authority must have completed displaced polling restoration for initial census',
+      );
+      expect(
+        session.engine?.isRunning,
+        isTrue,
+        reason:
+            'Polling engine must be restored and running after initial census',
+      );
+
+      await session.disconnect();
+    });
+
+    test('B9 wire-level proof: normal 010D polling is held during slow BMS probe and resumes afterward', () async {
+      // Fixed input: the persisted dashboard is exactly vehicle speed. The
+      // product's restoration path re-syncs from activePidsProvider, so a
+      // test-only syncActivePids() would be overwritten by the shipped
+      // six-PID default after the first takeover and 010D could then go out
+      // grouped rather than as the exact command this proof waits for.
+      final container = await _createContainer({
+        'powertrain_battery_experiments_enabled_v1': true,
+        'active_pid_ids_v1': <String>[PidLibrary.vehicleSpeed.id],
+      });
+      addTearDown(container.dispose);
+
+      final snapshot = await PowertrainBatteryCatalogAsset.load();
+      final profile = snapshot.catalog.profiles.singleWhere(
+        (p) => p.id == 'mg-zs-ev-au-2021',
+      );
+      final command = profile.commands.singleWhere(
+        (c) => c.modeAndIdentifier == '22B046',
+      );
+      final bmsWire = command.modeAndIdentifier;
+
+      final adapter = _createBmsAdapter(
+        response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
+      );
+      // The BMS reply is released by the test, not by a timer: the hold
+      // lasts exactly as long as this barrier is open.
+      final bmsReply = Completer<void>();
+      adapter.responseBarrier = (wire) =>
+          wire == bmsWire ? bmsReply.future : null;
+
+      final session = container.read(obdSessionProvider.notifier);
+      final trace = <String>[];
+      String state() =>
+          'engineRunning=${session.engine?.isRunning} '
+          'restorations=${session.linkOwnership?.displacedRestorationCount}';
+      String diagnostics() =>
+          'trace:\n  ${trace.join('\n  ')}\nwire tail: ${_wireTail(adapter)}\n'
+          'state: ${state()}';
+
+      // Event observers are installed before anything is triggered, so an
+      // event can never arrive before its waiter exists.
+      final previousObserver = adapter.onCommandWritten;
+      var holdOpen = false;
+      bool? engineRunningAtBmsWire;
+      final violations = <String>[];
+      adapter.onCommandWritten = (wire) {
+        previousObserver?.call(wire);
+        if (wire == bmsWire) {
+          holdOpen = true;
+          engineRunningAtBmsWire = session.engine?.isRunning;
+          trace.add('wire $wire (hold opens) ${state()}');
+        } else if (wire == '010D') {
+          final running = session.engine?.isRunning ?? false;
+          trace.add('wire 010D hold=$holdOpen ${state()}');
+          // Recorded here, asserted on the main path: an expect inside the
+          // transport callback could be swallowed by product error handling.
+          if (holdOpen) {
+            violations.add(
+              '010D at wire #${adapter.commandLog.length} (engineRunning=$running)',
+            );
+          }
+        }
+      };
+
+      expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+      final authority = session.linkOwnership!;
+      final originalOnRestored = authority.onDisplacedPollingRestored;
+      var restorations = <Completer<void>>[];
+      authority.onDisplacedPollingRestored = () {
+        // The product callback (PID resync, discovery restart) still runs.
+        originalOnRestored?.call();
+        holdOpen = false;
+        trace.add('restoration observed ${state()}');
+        final waiting = restorations;
+        restorations = [];
+        for (final c in waiting) {
+          if (!c.isCompleted) c.complete();
+        }
+      };
+
+      Future<void> restorationCount(int atLeast) async {
+        while (authority.displacedRestorationCount < atLeast) {
+          final next = Completer<void>();
+          restorations.add(next);
+          await next.future.timeout(
+            _eventWatchdog,
+            onTimeout: () => fail(
+              'watchdog: restoration $atLeast never observed\n${diagnostics()}',
+            ),
+          );
+        }
+      }
+
+      try {
+        // 0. The automatic post-connect census is itself a displaced
+        // takeover. Let it restore first so its restoration is never
+        // mistaken for the BMS one.
+        await restorationCount(1);
+        final baselineRestorations = authority.displacedRestorationCount;
+        trace.add('census converged ${state()}');
+
+        // 1. Normal polling: a fresh 010D after the census restoration.
+        await _waitForWireCommand(
+          adapter,
+          '010D',
+          afterCount: adapter.commandLog.where((c) => c == '010D').length,
         );
-        expect(
-          session.engine?.isRunning,
-          isTrue,
-          reason: 'Polling engine must be restored and running after initial census',
-        );
-
-        await session.disconnect();
-      },
-    );
-
-    test(
-      'B9 wire-level proof: normal 010D polling is held during slow BMS probe and resumes afterward',
-      () async {
-        final container = await _createContainer({
-          'powertrain_battery_experiments_enabled_v1': true,
-        });
-        addTearDown(container.dispose);
-
-        final snapshot = await PowertrainBatteryCatalogAsset.load();
-        final profile = snapshot.catalog.profiles.singleWhere(
-          (p) => p.id == 'mg-zs-ev-au-2021',
-        );
-        final command = profile.commands.singleWhere(
-          (c) => c.modeAndIdentifier == '22B046',
-        );
-
-        final adapter = _createBmsAdapter(
-          response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
-        );
-        adapter.slowCommands[command.modeAndIdentifier] = const Duration(
-          milliseconds: 150,
-        );
-
-        final session = container.read(obdSessionProvider.notifier);
-        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
-
-        // Sync 010D so that normal polling dispatches it
-        session.syncActivePids(const [PidLibrary.vehicleSpeed]);
-
-        // 1. Wait for at least one 010D on the wire
-        await _waitForWireCommand(adapter, '010D');
-        final initial010DCount = adapter.commandLog.where((c) => c == '010D').length;
-        expect(initial010DCount, greaterThan(0));
+        expect(session.engine?.isRunning, isTrue, reason: diagnostics());
 
         final consents = container.read(
           powertrainExperimentalProbeConsentsProvider.notifier,
@@ -855,7 +1035,7 @@ void main() {
           connectionGeneration: session.connectionGeneration,
         );
 
-        // 2. Launch slow BMS probe
+        // 2. Launch the BMS probe. Its reply stays parked on the barrier.
         final pending = session.probePowertrainBatteryCommand(
           snapshot: snapshot,
           profileId: profile.id,
@@ -863,132 +1043,150 @@ void main() {
           vehicleYear: 2021,
         );
 
-        // 3. The hold starts when 22B046 itself is on the wire. stop() lets
-        // the polling loop finish a 010D it had already started, so that
-        // command can land after launch and before the probe. It is not
-        // interleaved with the slow BMS request. Counting from the first
-        // 010D made that in-flight command look like a violation on a busy
-        // runner.
-        await _waitForWireCommand(adapter, command.modeAndIdentifier);
-        int count010D() => adapter.commandLog.where((c) => c == '010D').length;
-        final duringBms010DCount = count010D();
-        var probeSettled = false;
-        final settled = pending.whenComplete(() {
-          probeSettled = true;
-        });
-        while (!probeSettled) {
-          expect(
-            count010D(),
-            equals(duringBms010DCount),
-            reason: 'Normal 010D polling must NOT be dispatched on wire while BMS probe is in flight',
-          );
+        // 3. The hold opens when 22B046 itself is on the wire. A 010D the
+        // loop had already started may land before that; it is not
+        // interleaved with the BMS request.
+        await _waitForWireCommand(adapter, bmsWire);
+        expect(
+          engineRunningAtBmsWire,
+          isFalse,
+          reason:
+              'polling must be stopped before 22B046 reaches the wire\n'
+              '${diagnostics()}',
+        );
+        final duringBms010DCount = adapter.commandLog
+            .where((c) => c == '010D')
+            .length;
+
+        // Give a misbehaving poller every chance to interleave while the
+        // reply is withheld. Extra time can only reveal a violation; it can
+        // never make a correct run fail.
+        for (var i = 0; i < 15; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
+          expect(session.engine?.isRunning, isFalse, reason: diagnostics());
         }
         expect(
-          count010D(),
-          equals(duringBms010DCount),
-          reason: 'Normal 010D polling must NOT be dispatched on wire while BMS probe is in flight',
+          authority.displacedRestorationCount,
+          baselineRestorations,
+          reason: 'nothing may restore polling while the BMS reply is held',
         );
 
-        // 4. Await BMS completion
-        final result = await settled;
-        expect(result.failure, isNull);
+        // 4. Release the BMS reply; the takeover then restores polling.
+        bmsReply.complete();
+        await restorationCount(baselineRestorations + 1);
 
-        // 5. After BMS completes and polling is restored: 010D count increases again
-        await _waitForWireCommand(adapter, '010D', afterCount: duringBms010DCount);
-        final postBms010DCount = count010D();
+        // 5. Polling really resumed: a new 010D on the wire, after the hold.
+        await _waitForWireCommand(
+          adapter,
+          '010D',
+          afterCount: duringBms010DCount,
+        );
+        expect(session.engine?.isRunning, isTrue, reason: diagnostics());
+
+        final result = await pending.timeout(
+          _eventWatchdog,
+          onTimeout: () =>
+              fail('watchdog: BMS probe never settled\n${diagnostics()}'),
+        );
+        expect(result.failure, isNull, reason: diagnostics());
+
         expect(
-          postBms010DCount,
-          greaterThan(duringBms010DCount),
-          reason: 'Normal 010D polling must resume and dispatch on wire after BMS probe finishes',
-        );
-
-        await session.disconnect();
-      },
-    );
-
-    test(
-      'BMS queue expiry compatibility: expired consent in authority queue returns transport failure without throwing raw exception',
-      () async {
-        final container = await _createContainer({
-          'powertrain_battery_experiments_enabled_v1': true,
-        });
-        addTearDown(container.dispose);
-
-        final snapshot = await PowertrainBatteryCatalogAsset.load();
-        final profile = snapshot.catalog.profiles.singleWhere(
-          (p) => p.id == 'mg-zs-ev-au-2021',
-        );
-        final command = profile.commands.singleWhere(
-          (c) => c.modeAndIdentifier == '22B046',
-        );
-
-        final adapter = _createBmsAdapter(
-          response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
-        );
-        // Make census slow to occupy authority
-        adapter.slowCommands['0100'] = const Duration(milliseconds: 200);
-
-        final session = container.read(obdSessionProvider.notifier);
-        expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
-
-        // 1. Occupy authority with slow census
-        final slowCensus = session.ensureResponderCensus();
-        await _waitForWireCommand(adapter, '0100');
-
-        // 2. Authorize BMS probe with short remaining lifetime so it expires while queued
-        final consents = container.read(
-          powertrainExperimentalProbeConsentsProvider.notifier,
-        );
-        // consentLifetime is 4s, so setting now to 3950ms in the past leaves 50ms
-        final shortConsentNow = DateTime.now().subtract(
-          PowertrainExperimentalProbeConsents.consentLifetime,
-        ).add(const Duration(milliseconds: 50));
-
-        consents.authorize(
-          snapshot: snapshot,
-          profileId: profile.id,
-          commandKey: command.wireKey,
-          vehicleYear: 2021,
-          connectionGeneration: session.connectionGeneration,
-          now: shortConsentNow,
-        );
-
-        // 3. Queue BMS probe in authority behind the slow census
-        final pendingBms = session.probePowertrainBatteryCommand(
-          snapshot: snapshot,
-          profileId: profile.id,
-          commandKey: command.wireKey,
-          vehicleYear: 2021,
-        );
-
-        // 4. Wait for census to complete (at 200ms, the 50ms consent is guaranteed expired)
-        await slowCensus;
-
-        // 5. Await BMS result - must return a valid PowertrainBatteryProbeResult with transport failure, NOT throw DiagnosticLinkException
-        final result = await pendingBms;
-        expect(
-          result.failure,
-          equals(PowertrainBatteryProbeFailure.transport),
-          reason: 'Expired consent in authority queue must return transport failure',
-        );
-
-        // 6. 22B046 must NOT have reached the wire
-        expect(
-          adapter.commandLog.where((c) => c == command.modeAndIdentifier),
+          violations,
           isEmpty,
-          reason: 'BMS probe with expired consent must not dispatch command on wire',
+          reason:
+              'Normal 010D polling must NOT be dispatched on wire while '
+              'BMS probe is in flight\n${diagnostics()}',
         );
-
-        // 7. Consent was consumed exactly once
-        expect(
-          container.read(powertrainExperimentalProbeConsentsProvider),
-          isEmpty,
-          reason: 'Consent must be consumed and removed',
-        );
-
+      } finally {
+        if (!bmsReply.isCompleted) bmsReply.complete();
+        adapter.onCommandWritten = previousObserver;
+        adapter.responseBarrier = null;
+        authority.onDisplacedPollingRestored = originalOnRestored;
         await session.disconnect();
-      },
-    );
+      }
+    });
+
+    test('BMS queue expiry compatibility: expired consent in authority queue returns transport failure without throwing raw exception', () async {
+      final container = await _createContainer({
+        'powertrain_battery_experiments_enabled_v1': true,
+      });
+      addTearDown(container.dispose);
+
+      final snapshot = await PowertrainBatteryCatalogAsset.load();
+      final profile = snapshot.catalog.profiles.singleWhere(
+        (p) => p.id == 'mg-zs-ev-au-2021',
+      );
+      final command = profile.commands.singleWhere(
+        (c) => c.modeAndIdentifier == '22B046',
+      );
+
+      final adapter = _createBmsAdapter(
+        response: const [0x62, 0xB0, 0x46, 0x01, 0xF4],
+      );
+      // Make census slow to occupy authority
+      adapter.slowCommands['0100'] = const Duration(milliseconds: 200);
+
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+
+      // 1. Occupy authority with slow census
+      final slowCensus = session.ensureResponderCensus();
+      await _waitForWireCommand(adapter, '0100');
+
+      // 2. Authorize BMS probe with short remaining lifetime so it expires while queued
+      final consents = container.read(
+        powertrainExperimentalProbeConsentsProvider.notifier,
+      );
+      // consentLifetime is 4s, so setting now to 3950ms in the past leaves 50ms
+      final shortConsentNow = DateTime.now()
+          .subtract(PowertrainExperimentalProbeConsents.consentLifetime)
+          .add(const Duration(milliseconds: 50));
+
+      consents.authorize(
+        snapshot: snapshot,
+        profileId: profile.id,
+        commandKey: command.wireKey,
+        vehicleYear: 2021,
+        connectionGeneration: session.connectionGeneration,
+        now: shortConsentNow,
+      );
+
+      // 3. Queue BMS probe in authority behind the slow census
+      final pendingBms = session.probePowertrainBatteryCommand(
+        snapshot: snapshot,
+        profileId: profile.id,
+        commandKey: command.wireKey,
+        vehicleYear: 2021,
+      );
+
+      // 4. Wait for census to complete (at 200ms, the 50ms consent is guaranteed expired)
+      await slowCensus;
+
+      // 5. Await BMS result - must return a valid PowertrainBatteryProbeResult with transport failure, NOT throw DiagnosticLinkException
+      final result = await pendingBms;
+      expect(
+        result.failure,
+        equals(PowertrainBatteryProbeFailure.transport),
+        reason:
+            'Expired consent in authority queue must return transport failure',
+      );
+
+      // 6. 22B046 must NOT have reached the wire
+      expect(
+        adapter.commandLog.where((c) => c == command.modeAndIdentifier),
+        isEmpty,
+        reason:
+            'BMS probe with expired consent must not dispatch command on wire',
+      );
+
+      // 7. Consent was consumed exactly once
+      expect(
+        container.read(powertrainExperimentalProbeConsentsProvider),
+        isEmpty,
+        reason: 'Consent must be consumed and removed',
+      );
+
+      await session.disconnect();
+    });
   });
 }
