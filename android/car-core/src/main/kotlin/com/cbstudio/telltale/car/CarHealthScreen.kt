@@ -5,6 +5,7 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
+import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.ParkedOnlyOnClickListener
@@ -17,9 +18,16 @@ import com.cbstudio.telltale.car.diagnostics.CarDtcReport
 import com.cbstudio.telltale.car.diagnostics.CarDtcRepository
 import com.cbstudio.telltale.car.diagnostics.CarDtcRuntime
 import com.cbstudio.telltale.car.diagnostics.CarDtcState
-import com.cbstudio.telltale.car.health.CarAlertEvaluator
+import com.cbstudio.telltale.car.hardware.CarHostSpeedPermissionCoordinator
+import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
+import com.cbstudio.telltale.car.hardware.CarHostSpeedStatus
+import com.cbstudio.telltale.car.hardware.CarVehicleMotionResolver
+import com.cbstudio.telltale.car.health.CarAlertLevel
+import com.cbstudio.telltale.car.health.CarAlertPhase
+import com.cbstudio.telltale.car.health.CarAlertRepository
 import com.cbstudio.telltale.car.health.CarHealthEvaluator
 import com.cbstudio.telltale.car.health.CarObservedHealth
+import com.cbstudio.telltale.car.health.matchingAlertSnapshot
 import com.cbstudio.telltale.car.safety.CarDtcMotionGate
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
 import com.cbstudio.telltale.car.telemetry.CarSignalValue
@@ -36,14 +44,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Driver-distraction-safe vehicle health overview screen (AA-04B).
+ * Driver-distraction-safe vehicle health overview screen (AA-04B, AA-05).
  *
  * Implements:
  * - Observed vehicle health summary: "No observed warnings", "Attention", or "Unknown".
  *   Never fabricates "Safe to drive" or "Healthy".
  * - Driving-safe overview: MIL status, DTC count, Coolant temperature, Module Voltage.
- * - Hysteresis-guarded alerts for critical sensor readings (e.g. high coolant).
- * - Parked-only navigation gate to [CarDtcSummaryScreen] using [ParkedOnlyOnClickListener] and [CarDtcMotionGate].
+ * - Hysteresis-guarded alerts for critical sensor readings (e.g. high coolant) via [CarAlertRepository].
+ * - Parked-only navigation gate to [CarDtcSummaryScreen] using [ParkedOnlyOnClickListener] and [CarDtcMotionGate]
+ *   with multi-source motion fusion (AA-05).
  * - 1Hz throttled invalidation, dynamic host content limit compliance.
  */
 class CarHealthScreen(
@@ -52,9 +61,13 @@ class CarHealthScreen(
     private val dtcRepository: CarDtcRepository = CarDtcRuntime.repository,
     private val constraintManager: ConstraintManager? = null,
     private val contentLimitProvider: (() -> Int)? = null,
-    private val alertEvaluator: CarAlertEvaluator = CarAlertEvaluator(),
     private val clock: () -> Long = SystemClock::elapsedRealtime,
     private val coroutineScope: CoroutineScope? = null,
+    private val sessionRuntime: CarSessionRuntime? = null,
+    private val hostSpeedRepository: CarHostSpeedRepository = sessionRuntime?.hostSpeedRepository ?: CarHostSpeedRepository(),
+    private val motionResolver: CarVehicleMotionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
+    private val alertRepository: CarAlertRepository = sessionRuntime?.alertRepository ?: CarAlertRepository(),
+    private val permissionCoordinator: CarHostSpeedPermissionCoordinator = sessionRuntime?.permissionCoordinator ?: CarHostSpeedPermissionCoordinator(),
 ) : Screen(carContext), DefaultLifecycleObserver {
 
     companion object {
@@ -78,11 +91,11 @@ class CarHealthScreen(
     private var pendingRefreshJob: Job? = null
     private var lastInvalidateElapsedMs: Long = -THROTTLE_INTERVAL_MS
     private var lastRenderedModel: DisplayModel? = null
-    private var lastTelemetryEpoch: Long? = null
+
+    internal var onInvalidateListener: (() -> Unit)? = null
 
     init {
         setMarker(CAR_HEALTH_MARKER)
-        lastTelemetryEpoch = (telemetryRepository.state.value as? CarTelemetryState.Current)?.frame?.connectionEpoch
         lastRenderedModel = buildDisplayModel(telemetryRepository.state.value, dtcRepository.state.value)
         lifecycle.addObserver(this)
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
@@ -131,6 +144,16 @@ class CarHealthScreen(
                     handleStateUpdate(telemetryRepository.state.value, dtcState)
                 }
             }
+            launch {
+                hostSpeedRepository.sample.collect {
+                    handleStateUpdate(telemetryRepository.state.value, dtcRepository.state.value)
+                }
+            }
+            launch {
+                alertRepository.transitions.collect {
+                    triggerImmediateRefresh()
+                }
+            }
         }
     }
 
@@ -139,6 +162,19 @@ class CarHealthScreen(
         observeJob = null
         pendingRefreshJob?.cancel()
         pendingRefreshJob = null
+    }
+
+    internal fun triggerImmediateRefresh() {
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+        pendingRefreshJob?.cancel()
+        pendingRefreshJob = null
+        val currentModel = buildDisplayModel(
+            telemetryRepository.state.value,
+            dtcRepository.state.value,
+        )
+        if (currentModel != lastRenderedModel) {
+            executeInvalidate(currentModel, clock())
+        }
     }
 
     private fun handleStateUpdate(telemetryState: CarTelemetryState, dtcState: CarDtcState) {
@@ -182,6 +218,7 @@ class CarHealthScreen(
             invalidate()
         } catch (_: IllegalStateException) {
         }
+        onInvalidateListener?.invoke()
     }
 
     fun resolveContentLimit(): Int {
@@ -236,26 +273,15 @@ class CarHealthScreen(
         val frame = (telemetryState as? CarTelemetryState.Current)?.frame
         val dtcReport = com.cbstudio.telltale.car.health.matchingDtcReport(telemetryState, dtcState)
 
-        val currentEpoch = frame?.connectionEpoch
-        if (lastTelemetryEpoch != null && currentEpoch != null && currentEpoch != lastTelemetryEpoch) {
-            alertEvaluator.reset()
-        }
-        if (currentEpoch != null) {
-            lastTelemetryEpoch = currentEpoch
-        }
-
-        // 1. Evaluate alert hysteresis for coolant
-        val coolantSignal = frame?.coolantC
-        val coolantVal = coolantSignal?.value
-        val isCoolantLive = coolantSignal?.status == CarSignalStatus.LIVE &&
-                coolantVal != null && coolantVal.isFinite()
-        alertEvaluator.evaluate(coolantVal, isCoolantLive, clock())
+        // 1. Evaluate alert state from session authority (AA-05, Blocker 3)
+        val alertSnapshot = matchingAlertSnapshot(telemetryState, alertRepository.snapshot.value)
+        val isAlertActive = alertSnapshot?.level == CarAlertLevel.ATTENTION
 
         // 2. Evaluate observed health
         val observedHealth = CarHealthEvaluator.evaluate(
             telemetryState = telemetryState,
             dtcState = dtcState,
-            isAlertActive = alertEvaluator.isAlertActive,
+            isAlertActive = isAlertActive,
         )
         val healthText = when (observedHealth) {
             CarObservedHealth.NO_OBSERVED_WARNINGS ->
@@ -320,7 +346,25 @@ class CarHealthScreen(
             }
         }
 
-        val coolantText = formatSignal(frame?.coolantC, "°C", "%.0f")
+        val coolantBase = formatSignal(frame?.coolantC, "°C", "%.0f")
+        val coolantText = when {
+            isAlertActive -> {
+                if (coolantBase != missingText && coolantBase != staleText) {
+                    "$coolantBase · ${carContext.getString(R.string.car_alert_high)}"
+                } else {
+                    coolantBase
+                }
+            }
+            alertSnapshot?.coolant == CarAlertPhase.UNKNOWN_AFTER_WARNING -> {
+                if (coolantBase != missingText && coolantBase != staleText) {
+                    "$coolantBase · ${carContext.getString(R.string.car_alert_high)}"
+                } else {
+                    staleText
+                }
+            }
+            else -> coolantBase
+        }
+
         val voltageText = formatSignal(frame?.controlModuleVoltageV, "V", "%.1f")
 
         return listOf(
@@ -330,6 +374,18 @@ class CarHealthScreen(
             MetricRow(carContext.getString(R.string.car_health_coolant_row), coolantText),
             MetricRow(carContext.getString(R.string.car_health_voltage_row), voltageText),
         )
+    }
+
+    internal fun requestSpeedPermission(onResult: ((Boolean) -> Unit)? = null) {
+        permissionCoordinator.requestPermissions(carContext) { granted ->
+            if (granted) {
+                try {
+                    invalidate()
+                } catch (_: Throwable) {
+                }
+            }
+            onResult?.invoke(granted)
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -359,6 +415,9 @@ class CarHealthScreen(
                             constraintManager = constraintManager,
                             contentLimitProvider = contentLimitProvider,
                             clock = clock,
+                            sessionRuntime = sessionRuntime,
+                            hostSpeedRepository = hostSpeedRepository,
+                            alertRepository = alertRepository,
                         ),
                     )
                 }
@@ -371,7 +430,7 @@ class CarHealthScreen(
                 .setTitle(carContext.getString(R.string.car_action_fault_codes))
                 .setOnClickListener(
                     ParkedOnlyOnClickListener.create {
-                        if (CarDtcMotionGate.isStationary(telemetryRepository.state.value)) {
+                        if (CarDtcMotionGate.isStationary(telemetryRepository.state.value, hostSpeedRepository.sample.value, motionResolver)) {
                             screenManager.push(
                                 CarDtcSummaryScreen(
                                     carContext = carContext,
@@ -379,6 +438,9 @@ class CarHealthScreen(
                                     dtcRepository = dtcRepository,
                                     constraintManager = constraintManager,
                                     contentLimitProvider = contentLimitProvider,
+                                    sessionRuntime = sessionRuntime,
+                                    hostSpeedRepository = hostSpeedRepository,
+                                    motionResolver = motionResolver,
                                 ),
                             )
                         }
@@ -387,9 +449,26 @@ class CarHealthScreen(
                 .build(),
         )
 
-        return PaneTemplate.Builder(paneBuilder.build())
+        val templateBuilder = PaneTemplate.Builder(paneBuilder.build())
             .setTitle(carContext.getString(R.string.car_health_title))
             .setHeaderAction(Action.BACK)
-            .build()
+
+        if (hostSpeedRepository.sample.value.status == CarHostSpeedStatus.PERMISSION_DENIED) {
+            val actionStrip = ActionStrip.Builder()
+                .addAction(
+                    Action.Builder()
+                        .setTitle(carContext.getString(R.string.car_action_enable_speed))
+                        .setOnClickListener(
+                            ParkedOnlyOnClickListener.create {
+                                requestSpeedPermission()
+                            }
+                        )
+                        .build()
+                )
+                .build()
+            templateBuilder.setActionStrip(actionStrip)
+        }
+
+        return templateBuilder.build()
     }
 }

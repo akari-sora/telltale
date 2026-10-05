@@ -1,5 +1,7 @@
 package com.cbstudio.telltale.car.safety
 
+import com.cbstudio.telltale.car.hardware.CarHostSpeedSample
+import com.cbstudio.telltale.car.hardware.CarHostSpeedStatus
 import com.cbstudio.telltale.car.telemetry.CarConnectionPhase
 import com.cbstudio.telltale.car.telemetry.CarSignalInput
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
@@ -120,5 +122,63 @@ class CarDtcMotionGateTest {
 
         repo.submit(frameInput(speedKmh = live(-1.0), phase = CarConnectionPhase.CONNECTED))
         assertEquals(CarDtcMotionState.UNKNOWN, CarDtcMotionGate.evaluate(repo.state.value))
+    }
+
+    @Test
+    fun hostSpeedReverseEvaluatesToMoving() {
+        // AA05-15: Host raw speed < 0 (reverse) is non-zero -> MOVING
+        val hostSample = CarHostSpeedSample(
+            status = CarHostSpeedStatus.LIVE,
+            rawMetersPerSecond = -1.0f,
+        )
+        assertEquals(
+            CarDtcMotionState.MOVING,
+            CarDtcMotionGate.evaluate(CarTelemetryState.Awaiting, hostSample),
+        )
+        assertFalse(CarDtcMotionGate.isStationary(CarTelemetryState.Awaiting, hostSample))
+    }
+
+    @Test
+    fun hostSpeedMovingWithObdZeroEvaluatesToMoving() = runTest {
+        // AA05-16: Any fresh source non-zero -> MOVING
+        val repo = createRepository()
+        repo.submit(frameInput(speedKmh = live(0.0), phase = CarConnectionPhase.CONNECTED))
+
+        val hostMoving = CarHostSpeedSample(
+            status = CarHostSpeedStatus.LIVE,
+            displaySpeedMetersPerSecond = 5.0f,
+        )
+        assertEquals(
+            CarDtcMotionState.MOVING,
+            CarDtcMotionGate.evaluate(repo.state.value, hostMoving),
+        )
+        assertFalse(CarDtcMotionGate.isStationary(repo.state.value, hostMoving))
+    }
+
+    @Test
+    fun hostSpeedZeroWithObdUnavailableEvaluatesToStationary() {
+        val hostZero = CarHostSpeedSample(
+            status = CarHostSpeedStatus.LIVE,
+            displaySpeedMetersPerSecond = 0.0f,
+            rawMetersPerSecond = 0.0f,
+        )
+        assertEquals(
+            CarDtcMotionState.STATIONARY,
+            CarDtcMotionGate.evaluate(CarTelemetryState.Awaiting, hostZero),
+        )
+        assertTrue(CarDtcMotionGate.isStationary(CarTelemetryState.Awaiting, hostZero))
+    }
+
+    @Test
+    fun hostSpeedStaleWithObdUnavailableEvaluatesToUnknown() {
+        // AA05-17: No fresh evidence -> UNKNOWN
+        val hostStale = CarHostSpeedSample(
+            status = CarHostSpeedStatus.STALE,
+        )
+        assertEquals(
+            CarDtcMotionState.UNKNOWN,
+            CarDtcMotionGate.evaluate(CarTelemetryState.Awaiting, hostStale),
+        )
+        assertFalse(CarDtcMotionGate.isStationary(CarTelemetryState.Awaiting, hostStale))
     }
 }

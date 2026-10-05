@@ -12,6 +12,11 @@ import androidx.car.app.model.Template
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
+import com.cbstudio.telltale.car.hardware.CarSpeedResolver
+import com.cbstudio.telltale.car.health.CarAlertPhase
+import com.cbstudio.telltale.car.health.CarAlertRepository
+import com.cbstudio.telltale.car.health.matchingAlertSnapshot
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
 import com.cbstudio.telltale.car.telemetry.CarSignalValue
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
@@ -27,11 +32,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Driver-distraction-safe powertrain overview screen (AA-04B).
+ * Driver-distraction-safe powertrain overview screen (AA-04B, AA-05).
  *
  * Displays actual available powertrain metrics from schema-v1:
  * RPM, Coolant, Intake Air (IAT), Manifold Absolute Pressure (MAP), Module Voltage, Speed.
- * Read-only, 1Hz throttled invalidation, dynamic host content limit compliance.
+ * Read-only, 1Hz throttled invalidation, dynamic host content limit compliance,
+ * with speed arbitration fallback and coolant in-template alerts.
  */
 class CarPowertrainScreen(
     carContext: CarContext,
@@ -40,6 +46,10 @@ class CarPowertrainScreen(
     private val contentLimitProvider: (() -> Int)? = null,
     private val clock: () -> Long = SystemClock::elapsedRealtime,
     private val coroutineScope: CoroutineScope? = null,
+    private val sessionRuntime: CarSessionRuntime? = null,
+    private val speedResolver: CarSpeedResolver = sessionRuntime?.speedResolver ?: CarSpeedResolver(),
+    private val hostSpeedRepository: CarHostSpeedRepository = sessionRuntime?.hostSpeedRepository ?: CarHostSpeedRepository(),
+    private val alertRepository: CarAlertRepository = sessionRuntime?.alertRepository ?: CarAlertRepository(),
 ) : Screen(carContext), DefaultLifecycleObserver {
 
     companion object {
@@ -62,6 +72,8 @@ class CarPowertrainScreen(
     private var pendingRefreshJob: Job? = null
     private var lastInvalidateElapsedMs: Long = -THROTTLE_INTERVAL_MS
     private var lastRenderedModel: DisplayModel? = null
+
+    internal var onInvalidateListener: (() -> Unit)? = null
 
     init {
         lastRenderedModel = buildDisplayModel(repository.state.value)
@@ -102,8 +114,20 @@ class CarPowertrainScreen(
         stopObserving()
         val scope = getScope()
         observeJob = scope.launch {
-            repository.state.collect { state ->
-                handleStateUpdate(state)
+            launch {
+                repository.state.collect { state ->
+                    handleStateUpdate(state)
+                }
+            }
+            launch {
+                hostSpeedRepository.sample.collect {
+                    handleStateUpdate(repository.state.value)
+                }
+            }
+            launch {
+                alertRepository.transitions.collect {
+                    triggerImmediateRefresh()
+                }
             }
         }
     }
@@ -113,6 +137,16 @@ class CarPowertrainScreen(
         observeJob = null
         pendingRefreshJob?.cancel()
         pendingRefreshJob = null
+    }
+
+    internal fun triggerImmediateRefresh() {
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+        pendingRefreshJob?.cancel()
+        pendingRefreshJob = null
+        val currentModel = buildDisplayModel(repository.state.value)
+        if (currentModel != lastRenderedModel) {
+            executeInvalidate(currentModel, clock())
+        }
     }
 
     private fun handleStateUpdate(state: CarTelemetryState) {
@@ -153,6 +187,7 @@ class CarPowertrainScreen(
             invalidate()
         } catch (_: IllegalStateException) {
         }
+        onInvalidateListener?.invoke()
     }
 
     fun resolveContentLimit(): Int {
@@ -234,11 +269,52 @@ class CarPowertrainScreen(
         val frame = (state as? CarTelemetryState.Current)?.frame
 
         val rpmText = formatSignal(frame?.rpm, "RPM", "%.0f")
-        val coolantText = formatSignal(frame?.coolantC, "°C", "%.0f")
+
+        // Coolant with alert status
+        val coolantBase = formatSignal(frame?.coolantC, "°C", "%.0f")
+        val alertSnapshot = matchingAlertSnapshot(state, alertRepository.snapshot.value)
+        val coolantText = when {
+            alertSnapshot?.coolant == CarAlertPhase.ACTIVE -> {
+                if (coolantBase != missingText && coolantBase != staleText) {
+                    "$coolantBase · ${carContext.getString(R.string.car_alert_high)}"
+                } else {
+                    coolantBase
+                }
+            }
+            alertSnapshot?.coolant == CarAlertPhase.UNKNOWN_AFTER_WARNING -> {
+                if (coolantBase != missingText && coolantBase != staleText) {
+                    "$coolantBase · ${carContext.getString(R.string.car_alert_high)}"
+                } else {
+                    staleText
+                }
+            }
+            else -> coolantBase
+        }
+
         val iatText = formatSignal(frame?.intakeAirC, "°C", "%.0f")
         val mapText = formatSignal(frame?.mapKpa, "kPa", "%.0f")
         val voltageText = formatSignal(frame?.controlModuleVoltageV, "V", "%.1f")
-        val speedText = formatSignal(frame?.speedKmh, "km/h", "%.0f")
+
+        // Speed resolved via arbitration
+        val resolvedSpeed = speedResolver.resolve(state, hostSpeedRepository.sample.value)
+        val speedText = when (resolvedSpeed.status) {
+            CarSignalStatus.LIVE -> {
+                val value = resolvedSpeed.speedKmh
+                if (value != null && value.isFinite()) {
+                    val formatted = "%.0f".format(Locale.US, value)
+                    val cleanFormatted = if (formatted == "-0" || formatted == "-0.0") {
+                        formatted.removePrefix("-")
+                    } else {
+                        formatted
+                    }
+                    "$cleanFormatted km/h"
+                } else {
+                    missingText
+                }
+            }
+            CarSignalStatus.STALE -> staleText
+            CarSignalStatus.UNAVAILABLE, CarSignalStatus.UNSUPPORTED -> missingText
+        }
 
         return listOf(
             MetricRow(carContext.getString(R.string.car_powertrain_rpm_title), rpmText),

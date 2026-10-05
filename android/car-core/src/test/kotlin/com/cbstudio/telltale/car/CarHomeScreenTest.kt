@@ -6,6 +6,14 @@ import androidx.car.app.testing.ScreenController
 import androidx.car.app.testing.TestCarContext
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
+import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
+import com.cbstudio.telltale.car.hardware.CarHostSpeedSample
+import com.cbstudio.telltale.car.hardware.CarHostSpeedStatus
+import com.cbstudio.telltale.car.health.CarAlertCoordinator
+import com.cbstudio.telltale.car.health.CarAlertLevel
+import com.cbstudio.telltale.car.health.CarAlertPhase
+import com.cbstudio.telltale.car.health.CarAlertRepository
+import com.cbstudio.telltale.car.health.CarAlertSnapshot
 import com.cbstudio.telltale.car.telemetry.CarConnectionPhase
 import com.cbstudio.telltale.car.telemetry.CarSignalInput
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
@@ -719,5 +727,185 @@ class CarHomeScreenTest {
         val template = screen.onGetTemplate() as PaneTemplate
         assertEquals(1, template.pane.rows.size)
         assertEquals("Speed", template.pane.rows[0].title?.toString())
+    }
+
+    @Test
+    fun homeScreen_displaysHostSpeedFallbackWhenObdUnavailable() = runTest {
+        val repo = createRepository()
+        // OBD speed is unavailable
+        repo.submit(frameInput(speedKmh = unavailable()))
+        runCurrent()
+
+        val hostSpeedRepo = CarHostSpeedRepository()
+        // Host reports 15 m/s = 54 km/h
+        hostSpeedRepo.updateSample(
+            CarHostSpeedSample(
+                status = CarHostSpeedStatus.LIVE,
+                displaySpeedMetersPerSecond = 15f,
+            ),
+        )
+
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            hostSpeedRepository = hostSpeedRepo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val speedRow = template.pane.rows[0]
+        assertEquals("Speed", speedRow.title?.toString())
+        assertEquals("54 km/h", speedRow.texts[0].toString())
+    }
+
+    @Test
+    fun homeScreen_displaysInTemplateCoolantAlertWhenActive() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput(coolantC = live(108.0)))
+        runCurrent()
+
+        val alertRepo = CarAlertRepository()
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(
+                level = CarAlertLevel.ATTENTION,
+                coolant = CarAlertPhase.ACTIVE,
+                connectionEpoch = 1L,
+            ),
+        )
+
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            alertRepository = alertRepo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val coolantRow = template.pane.rows[2]
+        assertEquals("Coolant", coolantRow.title?.toString())
+        assertEquals("108 °C · High", coolantRow.texts[0].toString())
+    }
+
+    @Test
+    fun homeScreen_alertTransitionTriggersImmediateRefresh() = runTest {
+        var currentTime = 1_000L
+        val repo = createRepository()
+        repo.submit(frameInput(sequence = 1, coolantC = live(108.0)))
+        runCurrent()
+
+        val alertCoord = CarAlertCoordinator(
+            telemetryRepository = repo,
+            clock = { currentTime },
+            coroutineScope = backgroundScope,
+        )
+
+        var invalidateCount = 0
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            alertRepository = alertCoord.repository,
+            clock = { currentTime },
+            contentLimitProvider = { 6 },
+        )
+        screen.onInvalidateListener = { invalidateCount++ }
+
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+        alertCoord.start()
+        runCurrent()
+
+        val initialInvalidates = invalidateCount
+
+        // Advance 3001ms past hold threshold to trigger ACTIVE alert edge
+        currentTime = 4_001L
+        repo.submit(frameInput(sequence = 2, coolantC = live(108.0)))
+        runCurrent()
+
+        // Transition edge must have triggered immediate refresh without waiting 1000ms delay
+        assertEquals(CarAlertPhase.ACTIVE, alertCoord.repository.snapshot.value.coolant)
+        assertTrue(invalidateCount > initialInvalidates)
+
+        alertCoord.destroy()
+    }
+
+    @Test
+    fun home_doesNotRenderAlertFromPreviousEpoch() = runTest {
+        val repo = createRepository()
+        // Current vehicle is Epoch 2
+        repo.submit(frameInput(connectionEpoch = 2L, coolantC = live(108.0)))
+        runCurrent()
+
+        // Alert snapshot was retained from previous vehicle (Epoch 1)
+        val alertRepo = CarAlertRepository()
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(
+                level = CarAlertLevel.ATTENTION,
+                coolant = CarAlertPhase.ACTIVE,
+                connectionEpoch = 1L,
+            ),
+        )
+
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            alertRepository = alertRepo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val coolantRow = template.pane.rows[2]
+        assertEquals("Coolant", coolantRow.title?.toString())
+        // Must NOT render alert high suffix because epoch does not match
+        assertEquals("108 °C", coolantRow.texts[0].toString())
+    }
+
+    @Test
+    fun homeScreen_rapidSemanticEdgesTriggerImmediateRefresh() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput(connectionEpoch = 1L, coolantC = live(108.0)))
+        runCurrent()
+
+        val alertRepo = CarAlertRepository()
+        var invalidateCount = 0
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            alertRepository = alertRepo,
+            contentLimitProvider = { 6 },
+            coroutineScope = backgroundScope,
+        )
+        screen.onInvalidateListener = { invalidateCount++ }
+
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+        runCurrent()
+
+        val initialInvalidates = invalidateCount
+
+        // Emit rapid semantic transitions via alertRepo
+        // Edge 1: NORMAL -> ACTIVE (turns alert on, text becomes "108 °C · High")
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(level = CarAlertLevel.ATTENTION, coolant = CarAlertPhase.ACTIVE, connectionEpoch = 1L),
+        )
+        runCurrent()
+        val afterEdge1 = invalidateCount
+        assertTrue("Edge 1 (NORMAL -> ACTIVE) must trigger immediate refresh", afterEdge1 > initialInvalidates)
+
+        // Edge 2: ACTIVE -> NORMAL (turns alert off, text becomes "108 °C")
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(level = CarAlertLevel.NORMAL, coolant = CarAlertPhase.NORMAL, connectionEpoch = 1L),
+        )
+        runCurrent()
+        val afterEdge2 = invalidateCount
+        assertTrue("Edge 2 (ACTIVE -> NORMAL) must trigger immediate refresh", afterEdge2 > afterEdge1)
     }
 }
