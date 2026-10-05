@@ -16,14 +16,14 @@ import com.cbstudio.telltale.car.diagnostics.CarDtcItem
 import com.cbstudio.telltale.car.diagnostics.CarDtcKind
 import com.cbstudio.telltale.car.diagnostics.CarDtcRepository
 import com.cbstudio.telltale.car.diagnostics.CarDtcRuntime
-import com.cbstudio.telltale.car.diagnostics.CarDtcState
 import com.cbstudio.telltale.car.diagnostics.CarFreezeReading
 import com.cbstudio.telltale.car.diagnostics.CarFreezeSignalKind
+import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
+import com.cbstudio.telltale.car.hardware.CarVehicleMotionResolver
 import com.cbstudio.telltale.car.health.matchingDtcReport
 import com.cbstudio.telltale.car.safety.CarDtcMotionGate
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRuntime
-import com.cbstudio.telltale.car.telemetry.CarTelemetryState
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,10 +33,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Read-only DTC Detail and Freeze Frame inspection screen (AA-04C).
+ * Stationary-only detail screen for a specific observed DTC and its freeze-frame data (AA-04B, AA-05).
  *
- * Parked only: continuously observes motion gate and automatically pops back to
- * CarHealthScreen if the vehicle begins moving.
+ * Implements:
+ * - Exact DTC identification by code + kind + sourceId.
+ * - Dynamic list limit adaptation with freeze-frame truncation indicators.
+ * - Multi-source motion safety gate: auto-pops back to [CarHealthScreen] if vehicle starts moving.
+ * - Fail-closed liveness check: auto-pops if selected DTC is removed during rescan or vehicle change.
  */
 class CarDtcDetailScreen(
     carContext: CarContext,
@@ -46,6 +49,9 @@ class CarDtcDetailScreen(
     private val constraintManager: ConstraintManager? = null,
     private val contentLimitProvider: (() -> Int)? = null,
     private val coroutineScope: CoroutineScope? = null,
+    private val sessionRuntime: CarSessionRuntime? = null,
+    private val hostSpeedRepository: CarHostSpeedRepository = sessionRuntime?.hostSpeedRepository ?: CarHostSpeedRepository(),
+    private val motionResolver: CarVehicleMotionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
 ) : Screen(carContext), DefaultLifecycleObserver {
 
     companion object {
@@ -99,8 +105,8 @@ class CarDtcDetailScreen(
             return
         }
         val telemetryState = telemetryRepository.state.value
-        // Strict safety rule: If vehicle is no longer stationary, pop to CarHealthScreen immediately
-        if (!CarDtcMotionGate.isStationary(telemetryState)) {
+        // Strict safety rule (AA05-18): If vehicle is no longer stationary, pop to CarHealthScreen immediately
+        if (!CarDtcMotionGate.isStationary(telemetryState, hostSpeedRepository.sample.value, motionResolver)) {
             try {
                 screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
             } catch (_: Throwable) {
@@ -136,6 +142,11 @@ class CarDtcDetailScreen(
         observeJob = scope.launch {
             launch {
                 telemetryRepository.state.collect {
+                    checkLivenessAndInvalidate()
+                }
+            }
+            launch {
+                hostSpeedRepository.sample.collect {
                     checkLivenessAndInvalidate()
                 }
             }

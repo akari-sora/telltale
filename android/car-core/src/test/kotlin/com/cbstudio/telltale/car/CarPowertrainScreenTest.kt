@@ -6,6 +6,11 @@ import androidx.car.app.testing.ScreenController
 import androidx.car.app.testing.TestCarContext
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
+import com.cbstudio.telltale.car.health.CarAlertCoordinator
+import com.cbstudio.telltale.car.health.CarAlertLevel
+import com.cbstudio.telltale.car.health.CarAlertPhase
+import com.cbstudio.telltale.car.health.CarAlertRepository
+import com.cbstudio.telltale.car.health.CarAlertSnapshot
 import com.cbstudio.telltale.car.telemetry.CarConnectionPhase
 import com.cbstudio.telltale.car.telemetry.CarSignalInput
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
@@ -17,6 +22,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -154,5 +160,223 @@ class CarPowertrainScreenTest {
             listOf("RPM", "Coolant", "Intake Air", "MAP"),
             template.pane.rows.map { it.title?.toString() },
         )
+    }
+
+    @Test
+    fun powertrainScreen_displaysInTemplateCoolantAlertWhenActive() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput(coolant = 108.0))
+        runCurrent()
+
+        val alertRepo = CarAlertRepository()
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(
+                level = CarAlertLevel.ATTENTION,
+                coolant = CarAlertPhase.ACTIVE,
+                connectionEpoch = 1L,
+            ),
+        )
+
+        val screen = CarPowertrainScreen(
+            carContext = carContext,
+            repository = repo,
+            alertRepository = alertRepo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val coolantRow = template.pane.rows[1]
+        assertEquals("Coolant", coolantRow.title?.toString())
+        assertEquals("108 °C · High", coolantRow.texts[0].toString())
+    }
+
+    @Test
+    fun powertrain_doesNotRenderAlertFromPreviousEpoch() = runTest {
+        val repo = createRepository()
+        // Current vehicle is Epoch 2
+        repo.submit(
+            CarTelemetryFrameInput(
+                schemaVersion = 1,
+                sequence = 1,
+                connectionEpoch = 2,
+                lifecycleEpoch = 0,
+                producedAtMonotonicUs = 1_000,
+                connectionPhase = CarConnectionPhase.CONNECTED,
+                speedKmh = live(45.0),
+                rpm = live(1800.0),
+                coolantC = live(108.0),
+                intakeAirC = live(25.0),
+                controlModuleVoltageV = live(14.1),
+                mapKpa = live(35.0),
+                diagnosticsAvailable = true,
+                milOn = false,
+                dtcCount = 0,
+            ),
+        )
+        runCurrent()
+
+        // Alert snapshot was retained from previous vehicle (Epoch 1)
+        val alertRepo = CarAlertRepository()
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(
+                level = CarAlertLevel.ATTENTION,
+                coolant = CarAlertPhase.ACTIVE,
+                connectionEpoch = 1L,
+            ),
+        )
+
+        val screen = CarPowertrainScreen(
+            carContext = carContext,
+            repository = repo,
+            alertRepository = alertRepo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val coolantRow = template.pane.rows[1]
+        assertEquals("Coolant", coolantRow.title?.toString())
+        assertEquals("108 °C", coolantRow.texts[0].toString())
+    }
+
+    @Test
+    fun powertrainScreen_alertTransitionTriggersImmediateRefresh() = runTest {
+        var currentTime = 1_000L
+        val repo = createRepository()
+        repo.submit(
+            CarTelemetryFrameInput(
+                schemaVersion = 1,
+                sequence = 1,
+                connectionEpoch = 1,
+                lifecycleEpoch = 0,
+                producedAtMonotonicUs = 1_000,
+                connectionPhase = CarConnectionPhase.CONNECTED,
+                speedKmh = live(45.0),
+                rpm = live(1800.0),
+                coolantC = live(108.0),
+                intakeAirC = live(25.0),
+                controlModuleVoltageV = live(14.1),
+                mapKpa = live(35.0),
+                diagnosticsAvailable = true,
+                milOn = false,
+                dtcCount = 0,
+            ),
+        )
+        runCurrent()
+
+        val alertCoord = CarAlertCoordinator(
+            telemetryRepository = repo,
+            clock = { currentTime },
+            coroutineScope = backgroundScope,
+        )
+
+        var invalidateCount = 0
+        val screen = CarPowertrainScreen(
+            carContext = carContext,
+            repository = repo,
+            alertRepository = alertCoord.repository,
+            clock = { currentTime },
+            contentLimitProvider = { 6 },
+            coroutineScope = backgroundScope,
+        )
+        screen.onInvalidateListener = { invalidateCount++ }
+
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+        alertCoord.start()
+        runCurrent()
+
+        val initialInvalidates = invalidateCount
+
+        // Advance 3001ms past hold threshold to trigger ACTIVE alert edge
+        currentTime = 4_001L
+        repo.submit(
+            CarTelemetryFrameInput(
+                schemaVersion = 1,
+                sequence = 2,
+                connectionEpoch = 1,
+                lifecycleEpoch = 0,
+                producedAtMonotonicUs = 4_001_000,
+                connectionPhase = CarConnectionPhase.CONNECTED,
+                speedKmh = live(45.0),
+                rpm = live(1800.0),
+                coolantC = live(108.0),
+                intakeAirC = live(25.0),
+                controlModuleVoltageV = live(14.1),
+                mapKpa = live(35.0),
+                diagnosticsAvailable = true,
+                milOn = false,
+                dtcCount = 0,
+            ),
+        )
+        runCurrent()
+
+        assertEquals(CarAlertPhase.ACTIVE, alertCoord.repository.snapshot.value.coolant)
+        assertTrue(invalidateCount > initialInvalidates)
+
+        alertCoord.destroy()
+    }
+
+    @Test
+    fun powertrainScreen_rapidSemanticEdgesTriggerImmediateRefresh() = runTest {
+        val repo = createRepository()
+        repo.submit(
+            CarTelemetryFrameInput(
+                schemaVersion = 1,
+                sequence = 1,
+                connectionEpoch = 1,
+                lifecycleEpoch = 0,
+                producedAtMonotonicUs = 1_000,
+                connectionPhase = CarConnectionPhase.CONNECTED,
+                speedKmh = live(45.0),
+                rpm = live(1800.0),
+                coolantC = live(108.0),
+                intakeAirC = live(25.0),
+                controlModuleVoltageV = live(14.1),
+                mapKpa = live(35.0),
+                diagnosticsAvailable = true,
+                milOn = false,
+                dtcCount = 0,
+            ),
+        )
+        runCurrent()
+
+        val alertRepo = CarAlertRepository()
+        var invalidateCount = 0
+        val screen = CarPowertrainScreen(
+            carContext = carContext,
+            repository = repo,
+            alertRepository = alertRepo,
+            contentLimitProvider = { 6 },
+            coroutineScope = backgroundScope,
+        )
+        screen.onInvalidateListener = { invalidateCount++ }
+
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+        runCurrent()
+
+        val initialInvalidates = invalidateCount
+
+        // Edge 1: NORMAL -> ACTIVE
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(level = CarAlertLevel.ATTENTION, coolant = CarAlertPhase.ACTIVE, connectionEpoch = 1L),
+        )
+        runCurrent()
+        val afterEdge1 = invalidateCount
+        assertTrue("Edge 1 (NORMAL -> ACTIVE) must trigger immediate refresh", afterEdge1 > initialInvalidates)
+
+        // Edge 2: ACTIVE -> NORMAL
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(level = CarAlertLevel.NORMAL, coolant = CarAlertPhase.NORMAL, connectionEpoch = 1L),
+        )
+        runCurrent()
+        val afterEdge2 = invalidateCount
+        assertTrue("Edge 2 (ACTIVE -> NORMAL) must trigger immediate refresh", afterEdge2 > afterEdge1)
     }
 }

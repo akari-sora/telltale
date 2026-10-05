@@ -13,6 +13,12 @@ import androidx.car.app.model.Template
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
+import com.cbstudio.telltale.car.hardware.CarSpeedResolver
+import com.cbstudio.telltale.car.hardware.CarVehicleMotionResolver
+import com.cbstudio.telltale.car.health.CarAlertPhase
+import com.cbstudio.telltale.car.health.CarAlertRepository
+import com.cbstudio.telltale.car.health.matchingAlertSnapshot
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
 import com.cbstudio.telltale.car.telemetry.CarSignalValue
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
@@ -28,14 +34,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Driver-distraction-safe live telemetry dashboard screen (AA-03).
+ * Driver-distraction-safe live telemetry dashboard screen (AA-03, AA-05).
  *
  * Implements:
  * - Dynamic row limit adaptation via [ConstraintManager.CONTENT_LIMIT_TYPE_PANE] (4 to 6 rows).
  * - Prioritized metric presentation: Speed (km/h), RPM, Coolant (°C), Voltage (V), Boost, Engine Load.
+ * - Multi-source speed arbitration (AA-05): OBD-first with host CarInfo fallback (display/raw).
+ * - In-template alert presentation for coolant temperature (AA-05).
  * - Missing & stale data contracts: missing/unavailable shows `--`, quiet/stale shows `Stale`.
  *   Never fabricates fictitious 0 values.
- * - DDG compliance: strictly read-only, no interactive/destructive buttons, 1Hz throttled invalidation.
+ * - DDG compliance: strictly read-only, no interactive/destructive buttons, 1Hz throttled invalidation,
+ *   with immediate invalidation on semantic alert transitions.
  */
 class CarHomeScreen(
     carContext: CarContext,
@@ -44,6 +53,10 @@ class CarHomeScreen(
     private val contentLimitProvider: (() -> Int)? = null,
     private val clock: () -> Long = SystemClock::elapsedRealtime,
     private val coroutineScope: CoroutineScope? = null,
+    private val sessionRuntime: CarSessionRuntime? = null,
+    private val speedResolver: CarSpeedResolver = sessionRuntime?.speedResolver ?: CarSpeedResolver(),
+    private val hostSpeedRepository: CarHostSpeedRepository = sessionRuntime?.hostSpeedRepository ?: CarHostSpeedRepository(),
+    private val alertRepository: CarAlertRepository = sessionRuntime?.alertRepository ?: CarAlertRepository(),
 ) : Screen(carContext), DefaultLifecycleObserver {
 
     companion object {
@@ -108,8 +121,20 @@ class CarHomeScreen(
         stopObserving()
         val scope = getScope()
         observeJob = scope.launch {
-            repository.state.collect { state ->
-                handleStateUpdate(state)
+            launch {
+                repository.state.collect { state ->
+                    handleStateUpdate(state)
+                }
+            }
+            launch {
+                hostSpeedRepository.sample.collect {
+                    handleStateUpdate(repository.state.value)
+                }
+            }
+            launch {
+                alertRepository.transitions.collect {
+                    triggerImmediateRefresh()
+                }
             }
         }
     }
@@ -119,6 +144,16 @@ class CarHomeScreen(
         observeJob = null
         pendingRefreshJob?.cancel()
         pendingRefreshJob = null
+    }
+
+    internal fun triggerImmediateRefresh() {
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+        pendingRefreshJob?.cancel()
+        pendingRefreshJob = null
+        val currentModel = buildDisplayModel(repository.state.value)
+        if (currentModel != lastRenderedModel) {
+            executeInvalidate(currentModel, clock())
+        }
     }
 
     private fun handleStateUpdate(state: CarTelemetryState) {
@@ -242,9 +277,50 @@ class CarHomeScreen(
 
         val frame = (state as? CarTelemetryState.Current)?.frame
 
-        val speedText = formatSignal(frame?.speedKmh, "km/h", "%.0f")
+        // AA-05: Resolved speed through arbitration (OBD live > Host display > Host raw > Stale / Unavailable)
+        val resolvedSpeed = speedResolver.resolve(state, hostSpeedRepository.sample.value)
+        val speedText = when (resolvedSpeed.status) {
+            CarSignalStatus.LIVE -> {
+                val value = resolvedSpeed.speedKmh
+                if (value != null && value.isFinite()) {
+                    val formatted = "%.0f".format(Locale.US, value)
+                    val cleanFormatted = if (formatted == "-0" || formatted == "-0.0") {
+                        formatted.removePrefix("-")
+                    } else {
+                        formatted
+                    }
+                    "$cleanFormatted km/h"
+                } else {
+                    missingText
+                }
+            }
+            CarSignalStatus.STALE -> staleText
+            CarSignalStatus.UNAVAILABLE, CarSignalStatus.UNSUPPORTED -> missingText
+        }
+
         val rpmText = formatSignal(frame?.rpm, "RPM", "%.0f")
-        val coolantText = formatSignal(frame?.coolantC, "°C", "%.0f")
+
+        // AA-05: In-template Coolant Alert
+        val coolantBase = formatSignal(frame?.coolantC, "°C", "%.0f")
+        val alertSnapshot = matchingAlertSnapshot(state, alertRepository.snapshot.value)
+        val coolantText = when {
+            alertSnapshot?.coolant == CarAlertPhase.ACTIVE -> {
+                if (coolantBase != missingText && coolantBase != staleText) {
+                    "$coolantBase · ${carContext.getString(R.string.car_alert_high)}"
+                } else {
+                    coolantBase
+                }
+            }
+            alertSnapshot?.coolant == CarAlertPhase.UNKNOWN_AFTER_WARNING -> {
+                if (coolantBase != missingText && coolantBase != staleText) {
+                    "$coolantBase · ${carContext.getString(R.string.car_alert_high)}"
+                } else {
+                    staleText
+                }
+            }
+            else -> coolantBase
+        }
+
         val voltageText = formatSignal(frame?.controlModuleVoltageV, "V", "%.1f")
         val boostText = missingText
         val loadText = missingText
@@ -286,6 +362,10 @@ class CarHomeScreen(
                                 constraintManager = constraintManager,
                                 contentLimitProvider = contentLimitProvider,
                                 clock = clock,
+                                sessionRuntime = sessionRuntime,
+                                hostSpeedRepository = hostSpeedRepository,
+                                motionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
+                                alertRepository = alertRepository,
                             ),
                         )
                     }

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- AA-05 Android Auto vehicle hardware speed permission -->
+    <uses-permission android:name="com.google.android.gms.permission.CAR_SPEED" />
+
     <application>
         <!--
           AA-00 / AA-01 prototype only.

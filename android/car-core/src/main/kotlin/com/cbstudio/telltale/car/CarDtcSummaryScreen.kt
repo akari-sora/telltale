@@ -20,7 +20,8 @@ import com.cbstudio.telltale.car.diagnostics.CarDtcRuntime
 import com.cbstudio.telltale.car.diagnostics.CarDtcScanPhase
 import com.cbstudio.telltale.car.diagnostics.CarDtcState
 import com.cbstudio.telltale.car.diagnostics.CarDtcVerdict
-import com.cbstudio.telltale.car.health.matchingDtcReport
+import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
+import com.cbstudio.telltale.car.hardware.CarVehicleMotionResolver
 import com.cbstudio.telltale.car.safety.CarDtcMotionGate
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRuntime
@@ -33,11 +34,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Read-only DTC list inspection screen (AA-04C).
+ * Stationary-only screen listing observed DTCs (AA-04B, AA-05).
  *
- * Parked only:
- * - Each row click is protected by [ParkedOnlyOnClickListener] and [CarDtcMotionGate].
- * - Automatically pops back to [CarHealthScreen] if vehicle starts moving.
+ * Implements:
+ * - Dynamic list limit adaptation via [ConstraintManager.CONTENT_LIMIT_TYPE_LIST].
+ * - Overflow row indicator when DTC count exceeds host content limit.
+ * - Parked-only navigation gate to [CarDtcDetailScreen].
+ * - Automatically pops back to [CarHealthScreen] if vehicle starts moving (multi-source motion gate).
  */
 class CarDtcSummaryScreen(
     carContext: CarContext,
@@ -46,6 +49,9 @@ class CarDtcSummaryScreen(
     private val constraintManager: ConstraintManager? = null,
     private val contentLimitProvider: (() -> Int)? = null,
     private val coroutineScope: CoroutineScope? = null,
+    private val sessionRuntime: CarSessionRuntime? = null,
+    private val hostSpeedRepository: CarHostSpeedRepository = sessionRuntime?.hostSpeedRepository ?: CarHostSpeedRepository(),
+    private val motionResolver: CarVehicleMotionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
 ) : Screen(carContext), DefaultLifecycleObserver {
 
     companion object {
@@ -99,6 +105,11 @@ class CarDtcSummaryScreen(
                 }
             }
             launch {
+                hostSpeedRepository.sample.collect {
+                    handleTelemetryUpdate(telemetryRepository.state.value)
+                }
+            }
+            launch {
                 dtcRepository.state.collect {
                     if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                         try {
@@ -120,8 +131,8 @@ class CarDtcSummaryScreen(
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
             return
         }
-        // Strict safety rule: If vehicle is no longer stationary, pop to CarHealthScreen immediately
-        if (!CarDtcMotionGate.isStationary(telemetryState)) {
+        // Strict safety rule (AA05-18): If vehicle is no longer stationary, pop to CarHealthScreen immediately
+        if (!CarDtcMotionGate.isStationary(telemetryState, hostSpeedRepository.sample.value, motionResolver)) {
             try {
                 screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
             } catch (_: Throwable) {
@@ -146,7 +157,11 @@ class CarDtcSummaryScreen(
         val manager = constraintManager ?: try {
             carContext.getCarService(ConstraintManager::class.java)
         } catch (_: Throwable) {
-            null
+            try {
+                carContext.getCarService(CarContext.CONSTRAINT_SERVICE) as? ConstraintManager
+            } catch (_: Throwable) {
+                null
+            }
         }
         val limit = try {
             manager?.getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST) ?: DEFAULT_LIST_LIMIT
@@ -160,7 +175,7 @@ class CarDtcSummaryScreen(
         val listBuilder = ItemList.Builder()
         val limit = resolveListLimit()
 
-        val currentReport = matchingDtcReport(telemetryRepository.state.value, dtcRepository.state.value)
+        val currentReport = com.cbstudio.telltale.car.health.matchingDtcReport(telemetryRepository.state.value, dtcRepository.state.value)
         val items = currentReport?.items ?: emptyList()
 
         if (items.isEmpty()) {
@@ -209,7 +224,7 @@ class CarDtcSummaryScreen(
                     .addText(coverageText)
                     .setOnClickListener(
                         ParkedOnlyOnClickListener.create {
-                            if (CarDtcMotionGate.isStationary(telemetryRepository.state.value)) {
+                            if (CarDtcMotionGate.isStationary(telemetryRepository.state.value, hostSpeedRepository.sample.value, motionResolver)) {
                                 screenManager.push(
                                     CarDtcDetailScreen(
                                         carContext = carContext,
@@ -218,6 +233,9 @@ class CarDtcSummaryScreen(
                                         telemetryRepository = telemetryRepository,
                                         constraintManager = constraintManager,
                                         contentLimitProvider = contentLimitProvider,
+                                        sessionRuntime = sessionRuntime,
+                                        hostSpeedRepository = hostSpeedRepository,
+                                        motionResolver = motionResolver,
                                     ),
                                 )
                             }

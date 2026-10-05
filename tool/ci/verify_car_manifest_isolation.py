@@ -157,33 +157,35 @@ def main():
 
     all_errors = []
 
-    # AA01-08 carProto merged manifest:
-    # MUST contain CarAppService
-    # MUST contain category.IOT
-    # MUST contain com.google.android.gms.car.application
+    # AA01-08 / AA05-04 carProto merged manifest:
+    # MUST contain CarAppService, category.IOT, com.google.android.gms.car.application
+    # MUST contain com.google.android.gms.permission.CAR_SPEED
+    # MUST NOT contain AAOS specific permissions
     all_errors.extend(
         verify_manifest(
-            name="AA01-08 carProto",
+            name="AA01-08 / AA05-04 carProto",
             path=p_car,
             must_contain=[
                 "CarAppService",
                 "category.IOT",
                 "com.google.android.gms.car.application",
+                "com.google.android.gms.permission.CAR_SPEED",
             ],
             must_not_contain=[
                 "com.android.automotive",
                 "CarAppActivity",
+                "android.car.permission.CAR_SPEED",
+                "android.car.permission.READ_CAR_DISPLAY_UNITS",
             ],
         )
     )
 
-    # AA01-09 fieldDebug merged manifest:
-    # MUST NOT contain CarAppService
-    # MUST NOT contain category.IOT
-    # MUST NOT contain com.google.android.gms.car.application
+    # AA01-09 / AA05-06 fieldDebug merged manifest:
+    # MUST NOT contain CarAppService, category.IOT, com.google.android.gms.car.application,
+    # or any automotive/car permissions
     all_errors.extend(
         verify_manifest(
-            name="AA01-09 fieldDebug (production)",
+            name="AA01-09 / AA05-06 fieldDebug (production)",
             path=p_field,
             must_contain=[],
             must_not_contain=[
@@ -192,17 +194,18 @@ def main():
                 "com.google.android.gms.car.application",
                 "com.android.automotive",
                 "CarAppActivity",
+                "com.google.android.gms.permission.CAR_SPEED",
+                "android.car.permission.CAR_SPEED",
+                "android.car.permission.READ_CAR_DISPLAY_UNITS",
             ],
         )
     )
 
-    # AA01-R05 fieldRelease merged manifest (mandatory gate):
-    # MUST NOT contain CarAppService
-    # MUST NOT contain category.IOT
-    # MUST NOT contain com.google.android.gms.car.application
+    # AA01-R05 / AA05-06 fieldRelease merged manifest (mandatory gate):
+    # MUST NOT contain any car components or car permissions
     all_errors.extend(
         verify_manifest(
-            name="AA01-R05 fieldRelease (production)",
+            name="AA01-R05 / AA05-06 fieldRelease (production)",
             path=p_field_release,
             must_contain=[],
             must_not_contain=[
@@ -211,26 +214,31 @@ def main():
                 "com.google.android.gms.car.application",
                 "com.android.automotive",
                 "CarAppActivity",
+                "com.google.android.gms.permission.CAR_SPEED",
+                "android.car.permission.CAR_SPEED",
+                "android.car.permission.READ_CAR_DISPLAY_UNITS",
             ],
         )
     )
 
-    # AA01-10 automotive merged manifest:
-    # MUST contain CarAppService
-    # MUST contain com.android.automotive
-    # MUST contain CarAppActivity
-    # MUST NOT contain com.google.android.gms.car.application
+    # AA01-10 / AA05-05 automotive merged manifest:
+    # MUST contain CarAppService, com.android.automotive, CarAppActivity
+    # MUST contain android.car.permission.CAR_SPEED, android.car.permission.READ_CAR_DISPLAY_UNITS
+    # MUST NOT contain com.google.android.gms.car.application or Google CAR_SPEED
     all_errors.extend(
         verify_manifest(
-            name="AA01-10 automotive",
+            name="AA01-10 / AA05-05 automotive",
             path=p_auto,
             must_contain=[
                 "CarAppService",
                 "com.android.automotive",
                 "CarAppActivity",
+                "android.car.permission.CAR_SPEED",
+                "android.car.permission.READ_CAR_DISPLAY_UNITS",
             ],
             must_not_contain=[
                 "com.google.android.gms.car.application",
+                "com.google.android.gms.permission.CAR_SPEED",
             ],
         )
     )

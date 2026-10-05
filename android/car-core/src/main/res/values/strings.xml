@@ -66,4 +66,9 @@
     <string name="car_freeze_frame_omitted">%d additional signals omitted</string>
     <string name="car_freeze_frame_incomplete_summary">Incomplete data · %d signals unread or omitted</string>
     <string name="car_freeze_frame_read_incomplete">Incomplete data · Read interrupted</string>
+
+    <!-- AA-05 In-Template Alert & Host Speed Strings -->
+    <string name="car_alert_high">High</string>
+    <string name="car_alert_attention">Attention</string>
+    <string name="car_action_enable_speed">Enable vehicle speed</string>
 </resources>

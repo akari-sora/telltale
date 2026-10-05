@@ -16,6 +16,15 @@ import com.cbstudio.telltale.car.diagnostics.CarDtcRepository
 import com.cbstudio.telltale.car.diagnostics.CarDtcScanPhase
 import com.cbstudio.telltale.car.diagnostics.CarDtcVerdict
 import com.cbstudio.telltale.car.diagnostics.DefaultCarDtcRepository
+import com.cbstudio.telltale.car.hardware.CarHostSpeedPermissionCoordinator
+import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
+import com.cbstudio.telltale.car.hardware.CarHostSpeedSample
+import com.cbstudio.telltale.car.hardware.CarHostSpeedStatus
+import com.cbstudio.telltale.car.health.CarAlertCoordinator
+import com.cbstudio.telltale.car.health.CarAlertLevel
+import com.cbstudio.telltale.car.health.CarAlertPhase
+import com.cbstudio.telltale.car.health.CarAlertRepository
+import com.cbstudio.telltale.car.health.CarAlertSnapshot
 import com.cbstudio.telltale.car.telemetry.CarConnectionPhase
 import com.cbstudio.telltale.car.telemetry.CarSignalInput
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
@@ -57,6 +66,12 @@ class CarHealthScreenTest {
         carContext = TestCarContext.createCarContext(
             ApplicationProvider.getApplicationContext(),
         )
+        val packageInfo = carContext.packageManager.getPackageInfo(carContext.packageName, 0).apply {
+            requestedPermissions = arrayOf(
+                com.cbstudio.telltale.car.hardware.CarHostSpeedPermissionCoordinator.PERMISSION_CAR_SPEED_PROJECTED,
+            )
+        }
+        org.robolectric.Shadows.shadowOf(carContext.packageManager).installPackage(packageInfo)
     }
 
     @After
@@ -275,29 +290,34 @@ class CarHealthScreenTest {
         var currentTime = 1_000L
         val telemRepo = createTelemetryRepo()
         val dtcRepo = DefaultCarDtcRepository()
+        val alertCoord = CarAlertCoordinator(
+            telemetryRepository = telemRepo,
+            clock = { currentTime },
+            coroutineScope = backgroundScope,
+        )
+        alertCoord.start()
 
         // Epoch 1: hot coolant enters ACTIVE alert
         telemRepo.submit(frameInput(sequence = 1, epoch = 1, coolant = 108.0))
         dtcRepo.submit(dtcReport(epoch = 1, verdict = CarDtcVerdict.COMPLETE_CLEAN, totalCodes = 0))
+        runCurrent()
 
         val screen = CarHealthScreen(
             carContext = carContext,
             telemetryRepository = telemRepo,
             dtcRepository = dtcRepo,
+            alertRepository = alertCoord.repository,
             contentLimitProvider = { 6 },
             clock = { currentTime },
         )
         val controller = ScreenController(screen)
         controller.moveToState(Lifecycle.State.RESUMED)
 
-        // Enter PENDING_ENTER at t=1000
-        var template = screen.onGetTemplate() as PaneTemplate
-
         // Advance to t=4500 (> 3000ms hold time) -> alert ACTIVE
         currentTime = 4_500L
         telemRepo.submit(frameInput(sequence = 2, epoch = 1, coolant = 108.0))
         runCurrent()
-        template = screen.onGetTemplate() as PaneTemplate
+        var template = screen.onGetTemplate() as PaneTemplate
         assertEquals("Attention", template.pane.rows[0].texts[0].toString())
 
         // Car switch: Epoch 2 connects with normal coolant (85.0°C)
@@ -309,6 +329,118 @@ class CarHealthScreenTest {
         template = screen.onGetTemplate() as PaneTemplate
         // Hysteresis must have been reset: cool reading immediately results in NORMAL, not PENDING_CLEAR
         assertEquals("No observed warnings", template.pane.rows[0].texts[0].toString())
+        alertCoord.destroy()
+    }
+
+    @Test
+    fun healthScreen_speedPermissionDeniedShowsParkedOnlyEnableAction() = runTest {
+        val telemRepo = createTelemetryRepo()
+        val dtcRepo = DefaultCarDtcRepository()
+        val hostRepo = CarHostSpeedRepository()
+        hostRepo.updateSample(CarHostSpeedSample(status = CarHostSpeedStatus.PERMISSION_DENIED))
+
+        val screen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            hostSpeedRepository = hostRepo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val actionStrip = template.actionStrip
+        assertNotNull(actionStrip)
+        assertEquals(1, actionStrip!!.actions.size)
+        assertEquals("Enable vehicle speed", actionStrip.actions[0].title?.toString())
+        assertNotNull(actionStrip.actions[0].onClickDelegate)
+    }
+
+    @Test
+    fun healthScreen_speedPermissionGrantedTriggersRetryAndRemovesAction() = runTest {
+        val telemRepo = createTelemetryRepo()
+        val dtcRepo = DefaultCarDtcRepository()
+        val hostRepo = CarHostSpeedRepository()
+        hostRepo.updateSample(CarHostSpeedSample(status = CarHostSpeedStatus.PERMISSION_DENIED))
+
+        var retried = false
+        val coordinator = CarHostSpeedPermissionCoordinator(
+            onPermissionGranted = {
+                retried = true
+                hostRepo.updateSample(CarHostSpeedSample(status = CarHostSpeedStatus.LIVE, displaySpeedMetersPerSecond = 10f))
+            },
+        )
+
+        val screen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            hostSpeedRepository = hostRepo,
+            permissionCoordinator = coordinator,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        // Request permission and simulate grant
+        var grantedResult: Boolean? = null
+        screen.requestSpeedPermission { grantedResult = it }
+        val perms = CarHostSpeedPermissionCoordinator.resolveRequiredPermissions(carContext)
+        val info = carContext.lastPermissionRequestInfo
+        info?.listener?.onRequestPermissionsResult(perms, emptyList<String>())
+        runCurrent()
+
+        assertTrue(grantedResult == true)
+        assertTrue(retried)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        // ActionStrip should now be null since permission is no longer DENIED
+        assertTrue(template.actionStrip == null || template.actionStrip!!.actions.isEmpty())
+    }
+
+    @Test
+    fun healthScreen_alertTransitionTriggersImmediateRefresh() = runTest {
+        var currentTime = 1_000L
+        val telemRepo = createTelemetryRepo()
+        telemRepo.submit(frameInput(sequence = 1, coolant = 108.0))
+        runCurrent()
+
+        val alertCoord = CarAlertCoordinator(
+            telemetryRepository = telemRepo,
+            clock = { currentTime },
+            coroutineScope = backgroundScope,
+        )
+
+        var invalidateCount = 0
+        val screen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            alertRepository = alertCoord.repository,
+            clock = { currentTime },
+            contentLimitProvider = { 6 },
+        )
+        screen.onInvalidateListener = { invalidateCount++ }
+
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+        alertCoord.start()
+        runCurrent()
+
+        val initialInvalidates = invalidateCount
+
+        // Advance 3001ms past hold threshold to trigger ACTIVE alert edge
+        currentTime = 4_001L
+        telemRepo.submit(frameInput(sequence = 2, coolant = 108.0))
+        runCurrent()
+
+        // Transition edge must have triggered immediate refresh
+        assertEquals(CarAlertPhase.ACTIVE, alertCoord.repository.snapshot.value.coolant)
+        assertTrue(invalidateCount > initialInvalidates)
+
+        alertCoord.destroy()
     }
 
     @Test
@@ -369,5 +501,88 @@ class CarHealthScreenTest {
         @Suppress("DEPRECATION")
         template = screen.onGetTemplate() as PaneTemplate
         assertEquals("Unknown", template.pane.rows[0].texts[0].toString())
+    }
+
+    @Test
+    fun health_doesNotRenderAttentionFromPreviousEpoch() = runTest {
+        val telemRepo = createTelemetryRepo()
+        // Car connected at Epoch 2, clean DTC
+        telemRepo.submit(frameInput(epoch = 2L, coolant = 108.0, milOn = false, dtcCount = 0))
+        val dtcRepo = DefaultCarDtcRepository()
+        dtcRepo.submit(dtcReport(epoch = 2L, verdict = CarDtcVerdict.COMPLETE_CLEAN, coverageComplete = true, totalCodes = 0))
+        runCurrent()
+
+        // Alert snapshot is from previous vehicle session (Epoch 1)
+        val alertRepo = CarAlertRepository()
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(
+                level = CarAlertLevel.ATTENTION,
+                coolant = CarAlertPhase.ACTIVE,
+                connectionEpoch = 1L,
+            ),
+        )
+
+        val screen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            alertRepository = alertRepo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val rows = template.pane.rows
+        // Status must NOT be "Attention", should be "No observed warnings" because Epoch 1 alert is ignored
+        assertEquals("No observed warnings", rows[0].texts[0].toString())
+        // Coolant row must NOT have "· High"
+        val coolantRow = rows.find { it.title?.toString() == "Coolant" }
+        assertNotNull(coolantRow)
+        assertEquals("108 °C", coolantRow!!.texts[0].toString())
+    }
+
+    @Test
+    fun healthScreen_rapidSemanticEdgesTriggerImmediateRefresh() = runTest {
+        val telemRepo = createTelemetryRepo()
+        telemRepo.submit(frameInput(epoch = 1L, coolant = 108.0, milOn = false, dtcCount = 0))
+        val dtcRepo = DefaultCarDtcRepository()
+        dtcRepo.submit(dtcReport(epoch = 1L, verdict = CarDtcVerdict.COMPLETE_CLEAN, coverageComplete = true, totalCodes = 0))
+        runCurrent()
+
+        val alertRepo = CarAlertRepository()
+        var invalidateCount = 0
+        val screen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            alertRepository = alertRepo,
+            contentLimitProvider = { 6 },
+            coroutineScope = backgroundScope,
+        )
+        screen.onInvalidateListener = { invalidateCount++ }
+
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+        runCurrent()
+
+        val initialInvalidates = invalidateCount
+
+        // Edge 1: NORMAL -> ACTIVE
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(level = CarAlertLevel.ATTENTION, coolant = CarAlertPhase.ACTIVE, connectionEpoch = 1L),
+        )
+        runCurrent()
+        val afterEdge1 = invalidateCount
+        assertTrue("Edge 1 (NORMAL -> ACTIVE) must trigger immediate refresh", afterEdge1 > initialInvalidates)
+
+        // Edge 2: ACTIVE -> NORMAL
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(level = CarAlertLevel.NORMAL, coolant = CarAlertPhase.NORMAL, connectionEpoch = 1L),
+        )
+        runCurrent()
+        val afterEdge2 = invalidateCount
+        assertTrue("Edge 2 (ACTIVE -> NORMAL) must trigger immediate refresh", afterEdge2 > afterEdge1)
     }
 }
