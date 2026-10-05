@@ -5,6 +5,7 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
+import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
@@ -273,9 +274,29 @@ class CarHomeScreen(
             )
         }
 
+        val actionStrip = ActionStrip.Builder()
+            .addAction(
+                Action.Builder()
+                    .setTitle(carContext.getString(R.string.car_action_health))
+                    .setOnClickListener {
+                        screenManager.push(
+                            CarHealthScreen(
+                                carContext = carContext,
+                                telemetryRepository = repository,
+                                constraintManager = constraintManager,
+                                contentLimitProvider = contentLimitProvider,
+                                clock = clock,
+                            ),
+                        )
+                    }
+                    .build(),
+            )
+            .build()
+
         return PaneTemplate.Builder(paneBuilder.build())
             .setTitle(carContext.getString(R.string.car_app_name))
             .setHeaderAction(Action.APP_ICON)
+            .setActionStrip(actionStrip)
             .build()
     }
 }

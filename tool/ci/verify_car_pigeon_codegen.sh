@@ -11,6 +11,8 @@ cd "$(git rev-parse --show-toplevel)"
 generated=(
   lib/car/generated/car_telemetry.g.dart
   android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarTelemetry.g.kt
+  lib/car/generated/car_diagnostics.g.dart
+  android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarDiagnostics.g.kt
 )
 
 # CI images put the Flutter SDK's dart on PATH; local checkouts may only
@@ -25,6 +27,7 @@ else
 fi
 
 "${dart_cmd[@]}" run pigeon --input pigeons/car_telemetry.dart
+"${dart_cmd[@]}" run pigeon --input pigeons/car_diagnostics.dart
 
 status="$(git status --porcelain -- "${generated[@]}")"
 if [[ -n "$status" ]]; then

@@ -15,4 +15,55 @@
     <string name="car_home_load_title">Engine Load</string>
     <string name="car_signal_missing">--</string>
     <string name="car_signal_stale">Stale</string>
+
+    <!-- AA-04 Actions -->
+    <string name="car_action_health">Health</string>
+    <string name="car_action_powertrain">Powertrain</string>
+    <string name="car_action_fault_codes">Fault Codes</string>
+
+    <!-- AA-04 Health Screen -->
+    <string name="car_health_title">Vehicle Health</string>
+    <string name="car_health_status_row">Observed Status</string>
+    <string name="car_health_mil_row">MIL</string>
+    <string name="car_health_dtc_row">Fault Codes</string>
+    <string name="car_health_coolant_row">Coolant</string>
+    <string name="car_health_voltage_row">Module Voltage</string>
+    <string name="car_health_status_attention">Attention</string>
+    <string name="car_health_status_no_warnings">No observed warnings</string>
+    <string name="car_health_status_unknown">Unknown</string>
+    <string name="car_mil_on">On</string>
+    <string name="car_mil_off">Off</string>
+    <string name="car_dtc_count_format">%d codes</string>
+    <string name="car_dtc_none">0 codes</string>
+
+    <!-- AA-04 Powertrain Screen -->
+    <string name="car_powertrain_title">Powertrain</string>
+    <string name="car_powertrain_rpm_title">RPM</string>
+    <string name="car_powertrain_coolant_title">Coolant</string>
+    <string name="car_powertrain_iat_title">Intake Air</string>
+    <string name="car_powertrain_map_title">MAP</string>
+    <string name="car_powertrain_voltage_title">Module Voltage</string>
+    <string name="car_powertrain_speed_title">Speed</string>
+
+    <!-- AA-04 DTC Screens -->
+    <string name="car_dtc_summary_title">Diagnostic Codes</string>
+    <string name="car_dtc_no_codes">No diagnostic codes observed</string>
+    <string name="car_dtc_status_not_scanned">Not scanned</string>
+    <string name="car_dtc_status_scanning">Scan in progress</string>
+    <string name="car_dtc_status_partial_clean">Coverage incomplete / no faults observed in completed portions</string>
+    <string name="car_dtc_status_unavailable">Diagnostics unavailable / incomplete</string>
+    <string name="car_dtc_more_items_format">%d additional diagnostic codes not shown</string>
+    <string name="car_dtc_parked_only_notice">Parked only</string>
+    <string name="car_dtc_detail_title">Code Details</string>
+    <string name="car_dtc_detail_class">Class</string>
+    <string name="car_dtc_detail_controller">Controller</string>
+    <string name="car_dtc_detail_coverage">Coverage</string>
+    <string name="car_dtc_coverage_complete">Complete</string>
+    <string name="car_dtc_coverage_partial">Partial</string>
+    <string name="car_freeze_frame_section">Freeze Frame</string>
+    <string name="car_freeze_frame_none">No freeze frame available</string>
+    <string name="car_freeze_frame_unknown">Freeze frame contents unreadable</string>
+    <string name="car_freeze_frame_omitted">%d additional signals omitted</string>
+    <string name="car_freeze_frame_incomplete_summary">Incomplete data · %d signals unread or omitted</string>
+    <string name="car_freeze_frame_read_incomplete">Incomplete data · Read interrupted</string>
 </resources>

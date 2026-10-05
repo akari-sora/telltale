@@ -44,22 +44,36 @@ class CarBridgeContractTest(unittest.TestCase):
 
     # AA02-03
     def test_schema_declares_one_host_api_and_no_flutter_api(self):
-        source = _strip_dart_comments(self.read(PIGEON_INPUT))
-        self.assertEqual(len(re.findall(r"@HostApi\s*\(", source)), 1)
-        self.assertEqual(re.findall(r"@FlutterApi\s*\(", source), [])
-        self.assertEqual(re.findall(r"@EventChannelApi\s*\(", source), [])
-        self.assertIn("void publishTelemetryFrame(CarTelemetryMessage frame);", source)
+        for path in ("pigeons/car_telemetry.dart", "pigeons/car_diagnostics.dart"):
+            source = _strip_dart_comments(self.read(path))
+            self.assertEqual(len(re.findall(r"@HostApi\s*\(", source)), 1, msg=f"HostApi count in {path}")
+            self.assertEqual(re.findall(r"@FlutterApi\s*\(", source), [], msg=f"FlutterApi in {path}")
+            self.assertEqual(re.findall(r"@EventChannelApi\s*\(", source), [], msg=f"EventChannelApi in {path}")
+        self.assertIn("void publishTelemetryFrame(CarTelemetryMessage frame);", self.read("pigeons/car_telemetry.dart"))
+        self.assertIn("void publishDtcReport(CarDtcReportMessage report);", self.read("pigeons/car_diagnostics.dart"))
 
     def test_generated_code_has_no_kotlin_to_dart_api(self):
-        kotlin = self.read(GENERATED_KOTLIN)
-        dart = self.read(GENERATED_DART)
-        # A Pigeon FlutterApi generates a Kotlin class that *calls* Dart and a
-        # Dart abstract class with a static setUp; neither may exist.
-        self.assertNotIn("class CarTelemetryFlutterApi", kotlin)
-        self.assertNotRegex(kotlin, r"class \w+FlutterApi\(")
-        self.assertNotRegex(dart, r"abstract class \w+ \{\s*static const MessageCodec")
-        self.assertEqual(len(re.findall(r"(?m)^interface \w+", kotlin)), 1)
-        self.assertIn("interface CarTelemetryHostApi", kotlin)
+        pairs = [
+            (
+                "android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarTelemetry.g.kt",
+                "lib/car/generated/car_telemetry.g.dart",
+                "CarTelemetryHostApi",
+            ),
+            (
+                "android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarDiagnostics.g.kt",
+                "lib/car/generated/car_diagnostics.g.dart",
+                "CarDiagnosticsHostApi",
+            ),
+        ]
+        for kt_path, dart_path, host_api in pairs:
+            kotlin = self.read(kt_path)
+            dart = self.read(dart_path)
+            self.assertNotIn("class CarTelemetryFlutterApi", kotlin)
+            self.assertNotIn("class CarDiagnosticsFlutterApi", kotlin)
+            self.assertNotRegex(kotlin, r"class \w+FlutterApi\(")
+            self.assertNotRegex(dart, r"abstract class \w+ \{\s*static const MessageCodec")
+            self.assertEqual(len(re.findall(r"(?m)^interface \w+", kotlin)), 1)
+            self.assertIn(f"interface {host_api}", kotlin)
 
     # AA02-04
     def test_schema_version_is_one_on_both_ends(self):
@@ -77,7 +91,7 @@ class CarBridgeContractTest(unittest.TestCase):
             str(p.relative_to(ROOT))
             for p in (ROOT / "android").rglob("*.kt")
             if "/build/" not in str(p)
-            and "CarTelemetryHostApi" in p.read_text(encoding="utf-8")
+            and any(api in p.read_text(encoding="utf-8") for api in ("CarTelemetryHostApi", "CarDiagnosticsHostApi"))
         )
         self.assertTrue(hits)
         for path in hits:
@@ -93,9 +107,11 @@ class CarBridgeContractTest(unittest.TestCase):
         self.assertIn("FlavorPlatformRegistrar.register(flutterEngine)", source)
         for forbidden in (
             "CarTelemetryHostApi",
+            "CarDiagnosticsHostApi",
             "carbridge",
             "com.cbstudio.telltale.car.",
             "CarTelemetryRuntime",
+            "CarDtcRuntime",
             "Class.forName",
         ):
             self.assertNotIn(forbidden, source, msg=forbidden)

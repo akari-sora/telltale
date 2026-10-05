@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'car/car_diagnostics_runtime.dart';
 import 'car/car_projection_runtime.dart';
 import 'core/app_locales_platform.dart';
 import 'core/form_factor.dart';
@@ -51,6 +52,7 @@ class _TorqueAppState extends ConsumerState<TorqueApp>
   bool _startupReady = false;
   bool _startupRequiresRestart = false;
   ProviderSubscription<Object?>? _carProjection;
+  ProviderSubscription<Object?>? _carDiagnostics;
 
   static const _l10nDelegates = <LocalizationsDelegate<dynamic>>[
     AppLocalizations.delegate,
@@ -73,6 +75,8 @@ class _TorqueAppState extends ConsumerState<TorqueApp>
     // is paused, and so would be its telemetry listener — the car would see
     // a session that never produces data while the phone shows gauges.
     _carProjection = ref.listenManual(carProjectionRuntimeProvider, (_, _) {});
+    // AA-04 car diagnostics and DTC projection.
+    _carDiagnostics = ref.listenManual(carDiagnosticsRuntimeProvider, (_, _) {});
     _startupInitialization = _initializeStartup();
     _lifecycleListener = AppLifecycleListener(onResume: _onResume);
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncAppLocales());
@@ -121,6 +125,7 @@ class _TorqueAppState extends ConsumerState<TorqueApp>
   @override
   void dispose() {
     _carProjection?.close();
+    _carDiagnostics?.close();
     WidgetsBinding.instance.removeObserver(this);
     _lifecycleListener.dispose();
     super.dispose();
