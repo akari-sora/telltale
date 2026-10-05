@@ -34,6 +34,8 @@ fun isSemanticAlertEdge(oldPhase: CarAlertPhase, newPhase: CarAlertPhase): Boole
     if (oldPhase == newPhase) return false
     return (oldPhase == CarAlertPhase.NORMAL && newPhase == CarAlertPhase.ACTIVE) ||
             (oldPhase == CarAlertPhase.PENDING_ENTER && newPhase == CarAlertPhase.ACTIVE) ||
+            (oldPhase == CarAlertPhase.PENDING_CLEAR && newPhase == CarAlertPhase.ACTIVE) ||
+            (oldPhase == CarAlertPhase.UNKNOWN_AFTER_WARNING && newPhase == CarAlertPhase.ACTIVE) ||
             (oldPhase == CarAlertPhase.ACTIVE && newPhase == CarAlertPhase.UNKNOWN_AFTER_WARNING) ||
             (oldPhase == CarAlertPhase.ACTIVE && newPhase == CarAlertPhase.NORMAL) ||
             (oldPhase == CarAlertPhase.PENDING_CLEAR && newPhase == CarAlertPhase.NORMAL) ||

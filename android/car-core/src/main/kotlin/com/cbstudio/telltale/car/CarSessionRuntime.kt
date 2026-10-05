@@ -41,15 +41,18 @@ class CarSessionRuntime(
 
     private var internalScope: CoroutineScope? = null
     private var freshnessJob: Job? = null
+    private var currentRegistrationToken: Long = 0L
     var isStarted = false
         private set
 
     fun start() {
         if (isStarted) return
         isStarted = true
+        val registrationToken = ++currentRegistrationToken
 
         hostSpeedRepository.reset()
         hostSpeedGateway.startListening { sample ->
+            if (!isStarted || registrationToken != currentRegistrationToken) return@startListening
             hostSpeedRepository.updateSample(sample)
         }
 
@@ -66,9 +69,11 @@ class CarSessionRuntime(
 
     fun retryHostSpeed() {
         if (!isStarted) return
+        val registrationToken = ++currentRegistrationToken
         hostSpeedGateway.stopListening()
         hostSpeedRepository.reset()
         hostSpeedGateway.startListening { sample ->
+            if (!isStarted || registrationToken != currentRegistrationToken) return@startListening
             hostSpeedRepository.updateSample(sample)
         }
     }
@@ -76,6 +81,7 @@ class CarSessionRuntime(
     fun stop() {
         if (!isStarted) return
         isStarted = false
+        ++currentRegistrationToken
 
         freshnessJob?.cancel()
         freshnessJob = null
@@ -87,6 +93,7 @@ class CarSessionRuntime(
 
     fun destroy() {
         stop()
+        ++currentRegistrationToken
         internalScope?.cancel()
         internalScope = null
 

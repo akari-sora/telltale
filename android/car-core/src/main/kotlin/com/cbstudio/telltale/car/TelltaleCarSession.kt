@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.car.app.Screen
 import androidx.car.app.Session
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 
 /**
@@ -23,6 +24,9 @@ class TelltaleCarSession(
     override fun onCreateScreen(intent: Intent): Screen {
         if (!::sessionRuntime.isInitialized) {
             sessionRuntime = runtimeProvider?.invoke(this) ?: CarSessionRuntime(carContext)
+        }
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !sessionRuntime.isStarted) {
+            sessionRuntime.start()
         }
         return CarHomeScreen(carContext = carContext, sessionRuntime = sessionRuntime)
     }

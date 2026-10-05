@@ -1,6 +1,8 @@
 package com.cbstudio.telltale.car
 
+import android.content.Intent
 import androidx.car.app.testing.TestCarContext
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.cbstudio.telltale.car.hardware.CarHardwareSpeedGateway
 import com.cbstudio.telltale.car.hardware.CarHostSpeedPermissionCoordinator
@@ -272,5 +274,236 @@ class CarSessionRuntimeTest {
         assertEquals(CarHostSpeedStatus.STALE, speedRepo.sample.value.status)
 
         runtime.destroy()
+    }
+
+    @Test
+    fun gatewaySampleEmittedWhileRuntimeStoppedDoesNotUpdateRepository() = testScope.runTest {
+        var capturedCallback: ((CarHostSpeedSample) -> Unit)? = null
+        val gateway = object : CarHardwareSpeedGateway {
+            override fun startListening(onSpeedAvailable: (CarHostSpeedSample) -> Unit) {
+                capturedCallback = onSpeedAvailable
+            }
+            override fun stopListening() {}
+        }
+        val speedRepo = CarHostSpeedRepository()
+        val telemetryRepo = CarTelemetryRepository(
+            scope = backgroundScope,
+            elapsedRealtimeMs = { virtualTimeMs },
+        )
+        val alertCoord = CarAlertCoordinator(
+            telemetryRepository = telemetryRepo,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+        val runtime = CarSessionRuntime(
+            carContext = carContext,
+            telemetryRepository = telemetryRepo,
+            hostSpeedGateway = gateway,
+            hostSpeedRepository = speedRepo,
+            alertCoordinator = alertCoord,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+
+        runtime.start()
+        assertTrue(runtime.isStarted)
+
+        runtime.stop()
+        assertFalse(runtime.isStarted)
+        assertEquals(CarHostSpeedSample.INITIAL, speedRepo.sample.value)
+
+        // Gateway produces sample asynchronously after runtime is stopped
+        capturedCallback?.invoke(
+            CarHostSpeedSample(
+                status = CarHostSpeedStatus.LIVE,
+                rawMetersPerSecond = 25f,
+                displaySpeedMetersPerSecond = 25f,
+                receivedAtElapsedMs = virtualTimeMs,
+            ),
+        )
+
+        // Must remain INITIAL and not leak live sample while stopped
+        assertEquals(CarHostSpeedSample.INITIAL, speedRepo.sample.value)
+
+        runtime.destroy()
+    }
+
+    @Test
+    fun gatewaySampleFromPreviousGenerationAfterRestartDoesNotOverwriteNewSample() = testScope.runTest {
+        val callbacks = mutableListOf<(CarHostSpeedSample) -> Unit>()
+        val gateway = object : CarHardwareSpeedGateway {
+            override fun startListening(onSpeedAvailable: (CarHostSpeedSample) -> Unit) {
+                callbacks.add(onSpeedAvailable)
+            }
+            override fun stopListening() {}
+        }
+        val speedRepo = CarHostSpeedRepository()
+        val telemetryRepo = CarTelemetryRepository(
+            scope = backgroundScope,
+            elapsedRealtimeMs = { virtualTimeMs },
+        )
+        val alertCoord = CarAlertCoordinator(
+            telemetryRepository = telemetryRepo,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+        val runtime = CarSessionRuntime(
+            carContext = carContext,
+            telemetryRepository = telemetryRepo,
+            hostSpeedGateway = gateway,
+            hostSpeedRepository = speedRepo,
+            alertCoordinator = alertCoord,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+
+        // 1. Start generation 1 (callback A)
+        runtime.start()
+        assertEquals(1, callbacks.size)
+        val callbackA = callbacks[0]
+
+        // 2. Stop and restart -> generation 2 (callback B)
+        runtime.stop()
+        runtime.start()
+        assertEquals(2, callbacks.size)
+        val callbackB = callbacks[1]
+
+        // 3. Callback B delivers fresh 25 m/s sample
+        callbackB.invoke(
+            CarHostSpeedSample(
+                status = CarHostSpeedStatus.LIVE,
+                rawMetersPerSecond = 25f,
+                displaySpeedMetersPerSecond = 25f,
+                receivedAtElapsedMs = virtualTimeMs,
+            ),
+        )
+        assertEquals(25f, speedRepo.sample.value.displaySpeedMetersPerSecond)
+
+        // 4. Stale callback A from generation 1 arrives late with 0 m/s
+        callbackA.invoke(
+            CarHostSpeedSample(
+                status = CarHostSpeedStatus.LIVE,
+                rawMetersPerSecond = 0f,
+                displaySpeedMetersPerSecond = 0f,
+                receivedAtElapsedMs = virtualTimeMs,
+            ),
+        )
+
+        // Must remain 25 m/s, NOT overwritten by generation 1 callback
+        assertEquals(25f, speedRepo.sample.value.displaySpeedMetersPerSecond)
+
+        runtime.destroy()
+    }
+
+    @Test
+    fun gatewaySampleFromPreviousGenerationAfterRetryDoesNotOverwriteNewSample() = testScope.runTest {
+        val callbacks = mutableListOf<(CarHostSpeedSample) -> Unit>()
+        val gateway = object : CarHardwareSpeedGateway {
+            override fun startListening(onSpeedAvailable: (CarHostSpeedSample) -> Unit) {
+                callbacks.add(onSpeedAvailable)
+            }
+            override fun stopListening() {}
+        }
+        val speedRepo = CarHostSpeedRepository()
+        val telemetryRepo = CarTelemetryRepository(
+            scope = backgroundScope,
+            elapsedRealtimeMs = { virtualTimeMs },
+        )
+        val alertCoord = CarAlertCoordinator(
+            telemetryRepository = telemetryRepo,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+        val runtime = CarSessionRuntime(
+            carContext = carContext,
+            telemetryRepository = telemetryRepo,
+            hostSpeedGateway = gateway,
+            hostSpeedRepository = speedRepo,
+            alertCoordinator = alertCoord,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+
+        // 1. Start generation 1
+        runtime.start()
+        assertEquals(1, callbacks.size)
+        val callbackA = callbacks[0]
+
+        // 2. Retry while remaining started -> generation 2
+        runtime.retryHostSpeed()
+        assertTrue(runtime.isStarted)
+        assertEquals(2, callbacks.size)
+        val callbackB = callbacks[1]
+
+        // 3. Callback B delivers fresh 30 m/s sample
+        callbackB.invoke(
+            CarHostSpeedSample(
+                status = CarHostSpeedStatus.LIVE,
+                rawMetersPerSecond = 30f,
+                displaySpeedMetersPerSecond = 30f,
+                receivedAtElapsedMs = virtualTimeMs,
+            ),
+        )
+        assertEquals(30f, speedRepo.sample.value.displaySpeedMetersPerSecond)
+
+        // 4. Stale callback A from before retry arrives late with 0 m/s
+        callbackA.invoke(
+            CarHostSpeedSample(
+                status = CarHostSpeedStatus.LIVE,
+                rawMetersPerSecond = 0f,
+                displaySpeedMetersPerSecond = 0f,
+                receivedAtElapsedMs = virtualTimeMs,
+            ),
+        )
+
+        // Must remain 30 m/s, NOT overwritten by pre-retry callback
+        assertEquals(30f, speedRepo.sample.value.displaySpeedMetersPerSecond)
+
+        runtime.destroy()
+    }
+
+    @Test
+    fun gatewaySampleAfterDestroyIsIgnored() = testScope.runTest {
+        var capturedCallback: ((CarHostSpeedSample) -> Unit)? = null
+        val gateway = object : CarHardwareSpeedGateway {
+            override fun startListening(onSpeedAvailable: (CarHostSpeedSample) -> Unit) {
+                capturedCallback = onSpeedAvailable
+            }
+            override fun stopListening() {}
+        }
+        val speedRepo = CarHostSpeedRepository()
+        val telemetryRepo = CarTelemetryRepository(
+            scope = backgroundScope,
+            elapsedRealtimeMs = { virtualTimeMs },
+        )
+        val alertCoord = CarAlertCoordinator(
+            telemetryRepository = telemetryRepo,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+        val runtime = CarSessionRuntime(
+            carContext = carContext,
+            telemetryRepository = telemetryRepo,
+            hostSpeedGateway = gateway,
+            hostSpeedRepository = speedRepo,
+            alertCoordinator = alertCoord,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+
+        runtime.start()
+        runtime.destroy()
+        assertFalse(runtime.isStarted)
+
+        capturedCallback?.invoke(
+            CarHostSpeedSample(
+                status = CarHostSpeedStatus.LIVE,
+                rawMetersPerSecond = 20f,
+                displaySpeedMetersPerSecond = 20f,
+                receivedAtElapsedMs = virtualTimeMs,
+            ),
+        )
+
+        assertEquals(CarHostSpeedSample.INITIAL, speedRepo.sample.value)
     }
 }

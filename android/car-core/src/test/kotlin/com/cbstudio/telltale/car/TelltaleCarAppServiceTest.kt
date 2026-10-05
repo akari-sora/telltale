@@ -8,6 +8,7 @@ import androidx.car.app.validation.HostValidator
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -16,6 +17,8 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.cbstudio.telltale.car.hardware.CarHardwareSpeedGateway
+import com.cbstudio.telltale.car.hardware.CarHostSpeedSample
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -51,6 +54,49 @@ class TelltaleCarAppServiceTest {
         val screen = session.onCreateScreen(Intent())
         assertNotNull(screen)
         assertTrue(screen is CarHomeScreen)
+    }
+
+    @Test
+    fun session_onCreateScreen_startsRuntimeIfLifecycleAlreadyStarted() {
+        var startCount = 0
+        val countingGateway = object : CarHardwareSpeedGateway {
+            override fun startListening(onSpeedAvailable: (CarHostSpeedSample) -> Unit) {
+                startCount++
+            }
+            override fun stopListening() {}
+        }
+        val session = TelltaleCarSession { s ->
+            CarSessionRuntime(
+                carContext = s.carContext,
+                hostSpeedGateway = countingGateway,
+            )
+        }
+        val intent = Intent()
+        val controller = SessionController(session, carContext, intent)
+
+        // Move session to STARTED
+        controller.moveToState(Lifecycle.State.STARTED)
+        val runtime = session.sessionRuntime
+        assertTrue(runtime.isStarted)
+        assertEquals(1, startCount)
+
+        // Explicitly simulate stopped runtime while session lifecycle remains STARTED
+        runtime.stop()
+        assertEquals(Lifecycle.State.STARTED, session.lifecycle.currentState)
+        assertFalse(runtime.isStarted)
+
+        // Now calling onCreateScreen tests the recovery branch:
+        val screen = session.onCreateScreen(Intent())
+        assertNotNull(screen)
+        assertTrue(screen is CarHomeScreen)
+        assertTrue(runtime.isStarted)
+        assertEquals(2, startCount)
+
+        // Subsequent onCreateScreen call does not duplicate start
+        session.onCreateScreen(Intent())
+        assertEquals(2, startCount)
+
+        runtime.destroy()
     }
 
     @Test
