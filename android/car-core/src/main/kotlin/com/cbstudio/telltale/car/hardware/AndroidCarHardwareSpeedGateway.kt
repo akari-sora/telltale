@@ -27,9 +27,11 @@ class AndroidCarHardwareSpeedGateway(
 
     private var speedListener: OnCarDataAvailableListener<Speed>? = null
     private var carInfoRef: CarInfo? = null
+    private var activeRegistrationToken: Long = 0L
 
     override fun startListening(onSpeedAvailable: (CarHostSpeedSample) -> Unit) {
         stopListening()
+        val regToken = ++activeRegistrationToken
 
         // AA05-03: Car App API < 3 fail closed to UNIMPLEMENTED
         val apiLevel = try {
@@ -88,6 +90,7 @@ class AndroidCarHardwareSpeedGateway(
         carInfoRef = carInfo
 
         val listener = OnCarDataAvailableListener<Speed> { speed ->
+            if (speedListener == null || regToken != activeRegistrationToken) return@OnCarDataAvailableListener
             val now = clock()
             val sample = parseSpeed(speed, now)
             onSpeedAvailable(sample)
@@ -129,6 +132,9 @@ class AndroidCarHardwareSpeedGateway(
     override fun stopListening() {
         val listener = speedListener
         val carInfo = carInfoRef
+        speedListener = null
+        carInfoRef = null
+        activeRegistrationToken++
         if (listener != null && carInfo != null) {
             try {
                 carInfo.removeSpeedListener(listener)
@@ -136,8 +142,6 @@ class AndroidCarHardwareSpeedGateway(
                 // Ignore failure during unregister
             }
         }
-        speedListener = null
-        carInfoRef = null
     }
 
     internal fun parseSpeed(speed: Speed, nowElapsedMs: Long): CarHostSpeedSample {

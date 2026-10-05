@@ -585,4 +585,41 @@ class CarHealthScreenTest {
         val afterEdge2 = invalidateCount
         assertTrue("Edge 2 (ACTIVE -> NORMAL) must trigger immediate refresh", afterEdge2 > afterEdge1)
     }
+
+    @Test
+    fun healthScreen_nonCoolantAttentionAlertDoesNotLabelCoolantAsHigh() = runTest {
+        val telemRepo = createTelemetryRepo()
+        telemRepo.submit(frameInput(coolant = 88.0, voltage = 14.0, epoch = 1L))
+        val dtcRepo = DefaultCarDtcRepository()
+        dtcRepo.submit(dtcReport(epoch = 1L, verdict = CarDtcVerdict.COMPLETE_CLEAN, coverageComplete = true, totalCodes = 0))
+
+        val alertRepo = CarAlertRepository()
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(
+                level = CarAlertLevel.ATTENTION,
+                coolant = CarAlertPhase.NORMAL,
+                connectionEpoch = 1L,
+            ),
+        )
+
+        val screen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            alertRepository = alertRepo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val rows = template.pane.rows
+
+        // Observed Status reflects general attention
+        assertEquals("Attention", rows[0].texts[0].toString())
+
+        // Coolant remains 88 °C without · High
+        assertEquals("88 °C", rows[3].texts[0].toString())
+    }
 }

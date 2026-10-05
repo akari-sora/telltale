@@ -174,4 +174,62 @@ class CarAlertCoordinatorTest {
         assertEquals(CarAlertLevel.NORMAL, coordinator.repository.snapshot.value.level)
         assertEquals(2L, coordinator.repository.snapshot.value.connectionEpoch)
     }
+
+    @Test
+    fun isSemanticAlertEdge_identifiesAllSemanticTransitions() {
+        // Semantic edges into ACTIVE
+        assertTrue(isSemanticAlertEdge(CarAlertPhase.NORMAL, CarAlertPhase.ACTIVE))
+        assertTrue(isSemanticAlertEdge(CarAlertPhase.PENDING_ENTER, CarAlertPhase.ACTIVE))
+        assertTrue(isSemanticAlertEdge(CarAlertPhase.PENDING_CLEAR, CarAlertPhase.ACTIVE))
+        assertTrue(isSemanticAlertEdge(CarAlertPhase.UNKNOWN_AFTER_WARNING, CarAlertPhase.ACTIVE))
+
+        // Semantic edges out of ACTIVE or into NORMAL
+        assertTrue(isSemanticAlertEdge(CarAlertPhase.ACTIVE, CarAlertPhase.UNKNOWN_AFTER_WARNING))
+        assertTrue(isSemanticAlertEdge(CarAlertPhase.ACTIVE, CarAlertPhase.NORMAL))
+        assertTrue(isSemanticAlertEdge(CarAlertPhase.PENDING_CLEAR, CarAlertPhase.NORMAL))
+        assertTrue(isSemanticAlertEdge(CarAlertPhase.UNKNOWN_AFTER_WARNING, CarAlertPhase.NORMAL))
+
+        // Non-semantic internal debounce transitions
+        assertFalse(isSemanticAlertEdge(CarAlertPhase.NORMAL, CarAlertPhase.NORMAL))
+        assertFalse(isSemanticAlertEdge(CarAlertPhase.ACTIVE, CarAlertPhase.ACTIVE))
+        assertFalse(isSemanticAlertEdge(CarAlertPhase.NORMAL, CarAlertPhase.PENDING_ENTER))
+        assertFalse(isSemanticAlertEdge(CarAlertPhase.ACTIVE, CarAlertPhase.PENDING_CLEAR))
+        assertFalse(isSemanticAlertEdge(CarAlertPhase.PENDING_ENTER, CarAlertPhase.NORMAL))
+    }
+
+    @Test
+    fun recoveryFromUnknownAfterWarningToActiveEmitsSemanticTransition() = testScope.runTest {
+        val transitions = mutableListOf<CarAlertTransition>()
+        val job = launch { coordinator.repository.transitions.collect { transitions.add(it) } }
+        coordinator.start()
+        runCurrent()
+
+        // 1. Enter ACTIVE alert
+        virtualTimeMs = 1_000L
+        telemetryRepository.submit(createFrameInput(coolantC = live(106.0)))
+        runCurrent()
+        virtualTimeMs = 4_001L
+        telemetryRepository.submit(createFrameInput(coolantC = live(106.0)))
+        runCurrent()
+        assertEquals(CarAlertPhase.ACTIVE, coordinator.repository.snapshot.value.coolant)
+        assertEquals(1, transitions.size)
+
+        // 2. Drop signal -> UNKNOWN_AFTER_WARNING
+        virtualTimeMs = 5_000L
+        telemetryRepository.submit(createFrameInput(coolantC = stale()))
+        runCurrent()
+        assertEquals(CarAlertPhase.UNKNOWN_AFTER_WARNING, coordinator.repository.snapshot.value.coolant)
+        assertEquals(2, transitions.size)
+
+        // 3. Signal recovers with overheat (106°C) -> enters ACTIVE immediately
+        virtualTimeMs = 6_000L
+        telemetryRepository.submit(createFrameInput(coolantC = live(106.0)))
+        runCurrent()
+        assertEquals(CarAlertPhase.ACTIVE, coordinator.repository.snapshot.value.coolant)
+        assertEquals(3, transitions.size)
+        assertEquals(CarAlertPhase.UNKNOWN_AFTER_WARNING, transitions[2].previous.coolant)
+        assertEquals(CarAlertPhase.ACTIVE, transitions[2].current.coolant)
+
+        job.cancel()
+    }
 }

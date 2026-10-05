@@ -348,7 +348,7 @@ class CarHealthScreen(
 
         val coolantBase = formatSignal(frame?.coolantC, "°C", "%.0f")
         val coolantText = when {
-            isAlertActive -> {
+            alertSnapshot?.coolant == CarAlertPhase.ACTIVE -> {
                 if (coolantBase != missingText && coolantBase != staleText) {
                     "$coolantBase · ${carContext.getString(R.string.car_alert_high)}"
                 } else {
