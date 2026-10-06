@@ -60,6 +60,9 @@
     <string name="car_dtc_detail_coverage">Coverage</string>
     <string name="car_dtc_coverage_complete">Complete</string>
     <string name="car_dtc_coverage_partial">Partial</string>
+    <string name="car_dtc_kind_stored">Stored</string>
+    <string name="car_dtc_kind_pending">Pending</string>
+    <string name="car_dtc_kind_permanent">Permanent</string>
     <string name="car_freeze_frame_section">Freeze Frame</string>
     <string name="car_freeze_frame_none">No freeze frame available</string>
     <string name="car_freeze_frame_unknown">Freeze frame contents unreadable</string>

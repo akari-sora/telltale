@@ -1,0 +1,9 @@
+# AA-06 DHU Lifecycle and Video Focus Script
+# 1. Video Focus Off
+focus video off
+sleep 2
+
+# 2. Video Focus On (App restoration)
+focus video on
+sleep 2
+screenshot aa06-lifecycle-focus-restored.png

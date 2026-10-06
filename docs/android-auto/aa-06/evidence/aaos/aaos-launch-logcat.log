@@ -1,0 +1,12 @@
+$ adb -s emulator-5554 shell am start -W -n com.cbstudio.telltale.carproto.aaos/androidx.car.app.activity.CarAppActivity
+Starting: Intent { cmp=com.cbstudio.telltale.carproto.aaos/androidx.car.app.activity.CarAppActivity }
+Status: ok
+LaunchState: COLD
+Activity: com.cbstudio.telltale.carproto.aaos/androidx.car.app.activity.CarAppActivity
+TotalTime: 1243
+WaitTime: 1248
+Complete
+
+Logcat trace from emulator-5554:
+10-05 20:16:15.805   561  2342 I ActivityTaskManager: START u10 {flg=0x10000000 cmp=com.cbstudio.telltale.carproto.aaos/androidx.car.app.activity.CarAppActivity} from uid 2000
+10-05 20:16:17.051   561   583 I ActivityTaskManager: Displayed com.cbstudio.telltale.carproto.aaos/androidx.car.app.activity.CarAppActivity: +1s243ms

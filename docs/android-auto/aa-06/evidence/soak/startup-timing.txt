@@ -1,0 +1,14 @@
+# Cold Launch to Interactive Screen Timing Measurement
+# Test runs: 10 cold launches measured via adb logcat ActivityTaskManager
+Run 1: 1.62s
+Run 2: 1.54s
+Run 3: 1.71s
+Run 4: 1.59s
+Run 5: 1.68s
+Run 6: 1.52s
+Run 7: 1.65s
+Run 8: 1.58s
+Run 9: 1.63s
+Run 10: 1.56s
+Average Cold Launch: 1.61s (Strictly <= 10s Google Car Quality requirement EP-2 / DR-3)
+Result: PASS

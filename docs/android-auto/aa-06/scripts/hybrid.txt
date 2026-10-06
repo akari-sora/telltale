@@ -1,0 +1,20 @@
+# AA-06 DHU Hybrid Touch & Rotary Input Script
+# Verifies seamless transition between Touch (tap) and Rotary Controller
+# Grammar: Android Auto Desktop Head Unit 2.0 Hybrid Specification
+
+# 1. Initial touch interaction on screen (Tap Health Action in ActionStrip)
+tap 720 60
+sleep 2
+screenshot aa06-hybrid-touch-first.png
+
+# 2. Rotary knob focus take-over
+dpad rotate right
+sleep 1
+screenshot aa06-hybrid-rotary-takeover.png
+
+# 3. Rotary select followed by back navigation
+dpad click
+sleep 2
+dpad back
+sleep 1
+screenshot aa06-hybrid-restored.png

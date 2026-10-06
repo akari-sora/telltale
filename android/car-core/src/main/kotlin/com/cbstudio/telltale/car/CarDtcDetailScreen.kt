@@ -21,6 +21,7 @@ import com.cbstudio.telltale.car.diagnostics.CarFreezeSignalKind
 import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
 import com.cbstudio.telltale.car.hardware.CarVehicleMotionResolver
 import com.cbstudio.telltale.car.health.matchingDtcReport
+import com.cbstudio.telltale.car.localization.CarTextIsolation
 import com.cbstudio.telltale.car.safety.CarDtcMotionGate
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRuntime
@@ -185,7 +186,7 @@ class CarDtcDetailScreen(
         return if (limit > 0) limit else DEFAULT_LIST_LIMIT
     }
 
-    private fun formatFreezeReading(reading: CarFreezeReading): Pair<String, String> {
+    private fun formatFreezeReading(reading: CarFreezeReading, isRtl: Boolean = false): Pair<String, String> {
         val (titleRes, unit, format) = when (reading.signal) {
             CarFreezeSignalKind.SPEED_KMH -> Triple(R.string.car_powertrain_speed_title, "km/h", "%.0f")
             CarFreezeSignalKind.RPM -> Triple(R.string.car_powertrain_rpm_title, "RPM", "%.0f")
@@ -197,7 +198,7 @@ class CarDtcDetailScreen(
         }
         val formatted = format.format(Locale.US, reading.value)
         val clean = if (formatted == "-0" || formatted == "-0.0") formatted.removePrefix("-") else formatted
-        return Pair(carContext.getString(titleRes), "$clean $unit")
+        return Pair(carContext.getString(titleRes), CarTextIsolation.wrapMetric(clean, unit, isRtl))
     }
 
     override fun onGetTemplate(): Template {
@@ -218,6 +219,7 @@ class CarDtcDetailScreen(
                 .build()
         }
 
+        val isRtl = CarTextIsolation.isRtlContext(carContext)
         val listBuilder = ItemList.Builder()
         val limit = resolveListLimit()
         var rowCount = 0
@@ -236,9 +238,9 @@ class CarDtcDetailScreen(
 
         // 1. Metadata rows
         val classLabel = when (currentItem.kind) {
-            CarDtcKind.STORED -> "Stored"
-            CarDtcKind.PENDING -> "Pending"
-            CarDtcKind.PERMANENT -> "Permanent"
+            CarDtcKind.STORED -> carContext.getString(R.string.car_dtc_kind_stored)
+            CarDtcKind.PENDING -> carContext.getString(R.string.car_dtc_kind_pending)
+            CarDtcKind.PERMANENT -> carContext.getString(R.string.car_dtc_kind_permanent)
         }
         addRow(carContext.getString(R.string.car_dtc_detail_class), classLabel)
         addRow(carContext.getString(R.string.car_dtc_detail_controller), currentItem.sourceId ?: "--")
@@ -275,7 +277,7 @@ class CarDtcDetailScreen(
 
                 val readingsToDisplay = freezeFrame.readings.take(maxReadings)
                 for (reading in readingsToDisplay) {
-                    val (signalTitle, signalText) = formatFreezeReading(reading)
+                    val (signalTitle, signalText) = formatFreezeReading(reading, isRtl)
                     addRow(signalTitle, signalText)
                 }
 
@@ -292,8 +294,10 @@ class CarDtcDetailScreen(
             }
         }
 
+        val displayCode = CarTextIsolation.wrapDtcCode(currentItem.code, isRtl)
+
         return ListTemplate.Builder()
-            .setTitle(currentItem.code)
+            .setTitle(displayCode)
             .setHeaderAction(Action.BACK)
             .setSingleList(listBuilder.build())
             .build()

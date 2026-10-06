@@ -1,0 +1,20 @@
+# AA-06 DHU Host Speed Injection Script
+# 1. Zero Speed (Stationary)
+speed 0
+sleep 2
+screenshot aa06-hostspeed-zero.png
+
+# 2. Moving Speed (5 m/s = 18 km/h)
+speed 5
+sleep 2
+screenshot aa06-hostspeed-moving-5mps.png
+
+# 3. Highway Speed (25 m/s = 90 km/h)
+speed 25
+sleep 2
+screenshot aa06-hostspeed-moving-25mps.png
+
+# 4. Stop
+speed 0
+sleep 2
+screenshot aa06-hostspeed-stop.png

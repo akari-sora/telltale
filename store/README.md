@@ -28,6 +28,7 @@ store/
 | `<locale>/03-dtc-freeze.png` | 1080×2340 | 24-bit PNG | 手機截圖：故障碼與凍結幀 |
 | `<locale>/05-performance.png` | 1080×2340 | 24-bit PNG | 手機截圖：性能量測 |
 | `<locale>/06-skins.png` | 1080×2340 | 24-bit PNG | 手機截圖：語言與面盤外觀 |
+| `fastlane/metadata/android/<locale>/images/automotiveScreenshots/` | 800×1280 (直式) / 1024×768 (橫式) | 24-bit PNG | Android for Cars / Automotive 車載商店截圖（6 個 unique AAOS 原生 emulator captures，包含 3 張 800×1280 直式與 3 張 1024×768 橫式，共用於 en-US 與 zh-TW listing；Google Play Developer API 支援 automotiveScreenshots，但目前專案使用的 gplay CLI 以及 Fastlane Supply 的預設 metadata auto-discovery 未支援，需直接呼叫 API、擴充工具，或於 Play Console 手動處理） |
 | `preview-gt86-vin-redacted.mp4` | 1920×1080 | H.264 MP4 | Google Play YouTube 預覽影片來源；GT86 實車 VIN 已遮蔽 |
 
 兩組截圖**畫面編號相同、內容刻意不同**。`en-US/06-skins.png` 取的是語言選單連同外觀設定，
@@ -119,3 +120,9 @@ store/upload.sh --apply en-US  # 只做一個語系
 （無 alpha）」。它們的 alpha 通道實測全部是 255（完全不透明），所以扁平化成 24-bit 是無損的，
 已經做了（順帶少了約 300 KB）。`icon-512.png` 相反 —— 它的 alpha 是 0..255，**真的有透明區域**，
 扁平化會在圖示後面壓上一塊黑底，而且 Play 的圖示規則本來就要 32-bit 含 alpha。不要動它。
+
+**Google Play Developer API、gplay CLI 與 Fastlane automotiveScreenshots 支援現況（2026-10-05 實測）。**
+Google Play Developer API（Edits.images 端點）官方已正式支援 `automotiveScreenshots` 作為合法的 `imageType`。
+然而，目前專案使用的 `gplay` CLI 本地二進位檔尚未封裝 `automotiveScreenshots` 參數；且 Fastlane Supply 的預設 metadata auto-discovery（`SCREENSHOT_TYPES`）目前僅涵蓋 phone / 7-inch / 10-inch / TV / Wear，尚未自動掃描 automotiveScreenshots。
+因此 `fastlane/metadata/android/<locale>/images/automotiveScreenshots/` 目錄已依據 Google Play AAOS 最新規範完整備妥標準直式（800×1280）與橫式（1024×768 / 1280×720）24-bit RGB 截圖。在 CI / 自動化管線中，若未自行以 Python/curl 直接呼叫 Developer API 或擴充 CLI，需在 Google Play Console 網頁後台（主要商店資訊 -> 汽車）進行手動核驗與上傳。
+

@@ -100,6 +100,16 @@ class TelltaleCarAppServiceTest {
     }
 
     @Test
+    fun session_onCreateScreen_returnsHomeScreen() {
+        val session = TelltaleCarSession()
+        val controller = SessionController(session, carContext, Intent())
+        controller.moveToState(Lifecycle.State.CREATED)
+
+        val screen = session.onCreateScreen(Intent())
+        assertTrue(screen is CarHomeScreen)
+    }
+
+    @Test
     fun createHostValidator_whenDebuggable_returnsAllowAll() {
         val service = Robolectric.buildService(TelltaleCarAppService::class.java).create().get()
         service.applicationInfo.flags = service.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE

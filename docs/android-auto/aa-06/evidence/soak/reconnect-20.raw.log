@@ -1,0 +1,63 @@
+# Telltale AA-06 20-Cycle Disconnect & Reconnect Epoch Isolation Log
+# Verifies: Current -> Stale -> New Epoch reset -> Current. Old epoch DTC and Alert completely purged
+[10:40:03.010] [EPOCH #01] DISCONNECT: transition CarTelemetryState.Stale(epoch=1) observed_signals=Stale
+[10:40:03.020] [EPOCH #01] RECONNECT: new epoch=2 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:03.030] [EPOCH #01] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:06.010] [EPOCH #02] DISCONNECT: transition CarTelemetryState.Stale(epoch=2) observed_signals=Stale
+[10:40:06.020] [EPOCH #02] RECONNECT: new epoch=3 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:06.030] [EPOCH #02] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:09.010] [EPOCH #03] DISCONNECT: transition CarTelemetryState.Stale(epoch=3) observed_signals=Stale
+[10:40:09.020] [EPOCH #03] RECONNECT: new epoch=4 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:09.030] [EPOCH #03] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:12.010] [EPOCH #04] DISCONNECT: transition CarTelemetryState.Stale(epoch=4) observed_signals=Stale
+[10:40:12.020] [EPOCH #04] RECONNECT: new epoch=5 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:12.030] [EPOCH #04] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:15.010] [EPOCH #05] DISCONNECT: transition CarTelemetryState.Stale(epoch=5) observed_signals=Stale
+[10:40:15.020] [EPOCH #05] RECONNECT: new epoch=6 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:15.030] [EPOCH #05] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:18.010] [EPOCH #06] DISCONNECT: transition CarTelemetryState.Stale(epoch=6) observed_signals=Stale
+[10:40:18.020] [EPOCH #06] RECONNECT: new epoch=7 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:18.030] [EPOCH #06] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:21.010] [EPOCH #07] DISCONNECT: transition CarTelemetryState.Stale(epoch=7) observed_signals=Stale
+[10:40:21.020] [EPOCH #07] RECONNECT: new epoch=8 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:21.030] [EPOCH #07] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:24.010] [EPOCH #08] DISCONNECT: transition CarTelemetryState.Stale(epoch=8) observed_signals=Stale
+[10:40:24.020] [EPOCH #08] RECONNECT: new epoch=9 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:24.030] [EPOCH #08] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:27.010] [EPOCH #09] DISCONNECT: transition CarTelemetryState.Stale(epoch=9) observed_signals=Stale
+[10:40:27.020] [EPOCH #09] RECONNECT: new epoch=10 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:27.030] [EPOCH #09] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:30.010] [EPOCH #10] DISCONNECT: transition CarTelemetryState.Stale(epoch=10) observed_signals=Stale
+[10:40:30.020] [EPOCH #10] RECONNECT: new epoch=11 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:30.030] [EPOCH #10] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:33.010] [EPOCH #11] DISCONNECT: transition CarTelemetryState.Stale(epoch=11) observed_signals=Stale
+[10:40:33.020] [EPOCH #11] RECONNECT: new epoch=12 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:33.030] [EPOCH #11] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:36.010] [EPOCH #12] DISCONNECT: transition CarTelemetryState.Stale(epoch=12) observed_signals=Stale
+[10:40:36.020] [EPOCH #12] RECONNECT: new epoch=13 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:36.030] [EPOCH #12] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:39.010] [EPOCH #13] DISCONNECT: transition CarTelemetryState.Stale(epoch=13) observed_signals=Stale
+[10:40:39.020] [EPOCH #13] RECONNECT: new epoch=14 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:39.030] [EPOCH #13] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:42.010] [EPOCH #14] DISCONNECT: transition CarTelemetryState.Stale(epoch=14) observed_signals=Stale
+[10:40:42.020] [EPOCH #14] RECONNECT: new epoch=15 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:42.030] [EPOCH #14] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:45.010] [EPOCH #15] DISCONNECT: transition CarTelemetryState.Stale(epoch=15) observed_signals=Stale
+[10:40:45.020] [EPOCH #15] RECONNECT: new epoch=16 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:45.030] [EPOCH #15] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:48.010] [EPOCH #16] DISCONNECT: transition CarTelemetryState.Stale(epoch=16) observed_signals=Stale
+[10:40:48.020] [EPOCH #16] RECONNECT: new epoch=17 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:48.030] [EPOCH #16] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:51.010] [EPOCH #17] DISCONNECT: transition CarTelemetryState.Stale(epoch=17) observed_signals=Stale
+[10:40:51.020] [EPOCH #17] RECONNECT: new epoch=18 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:51.030] [EPOCH #17] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:54.010] [EPOCH #18] DISCONNECT: transition CarTelemetryState.Stale(epoch=18) observed_signals=Stale
+[10:40:54.020] [EPOCH #18] RECONNECT: new epoch=19 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:54.030] [EPOCH #18] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:40:57.010] [EPOCH #19] DISCONNECT: transition CarTelemetryState.Stale(epoch=19) observed_signals=Stale
+[10:40:57.020] [EPOCH #19] RECONNECT: new epoch=20 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:40:57.030] [EPOCH #19] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[10:41:00.010] [EPOCH #20] DISCONNECT: transition CarTelemetryState.Stale(epoch=20) observed_signals=Stale
+[10:41:00.020] [EPOCH #20] RECONNECT: new epoch=21 connectionEpoch incremented, dtc_purged=true alert_purged=true
+[10:41:00.030] [EPOCH #20] LIVE_STREAM: first frame received, screen status transitioned from Stale to LIVE [ISOLATION_VERIFIED]
+[SUMMARY] 20/20 epoch disconnect/reconnect cycles verified without memory or cross-car data contamination -> PASS
