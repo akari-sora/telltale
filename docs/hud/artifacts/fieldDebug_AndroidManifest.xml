@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.cbstudio.telltale"
+    android:versionCode="17"
+    android:versionName="1.0.16" >
+
+    <uses-sdk
+        android:minSdkVersion="24"
+        android:targetSdkVersion="36" />
+    <!--
+         The INTERNET permission is required for development. Specifically,
+         the Flutter tool needs it to communicate with the running application
+         to allow setting breakpoints, to provide hot reload, etc.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!--
+ Android 12 (API 31) and up: dedicated Bluetooth permissions.
+         `neverForLocation` declares that scan results are not used to derive
+         physical location, which is what keeps the system from demanding the
+         location permission on top.
+    -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!--
+ Android 11 (API 30) and below still gate BLE scanning behind the
+         legacy permissions plus a location permission.
+    -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+    <!--
+ Declared explicitly so the cap survives the merge. `uses-permission`
+         merges by union, so one dependency declaring this unbounded is enough
+         to ship an uncapped coarse-location request on every Android version,
+         for something the app only needs below API 31 and only for discovery.
+         `tools:node="replace"` makes the cap win regardless.
+
+         Verified 2026-08-18 against the merged manifest: no current dependency
+         declares it, so this is insurance rather than a live correction. It
+         stays because the cost is one line and the failure it prevents is a
+         permission the user cannot see us not needing.
+    -->
+    <uses-permission
+        android:name="android.permission.ACCESS_COARSE_LOCATION"
+        android:maxSdkVersion="30" />
+
+    <uses-feature
+        android:name="android.hardware.bluetooth"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="false" />
+    <!--
+ Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+
+            <data android:mimeType="text/plain" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+
+            <data android:mimeType="*/*" />
+        </intent>
+    </queries>
+
+    <permission
+        android:name="com.cbstudio.telltale.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        android:protectionLevel="signature" />
+
+    <uses-permission android:name="com.cbstudio.telltale.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+
+    <application
+        android:name="android.app.Application"
+        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+        android:debuggable="true"
+        android:extractNativeLibs="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Telltale"
+        android:localeConfig="@xml/locales_config" >
+        <activity
+            android:name="com.cbstudio.telltale.MainActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:exported="true"
+            android:hardwareAccelerated="true"
+            android:launchMode="singleTop"
+            android:resizeableActivity="true"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:windowSoftInputMode="adjustResize" >
+
+            <!--
+                 Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI.
+            -->
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!--
+             Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java
+        -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+        <!--
+           Declares a provider which allows us to store files to share in
+           '.../caches/share_plus' and grant the receiving action access
+        -->
+        <provider
+            android:name="dev.fluttercommunity.plus.share.ShareFileProvider"
+            android:authorities="com.cbstudio.telltale.flutter.share_provider"
+            android:exported="false"
+            android:grantUriPermissions="true" >
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/flutter_share_file_paths" />
+        </provider>
+        <!--
+           This manifest declared broadcast receiver allows us to use an explicit
+           Intent when creating a PendingItent to be informed of the user's choice
+        -->
+        <receiver
+            android:name="dev.fluttercommunity.plus.share.SharePlusPendingIntent"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="EXTRA_CHOSEN_COMPONENT" />
+            </intent-filter>
+        </receiver>
+
+        <activity
+            android:name="io.flutter.plugins.urllauncher.WebViewActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
+
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="com.cbstudio.telltale.androidx-startup"
+            android:exported="false" >
+            <meta-data
+                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+                android:value="androidx.startup" />
+            <meta-data
+                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+                android:value="androidx.startup" />
+        </provider>
+
+        <uses-library
+            android:name="androidx.window.extensions"
+            android:required="false" />
+        <uses-library
+            android:name="androidx.window.sidecar"
+            android:required="false" />
+
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            android:directBootAware="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.DUMP" >
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>
