@@ -176,6 +176,38 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
+            HUD_DISPLAY_CHANNEL,
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setBrightnessOverride" -> {
+                    val brightness = call.argument<Double?>("brightness")
+                    val lp = window.attributes
+                    if (brightness == null) {
+                        lp.screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                    } else {
+                        lp.screenBrightness = brightness.toFloat().coerceIn(0.0f, 1.0f)
+                    }
+                    window.attributes = lp
+                    result.success(null)
+                }
+                "setSystemBarsHidden" -> {
+                    val hidden = call.argument<Boolean>("hidden") ?: false
+                    val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+                    if (hidden) {
+                        insetsController.systemBarsBehavior =
+                            androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                    } else {
+                        insetsController.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                    }
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
             APP_LOCALES_CHANNEL,
         ).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -535,6 +567,7 @@ class MainActivity : FlutterActivity() {
         const val ELAPSED_REALTIME_CHANNEL = "com.cbstudio.telltale/elapsed_realtime"
         const val FORM_FACTOR_CHANNEL = "com.cbstudio.telltale/form_factor"
         const val APP_LOCALES_CHANNEL = "com.cbstudio.telltale/app_locales"
+        const val HUD_DISPLAY_CHANNEL = "com.cbstudio.telltale/hud_display"
         const val UNKNOWN = "unknown"
     }
 }

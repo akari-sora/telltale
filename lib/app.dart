@@ -27,6 +27,7 @@ import 'ui/wear/wear_shell.dart';
 import 'ui/screens/connect/connect_screen.dart';
 import 'ui/screens/dashboard/dashboard_screen.dart';
 import 'ui/screens/dtc/dtc_screen.dart';
+import 'ui/screens/hud/hud_screen.dart';
 import 'ui/screens/performance/performance_screen.dart';
 import 'ui/screens/pids/powertrain_battery_catalog_screen.dart';
 import 'ui/screens/pids/pid_editor_screen.dart';
@@ -435,6 +436,11 @@ final _router = GoRouter(
           ),
         ),
       ],
+    ),
+    GoRoute(
+      path: HudScreen.path,
+      parentNavigatorKey: _rootKey,
+      builder: (context, state) => const HudScreen(),
     ),
   ],
 );

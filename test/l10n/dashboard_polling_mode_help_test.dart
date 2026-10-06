@@ -796,6 +796,36 @@ void main() {
     );
   });
 
+  testWidgets('dashboard status pills are vertically aligned along cross-axis center', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await _pumpDashboard(tester, batchingEnabled: true);
+
+    final pollingPillRect = tester.getRect(
+      find.descendant(
+        of: find.byKey(PollingModePill.pillKey),
+        matching: find.byType(StatusPill),
+      ),
+    );
+
+    // Explicit sibling pill rendered in the same header strip fixture: '12 PIDs/s'
+    final siblingFinder = find.widgetWithText(StatusPill, '12 PIDs/s');
+    expect(siblingFinder, findsOneWidget);
+    final siblingRect = tester.getRect(siblingFinder);
+
+    // Unconditional assertion: vertical centers must be identical within subpixel tolerance.
+    // When crossAxisAlignment is start, polling pill decoration sits inside a 48dp box and
+    // is centered at y=(48-28)/2=10dp, while 12 PIDs/s is at y=0dp (difference >= 9dp).
+    final centerDelta = (siblingRect.center.dy - pollingPillRect.center.dy).abs();
+    expect(
+      centerDelta,
+      lessThan(1.5),
+      reason: 'Status pills on the same row must be vertically centered together. '
+          'Delta was $centerDelta dp',
+    );
+  });
+
   group('the pill and its explanation survive the hard geometries', () {
     // 320dp is the narrowest width this project supports, landscape is the
     // windscreen-mount case, and 200% is the largest step Android's display

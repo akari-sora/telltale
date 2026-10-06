@@ -19,6 +19,7 @@ import '../../adaptive/adaptive_layout.dart';
 import '../../../diagnostics/availability.dart';
 import 'dashboard_grid_layout.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../hud/hud_preflight_dialog.dart';
 import '../../../obd/physics/physics_engine.dart';
 import '../../../obd/pid/pid.dart';
 import '../../../obd/pid/pid_library.dart';
@@ -238,11 +239,24 @@ class _WorkspaceToolbar extends StatelessWidget {
               ? CrossAxisAlignment.stretch
               : CrossAxisAlignment.end,
           children: [
-            OutlinedButton.icon(
-              key: const ValueKey('telemetry-history'),
-              onPressed: onHistory,
-              icon: const Icon(Icons.history, size: 18),
-              label: Text(l10n.dashboardLocalRecordings),
+            Wrap(
+              spacing: Spacing.xs,
+              runSpacing: Spacing.xs,
+              alignment: stack ? WrapAlignment.start : WrapAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  key: const ValueKey('dashboard-hud-entry'),
+                  onPressed: () => HudPreflightDialog.show(context),
+                  icon: const Icon(Icons.flip, size: 18),
+                  label: const Text('HUD'),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey('telemetry-history'),
+                  onPressed: onHistory,
+                  icon: const Icon(Icons.history, size: 18),
+                  label: Text(l10n.dashboardLocalRecordings),
+                ),
+              ],
             ),
             if (historyAccess != TelemetryHistoryAccess.permitted) ...[
               const SizedBox(height: Spacing.xs),
@@ -780,6 +794,7 @@ class _StatusStrip extends ConsumerWidget {
           Wrap(
             spacing: Spacing.sm,
             runSpacing: Spacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               StatusPill(
                 label: identity.vin == null
