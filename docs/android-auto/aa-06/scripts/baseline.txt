@@ -1,0 +1,5 @@
+# AA-06 DHU Baseline Walkthrough Script
+# Connect, verify home screen glanceability and take baseline screenshot
+sleep 3
+screenshot aa06-baseline-home.png
+sleep 1

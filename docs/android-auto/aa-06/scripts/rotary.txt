@@ -1,0 +1,34 @@
+# AA-06 DHU Rotary Controller Navigation Script
+# Verifies rotary controller focus navigation, scroll, selection, and Back
+# Grammar: Android Auto Desktop Head Unit 2.0 Rotary Specification
+
+# 1. Rotary focus traverse on Home Screen
+dpad right
+sleep 1
+dpad down
+sleep 1
+screenshot aa06-rotary-focus-home.png
+
+# 2. Select action to navigate to Health Screen
+dpad click
+sleep 2
+screenshot aa06-rotary-health-screen.png
+
+# 3. Focus and scroll through items
+dpad rotate right
+sleep 1
+dpad rotate right
+sleep 1
+screenshot aa06-rotary-health-scroll.png
+
+# 4. Hardware Back button
+dpad back
+sleep 2
+screenshot aa06-rotary-back-to-home.png
+
+# 5. Rotary quick flick stress
+dpad flick right
+sleep 1
+dpad flick left
+sleep 1
+screenshot aa06-rotary-flick-stable.png

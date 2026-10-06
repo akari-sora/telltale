@@ -1,0 +1,15 @@
+# AA-06 DHU Day/Night Lighting Adaptation Script
+# 1. Day Mode
+day
+sleep 2
+screenshot aa06-theme-day.png
+
+# 2. Night Mode
+night
+sleep 2
+screenshot aa06-theme-night.png
+
+# 3. Dynamic Toggle
+daynight
+sleep 2
+screenshot aa06-theme-toggle.png

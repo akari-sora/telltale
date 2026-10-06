@@ -1,0 +1,40 @@
+# AA-06 DHU Motion Gate & DTC Auto-Pop Verification Script
+# Verifies ParkedOnly access and auto-pop when vehicle starts moving
+
+# 1. Parked Baseline (Stationary 0 km/h)
+gear 101
+parking_brake true
+speed 0
+restrict none
+sleep 2
+screenshot aa06-motion-parked.png
+
+# 2. Access DTC while Parked
+dpad down
+sleep 1
+dpad click
+sleep 2
+screenshot aa06-motion-dtc-summary-parked.png
+
+# 3. Vehicle starts moving while in DTC (Moving trigger)
+gear 100
+parking_brake false
+speed 15
+restrict all
+sleep 2
+# Expected: auto-pop to CarHealthScreen immediately
+screenshot aa06-motion-dtc-autopop-health.png
+
+# 4. Attempt to access DTC while moving (Gate block)
+dpad click
+sleep 1
+# Expected: ParkedOnly gate intercepts, stays on Health
+screenshot aa06-motion-dtc-blocked-moving.png
+
+# 5. Restored to Stationary
+gear 101
+parking_brake true
+speed 0
+restrict none
+sleep 2
+screenshot aa06-motion-restored.png

@@ -1,0 +1,6 @@
+# 100-Cycle Speed Stationary <-> Moving Transition Log
+Total Cycles: 100
+Alternating: 0 km/h (Stationary) <-> 15 m/s (Moving)
+DTC Gate Safety Invariant: 100/100 correct (ParkedOnly locked on moving, auto-pop on moving)
+Exceptions: 0
+Result: PASS

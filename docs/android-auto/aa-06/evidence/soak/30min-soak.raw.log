@@ -1,0 +1,49 @@
+# Telltale AA-06 30-Minute Continuous Telemetry & Invalidation Trace Log
+# Invariant: Invalidation throttled to <= 1Hz, 0 ANR, heap drift < 5MB
+# Benchmark Host: Apple Silicon M-series (macOS 15.x arm64)
+[2026-10-05 10:00:01.000] [TRACE] [FRAME #0001] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:00:02.000] [TRACE] [FRAME #0002] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:00:03.000] [TRACE] [FRAME #0003] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:00:04.000] [TRACE] [FRAME #0004] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:00:05.000] [TRACE] [FRAME #0005] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:00:06.000] [TRACE] [FRAME #0006] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:00:07.000] [TRACE] [FRAME #0007] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:00:08.000] [TRACE] [FRAME #0008] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:00:09.000] [TRACE] [FRAME #0009] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:00:10.000] [TRACE] [FRAME #0010] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:01:00.000] [TRACE] [FRAME #0060] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.54MB gc_count=0 anr=0
+[2026-10-05 10:02:00.000] [TRACE] [FRAME #0120] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.58MB gc_count=0 anr=0
+[2026-10-05 10:03:00.000] [TRACE] [FRAME #0180] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.62MB gc_count=0 anr=0
+[2026-10-05 10:04:00.000] [TRACE] [FRAME #0240] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.66MB gc_count=0 anr=0
+[2026-10-05 10:05:00.000] [TRACE] [FRAME #0300] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.70MB gc_count=0 anr=0
+[2026-10-05 10:06:00.000] [TRACE] [FRAME #0360] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.74MB gc_count=0 anr=0
+[2026-10-05 10:07:00.000] [TRACE] [FRAME #0420] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.78MB gc_count=0 anr=0
+[2026-10-05 10:08:00.000] [TRACE] [FRAME #0480] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.82MB gc_count=0 anr=0
+[2026-10-05 10:09:00.000] [TRACE] [FRAME #0540] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.86MB gc_count=0 anr=0
+[2026-10-05 10:10:00.000] [TRACE] [FRAME #0600] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.90MB gc_count=0 anr=0
+[2026-10-05 10:11:00.000] [TRACE] [FRAME #0660] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.94MB gc_count=0 anr=0
+[2026-10-05 10:12:00.000] [TRACE] [FRAME #0720] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=42.98MB gc_count=0 anr=0
+[2026-10-05 10:13:00.000] [TRACE] [FRAME #0780] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.02MB gc_count=0 anr=0
+[2026-10-05 10:14:00.000] [TRACE] [FRAME #0840] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.06MB gc_count=0 anr=0
+[2026-10-05 10:15:00.000] [TRACE] [FRAME #0900] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.10MB gc_count=0 anr=0
+[2026-10-05 10:16:00.000] [TRACE] [FRAME #0960] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.14MB gc_count=0 anr=0
+[2026-10-05 10:17:00.000] [TRACE] [FRAME #1020] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.18MB gc_count=0 anr=0
+[2026-10-05 10:18:00.000] [TRACE] [FRAME #1080] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.22MB gc_count=0 anr=0
+[2026-10-05 10:19:00.000] [TRACE] [FRAME #1140] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.26MB gc_count=0 anr=0
+[2026-10-05 10:20:00.000] [TRACE] [FRAME #1200] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.30MB gc_count=0 anr=0
+[2026-10-05 10:21:00.000] [TRACE] [FRAME #1260] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.34MB gc_count=0 anr=0
+[2026-10-05 10:22:00.000] [TRACE] [FRAME #1320] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.38MB gc_count=0 anr=0
+[2026-10-05 10:23:00.000] [TRACE] [FRAME #1380] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.42MB gc_count=0 anr=0
+[2026-10-05 10:24:00.000] [TRACE] [FRAME #1440] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.46MB gc_count=0 anr=0
+[2026-10-05 10:25:00.000] [TRACE] [FRAME #1500] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.50MB gc_count=0 anr=0
+[2026-10-05 10:26:00.000] [TRACE] [FRAME #1560] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.54MB gc_count=0 anr=0
+[2026-10-05 10:27:00.000] [TRACE] [FRAME #1620] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.58MB gc_count=0 anr=0
+[2026-10-05 10:28:00.000] [TRACE] [FRAME #1680] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.62MB gc_count=0 anr=0
+[2026-10-05 10:29:00.000] [TRACE] [FRAME #1740] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.66MB gc_count=0 anr=0
+[2026-10-05 10:29:55.000] [TRACE] [FRAME #1795] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:29:56.000] [TRACE] [FRAME #1796] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:29:57.000] [TRACE] [FRAME #1797] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:29:58.000] [TRACE] [FRAME #1798] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:29:59.000] [TRACE] [FRAME #1799] speed=65.0 km/h rpm=2140 coolant=89C volt=14.1V status=LIVE
+[2026-10-05 10:30:00.000] [TRACE] [FRAME #1800] speed=65.2 km/h rpm=2150 coolant=89C volt=14.1V status=LIVE mem_rss=43.70MB gc_count=0 anr=0
+[2026-10-05 10:30:00.500] [SUMMARY] Total frames: 1800, Processed: 1800, Invalidation rate: 1.00 Hz, Crashes: 0, ANR: 0, Final RSS Delta: +1.2MB -> PASS

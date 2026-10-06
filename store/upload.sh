@@ -100,9 +100,20 @@ for locale in "${LOCALES[@]}"; do
   # Shared, wordless, and the same file for every locale.
   cp store/icon-512.png "$dst/images/icon.png"
 
+  # Automotive screenshots for Android for Cars / AAOS
+  # NOTE: Google Play Developer API (Edits.images) officially supports `automotiveScreenshots`.
+  # However, the current `gplay` CLI binary and Fastlane Supply's default auto-discovery
+  # do not yet map this directory. Staged here to preserve Fastlane metadata structure,
+  # but automated upload requires direct API calls, CLI extension, or manual upload via Play Console.
+  if [ -d "fastlane/metadata/android/$locale/images/automotiveScreenshots" ]; then
+    mkdir -p "$dst/images/automotiveScreenshots"
+    cp "fastlane/metadata/android/$locale/images/automotiveScreenshots"/*.png "$dst/images/automotiveScreenshots/"
+  fi
+
   texts=$(find "$dst" -maxdepth 1 -name '*.txt' | wc -l | tr -d ' ')
   shots=$(find "$dst/images/phoneScreenshots" -name '*.png' | wc -l | tr -d ' ')
-  echo "staged $locale: $texts text files, $shots screenshots"
+  auto_shots=$(find "$dst/images/automotiveScreenshots" -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
+  echo "staged $locale: $texts text files, $shots phone screenshots, $auto_shots automotive screenshots (Play Console verification required)"
 done
 
 DRY=--dry-run

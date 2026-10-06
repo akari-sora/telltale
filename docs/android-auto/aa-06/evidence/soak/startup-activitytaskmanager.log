@@ -1,0 +1,16 @@
+# ActivityTaskManager Cold Launch Timing
+# Device: emulator-5554 (Android Automotive SDK for arm64)
+# Target: com.cbstudio.telltale.carproto.aaos/androidx.car.app.activity.CarAppActivity
+
+$ adb -s emulator-5554 shell am start -W -n com.cbstudio.telltale.carproto.aaos/androidx.car.app.activity.CarAppActivity
+Starting: Intent { cmp=com.cbstudio.telltale.carproto.aaos/androidx.car.app.activity.CarAppActivity }
+Status: ok
+LaunchState: COLD
+Activity: com.cbstudio.telltale.carproto.aaos/androidx.car.app.activity.CarAppActivity
+TotalTime: 1243
+WaitTime: 1248
+Complete
+
+Logcat verification:
+10-05 20:14:34.832   561   583 I ActivityTaskManager: Displayed com.cbstudio.telltale.carproto.aaos/androidx.car.app.activity.CarAppActivity: +1s243ms
+Result: PASS (1243ms <= 10000ms threshold)

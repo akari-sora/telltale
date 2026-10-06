@@ -22,6 +22,7 @@ import com.cbstudio.telltale.car.diagnostics.CarDtcState
 import com.cbstudio.telltale.car.diagnostics.CarDtcVerdict
 import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
 import com.cbstudio.telltale.car.hardware.CarVehicleMotionResolver
+import com.cbstudio.telltale.car.localization.CarTextIsolation
 import com.cbstudio.telltale.car.safety.CarDtcMotionGate
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRuntime
@@ -209,18 +210,22 @@ class CarDtcSummaryScreen(
 
             for (item in displayItems) {
                 val kindLabel = when (item.kind) {
-                    CarDtcKind.STORED -> "Stored"
-                    CarDtcKind.PENDING -> "Pending"
-                    CarDtcKind.PERMANENT -> "Permanent"
+                    CarDtcKind.STORED -> carContext.getString(R.string.car_dtc_kind_stored)
+                    CarDtcKind.PENDING -> carContext.getString(R.string.car_dtc_kind_pending)
+                    CarDtcKind.PERMANENT -> carContext.getString(R.string.car_dtc_kind_permanent)
                 }
                 val coverageText = when (item.completeness) {
                     CarDtcCompleteness.COMPLETE -> carContext.getString(R.string.car_dtc_coverage_complete)
                     CarDtcCompleteness.PARTIAL -> carContext.getString(R.string.car_dtc_coverage_partial)
                 }
 
+                val isRtl = CarTextIsolation.isRtlContext(carContext)
+                val displayCode = CarTextIsolation.wrapDtcCode(item.code, isRtl)
+                val controllerLabel = carContext.getString(R.string.car_dtc_detail_controller)
+
                 val rowBuilder = Row.Builder()
-                    .setTitle("${item.code} · $kindLabel")
-                    .addText("Controller ${item.sourceId ?: "--"}")
+                    .setTitle("$displayCode · $kindLabel")
+                    .addText("$controllerLabel ${item.sourceId ?: "--"}")
                     .addText(coverageText)
                     .setOnClickListener(
                         ParkedOnlyOnClickListener.create {

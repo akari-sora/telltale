@@ -33,4 +33,6 @@ kotlin {
 dependencies {
     implementation(project(":car-core"))
     implementation("androidx.car.app:app-automotive:1.7.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 }
+

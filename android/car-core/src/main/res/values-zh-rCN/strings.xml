@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="car_app_name">Telltale</string>
+    <string name="car_home_status_title">车辆监控</string>
+    <string name="car_home_status_body">Android 车载架构运行中</string>
+    <string name="car_home_data_title">车辆数据</string>
+    <string name="car_home_data_body">遥测桥接未在 AA-01 连接</string>
+    <string name="car_home_safety_title">只读投影</string>
+    <string name="car_home_safety_body">无可用之车辆指令或破坏性操作</string>
+    <string name="car_home_speed_title">车速</string>
+    <string name="car_home_rpm_title">转速</string>
+    <string name="car_home_coolant_title">水温</string>
+    <string name="car_home_voltage_title">模块电压</string>
+    <string name="car_home_boost_title">增压值</string>
+    <string name="car_home_load_title">发动机负荷</string>
+    <string name="car_signal_missing">--</string>
+    <string name="car_signal_stale">超时</string>
+
+    <!-- AA-04 Actions -->
+    <string name="car_action_health">车况健康</string>
+    <string name="car_action_powertrain">动力系统</string>
+    <string name="car_action_fault_codes">故障码</string>
+
+    <!-- AA-04 Health Screen -->
+    <string name="car_health_title">车辆健康</string>
+    <string name="car_health_status_row">观测状态</string>
+    <string name="car_health_mil_row">MIL</string>
+    <string name="car_health_dtc_row">故障码</string>
+    <string name="car_health_coolant_row">水温</string>
+    <string name="car_health_voltage_row">模块电压</string>
+    <string name="car_health_status_attention">注意</string>
+    <string name="car_health_status_no_warnings">未观测到警示</string>
+    <string name="car_health_status_unknown">未知</string>
+    <string name="car_mil_on">点亮</string>
+    <string name="car_mil_off">熄灭</string>
+    <string name="car_dtc_count_format">%d 条故障码</string>
+    <string name="car_dtc_none">0 条故障码</string>
+
+    <!-- AA-04 Powertrain Screen -->
+    <string name="car_powertrain_title">动力系统</string>
+    <string name="car_powertrain_rpm_title">转速</string>
+    <string name="car_powertrain_coolant_title">水温</string>
+    <string name="car_powertrain_iat_title">进气温度</string>
+    <string name="car_powertrain_map_title">歧管压力</string>
+    <string name="car_powertrain_voltage_title">模块电压</string>
+    <string name="car_powertrain_speed_title">车速</string>
+
+    <!-- AA-04 DTC Screens -->
+    <string name="car_dtc_summary_title">诊断故障码</string>
+    <string name="car_dtc_no_codes">未观测到诊断故障码</string>
+    <string name="car_dtc_status_not_scanned">尚未扫描</string>
+    <string name="car_dtc_status_scanning">扫描中</string>
+    <string name="car_dtc_status_partial_clean">覆盖不完整 / 已完成部分未观测到故障</string>
+    <string name="car_dtc_status_unavailable">诊断不可用 / 不完整</string>
+    <string name="car_dtc_more_items_format">另有 %d 条诊断故障码未显示</string>
+    <string name="car_dtc_parked_only_notice">仅限停车时使用</string>
+    <string name="car_dtc_detail_title">故障码详情</string>
+    <string name="car_dtc_detail_class">类别</string>
+    <string name="car_dtc_detail_controller">控制器</string>
+    <string name="car_dtc_detail_coverage">覆盖范围</string>
+    <string name="car_dtc_coverage_complete">完整</string>
+    <string name="car_dtc_coverage_partial">部分</string>
+    <string name="car_dtc_kind_stored">已存储</string>
+    <string name="car_dtc_kind_pending">待确认</string>
+    <string name="car_dtc_kind_permanent">永久</string>
+    <string name="car_freeze_frame_section">冻结帧</string>
+    <string name="car_freeze_frame_none">无可用之冻结帧</string>
+    <string name="car_freeze_frame_unknown">冻结帧内容无法读取</string>
+    <string name="car_freeze_frame_omitted">已省略其余 %d 项信号</string>
+    <string name="car_freeze_frame_incomplete_summary">数据不完整 · %d 项信号未读取或已省略</string>
+    <string name="car_freeze_frame_read_incomplete">数据不完整 · 读取已中断</string>
+
+    <!-- AA-05 In-Template Alert & Host Speed Strings -->
+    <string name="car_alert_high">过高</string>
+    <string name="car_alert_attention">注意</string>
+    <string name="car_action_enable_speed">启用车速</string>
+</resources>

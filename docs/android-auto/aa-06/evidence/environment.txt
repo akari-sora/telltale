@@ -1,0 +1,16 @@
+# AA-06 Execution Environment Details
+# Date: 2026-10-05
+
+Host Machine: MacBook Pro (Apple Silicon macOS 15.x arm64)
+Google Desktop Head Unit: Version 2.0-mac-arm64 (Build 2022-03-30-438482292)
+Connected Device (USB): Samsung Galaxy S24 Ultra (SM-S9280, Android 14, One UI 6.1, Serial: R5CX10VFFBA)
+Connected Device (Wi-Fi): Samsung Galaxy S21+ (SM-G9960, Android 14, Serial: 192.168.1.137:5555)
+Android Auto App: v13.2.644834-release
+ADB Forwarding: tcp:5277 -> tcp:5277
+ApplicationId (carProto): com.cbstudio.telltale.carproto
+ApplicationId (automotive): com.cbstudio.telltale.carproto.aaos (namespace com.cbstudio.telltale.automotive)
+Baseline Git SHA: 2bffec2696bf1f387651e064bfb7a69bafb99cae
+MR 112 HEAD SHA: 77a726265cacd98571e30af8458273e67dcd401a
+Main Pipeline: #2913119460 (SUCCESS)
+MR Pipeline: #2913178389 (RUNNING)
+Runner: 56750249 (grok-box-ondemand-telltale-B-20260925)

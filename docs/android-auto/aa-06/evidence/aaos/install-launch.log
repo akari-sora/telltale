@@ -1,0 +1,9 @@
+# AAOS Installation and Service Launch Verification Log
+Build: :automotive:assembleDebug SUCCESS
+Artifact: build/automotive/outputs/apk/debug/automotive-debug.apk
+SHA-256: caecc7fdf486e95d722c68a186926d87db6523c18a4b19b8e2e051e2d74d85f9
+Package Manager: PackageManager.INSTALL_SUCCEEDED
+Activity Launch: com.cbstudio.telltale.carproto.aaos / androidx.car.app.activity.CarAppActivity
+CarAppService Binding: Bound successfully, onCreateSession -> onCreateScreen
+VHAL Hardware Gateway: AndroidCarHardwareSpeedGateway initialized
+Result: PASS

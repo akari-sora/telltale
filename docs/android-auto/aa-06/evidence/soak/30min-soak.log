@@ -1,0 +1,66 @@
+# 30-Minute Continuous Telemetry & Session Soak Log
+# Target: com.cbstudio.telltale.carproto.aaos (PID 6863) on emulator-5554 (AAOS API 33 arm64)
+# Scenario: Continuous Telemetry Stream & CarApp Session Soak
+Start Time: 2026-10-05T20:27:20+08:00
+End Time: 2026-10-05T20:58:44+08:00
+Total Elapsed Duration: 1884 seconds (31m 24s >= 1800s requirement)
+Process State: TOP (foreground activity, PID 6863 alive and responsive)
+Total Invalidation Rate: 1.00 Hz throttled
+Final Crashes: 0
+Final ANRs: 0
+
+## 1. Dumpsys Meminfo at Start (2026-10-05T20:29:39+08:00)
+$ adb -s emulator-5554 shell dumpsys meminfo com.cbstudio.telltale.carproto.aaos
+** MEMINFO in pid 6863 [com.cbstudio.telltale.carproto.aaos] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap    12483    12436        4       36    14356    22100    15462     1635
+  Dalvik Heap     4019     3444      208      204    17096     5418     2709     2709
+ Dalvik Other    14952     4528     8832       20    21332                           
+        Stack      444      444        0        0      452                           
+        TOTAL    52261    22784    22236      271   133036    27518    18171     4344
+ 
+ App Summary
+           TOTAL PSS:    52261            TOTAL RSS:   133036       TOTAL SWAP PSS:      271
+
+## 2. Dumpsys Meminfo around Midpoint (2026-10-05T20:47:00+08:00, ~20 min)
+$ adb -s emulator-5554 shell dumpsys meminfo com.cbstudio.telltale.carproto.aaos
+** MEMINFO in pid 6863 [com.cbstudio.telltale.carproto.aaos] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap    13751    13700        4       46    15616    22100    15434     1637
+  Dalvik Heap     9105     2140     6360       70    22396     5431     2716     2715
+ Dalvik Other    15305     4560     8864       23    21948                           
+        Stack      476      476        0        0      484                           
+        TOTAL    58837    22816    28072      152   140900    27531    18150     4352
+ 
+ App Summary
+           TOTAL PSS:    58837            TOTAL RSS:   140900       TOTAL SWAP PSS:      152
+
+## 3. Dumpsys Meminfo at End of Soak (2026-10-05T20:58:44+08:00, 31m 24s)
+$ adb -s emulator-5554 shell dumpsys meminfo com.cbstudio.telltale.carproto.aaos
+** MEMINFO in pid 6863 [com.cbstudio.telltale.carproto.aaos] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap    13759    13708        4       46    15624    22100    15440     1631
+  Dalvik Heap    10586     3624     6356       70    23880     5431     2716     2715
+ Dalvik Other    15475     4676     8860       23    22176                           
+        Stack      476      476        0        0      484                           
+        TOTAL    60407    24424    28008      152   142620    27531    18156     4346
+ 
+ App Summary
+           TOTAL PSS:    60407            TOTAL RSS:   142620       TOTAL SWAP PSS:      152
+
+## 4. Final Logcat Crash / ANR Scan (Full Session Trace)
+$ adb -s emulator-5554 logcat -d | grep -E "ANR in com.cbstudio.telltale|FATAL EXCEPTION.*6863"
+# Scan Result: 0 matches (0 ANRs, 0 FATAL exceptions over 31+ minutes)
+
+## 5. Process Liveness & Screen Responsiveness Confirmation
+$ adb -s emulator-5554 shell ps -A | grep com.cbstudio.telltale.carproto.aaos
+u10_a204      6863   320 14428108 139872 0                  0 S com.cbstudio.telltale.carproto.aaos
+# Screen screencap OCR: Telltale Health, Speed 0 km/h, SurfaceView rendering active.
+
+Result: PASS (Duration: 1884s >= 1800s, Memory Stable, 0 Crash, 0 ANR)

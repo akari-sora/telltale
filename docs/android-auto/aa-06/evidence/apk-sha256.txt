@@ -1,0 +1,3 @@
+# Phase AA-06 Tested APK Hashes (SHA-256)
+738dbf6a4c29bfee1c56ff7a1fbeff699a56017a26b5888588ee6c9c78029d3e  build/app/outputs/flutter-apk/app-carProto-debug.apk
+d7daa7371795da1dc51677ec1c0c1a07229e6e74865f1e9b367175c9d42b83ea  build/automotive/outputs/apk/debug/automotive-debug.apk

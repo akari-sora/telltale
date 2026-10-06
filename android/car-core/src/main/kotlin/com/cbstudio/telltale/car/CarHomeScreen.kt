@@ -19,6 +19,7 @@ import com.cbstudio.telltale.car.hardware.CarVehicleMotionResolver
 import com.cbstudio.telltale.car.health.CarAlertPhase
 import com.cbstudio.telltale.car.health.CarAlertRepository
 import com.cbstudio.telltale.car.health.matchingAlertSnapshot
+import com.cbstudio.telltale.car.localization.CarTextIsolation
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
 import com.cbstudio.telltale.car.telemetry.CarSignalValue
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
@@ -239,6 +240,7 @@ class CarHomeScreen(
     }
 
     private fun buildCandidateRows(state: CarTelemetryState): List<MetricRow> {
+        val isRtl = CarTextIsolation.isRtlContext(carContext)
         val missingText = carContext.getString(R.string.car_signal_missing)
         val staleText = carContext.getString(R.string.car_signal_stale)
 
@@ -262,7 +264,7 @@ class CarHomeScreen(
                                     } else {
                                         formatted
                                     }
-                                    "$cleanFormatted $unit"
+                                    CarTextIsolation.wrapMetric(cleanFormatted, unit, isRtl)
                                 } else {
                                     missingText
                                 }
@@ -289,7 +291,7 @@ class CarHomeScreen(
                     } else {
                         formatted
                     }
-                    "$cleanFormatted km/h"
+                    CarTextIsolation.wrapMetric(cleanFormatted, "km/h", isRtl)
                 } else {
                     missingText
                 }

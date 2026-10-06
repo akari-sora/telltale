@@ -28,6 +28,7 @@ import com.cbstudio.telltale.car.health.CarAlertRepository
 import com.cbstudio.telltale.car.health.CarHealthEvaluator
 import com.cbstudio.telltale.car.health.CarObservedHealth
 import com.cbstudio.telltale.car.health.matchingAlertSnapshot
+import com.cbstudio.telltale.car.localization.CarTextIsolation
 import com.cbstudio.telltale.car.safety.CarDtcMotionGate
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
 import com.cbstudio.telltale.car.telemetry.CarSignalValue
@@ -312,6 +313,8 @@ class CarHealthScreen(
             else -> missingText
         }
 
+        val isRtl = CarTextIsolation.isRtlContext(carContext)
+
         // 5. Signals: Coolant & Module Voltage
         fun formatSignal(signal: CarSignalValue?, unit: String, format: String): String {
             return when (telemetryState) {
@@ -333,7 +336,7 @@ class CarHealthScreen(
                                     } else {
                                         formatted
                                     }
-                                    "$clean $unit"
+                                    CarTextIsolation.wrapMetric(clean, unit, isRtl)
                                 } else {
                                     missingText
                                 }

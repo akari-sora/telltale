@@ -1,0 +1,35 @@
+$ adb -s emulator-5554 install -r build/automotive/outputs/apk/debug/automotive-debug.apk
+Performing Streamed Install
+Success
+
+$ adb -s emulator-5554 shell pm list packages | grep com.cbstudio.telltale.carproto.aaos
+package:com.cbstudio.telltale.carproto.aaos
+
+$ adb -s emulator-5554 shell getprop ro.build.characteristics
+automotive
+
+$ adb -s emulator-5554 shell pm list features | grep automotive
+feature:android.hardware.type.automotive
+feature:com.google.android.automotive.gas.hardware.version.major=2
+feature:com.google.android.automotive.gas.hardware.version.minor
+feature:com.google.android.automotive.gas.software.version.major=2
+feature:com.google.android.automotive.gas.software.version.minor=5
+
+$ adb -s emulator-5554 shell getprop ro.product.model
+Android Automotive SDK for arm64
+
+$ adb -s emulator-5554 shell getprop ro.build.version.release
+13
+
+$ adb -s emulator-5554 shell pm grant --user 10 com.cbstudio.telltale.carproto.aaos android.car.permission.CAR_SPEED
+
+$ adb -s emulator-5554 shell dumpsys package com.cbstudio.telltale.carproto.aaos | grep -A 10 "User 10:"
+    User 10: ceDataInode=279262 installed=true hidden=false suspended=false distractionFlags=0 stopped=false notLaunched=false enabled=0 instant=false virtual=false
+      installReason=0
+      firstInstallTime=2026-10-05 20:14:16
+      uninstallReason=0
+      overlay paths:
+        /data/resource-cache/com.android.systemui-neutral-o3wJ.frro
+        /data/resource-cache/com.android.systemui-accent-yVm1.frro
+      runtime permissions:
+        android.car.permission.CAR_SPEED: granted=true

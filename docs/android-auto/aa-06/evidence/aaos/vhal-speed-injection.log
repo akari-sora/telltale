@@ -1,0 +1,26 @@
+# AAOS VHAL Speed Injection & Arbitration Log
+# Target Device: emulator-5554 (Android Automotive SDK for arm64)
+
+$ adb -s emulator-5554 shell cmd car_service inject-continuous-events 0x11600208 13.333333 -s 10 -d 30
+$ adb -s emulator-5554 shell cmd car_service inject-continuous-events 0x11600207 13.333333 -s 10 -d 30
+
+System Logcat:
+10-05 20:30:15.120   960  1263 I CarShellCommand: Injecting VHAL event: prop=0x11600208, zone=0, value=13.333333, isError=false, delayTime=0
+10-05 20:30:15.151   960  1263 I CarShellCommand: Injecting VHAL event: prop=0x11600207, zone=0, value=13.333333, isError=false, delayTime=0
+10-05 20:30:42.100  6863  6863 I CarApp.Hardware: A change occurred in the value of property: CarPropertyValue{mPropertyId=0x11600208, mAreaId=0x0, mStatus=0, mTimestamp=1078293806957, mValue=13.333333}
+
+$ adb -s emulator-5554 shell cmd car_service get-property-value 0x11600208 0
+Property:0x11600208, status: 0, timestamp: 1078293806957, zone: 0x0, floatValues: [13.333333], int32Values: [], int64Values: [], bytes: [], string: 
+# Display Output: 48 km/h (vhal-speed-moving.png)
+
+$ adb -s emulator-5554 shell cmd car_service inject-continuous-events 0x11600208 0.0 -s 10 -d 5
+$ adb -s emulator-5554 shell cmd car_service inject-continuous-events 0x11600207 0.0 -s 10 -d 5
+
+System Logcat:
+10-05 20:32:37.314   960  2345 I CarShellCommand: Injecting VHAL event: prop=0x11600208, zone=0, value=0.0, isError=false, delayTime=0
+10-05 20:32:37.352   960  2345 I CarShellCommand: Injecting VHAL event: prop=0x11600207, zone=0, value=0.0, isError=false, delayTime=0
+10-05 20:32:50.241  6863  6863 I CarApp.Hardware: A change occurred in the value of property: CarPropertyValue{mPropertyId=0x11600208, mAreaId=0x0, mStatus=0, mTimestamp=1206434061934, mValue=0.0}
+
+$ adb -s emulator-5554 shell cmd car_service get-property-value 0x11600208 0
+Property:0x11600208, status: 0, timestamp: 1206434061934, zone: 0x0, floatValues: [0.0], int32Values: [], int64Values: [], bytes: [], string: 
+# Display Output: 0 km/h (vhal-speed-zero.png)
