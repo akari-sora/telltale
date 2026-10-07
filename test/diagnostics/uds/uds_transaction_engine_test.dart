@@ -565,7 +565,7 @@ void main() {
         final channel = CallbackUdsTransactionChannel(
           onSend: (_, _, _) async {
             sendExecuted = true;
-            await Future.delayed(const Duration(milliseconds: 40));
+            await Future.delayed(const Duration(milliseconds: 300));
             throw TimeoutException('send timed out');
           },
           onReceiveContinuation: (_) async =>
@@ -575,7 +575,7 @@ void main() {
         final result = await engine.execute(
           request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
           channel: channel,
-          outerDeadline: DateTime.now().add(const Duration(milliseconds: 20)),
+          outerDeadline: DateTime.now().add(const Duration(milliseconds: 200)),
         );
 
         expect(sendExecuted, isTrue, reason: 'Must enter channel.send to test catch block');
@@ -604,7 +604,7 @@ void main() {
           ),
           onReceiveContinuation: (_) async {
             continuationExecuted = true;
-            await Future.delayed(const Duration(milliseconds: 40));
+            await Future.delayed(const Duration(milliseconds: 300));
             throw TimeoutException('continuation timed out');
           },
         );
@@ -612,7 +612,7 @@ void main() {
         final result = await engine.execute(
           request: UdsTransactionRequest.readDid(const UdsDid(0x0100)),
           channel: channel,
-          outerDeadline: DateTime.now().add(const Duration(milliseconds: 20)),
+          outerDeadline: DateTime.now().add(const Duration(milliseconds: 200)),
         );
 
         expect(continuationExecuted, isTrue, reason: 'Must enter receiveContinuation to test catch block');

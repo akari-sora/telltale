@@ -15,7 +15,8 @@ tag `v1.0.17`. Play production release prepared with versionCode 18.
 GitLab Release `v1.0.17` published with 4 assets attached: `telltale-v1.0.17-arm64-v8a.apk`,
 `telltale-v1.0.17-armeabi-v7a.apk`, `telltale-v1.0.17-x86_64.apk`, and `SHA256SUMS`.
 
-Full test suite validation: 4,316 tests passed (`+4316 ~23: All tests passed!` for `flutter test`),
+CI full-gate [pipeline #2918920306](https://gitlab.com/aa22396584/telltale/-/pipelines/2918920306)
+on `a97594a5` and local full test suite validation: 4,316 tests passed (`+4316 ~23: All tests passed!` for `flutter test`),
 7 Linux HUD Golden visual tests 100% passed, and `flutter analyze` clean with 0 issues.
 Physical device smoke test completed and attested on Samsung Galaxy S24 Ultra (`R5CX10VFFBA`,
 Android 16, API 36; see `docs/verification/device-verification.md` for `Device walk attested: 1.0.17`),
@@ -23,48 +24,60 @@ confirming subpixel geometry alignment error < 0.7px, zero white border / Chrome
 and zero RenderFlex overflow across full lifecycle (Enter, Pause, Resume, Exit).
 Emulator walk on Pixel 9 Pro Fold (Android 16, `emulator-5554`) validated folded (0°),
 unfolded (180°), tabletop (90°), and dynamic folding/unfolding posture continuity without restart.
+Vehicle and hardware testing boundary: physical device walks and simulated ELM327/BLE GATT test rigs
+are verified; live vehicle road testing remains bounded per `docs/verification/` (not attested across all vehicle generations).
 
 ### Added
 
-- Head-Up Display (HUD) Mode / 抬頭顯示模式:
-  - High-contrast pure black OLED canvas (`#000000`) with sticky immersive system bars
-    hiding (`bhv=2`, `vsysui=0x1706`), eliminating windshield glare and edge bleeding.
-  - Optical mirror reflection geometry (`scaleX(-1)`) engineered specifically for
-    windshield reflection when placed flat on the car dashboard.
-  - Viewport-level touch event isolation to prevent accidental touches caused by road vibration.
-  - Distraction-free safety exit requiring a deliberate 700ms long press, guarding
-    driver focus while providing graceful navigation.
-  - Triple high-contrast optical themes: Green (競速綠), Amber (琥珀橙), and Ice Blue (冰藍),
-    optimized for daylight legibility and nighttime anti-glare.
-  - Monospaced tabular figures eliminating digit jitter and responsive scale bounds
-    preventing UI overflow across screen ratios. (HUD-01)
-- Android Auto & AAOS Automotive Surfaces / 車載系統深度整合:
-  - Google Driver Distraction Guidelines (DDG) compliance restricting list items to
-    6-item pagination during driving.
-  - Drive-safe read-only real-time telemetry bridge (Speed, RPM, Coolant temperature)
-    formatted for glanceable automotive projection.
-  - Stationary-only DTC fault code inspection strictly locked to Park (P) or 0 km/h,
-    with automatic dismissal back to home if vehicle movement is detected.
-  - Coolant temperature hysteresis debouncing engine (triggers at 105°C, clears only
-    below 100°C with 10s hold) preventing fluttering alert spam near threshold boundaries.
-  - Tri-locale BiDi alignment (`en-US`, `zh-TW`, `zh-CN`) ensuring full automotive parity.
-    (AA-01 ~ AA-07, AAOS-01)
-- Foldable & Multi-Surface Adaptivity / 摺疊機與多螢幕形態自適應:
-  - Responsive layouts with dynamic posture continuity across phone portrait/landscape,
-    foldable cover outer display, unfolded inner tablet, and 90° Tabletop posture.
-  - Master-Detail two-pane navigation with hardware hinge & crease physical avoidance,
-    guaranteeing no gauges or action buttons span across display seams.
-  - Continuous runtime state preservation across fold/unfold/rotation without adapter reconnection.
-  - 40 automated foldable and multi-window quality verification gates 100% passed.
-    (FOLD-01 ~ FOLD-08)
+- Head-Up Display (HUD) Mode / 抬頭顯示模式 (HUD-01):
+  - **繁體中文**：
+    - 全黑 OLED 極致對比：採用純黑底色（`#000000`），完全隱藏 Android 系統狀態列與導航列（`IMMERSIVE_STICKY` 粘性沉浸模式），消除擋風玻璃反光與邊框雜光。
+    - 光學鏡像幾何反轉：內建光學鏡像翻轉（`scaleX(-1)`），專為手機平放儀表台擋風玻璃投影反射設計，確保駕駛視線直覺清晰。
+    - 視圖層防誤觸觸摸隔離：全螢幕觸摸事件隔離保護，杜絕行車顛簸造成的非預期誤觸。
+    - 700ms 防分心長按退出機制：設置直覺式 700ms 長按退出防護，避免誤碰跳出，兼顧駕駛專注與操作安全性。
+    - 三套高對比光學配色：提供競速綠（Green）、琥珀橙（Amber）、冰藍（Ice Blue）三款高對比主題配色，適應白天強光與夜間低照度環境。
+    - 等寬字型與防溢出保護：數值採等寬字型排版避免位數跳動閃爍，並整合動態縮放防溢出保護，適配各類螢幕長寬比。
+  - **English**:
+    - Pure Black OLED Canvas: High-contrast true black background (`#000000`) with system bars hidden (`IMMERSIVE_STICKY`), eliminating windshield glare and frame bleeding.
+    - Optical Mirror Projection: Geometric horizontal reflection (`scaleX(-1)`) engineered specifically for dashboard windshield projection.
+    - Touch Isolation: Viewport-level touch event isolation prevents accidental taps caused by road vibration.
+    - 700ms Long-Press Exit Protection: Distraction-free safety exit requiring a deliberate 700ms long press, guarding driver focus while maintaining graceful navigation.
+    - Triple High-Contrast Palettes: Green, Amber, and Ice Blue color schemes optimized for both bright daylight and night driving conditions.
+    - Tabular Digits & Overflow Guard: Monospaced tabular figures eliminate digit jitter, coupled with responsive scale bounds to prevent UI overflows.
+- Android Auto & AAOS Automotive Surfaces / 車載系統深度整合 (AA-01 ~ AA-07, AAOS-01):
+  - **繁體中文**：
+    - Google 車規防分心規範 (DDG)：嚴格遵循 Google Driver Distraction Guidelines，行駛中強制限制清單為 6-item 分頁瀏覽，保障駕駛安全。
+    - 行駛唯讀即時遙測：車載螢幕呈現高易讀性即時遙測數據橋接（車速、轉速、水溫），行駛中維持嚴格唯讀，禁止危險干預。
+    - 靜止限定 DTC 故障碼檢視：故障碼掃描與詳細檢視僅限 P 檔或車速為 0 km/h 靜止狀態；一旦車輛移動（> 0 km/h）立即自動退回主畫面，防止行駛分心。
+    - 高溫冷卻液遲滯防抖告警引擎：引入專用冷卻液溫度遲滯防抖演算法（105°C 觸發告警 / 降至 100°C 延時解除），徹底消除臨界溫度震盪引發的頻繁跳報。
+    - 車載三語系完整對齊：車機端完整對齊英文（en-US）、繁體中文（zh-TW）、簡體中文（zh-CN），並支援雙向文字（BiDi）鏡像排版佈局。
+  - **English**:
+    - Google Driver Distraction Guidelines (DDG): Strict automotive compliance restricting list items to 6-item pagination when driving.
+    - Drive-Safe Read-Only Telemetry: Real-time powertrain telemetry bridge (Speed, RPM, Coolant) formatted for glanceable in-car projection.
+    - Stationary-Only DTC Inspection: Diagnostic Trouble Code review is strictly locked to Park (P) or stationary (0 km/h) conditions, with automatic dismissal back to home if vehicle movement is detected.
+    - Coolant Temperature Hysteresis Engine: Advanced debouncing hysteresis threshold (triggers at 105°C, clears only below 100°C with 10s hold) preventing fluttering alert spam near threshold boundaries.
+    - Tri-Locale Alignment: Complete parity across `en-US`, `zh-TW`, and `zh-CN` with full BiDi mirroring compliance.
+- Foldable & Multi-Surface Adaptivity / 摺疊機與多螢幕形態自適應 (FOLD-01 ~ FOLD-08):
+  - **繁體中文**：
+    - 全形態動態姿態自適應：無縫適配常規手機直橫屏、折疊機封面外螢幕（Cover Screen）、展開大螢幕（Unfolded Inner Display）與 90° Tabletop 半折疊懸停姿態。
+    - 雙窗格 (Master-Detail) 與鉸鏈物理迴避：寬螢幕自動切換為雙窗格導航與側邊欄；偵測實體鉸鏈（Hinge）與折痕區域進行物理安全避讓，絕不跨鉸鏈割裂任何儀表或按鈕。
+    - 連續性狀態保持：旋轉、展開或折疊時，完整保持已選 PID、故障碼掃描結果、儀表排列與零百加速測試進度，無須重新連線。
+    - 40 項折疊品質門禁 100% 通過：通過包含鉸鏈分割、子像素對齊、邊界溢出在內的 40 項折疊品質門禁測試。
+  - **English**:
+    - Continuous Adaptive Form Factors: Seamless continuity across phone portrait/landscape, foldable cover screens, unfolded inner tablets, and 90° Tabletop postures without restarting sessions.
+    - Master-Detail Layout & Physical Hinge Avoidance: Two-pane navigation on wide screens with hardware hinge and crease avoidance, guaranteeing no gauges or action buttons span across display seams.
+    - Runtime State Preservation: Folding, unfolding, or rotating preserves active telemetry, DTC inspection results, dashboard gauges, and active acceleration timers without adapter renegotiation.
+    - 40 Foldable Quality Gates: 100% pass rate across 40 automated foldable and multi-window quality verification gates.
 
 ### Refined & Fixed
 
-- Dashboard & Polling Refinements / 儀表板與採樣加固:
-  - Dashboard top status strip pills (polling mode, voltage, connection status) are vertically
-    centered (`WrapCrossAlignment.center`), eliminating baseline drop misalignment.
-  - Extended automatic protocol search budget to 25s for slow ELM327 adapters (`ATSP0` / `0100`),
-    with immediate retry on initial `NO DATA` before concluding unreachable. (#106)
+- Dashboard & Polling Refinements / 儀表板與採樣加固 (#106):
+  - **繁體中文**：
+    - 狀態膠囊垂直幾何置中：Dashboard 頂部狀態膠囊（批次讀取、電壓、連線狀態）修正為幾何垂直中心對齊（`WrapCrossAlignment.center`），消除字元下沉錯位。
+    - ATSP0 / 0100 搜尋預算防護：針對慢速 ELM327 轉接器延長自動協議搜尋超時寬限至 25 秒，初次接收 `NO DATA` 提供單次即時重試，大幅提升藍牙連接握手成功率。
+  - **English**:
+    - Vertical Center Alignment for Status Capsules: Polling mode, voltage, and connection pills on the Dashboard status strip are vertically centered (`WrapCrossAlignment.center`), eliminating baseline misalignment.
+    - ATSP0 / 0100 Protocol Search Budget: Extended automatic protocol negotiation budget to 25s for slow ELM327 adapters, with immediate retry for initial `NO DATA` responses, preventing premature handshake terminations.
 
 ### Verification & Downloads
 
