@@ -15,24 +15,67 @@ tag `v1.0.17`. Play production release prepared with versionCode 18.
 GitLab Release `v1.0.17` published with 4 assets attached: `telltale-v1.0.17-arm64-v8a.apk`,
 `telltale-v1.0.17-armeabi-v7a.apk`, `telltale-v1.0.17-x86_64.apk`, and `SHA256SUMS`.
 
+Full test suite validation: 4,316 tests passed (`+4316 ~23: All tests passed!` for `flutter test`),
+7 Linux HUD Golden visual tests 100% passed, and `flutter analyze` clean with 0 issues.
 Physical device smoke test completed and attested on Samsung Galaxy S24 Ultra (`R5CX10VFFBA`,
-Android 16; see `docs/verification/device-verification.md` for `Device walk attested: 1.0.17`).
+Android 16, API 36; see `docs/verification/device-verification.md` for `Device walk attested: 1.0.17`),
+confirming subpixel geometry alignment error < 0.7px, zero white border / Chrome bleeding,
+and zero RenderFlex overflow across full lifecycle (Enter, Pause, Resume, Exit).
 Emulator walk on Pixel 9 Pro Fold (Android 16, `emulator-5554`) validated folded (0°),
 unfolded (180°), tabletop (90°), and dynamic folding/unfolding posture continuity without restart.
 
 ### Added
 
-- Head-Up Display (HUD) Mode: High-contrast pure black canvas (#000000),
-  centered speed display, mirrored projection geometry with touch isolation,
-  and 700ms long-press exit protection. (HUD-01)
-- Android Auto & AAOS Automotive Surfaces: Car-grade read-only telemetry bridge,
-  Google Driver Distraction Guidelines (DDG) compliance with 6-item pagination,
-  stationary-only DTC inspection with motion auto-pop, coolant temperature
-  hysteresis debouncing engine (105°C/3s in, 100°C/10s out), and tri-locale
-  BiDi alignment (`values`, `values-zh-rTW`, `values-zh-rCN`). (AA-01, AAOS-01)
-- Foldable & Multi-Surface Adaptivity: Responsive layouts with physical hinge
-  and crease avoidance across phone, foldable inner/outer displays, and tablets.
-  (FOLD-01 ~ FOLD-07)
+- Head-Up Display (HUD) Mode / 抬頭顯示模式:
+  - High-contrast pure black OLED canvas (`#000000`) with sticky immersive system bars
+    hiding (`bhv=2`, `vsysui=0x1706`), eliminating windshield glare and edge bleeding.
+  - Optical mirror reflection geometry (`scaleX(-1)`) engineered specifically for
+    windshield reflection when placed flat on the car dashboard.
+  - Viewport-level touch event isolation to prevent accidental touches caused by road vibration.
+  - Distraction-free safety exit requiring a deliberate 700ms long press, guarding
+    driver focus while providing graceful navigation.
+  - Triple high-contrast optical themes: Green (競速綠), Amber (琥珀橙), and Ice Blue (冰藍),
+    optimized for daylight legibility and nighttime anti-glare.
+  - Monospaced tabular figures eliminating digit jitter and responsive scale bounds
+    preventing UI overflow across screen ratios. (HUD-01)
+- Android Auto & AAOS Automotive Surfaces / 車載系統深度整合:
+  - Google Driver Distraction Guidelines (DDG) compliance restricting list items to
+    6-item pagination during driving.
+  - Drive-safe read-only real-time telemetry bridge (Speed, RPM, Coolant temperature)
+    formatted for glanceable automotive projection.
+  - Stationary-only DTC fault code inspection strictly locked to Park (P) or 0 km/h,
+    with automatic dismissal back to home if vehicle movement is detected.
+  - Coolant temperature hysteresis debouncing engine (triggers at 105°C, clears only
+    below 100°C with 10s hold) preventing fluttering alert spam near threshold boundaries.
+  - Tri-locale BiDi alignment (`en-US`, `zh-TW`, `zh-CN`) ensuring full automotive parity.
+    (AA-01 ~ AA-07, AAOS-01)
+- Foldable & Multi-Surface Adaptivity / 摺疊機與多螢幕形態自適應:
+  - Responsive layouts with dynamic posture continuity across phone portrait/landscape,
+    foldable cover outer display, unfolded inner tablet, and 90° Tabletop posture.
+  - Master-Detail two-pane navigation with hardware hinge & crease physical avoidance,
+    guaranteeing no gauges or action buttons span across display seams.
+  - Continuous runtime state preservation across fold/unfold/rotation without adapter reconnection.
+  - 40 automated foldable and multi-window quality verification gates 100% passed.
+    (FOLD-01 ~ FOLD-08)
+
+### Refined & Fixed
+
+- Dashboard & Polling Refinements / 儀表板與採樣加固:
+  - Dashboard top status strip pills (polling mode, voltage, connection status) are vertically
+    centered (`WrapCrossAlignment.center`), eliminating baseline drop misalignment.
+  - Extended automatic protocol search budget to 25s for slow ELM327 adapters (`ATSP0` / `0100`),
+    with immediate retry on initial `NO DATA` before concluding unreachable. (#106)
+
+### Verification & Downloads
+
+| File | Architecture | Size | SHA-256 Digest |
+| :--- | :--- | :--- | :--- |
+| `telltale-v1.0.17-arm64-v8a.apk` | arm64-v8a (modern 64-bit) | 24M | `e903a6e51b3b44a7854b2aec5d116cb96e7e8c9f193f09dc2395a6b7ce05998c` |
+| `telltale-v1.0.17-armeabi-v7a.apk` | armeabi-v7a (legacy 32-bit) | 22M | `99c4e47f443c5d40da424571c2c61eba93da260028622d5ab0a09e465c080e3f` |
+| `telltale-v1.0.17-x86_64.apk` | x86_64 (emulators) | 25M | `b43855e283a18608bf6fa1746e4ceb7e078f4899bf00223775ea5f661ccdcd59` |
+
+Checksum verification command: `sha256sum -c SHA256SUMS`
+
 
 ## 1.0.16 — 2026-10-03
 
