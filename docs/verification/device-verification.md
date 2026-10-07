@@ -70,6 +70,17 @@ the artifact, not that they walked it, which is what this file is for. A
 weaker claim that is true beats a stronger one nobody can check, and the price
 of keeping it is one sentence in the release notes saying which claim it is.
 
+## 2026-10-07 — 1.0.17 release build on Galaxy S24 Ultra and a Pixel 9 Pro Fold emulator
+
+Device walk attested: 1.0.17
+
+Samsung Galaxy S24 Ultra `R5CX10VFFBA` (SM-S9280, zh-TW, Android 16) and
+`emulator-5554` (AVD `Foldable_Test`, Pixel 9 Pro Fold profile, en, Android
+16). Built `app-field-release.apk` (`--release --flavor field`). Screen walk
+across Dashboard, PID Manager, DTC screen, Performance cockpit, and HUD mode,
+verifying AA & AAOS safety contracts and foldable hinge boundary handling.
+`dumpsys package`: `versionCode=18 versionName=1.0.17`.
+
 ## 2026-10-03 — 1.0.16 release build on Galaxy S24 Ultra and a Pixel 9 Pro Fold emulator
 
 Device walk attested: 1.0.16

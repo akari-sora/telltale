@@ -8,6 +8,32 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+## 1.0.17 — 2026-10-07
+
+Google Play production target `1.0.17` / versionCode 18. GitLab annotated
+tag `v1.0.17`. Play production release prepared with versionCode 18.
+GitLab Release `v1.0.17` published with 4 assets attached: `telltale-v1.0.17-arm64-v8a.apk`,
+`telltale-v1.0.17-armeabi-v7a.apk`, `telltale-v1.0.17-x86_64.apk`, and `SHA256SUMS`.
+
+Physical device smoke test completed and attested on Samsung Galaxy S24 Ultra (`R5CX10VFFBA`,
+Android 16; see `docs/verification/device-verification.md` for `Device walk attested: 1.0.17`).
+Emulator walk on Pixel 9 Pro Fold (Android 16, `emulator-5554`) validated folded (0°),
+unfolded (180°), tabletop (90°), and dynamic folding/unfolding posture continuity without restart.
+
+### Added
+
+- Head-Up Display (HUD) Mode: High-contrast pure black canvas (#000000),
+  centered speed display, mirrored projection geometry with touch isolation,
+  and 700ms long-press exit protection. (HUD-01)
+- Android Auto & AAOS Automotive Surfaces: Car-grade read-only telemetry bridge,
+  Google Driver Distraction Guidelines (DDG) compliance with 6-item pagination,
+  stationary-only DTC inspection with motion auto-pop, coolant temperature
+  hysteresis debouncing engine (105°C/3s in, 100°C/10s out), and tri-locale
+  BiDi alignment (`values`, `values-zh-rTW`, `values-zh-rCN`). (AA-01, AAOS-01)
+- Foldable & Multi-Surface Adaptivity: Responsive layouts with physical hinge
+  and crease avoidance across phone, foldable inner/outer displays, and tablets.
+  (FOLD-01 ~ FOLD-07)
+
 ## 1.0.16 — 2026-10-03
 
 Google Play production target `1.0.16` / versionCode 17. GitLab annotated
