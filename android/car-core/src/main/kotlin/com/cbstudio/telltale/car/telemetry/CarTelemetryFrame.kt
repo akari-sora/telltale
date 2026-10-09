@@ -68,8 +68,8 @@ data class CarTelemetryFrame(
         const val SCHEMA_VERSION: Long = 1
 
         // Transport-corruption envelopes. Deliberately wider than any healthy
-        // vehicle: they reject garbage, not unusual-but-real readings.
-        val SPEED_KMH_ENVELOPE = 0.0..400.0
+        // vehicle: they reject garbage, not unusual-but-real readings (e.g. reverse speed).
+        val SPEED_KMH_ENVELOPE = -100.0..400.0
         val RPM_ENVELOPE = 0.0..20_000.0
         val COOLANT_C_ENVELOPE = -80.0..300.0
         val INTAKE_AIR_C_ENVELOPE = -80.0..300.0

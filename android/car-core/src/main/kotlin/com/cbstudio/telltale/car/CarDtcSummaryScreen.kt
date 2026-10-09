@@ -4,6 +4,7 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
+import androidx.car.app.model.Header
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.ParkedOnlyOnClickListener
@@ -111,8 +112,25 @@ class CarDtcSummaryScreen(
                 }
             }
             launch {
-                dtcRepository.state.collect {
+                dtcRepository.state.collect { dtcState ->
                     if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                        // SAFE-04 / SAFE-06: Secondary motion check on async DTC report arrival
+                        if (!CarDtcMotionGate.isStationary(telemetryRepository.state.value, hostSpeedRepository.sample.value, motionResolver)) {
+                            try {
+                                screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
+                            } catch (_: Throwable) {
+                            }
+                            return@collect
+                        }
+                        // SAFE-05: When matchingDtcReport is null and dtc is Current, epoch mismatched or reset
+                        val currentReport = com.cbstudio.telltale.car.health.matchingDtcReport(telemetryRepository.state.value, dtcState)
+                        if (currentReport == null && dtcState is com.cbstudio.telltale.car.diagnostics.CarDtcState.Current) {
+                            try {
+                                screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
+                            } catch (_: Throwable) {
+                            }
+                            return@collect
+                        }
                         try {
                             invalidate()
                         } catch (_: Throwable) {
@@ -132,8 +150,17 @@ class CarDtcSummaryScreen(
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
             return
         }
-        // Strict safety rule (AA05-18): If vehicle is no longer stationary, pop to CarHealthScreen immediately
+        // Strict safety rule (AA05-18 / SAFE-06): If vehicle is no longer stationary, pop to CarHealthScreen immediately
         if (!CarDtcMotionGate.isStationary(telemetryState, hostSpeedRepository.sample.value, motionResolver)) {
+            try {
+                screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
+            } catch (_: Throwable) {
+            }
+            return
+        }
+        // SAFE-05: If connection or epoch broke while in Current state, pop to CarHealthScreen
+        val currentReport = com.cbstudio.telltale.car.health.matchingDtcReport(telemetryState, dtcRepository.state.value)
+        if (currentReport == null && dtcRepository.state.value is com.cbstudio.telltale.car.diagnostics.CarDtcState.Current) {
             try {
                 screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
             } catch (_: Throwable) {
@@ -173,10 +200,50 @@ class CarDtcSummaryScreen(
     }
 
     override fun onGetTemplate(): Template {
+        // SAFE-04 / SAFE-06: Secondary motion check right before rendering template
+        if (!CarDtcMotionGate.isStationary(telemetryRepository.state.value, hostSpeedRepository.sample.value, motionResolver)) {
+            try {
+                screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
+            } catch (_: Throwable) {
+                try {
+                    screenManager.pop()
+                } catch (_: Throwable) {
+                }
+            }
+            val header = Header.Builder()
+                .setTitle(carContext.getString(R.string.car_dtc_summary_title))
+                .setStartHeaderAction(Action.BACK)
+                .build()
+
+            return ListTemplate.Builder()
+                .setHeader(header)
+                .setSingleList(
+                    ItemList.Builder()
+                        .addItem(
+                            Row.Builder()
+                                .setTitle(carContext.getString(R.string.car_dtc_status_unavailable))
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build()
+        }
+
         val listBuilder = ItemList.Builder()
         val limit = resolveListLimit()
 
         val currentReport = com.cbstudio.telltale.car.health.matchingDtcReport(telemetryRepository.state.value, dtcRepository.state.value)
+        // SAFE-05: When matchingDtcReport is null and dtc is Current, epoch mismatched or reset
+        if (currentReport == null && dtcRepository.state.value is com.cbstudio.telltale.car.diagnostics.CarDtcState.Current) {
+            try {
+                screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
+            } catch (_: Throwable) {
+                try {
+                    screenManager.pop()
+                } catch (_: Throwable) {
+                }
+            }
+        }
         val items = currentReport?.items ?: emptyList()
 
         if (items.isEmpty()) {
@@ -260,9 +327,13 @@ class CarDtcSummaryScreen(
             }
         }
 
-        return ListTemplate.Builder()
+        val header = Header.Builder()
             .setTitle(carContext.getString(R.string.car_dtc_summary_title))
-            .setHeaderAction(Action.BACK)
+            .setStartHeaderAction(Action.BACK)
+            .build()
+
+        return ListTemplate.Builder()
+            .setHeader(header)
             .setSingleList(listBuilder.build())
             .build()
     }

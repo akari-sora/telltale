@@ -358,4 +358,34 @@ class CarTelemetryRepositoryTest {
         runCurrent()
         assertEquals(CarTelemetryState.Awaiting, repo.state.value)
     }
+
+    @Test
+    fun producerReattachResetsDtcRepository() = runTest {
+        val dtcRepo = com.cbstudio.telltale.car.diagnostics.DefaultCarDtcRepository()
+        dtcRepo.submit(
+            com.cbstudio.telltale.car.diagnostics.CarDtcReport(
+                schemaVersion = 1,
+                reportSequence = 1,
+                connectionEpoch = 1,
+                phase = com.cbstudio.telltale.car.diagnostics.CarDtcScanPhase.IDLE,
+                verdict = com.cbstudio.telltale.car.diagnostics.CarDtcVerdict.COMPLETE_CLEAN,
+                coverageComplete = true,
+                milOn = false,
+                totalCodes = 0,
+                freezeFrameReadIncomplete = false,
+                items = emptyList(),
+                freezeFrames = emptyList(),
+            ),
+        )
+        assertTrue(dtcRepo.state.value is com.cbstudio.telltale.car.diagnostics.CarDtcState.Current)
+
+        val repo = CarTelemetryRepository(
+            scope = backgroundScope,
+            elapsedRealtimeMs = { testScheduler.currentTime },
+            dtcRepository = dtcRepo,
+        )
+
+        repo.onProducerAttached()
+        assertEquals(com.cbstudio.telltale.car.diagnostics.CarDtcState.Awaiting, dtcRepo.state.value)
+    }
 }

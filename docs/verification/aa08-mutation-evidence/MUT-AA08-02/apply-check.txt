@@ -1,0 +1,2 @@
+git apply --check docs/verification/aa08-mutation-evidence/MUT-AA08-02/mutation.patch
+EXIT: 0

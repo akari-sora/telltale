@@ -1,7 +1,7 @@
 """AA-05 static architecture contract gate for AAOS native hardware integration and alert surface.
 
 Verifies:
-  AA05-01: Car App Library version remains exact 1.7.0.
+  AA05-01: Car App Library version remains exact 1.8.0-rc01.
   AA05-02: CarSensors is NOT used anywhere; CarInfo.addSpeedListener is used instead.
   AA05-04: carProto leaf manifest declares com.google.android.gms.permission.CAR_SPEED.
   AA05-05: automotive leaf manifest declares android.car.permission.CAR_SPEED and READ_CAR_DISPLAY_UNITS.
@@ -25,14 +25,12 @@ class CarHardwareContractTest(unittest.TestCase):
         return (ROOT / relative).read_text(encoding="utf-8")
 
     # AA05-01
-    def test_car_app_library_is_pinned_to_1_7_0(self):
+    def test_car_app_library_is_pinned_to_1_8_0_rc01(self):
         car_core = self.read("android/car-core/build.gradle.kts")
-        self.assertIn('androidx.car.app:app:1.7.0', car_core)
-        self.assertNotIn('1.8.0', car_core)
+        self.assertIn('androidx.car.app:app:1.8.0-rc01', car_core)
 
         automotive = self.read("android/automotive/build.gradle.kts")
-        self.assertIn('androidx.car.app:app-automotive:1.7.0', automotive)
-        self.assertNotIn('1.8.0', automotive)
+        self.assertIn('androidx.car.app:app-automotive:1.8.0-rc01', automotive)
 
     # AA05-02
     def test_carsensors_is_never_used_in_car_code(self):

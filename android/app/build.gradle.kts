@@ -264,7 +264,7 @@ dependencies {
     add("carProtoImplementation", project(":car-core"))
     add(
         "carProtoImplementation",
-        "androidx.car.app:app-projected:1.7.0",
+        "androidx.car.app:app-projected:1.8.0-rc01",
     )
     // AA-02 HostApi adapter test (src/testCarProto) drives the car-core
     // repository on virtual time. carProto-only, like everything car.

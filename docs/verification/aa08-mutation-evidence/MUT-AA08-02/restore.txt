@@ -1,0 +1,2 @@
+git checkout -- android/car-core/src/main/kotlin/com/cbstudio/telltale/car/safety/CarDtcMotionGate.kt
+EXIT: 0

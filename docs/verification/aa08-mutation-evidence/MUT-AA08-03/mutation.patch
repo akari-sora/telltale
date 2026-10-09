@@ -1,0 +1,11 @@
+--- a/android/car-core/src/main/kotlin/com/cbstudio/telltale/car/health/CarHealthEvaluator.kt
++++ b/android/car-core/src/main/kotlin/com/cbstudio/telltale/car/health/CarHealthEvaluator.kt
+@@ -15,7 +15,7 @@
+ fun matchingDtcReport(telemetryState: CarTelemetryState, dtcState: CarDtcState): CarDtcReport? {
+     val currentTelemetry = (telemetryState as? CarTelemetryState.Current)?.frame ?: return null
+     val currentDtc = (dtcState as? CarDtcState.Current)?.report ?: return null
+-    if (currentTelemetry.connectionEpoch != currentDtc.connectionEpoch) return null
++    // Epoch isolation removed
+     return currentDtc
+ }
+ 

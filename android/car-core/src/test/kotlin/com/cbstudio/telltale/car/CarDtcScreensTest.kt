@@ -751,4 +751,252 @@ class CarDtcScreensTest {
         assertEquals(1, rows.size)
         assertEquals("Diagnostics unavailable / incomplete", rows[0].title?.toString())
     }
+
+    @Test
+    fun summaryScreen_popsBackOnForwardOrReverseMovement() = runTest {
+        val telemRepo = createTelemetryRepo()
+        telemRepo.submit(frameInput(sequence = 1, epoch = 1, speed = 0.0))
+        val dtcRepo = DefaultCarDtcRepository()
+        dtcRepo.submit(
+            CarDtcReport(
+                schemaVersion = 1,
+                reportSequence = 1,
+                connectionEpoch = 1,
+                phase = CarDtcScanPhase.IDLE,
+                verdict = CarDtcVerdict.COMPLETE_CLEAN,
+                coverageComplete = true,
+                milOn = false,
+                totalCodes = 0,
+                freezeFrameReadIncomplete = false,
+                items = emptyList(),
+                freezeFrames = emptyList(),
+            ),
+        )
+
+        val healthScreen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+        )
+        val screenManager = carContext.getCarService(ScreenManager::class.java)
+        screenManager.push(healthScreen)
+
+        val summaryScreen = CarDtcSummaryScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            coroutineScope = backgroundScope,
+        )
+        screenManager.push(summaryScreen)
+        val controller = ScreenController(summaryScreen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        assertEquals(summaryScreen, screenManager.top)
+
+        // 1. Forward movement (SAFE-06) triggers immediate pop to HealthScreen
+        telemRepo.submit(frameInput(sequence = 2, epoch = 1, speed = 10.0))
+        runCurrent()
+        assertEquals(healthScreen, screenManager.top)
+
+        // Reset to stationary
+        telemRepo.submit(frameInput(sequence = 3, epoch = 1, speed = 0.0))
+        runCurrent()
+
+        // Push summaryScreen again
+        val summaryScreen2 = CarDtcSummaryScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            coroutineScope = backgroundScope,
+        )
+        screenManager.push(summaryScreen2)
+        val controller2 = ScreenController(summaryScreen2)
+        controller2.moveToState(Lifecycle.State.RESUMED)
+        assertEquals(summaryScreen2, screenManager.top)
+
+        // 2. Reverse movement (speed < 0, SAFE-02 + SAFE-06) triggers immediate pop to HealthScreen
+        telemRepo.submit(frameInput(sequence = 4, epoch = 1, speed = -5.0))
+        runCurrent()
+        assertEquals(healthScreen, screenManager.top)
+    }
+
+    @Test
+    fun summaryScreen_popsBackOnEpochMismatch() = runTest {
+        val telemRepo = createTelemetryRepo()
+        telemRepo.submit(frameInput(sequence = 1, epoch = 1, speed = 0.0))
+        val dtcRepo = DefaultCarDtcRepository()
+        dtcRepo.submit(
+            CarDtcReport(
+                schemaVersion = 1,
+                reportSequence = 1,
+                connectionEpoch = 1,
+                phase = CarDtcScanPhase.IDLE,
+                verdict = CarDtcVerdict.COMPLETE_CLEAN,
+                coverageComplete = true,
+                milOn = false,
+                totalCodes = 0,
+                freezeFrameReadIncomplete = false,
+                items = emptyList(),
+                freezeFrames = emptyList(),
+            ),
+        )
+
+        val healthScreen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+        )
+        val screenManager = carContext.getCarService(ScreenManager::class.java)
+        screenManager.push(healthScreen)
+
+        val summaryScreen = CarDtcSummaryScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            coroutineScope = backgroundScope,
+        )
+        screenManager.push(summaryScreen)
+        val controller = ScreenController(summaryScreen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+        assertEquals(summaryScreen, screenManager.top)
+
+        // Telemetry switches epoch to 2 (e.g. reconnect) while stationary -> SAFE-05 popTo
+        telemRepo.submit(frameInput(sequence = 2, epoch = 2, speed = 0.0))
+        runCurrent()
+        assertEquals(healthScreen, screenManager.top)
+    }
+
+    @Test
+    fun summaryScreen_asyncReportArrivalWhileMovingDropsAndPopsBack() = runTest {
+        val telemRepo = createTelemetryRepo()
+        // Vehicle is moving at 20 km/h
+        telemRepo.submit(frameInput(sequence = 1, epoch = 1, speed = 20.0))
+        val dtcRepo = DefaultCarDtcRepository()
+
+        val healthScreen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+        )
+        val screenManager = carContext.getCarService(ScreenManager::class.java)
+        screenManager.push(healthScreen)
+
+        val summaryScreen = CarDtcSummaryScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            coroutineScope = backgroundScope,
+        )
+        screenManager.push(summaryScreen)
+        val controller = ScreenController(summaryScreen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        // Async DTC report arrives while vehicle is moving (SAFE-04)
+        dtcRepo.submit(
+            CarDtcReport(
+                schemaVersion = 1,
+                reportSequence = 1,
+                connectionEpoch = 1,
+                phase = CarDtcScanPhase.IDLE,
+                verdict = CarDtcVerdict.COMPLETE_CLEAN,
+                coverageComplete = true,
+                milOn = false,
+                totalCodes = 0,
+                freezeFrameReadIncomplete = false,
+                items = emptyList(),
+                freezeFrames = emptyList(),
+            ),
+        )
+        runCurrent()
+
+        // Must drop report and pop back to HealthScreen
+        assertEquals(healthScreen, screenManager.top)
+    }
+
+    @Test
+    fun summaryScreen_onGetTemplatePopsBackIfVehicleStartedMoving() = runTest {
+        val telemRepo = createTelemetryRepo()
+        telemRepo.submit(frameInput(sequence = 1, epoch = 1, speed = 0.0))
+        val dtcRepo = DefaultCarDtcRepository()
+
+        val healthScreen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+        )
+        val screenManager = carContext.getCarService(ScreenManager::class.java)
+        screenManager.push(healthScreen)
+
+        val summaryScreen = CarDtcSummaryScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            coroutineScope = backgroundScope,
+        )
+        screenManager.push(summaryScreen)
+
+        // Vehicle moves to 15 km/h before rendering
+        telemRepo.submit(frameInput(sequence = 2, epoch = 1, speed = 15.0))
+
+        // Direct call to onGetTemplate() (SAFE-04 / SAFE-06 secondary validation)
+        val template = summaryScreen.onGetTemplate() as ListTemplate
+        assertEquals(healthScreen, screenManager.top)
+        val rows = (template.singleList?.items ?: emptyList()).filterIsInstance<androidx.car.app.model.Row>()
+        assertEquals("Diagnostics unavailable / incomplete", rows[0].title?.toString())
+    }
+
+    @Test
+    fun detailScreen_onGetTemplatePopsBackIfVehicleStartedMoving() = runTest {
+        val telemRepo = createTelemetryRepo()
+        telemRepo.submit(frameInput(sequence = 1, epoch = 1, speed = 0.0))
+        val dtcRepo = DefaultCarDtcRepository()
+        val item = CarDtcItem(
+            code = "P0420",
+            kind = CarDtcKind.STORED,
+            sourceId = "7E8",
+            isManufacturerSpecific = false,
+            completeness = CarDtcCompleteness.COMPLETE,
+        )
+        dtcRepo.submit(
+            CarDtcReport(
+                schemaVersion = 1,
+                reportSequence = 1,
+                connectionEpoch = 1,
+                phase = CarDtcScanPhase.IDLE,
+                verdict = CarDtcVerdict.FAILED,
+                coverageComplete = true,
+                milOn = true,
+                totalCodes = 1,
+                freezeFrameReadIncomplete = false,
+                items = listOf(item),
+                freezeFrames = emptyList(),
+            ),
+        )
+
+        val healthScreen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+        )
+        val screenManager = carContext.getCarService(ScreenManager::class.java)
+        screenManager.push(healthScreen)
+
+        val detailScreen = CarDtcDetailScreen(
+            carContext = carContext,
+            item = item,
+            dtcRepository = dtcRepo,
+            telemetryRepository = telemRepo,
+            coroutineScope = backgroundScope,
+        )
+        screenManager.push(detailScreen)
+
+        // Vehicle moves into reverse (-8.0 km/h) before rendering
+        telemRepo.submit(frameInput(sequence = 2, epoch = 1, speed = -8.0))
+
+        // Direct call to onGetTemplate() (SAFE-02 / SAFE-04 / SAFE-06 secondary validation)
+        val template = detailScreen.onGetTemplate() as ListTemplate
+        assertEquals(healthScreen, screenManager.top)
+        val rows = (template.singleList?.items ?: emptyList()).filterIsInstance<androidx.car.app.model.Row>()
+        assertEquals("Diagnostics unavailable / incomplete", rows[0].title?.toString())
+    }
 }

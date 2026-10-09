@@ -1,0 +1,38 @@
+--- a/android/car-core/src/main/kotlin/com/cbstudio/telltale/car/CarDtcSummaryScreen.kt
++++ b/android/car-core/src/main/kotlin/com/cbstudio/telltale/car/CarDtcSummaryScreen.kt
+@@ -200,34 +200,7 @@
+     }
+ 
+     override fun onGetTemplate(): Template {
+-        // SAFE-04 / SAFE-06: Secondary motion check right before rendering template
+-        if (!CarDtcMotionGate.isStationary(telemetryRepository.state.value, hostSpeedRepository.sample.value, motionResolver)) {
+-            try {
+-                screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
+-            } catch (_: Throwable) {
+-                try {
+-                    screenManager.pop()
+-                } catch (_: Throwable) {
+-                }
+-            }
+-            val header = Header.Builder()
+-                .setTitle(carContext.getString(R.string.car_dtc_summary_title))
+-                .setStartHeaderAction(Action.BACK)
+-                .build()
+-
+-            return ListTemplate.Builder()
+-                .setHeader(header)
+-                .setSingleList(
+-                    ItemList.Builder()
+-                        .addItem(
+-                            Row.Builder()
+-                                .setTitle(carContext.getString(R.string.car_dtc_status_unavailable))
+-                                .build(),
+-                        )
+-                        .build(),
+-                )
+-                .build()
+-        }
++        // SAFE-04 / SAFE-06: Secondary motion check removed
+ 
+         val listBuilder = ItemList.Builder()
+         val limit = resolveListLimit()

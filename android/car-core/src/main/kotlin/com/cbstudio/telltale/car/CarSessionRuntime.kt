@@ -2,6 +2,8 @@ package com.cbstudio.telltale.car
 
 import android.os.SystemClock
 import androidx.car.app.CarContext
+import com.cbstudio.telltale.car.diagnostics.CarDtcRepository
+import com.cbstudio.telltale.car.diagnostics.CarDtcRuntime
 import com.cbstudio.telltale.car.hardware.AndroidCarHardwareSpeedGateway
 import com.cbstudio.telltale.car.hardware.CarHardwareSpeedGateway
 import com.cbstudio.telltale.car.hardware.CarHostSpeedPermissionCoordinator
@@ -26,6 +28,7 @@ import kotlinx.coroutines.launch
 class CarSessionRuntime(
     val carContext: CarContext,
     val telemetryRepository: CarTelemetryRepository = CarTelemetryRuntime.repository,
+    val dtcRepository: CarDtcRepository = CarDtcRuntime.repository,
     val hostSpeedGateway: CarHardwareSpeedGateway = AndroidCarHardwareSpeedGateway(carContext),
     val hostSpeedRepository: CarHostSpeedRepository = CarHostSpeedRepository(),
     val speedResolver: CarSpeedResolver = CarSpeedResolver(),
@@ -89,6 +92,7 @@ class CarSessionRuntime(
         hostSpeedGateway.stopListening()
         hostSpeedRepository.reset()
         alertCoordinator.stop()
+        dtcRepository.reset()
     }
 
     fun destroy() {
@@ -99,6 +103,7 @@ class CarSessionRuntime(
 
         alertCoordinator.destroy()
         hostSpeedRepository.reset()
+        dtcRepository.reset()
     }
 
     private fun getScope(): CoroutineScope {

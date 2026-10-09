@@ -52,6 +52,14 @@ class CarVehicleMotionResolverTest {
     }
 
     @Test
+    fun reverseMotionWithNegativeObdSpeedEvaluatesToMoving() {
+        // SAFE-02: OBD negative speed (reverse) is non-zero, hence MOVING
+        val obdReverse = CarTelemetryState.Current(liveFrame(-5.0), 1_000L)
+        val motion = resolver.resolveMotion(obdReverse, CarHostSpeedSample.INITIAL)
+        assertEquals(CarMotionEvidence.MOVING, motion)
+    }
+
+    @Test
     fun anyFreshNonZeroSourceEvaluatesToMoving() {
         // OBD says 0, but Host Display says 2.0 m/s -> MOVING
         val obdZero = CarTelemetryState.Current(liveFrame(0.0), 1_000L)

@@ -5,6 +5,7 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
+import androidx.car.app.model.Header
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
@@ -328,7 +329,6 @@ class CarPowertrainScreen(
         )
     }
 
-    @Suppress("DEPRECATION")
     override fun onGetTemplate(): Template {
         val model = buildDisplayModel(repository.state.value)
         lastRenderedModel = model
@@ -343,9 +343,13 @@ class CarPowertrainScreen(
             )
         }
 
-        return PaneTemplate.Builder(paneBuilder.build())
+        val header = Header.Builder()
             .setTitle(carContext.getString(R.string.car_powertrain_title))
-            .setHeaderAction(Action.BACK)
+            .setStartHeaderAction(Action.BACK)
+            .build()
+
+        return PaneTemplate.Builder(paneBuilder.build())
+            .setHeader(header)
             .build()
     }
 }

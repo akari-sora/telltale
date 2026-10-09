@@ -506,4 +506,62 @@ class CarSessionRuntimeTest {
 
         assertEquals(CarHostSpeedSample.INITIAL, speedRepo.sample.value)
     }
+
+    @Test
+    fun stopAndDestroyResetDtcRepository() = testScope.runTest {
+        val dtcRepo = com.cbstudio.telltale.car.diagnostics.DefaultCarDtcRepository()
+        dtcRepo.submit(
+            com.cbstudio.telltale.car.diagnostics.CarDtcReport(
+                schemaVersion = 1,
+                reportSequence = 1,
+                connectionEpoch = 1,
+                phase = com.cbstudio.telltale.car.diagnostics.CarDtcScanPhase.IDLE,
+                verdict = com.cbstudio.telltale.car.diagnostics.CarDtcVerdict.COMPLETE_CLEAN,
+                coverageComplete = true,
+                milOn = false,
+                totalCodes = 0,
+                freezeFrameReadIncomplete = false,
+                items = emptyList(),
+                freezeFrames = emptyList(),
+            ),
+        )
+        assertTrue(dtcRepo.state.value is com.cbstudio.telltale.car.diagnostics.CarDtcState.Current)
+
+        val runtime = CarSessionRuntime(
+            carContext = carContext,
+            dtcRepository = dtcRepo,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+
+        runtime.start()
+        assertTrue(runtime.isStarted)
+
+        // 1. stop() resets dtcRepository (SAFE-05)
+        runtime.stop()
+        assertFalse(runtime.isStarted)
+        assertEquals(com.cbstudio.telltale.car.diagnostics.CarDtcState.Awaiting, dtcRepo.state.value)
+
+        // Re-submit
+        dtcRepo.submit(
+            com.cbstudio.telltale.car.diagnostics.CarDtcReport(
+                schemaVersion = 1,
+                reportSequence = 2,
+                connectionEpoch = 2,
+                phase = com.cbstudio.telltale.car.diagnostics.CarDtcScanPhase.IDLE,
+                verdict = com.cbstudio.telltale.car.diagnostics.CarDtcVerdict.COMPLETE_CLEAN,
+                coverageComplete = true,
+                milOn = false,
+                totalCodes = 0,
+                freezeFrameReadIncomplete = false,
+                items = emptyList(),
+                freezeFrames = emptyList(),
+            ),
+        )
+        assertTrue(dtcRepo.state.value is com.cbstudio.telltale.car.diagnostics.CarDtcState.Current)
+
+        // 2. destroy() resets dtcRepository (SAFE-05)
+        runtime.destroy()
+        assertEquals(com.cbstudio.telltale.car.diagnostics.CarDtcState.Awaiting, dtcRepo.state.value)
+    }
 }

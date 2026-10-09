@@ -46,6 +46,7 @@ class CarTelemetryRepository(
     private val scope: CoroutineScope,
     private val elapsedRealtimeMs: () -> Long,
     private val staleAfterMs: Long = DEFAULT_STALE_AFTER_MS,
+    private val dtcRepository: com.cbstudio.telltale.car.diagnostics.CarDtcRepository? = null,
 ) {
     private val lock = Any()
     private val mutableState = MutableStateFlow<CarTelemetryState>(CarTelemetryState.Awaiting)
@@ -75,6 +76,7 @@ class CarTelemetryRepository(
             lastLifecycleEpoch = null
             lastReceivedAtElapsedMs = null
             mutableState.value = CarTelemetryState.Awaiting
+            (dtcRepository ?: com.cbstudio.telltale.car.diagnostics.CarDtcRuntime.repository).reset()
         }
     }
 
