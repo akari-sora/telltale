@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import sys
 import unittest
+from unittest.mock import MagicMock, patch
 
 # Ensure repo root is on sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -25,16 +27,28 @@ from tool.aaos_headless_runner import (
     SPEED_CRUISING,
     SPEED_REVERSE,
     SPEED_STATIONARY,
+    AaosStateObserver,
+    AdbResult,
+    EmulatorInstance,
     build_adb_prefix,
     build_emulator_launch_cmd,
     build_gear_injection_cmd,
     build_speed_injection_cmd,
+    find_free_emulator_port,
     main,
+    parse_app_package_ready,
     parse_stage1_response,
     parse_stage2_response,
     parse_stage3_response,
     parse_stage4_response,
+    parse_template_host_response,
+    parse_user_unlocked_response,
+    parse_vhal_gear_from_dumpsys,
+    parse_vhal_speed_from_dumpsys,
+    run_adb_shell,
     run_dry_run,
+    run_live_execution,
+    verify_stage4_readiness,
 )
 
 
@@ -188,6 +202,435 @@ class AaosHeadlessRunnerTest(unittest.TestCase):
         """Verify main() with --dry-run exits with 0."""
         ret = main(["--dry-run"])
         self.assertEqual(ret, 0)
+
+    # -----------------------------------------------------------------------
+    # R2 Tests: AdbResult, Error Token Interception & Stage 4 Readiness
+    # -----------------------------------------------------------------------
+
+    def test_adb_result_properties_and_string_representation(self):
+        """Verify AdbResult properties, error detection, strip, and str behavior."""
+        # Success result
+        res_ok = AdbResult(
+            returncode=0,
+            stdout="  device ready  ",
+            stderr="",
+            command=["adb", "get-state"],
+        )
+        self.assertTrue(res_ok.is_success)
+        self.assertEqual(res_ok.strip(), "device ready")
+        self.assertEqual(str(res_ok), "  device ready  ")
+        # Should not raise
+        res_ok.raise_for_status()
+
+        # Nonzero exit code
+        res_err = AdbResult(
+            returncode=19,
+            stdout="",
+            stderr="injection error",
+            command=["adb", "shell", "cmd"],
+        )
+        self.assertFalse(res_err.is_success)
+        with self.assertRaises(RuntimeError) as ctx:
+            res_err.raise_for_status()
+        self.assertIn("exit=19", str(ctx.exception))
+
+    def test_adb_shell_nonzero_exit_code_fails(self):
+        """Verify run_adb_shell raises RuntimeError when returncode is non-zero (Defect R2)."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["adb", "shell", "cmd", "car_service"],
+                returncode=19,
+                stdout="",
+                stderr="Error: command returned status 19",
+            )
+            with self.assertRaises(RuntimeError) as ctx:
+                run_adb_shell(["adb"], ["cmd", "car_service"], check=True)
+            self.assertIn("exit=19", str(ctx.exception))
+
+    def test_adb_shell_security_exception_fails(self):
+        """Verify run_adb_shell raises RuntimeError when SecurityException is present in output (Defect R2)."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["adb", "shell", "cmd", "car_service"],
+                returncode=0,
+                stdout="java.lang.SecurityException: Permission Denial: inject-vhal-event requires car permission",
+                stderr="",
+            )
+            with self.assertRaises(RuntimeError) as ctx:
+                run_adb_shell(["adb"], ["cmd", "car_service"], check=True)
+            self.assertIn("SecurityException", str(ctx.exception))
+
+    def test_adb_shell_unknown_command_fails(self):
+        """Verify run_adb_shell raises RuntimeError when 'Unknown command' is returned (Defect R2)."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["adb", "shell", "cmd", "car_service"],
+                returncode=0,
+                stdout="Unknown command: inject-vhal-event",
+                stderr="",
+            )
+            with self.assertRaises(RuntimeError) as ctx:
+                run_adb_shell(["adb"], ["cmd", "car_service"], check=True)
+            self.assertIn("Unknown command", str(ctx.exception))
+
+    def test_adb_shell_permission_denial_fails(self):
+        """Verify run_adb_shell raises RuntimeError when 'Permission Denial' is returned (Defect R2)."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["adb", "shell", "cmd", "car_service"],
+                returncode=0,
+                stdout="Error: Permission denial for calling uid",
+                stderr="",
+            )
+            with self.assertRaises(RuntimeError) as ctx:
+                run_adb_shell(["adb"], ["cmd", "car_service"], check=True)
+            self.assertIn("Permission denial", str(ctx.exception))
+
+    def test_adb_shell_check_false_returns_result_without_raising(self):
+        """Verify run_adb_shell returns AdbResult with check=False even on errors."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["adb", "shell", "service", "check"],
+                returncode=1,
+                stdout="Service car_service: not found",
+                stderr="",
+            )
+            res = run_adb_shell(["adb"], ["service", "check"], check=False)
+            self.assertEqual(res.returncode, 1)
+            self.assertFalse(res.is_success)
+            self.assertIn("not found", res.stdout)
+
+    def test_stage4_rejects_locked_user(self):
+        """Verify Stage 4 rejects RUNNING_LOCKED and locked states for User 10 (Defect R2)."""
+        self.assertFalse(parse_stage4_response("User 10: RUNNING_LOCKED\n"))
+        self.assertFalse(parse_stage4_response("UserInfo{10:Driver:locked}\n"))
+        self.assertFalse(parse_stage4_response("10 locked\n"))
+        self.assertFalse(parse_user_unlocked_response("User 10: RUNNING_LOCKED\n"))
+        self.assertFalse(parse_user_unlocked_response("false\n"))
+        self.assertFalse(parse_user_unlocked_response(""))
+
+        # Valid unlocked states must pass
+        self.assertTrue(parse_stage4_response("User 10: RUNNING_UNLOCKED\n"))
+        self.assertTrue(parse_user_unlocked_response("true\n"))
+        self.assertTrue(parse_user_unlocked_response("User 10: RUNNING_UNLOCKED\n"))
+
+    def test_stage4_rejects_missing_template_host(self):
+        """Verify Stage 4 rejects environment lacking android.software.car.templates_host (Defect R2)."""
+        output_without_host = "feature:android.hardware.wifi\nfeature:android.hardware.camera\n"
+        self.assertFalse(parse_template_host_response(output_without_host))
+        self.assertFalse(parse_template_host_response(""))
+
+        output_with_host = "feature:android.software.car.templates_host\nfeature:android.hardware.wifi\n"
+        self.assertTrue(parse_template_host_response(output_with_host))
+
+    def test_stage4_rejects_missing_app_package(self):
+        """Verify Stage 4 rejects environment lacking the target application package."""
+        self.assertFalse(parse_app_package_ready(""))
+        self.assertFalse(parse_app_package_ready("package not found\n"))
+        self.assertTrue(parse_app_package_ready("package:/data/app/~~foo/com.cbstudio.telltale.carproto.aaos-bar/base.apk\n"))
+
+    def test_stage4_full_readiness_verification(self):
+        """Verify verify_stage4_readiness checks user unlocked, template host, and app package."""
+        valid_u = "10"
+        valid_unlocked = "true"
+        valid_feat = "feature:android.software.car.templates_host"
+        valid_pkg = "package:/data/app/com.cbstudio.telltale.carproto.aaos"
+
+        # All valid
+        self.assertTrue(verify_stage4_readiness(valid_u, valid_unlocked, valid_feat, valid_pkg))
+
+        # User locked
+        self.assertFalse(verify_stage4_readiness("10", "false", valid_feat, valid_pkg))
+        # Template host missing
+        self.assertFalse(verify_stage4_readiness(valid_u, valid_unlocked, "", valid_pkg))
+        # App missing
+        self.assertFalse(verify_stage4_readiness(valid_u, valid_unlocked, valid_feat, ""))
+
+    # -----------------------------------------------------------------------
+    # R2 Tests: VHAL Dumpsys & End-to-End State Observation
+    # -----------------------------------------------------------------------
+
+    def test_vhal_dumpsys_speed_parser(self):
+        """Verify parse_vhal_speed_from_dumpsys handles dumpsys formats."""
+        dumpsys_1 = "Property: 0x11600207, Area: 0, Value: 13.89"
+        self.assertEqual(parse_vhal_speed_from_dumpsys(dumpsys_1), 13.89)
+
+        dumpsys_2 = "291504647 floatValues: [0.0]"
+        self.assertEqual(parse_vhal_speed_from_dumpsys(dumpsys_2), 0.0)
+
+        dumpsys_3 = "PERF_VEHICLE_SPEED: -2.0"
+        self.assertEqual(parse_vhal_speed_from_dumpsys(dumpsys_3), -2.0)
+
+        dumpsys_4 = "0x11600207 15.5"
+        self.assertEqual(parse_vhal_speed_from_dumpsys(dumpsys_4), 15.5)
+
+        self.assertIsNone(parse_vhal_speed_from_dumpsys("Empty dumpsys"))
+        self.assertIsNone(parse_vhal_speed_from_dumpsys(""))
+
+    def test_vhal_dumpsys_gear_parser(self):
+        """Verify parse_vhal_gear_from_dumpsys handles dumpsys formats."""
+        dumpsys_1 = "Property: 0x11400400, Area: 0, Value: 4"
+        self.assertEqual(parse_vhal_gear_from_dumpsys(dumpsys_1), 4)
+
+        dumpsys_2 = "289408000 int32Values: [8]"
+        self.assertEqual(parse_vhal_gear_from_dumpsys(dumpsys_2), 8)
+
+        dumpsys_3 = "GEAR_SELECTION: 2"
+        self.assertEqual(parse_vhal_gear_from_dumpsys(dumpsys_3), 2)
+
+        dumpsys_4 = "0x11400400 1"
+        self.assertEqual(parse_vhal_gear_from_dumpsys(dumpsys_4), 1)
+
+        self.assertIsNone(parse_vhal_gear_from_dumpsys("Empty dumpsys"))
+
+    def test_observer_state_evaluation_stationary(self):
+        """Verify AaosStateObserver evaluates Park & speed 0 as STATIONARY and DTC accessible."""
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        with patch.object(observer, "get_vhal_property_speed", return_value=0.0):
+            with patch.object(observer, "get_vhal_property_gear", return_value=GEAR_PARK):
+                self.assertEqual(observer.observe_motion_state(), "STATIONARY")
+                self.assertTrue(observer.verify_dtc_accessible())
+
+    def test_observer_state_evaluation_moving(self):
+        """Verify AaosStateObserver evaluates speed > 0 as MOVING, auto-pop triggered, and DTC not accessible."""
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        with patch.object(observer, "get_vhal_property_speed", return_value=13.89):
+            with patch.object(observer, "get_vhal_property_gear", return_value=GEAR_DRIVE):
+                self.assertEqual(observer.observe_motion_state(), "MOVING")
+                self.assertFalse(observer.verify_dtc_accessible())
+                with patch("tool.aaos_headless_runner.run_adb_shell") as mock_shell:
+                    mock_shell.return_value = AdbResult(0, "popTo CAR_HEALTH", "", [])
+                    self.assertTrue(observer.verify_autopop_occurred())
+
+    def test_observer_state_evaluation_reverse(self):
+        """Verify AaosStateObserver evaluates reverse speed as MOVING and DTC strictly blocked."""
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        with patch.object(observer, "get_vhal_property_speed", return_value=-2.0):
+            with patch.object(observer, "get_vhal_property_gear", return_value=GEAR_REVERSE):
+                self.assertEqual(observer.observe_motion_state(), "MOVING")
+                self.assertTrue(observer.verify_dtc_blocked())
+                self.assertFalse(observer.verify_dtc_accessible())
+
+    def _create_fake_adb_run(self, fail_inject_cmd: bool = False, inject_exit_code: int = 0, inject_output: str = "success"):
+        def fake_run(cmd, *args, **kwargs):
+            cmd_str = " ".join(str(c) for c in cmd)
+            if "get-state" in cmd_str:
+                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="device\n", stderr="")
+            elif "sys.boot_completed" in cmd_str:
+                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="1\n", stderr="")
+            elif "service" in cmd_str and "check" in cmd_str:
+                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="found\n", stderr="")
+            elif "am" in cmd_str and "get-current-user" in cmd_str:
+                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="10\n", stderr="")
+            elif "am" in cmd_str and "is-user-unlocked" in cmd_str:
+                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="true\n", stderr="")
+            elif "pm" in cmd_str and "features" in cmd_str:
+                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="feature:android.software.car.templates_host\n", stderr="")
+            elif "pm" in cmd_str and "path" in cmd_str:
+                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="package:/data/app/com.cbstudio.telltale.carproto.aaos/base.apk\n", stderr="")
+            elif "inject-vhal-event" in cmd_str:
+                if fail_inject_cmd:
+                    return subprocess.CompletedProcess(
+                        args=cmd,
+                        returncode=inject_exit_code,
+                        stdout=inject_output if inject_exit_code == 0 else "",
+                        stderr="Rejected" if inject_exit_code != 0 else "",
+                    )
+                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="success\n", stderr="")
+            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+        return fake_run
+
+    def test_scenario_fails_if_sample_unreceived(self):
+        """Verify scenario fails and returns 1 when speed sample is not received (Defect R2)."""
+        observer = MagicMock(spec=AaosStateObserver)
+        # Sample never arrives, and motion does not match expected
+        observer.verify_sample_received.return_value = False
+        observer.observe_motion_state.return_value = "UNKNOWN"
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = self._create_fake_adb_run()
+            ret = run_live_execution(
+                avd_name="AAOS_Automotive_1080p",
+                serial="emulator-5554",
+                emulator_bin=None,
+                adb_bin=Path(sys.executable),
+                skip_launch=True,
+                boot_timeout=5,
+                observer=observer,
+            )
+            self.assertEqual(ret, 1)
+
+    def test_scenario_fails_if_autopop_does_not_occur(self):
+        """Verify scenario fails and returns 1 when cruising speed does not trigger auto-pop (Defect R2)."""
+        observer = MagicMock(spec=AaosStateObserver)
+        observer.verify_sample_received.return_value = True
+        # First scenario (Parked Baseline): STATIONARY
+        # Second scenario (Drive Cruising): MOVING, but auto-pop fails to trigger
+        observer.observe_motion_state.side_effect = [
+            "STATIONARY",
+            "MOVING",
+            "MOVING",
+        ]
+        observer.verify_dtc_accessible.return_value = True
+        observer.verify_autopop_occurred.return_value = False
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = self._create_fake_adb_run()
+            ret = run_live_execution(
+                avd_name="AAOS_Automotive_1080p",
+                serial="emulator-5554",
+                emulator_bin=None,
+                adb_bin=Path(sys.executable),
+                skip_launch=True,
+                boot_timeout=5,
+                observer=observer,
+            )
+            self.assertEqual(ret, 1)
+
+    def test_scenario_fails_if_dtc_not_blocked_on_reverse(self):
+        """Verify scenario fails and returns 1 when reverse speed does not block DTC (Defect R2)."""
+        observer = MagicMock(spec=AaosStateObserver)
+        observer.verify_sample_received.return_value = True
+        observer.observe_motion_state.side_effect = [
+            "STATIONARY",
+            "MOVING",
+            "MOVING",
+        ]
+        observer.verify_dtc_accessible.return_value = True
+        observer.verify_autopop_occurred.return_value = True
+        observer.verify_dtc_blocked.return_value = False  # Reverse DTC block failed!
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = self._create_fake_adb_run()
+            ret = run_live_execution(
+                avd_name="AAOS_Automotive_1080p",
+                serial="emulator-5554",
+                emulator_bin=None,
+                adb_bin=Path(sys.executable),
+                skip_launch=True,
+                boot_timeout=5,
+                observer=observer,
+            )
+            self.assertEqual(ret, 1)
+
+    def test_scenario_fails_if_injection_rejected(self):
+        """Verify scenario fails and returns 1 immediately when VHAL injection returns exit 19 (Defect R2)."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = self._create_fake_adb_run(fail_inject_cmd=True, inject_exit_code=19)
+            ret = run_live_execution(
+                avd_name="AAOS_Automotive_1080p",
+                serial="emulator-5554",
+                emulator_bin=None,
+                adb_bin=Path(sys.executable),
+                skip_launch=True,
+                boot_timeout=5,
+            )
+            self.assertEqual(ret, 1)
+
+    def test_scenario_fails_if_command_unsupported(self):
+        """Verify scenario fails and returns 1 when inject-vhal-event command is unsupported (Defect R2)."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = self._create_fake_adb_run(
+                fail_inject_cmd=True,
+                inject_exit_code=0,
+                inject_output="Unknown command: inject-vhal-event",
+            )
+            ret = run_live_execution(
+                avd_name="AAOS_Automotive_1080p",
+                serial="emulator-5554",
+                emulator_bin=None,
+                adb_bin=Path(sys.executable),
+                skip_launch=True,
+                boot_timeout=5,
+            )
+            self.assertEqual(ret, 1)
+
+    # -----------------------------------------------------------------------
+    # R7 Tests: EmulatorInstance Lifecycle & Pre-existing Emulator Preservation
+    # -----------------------------------------------------------------------
+
+    def test_cleanup_preserves_foreign_emulator(self):
+        """Verify cleanup does not terminate or kill foreign/pre-existing emulators (Defect R7)."""
+        foreign_instance = EmulatorInstance(
+            pid=99999,
+            port=5554,
+            serial="emulator-5554",
+            owned=False,
+            process=MagicMock(),
+        )
+
+        with patch("subprocess.run") as mock_run:
+            foreign_instance.cleanup(keep_alive=False, adb_bin=Path("/mock/adb"))
+            # Must NOT call emu kill
+            for call_item in mock_run.call_args_list:
+                args = call_item[0][0]
+                self.assertNotIn("emu", args)
+                self.assertNotIn("kill", args)
+            # Process terminate must NOT be called
+            foreign_instance.process.terminate.assert_not_called()
+            foreign_instance.process.kill.assert_not_called()
+
+    def test_cleanup_only_kills_owned_instance(self):
+        """Verify cleanup terminates ONLY instances owned by this script (Defect R7)."""
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+
+        owned_instance = EmulatorInstance(
+            pid=12345,
+            port=5584,
+            serial="emulator-5584",
+            owned=True,
+            process=mock_proc,
+        )
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            owned_instance.cleanup(keep_alive=False, adb_bin=Path("/mock/adb"))
+
+            # Must call adb -s emulator-5584 emu kill (strictly targeted)
+            mock_run.assert_called_once()
+            called_cmd = mock_run.call_args[0][0]
+            self.assertEqual(called_cmd, ["/mock/adb", "-s", "emulator-5584", "emu", "kill"])
+
+            # Process terminate must be called
+            mock_proc.terminate.assert_called_once()
+
+    def test_find_free_emulator_port(self):
+        """Verify find_free_emulator_port returns an available even port in [5554, 5584]."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["adb", "devices"],
+                returncode=0,
+                stdout="List of devices attached\nemulator-5554\tdevice\n\n",
+            )
+            port = find_free_emulator_port(Path("/mock/adb"))
+            self.assertGreaterEqual(port, 5556)
+            self.assertLessEqual(port, 5584)
+            self.assertEqual(port % 2, 0)
+
+    def test_live_execution_full_flow_success_with_mock_observer(self):
+        """Verify run_live_execution full success flow with all readiness checks and observer passed."""
+        observer = MagicMock(spec=AaosStateObserver)
+        observer.verify_sample_received.return_value = True
+        observer.observe_motion_state.side_effect = [
+            "STATIONARY", "MOVING", "MOVING", "STATIONARY"
+        ]
+        observer.verify_dtc_accessible.return_value = True
+        observer.verify_autopop_occurred.return_value = True
+        observer.verify_dtc_blocked.return_value = True
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = self._create_fake_adb_run()
+            ret = run_live_execution(
+                avd_name="AAOS_Automotive_1080p",
+                serial="emulator-5554",
+                emulator_bin=None,
+                adb_bin=Path(sys.executable),
+                skip_launch=True,
+                boot_timeout=5,
+                observer=observer,
+            )
+            self.assertEqual(ret, 0)
 
 
 if __name__ == "__main__":

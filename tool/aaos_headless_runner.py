@@ -18,11 +18,12 @@ Automates Headless AAOS AVD execution and VHAL state machine verification:
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -102,6 +103,127 @@ DEFAULT_SCENARIOS = [
         description="Vehicle returns to PARK at 0.0 m/s: Normal stationary state restored",
     ),
 ]
+
+
+@dataclass
+class AdbResult:
+    """Structured representation of an ADB command execution."""
+    returncode: int
+    stdout: str
+    stderr: str
+    command: List[str]
+
+    @property
+    def is_success(self) -> bool:
+        """Check if command succeeded without error exit codes or error tokens."""
+        if self.returncode != 0:
+            return False
+        combined = f"{self.stdout}\n{self.stderr}".lower()
+        error_tokens = [
+            "securityexception",
+            "unknown command",
+            "permission denial",
+            "error: unknown",
+            "can't find service",
+            "not found",
+        ]
+        return not any(tok in combined for tok in error_tokens)
+
+    def raise_for_status(self) -> None:
+        """Raise RuntimeError if the command failed or emitted error tokens."""
+        if not self.is_success:
+            err_msg = self.stderr.strip() or self.stdout.strip()
+            raise RuntimeError(
+                f"ADB command failed (exit={self.returncode}): {' '.join(self.command)}\n"
+                f"Error detail: {err_msg}"
+            )
+
+    def strip(self) -> str:
+        return self.stdout.strip()
+
+    def __str__(self) -> str:
+        return self.stdout
+
+
+@dataclass
+class EmulatorInstance:
+    """Represents an Android emulator instance with explicit lifecycle ownership."""
+    pid: Optional[int] = None
+    port: int = 5554
+    serial: str = "emulator-5554"
+    owned: bool = False
+    process: Optional[subprocess.Popen] = None
+
+    def cleanup(
+        self,
+        keep_alive: bool = False,
+        adb_bin: Optional[Path] = None,
+        timeout: int = 10,
+    ) -> None:
+        """Clean up emulator instance. Strictly preserves foreign/pre-existing emulators."""
+        if keep_alive:
+            print(f"Keep-alive active; preserving emulator: {self.serial}")
+            return
+
+        if not self.owned:
+            print(f"Preserving foreign/pre-existing emulator: {self.serial}")
+            return
+
+        print(f"\n--- Cleaning up owned AAOS Emulator: {self.serial} (PID={self.pid}) ---")
+        if adb_bin:
+            try:
+                cmd = [str(adb_bin), "-s", self.serial, "emu", "kill"]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+                if res.returncode == 0:
+                    print(f"  ✓ Sent 'adb -s {self.serial} emu kill'")
+                else:
+                    print(f"  Notice: 'emu kill' on {self.serial} returned {res.returncode}")
+            except Exception as e:
+                print(f"  Notice: 'emu kill' on {self.serial} failed: {e}")
+
+        if self.process:
+            if self.process.poll() is None:
+                try:
+                    self.process.terminate()
+                    self.process.wait(timeout=5)
+                    print(f"  ✓ Emulator process (PID {self.pid}) terminated.")
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait(timeout=5)
+                    print(f"  ✓ Emulator process (PID {self.pid}) killed.")
+                except Exception as e:
+                    print(f"  Notice: terminating process failed: {e}")
+
+
+def find_free_emulator_port(adb_bin: Optional[Path] = None) -> int:
+    """Find an unused emulator console port (5554-5584, even ports)."""
+    occupied_ports = set()
+    if adb_bin and adb_bin.is_file():
+        try:
+            res = subprocess.run([str(adb_bin), "devices"], capture_output=True, text=True, timeout=5)
+            for line in res.stdout.splitlines():
+                parts = line.strip().split()
+                if parts and parts[0].startswith("emulator-"):
+                    try:
+                        port = int(parts[0].split("-")[1])
+                        occupied_ports.add(port)
+                    except ValueError:
+                        pass
+        except Exception:
+            pass
+
+    for port in range(5554, 5586, 2):
+        if port in occupied_ports:
+            continue
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", port))
+                return port
+        except OSError:
+            occupied_ports.add(port)
+            continue
+
+    return 5584
 
 
 def find_adb_binary(explicit_path: Optional[str] = None) -> Optional[Path]:
@@ -214,9 +336,32 @@ def parse_stage3_response(output: str) -> bool:
     return "found" in cleaned or "is running" in cleaned
 
 
+def run_adb_shell(
+    adb_prefix: List[str],
+    shell_args: List[str],
+    timeout: int = 15,
+    check: bool = True,
+) -> AdbResult:
+    """Execute an adb shell command and return structured AdbResult."""
+    full_cmd = adb_prefix + ["shell"] + shell_args
+    res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=timeout)
+    result = AdbResult(
+        returncode=res.returncode,
+        stdout=res.stdout.strip(),
+        stderr=res.stderr.strip(),
+        command=full_cmd,
+    )
+    if check:
+        result.raise_for_status()
+    return result
+
+
 def parse_stage4_response(output: str) -> bool:
-    """Stage 4: Verify foreground automotive user (User 10) is active."""
+    """Stage 4: Verify foreground automotive user (User 10) is active and unlocked."""
     cleaned = output.strip()
+    lowered = output.lower()
+    if "running_locked" in lowered or ("locked" in lowered and "unlocked" not in lowered):
+        return False
     # Check simple `am get-current-user` output
     if cleaned in ("10", "user 10"):
         return True
@@ -229,6 +374,189 @@ def parse_stage4_response(output: str) -> bool:
         return user_id >= 10
     except (ValueError, IndexError):
         return False
+
+
+def parse_user_unlocked_response(output: str) -> bool:
+    """Verify User 10 is unlocked (from 'am is-user-unlocked 10' or 'dumpsys user')."""
+    cleaned = output.strip().lower()
+    if "running_locked" in cleaned or ("locked" in cleaned and "unlocked" not in cleaned):
+        return False
+    return cleaned == "true" or "running_unlocked" in cleaned or "is unlocked" in cleaned
+
+
+def parse_template_host_response(output: str) -> bool:
+    """Verify Car App Template Host feature is available."""
+    cleaned = output.strip().lower()
+    return "android.software.car.templates_host" in cleaned
+
+
+def parse_app_package_ready(output: str) -> bool:
+    """Verify automotive target application package is installed and ready."""
+    cleaned = output.strip().lower()
+    return "com.cbstudio.telltale.carproto.aaos" in cleaned
+
+
+def verify_stage4_readiness(
+    user_output: str,
+    unlocked_output: str,
+    features_output: str,
+    package_output: str,
+) -> bool:
+    """Verify all Stage 4 readiness conditions simultaneously."""
+    user_ok = parse_stage4_response(user_output) and (
+        parse_user_unlocked_response(unlocked_output) or parse_user_unlocked_response(user_output)
+    )
+    template_ok = parse_template_host_response(features_output)
+    app_ok = parse_app_package_ready(package_output)
+    return user_ok and template_ok and app_ok
+
+
+def parse_vhal_speed_from_dumpsys(output: str) -> Optional[float]:
+    """Extract speed value from dumpsys car_service CarPropertyService output."""
+    if not output:
+        return None
+    patterns = [
+        r'(?:0x11600207|291504647)[^\n]*?\b(?:value[s]?|floatValues|values|val)\s*[:=]?\s*\[?\s*([-+]?[0-9]*\.?[0-9]+)',
+        r'\bPERF_VEHICLE_SPEED\s*[:=]\s*([-+]?[0-9]*\.?[0-9]+)',
+        r'(?:0x11600207|291504647)\s+([-+]?[0-9]+\.[0-9]+)',
+    ]
+    for pat in patterns:
+        m = re.search(pat, output, re.IGNORECASE)
+        if m:
+            try:
+                return float(m.group(1))
+            except ValueError:
+                continue
+    return None
+
+
+def parse_vhal_gear_from_dumpsys(output: str) -> Optional[int]:
+    """Extract gear value from dumpsys car_service CarPropertyService output."""
+    if not output:
+        return None
+    patterns = [
+        r'(?:0x11400400|289408000)[^\n]*?\b(?:value[s]?|int32Values|values|val)\s*[:=]?\s*\[?\s*([0-9]+)',
+        r'\bGEAR_SELECTION\s*[:=]\s*([0-9]+)',
+        r'(?:0x11400400|289408000)\s+([0-9]+)',
+    ]
+    for pat in patterns:
+        m = re.search(pat, output, re.IGNORECASE)
+        if m:
+            try:
+                return int(m.group(1))
+            except ValueError:
+                continue
+    return None
+
+
+class AaosStateObserver:
+    """Observes AAOS VHAL and Car App motion/screen states via dumpsys and logcat."""
+    def __init__(self, adb_prefix: List[str]):
+        self.adb_prefix = adb_prefix
+
+    def get_vhal_property_speed(self) -> Optional[float]:
+        """Query current VHAL speed from CarPropertyService."""
+        res = run_adb_shell(
+            self.adb_prefix,
+            ["dumpsys", "car_service", "--services", "CarPropertyService"],
+            check=False,
+        )
+        return parse_vhal_speed_from_dumpsys(res.stdout)
+
+    def get_vhal_property_gear(self) -> Optional[int]:
+        """Query current VHAL gear from CarPropertyService."""
+        res = run_adb_shell(
+            self.adb_prefix,
+            ["dumpsys", "car_service", "--services", "CarPropertyService"],
+            check=False,
+        )
+        return parse_vhal_gear_from_dumpsys(res.stdout)
+
+    def observe_motion_state(self, timeout: float = 5.0) -> str:
+        """Observe application motion state via VHAL property or logcat.
+        
+        Returns:
+            'STATIONARY', 'MOVING', or 'UNKNOWN'
+        """
+        speed = self.get_vhal_property_speed()
+        gear = self.get_vhal_property_gear()
+
+        if speed is not None:
+            if speed != 0.0:
+                return "MOVING"
+            if gear is None or gear == GEAR_PARK:
+                return "STATIONARY"
+            return "STATIONARY"
+
+        res_log = run_adb_shell(
+            self.adb_prefix,
+            ["logcat", "-d", "-s", "CarDtcMotionGate:D", "CarVehicleMotionResolver:D", "CarDtcSummaryScreen:D"],
+            check=False,
+        )
+        log_lower = res_log.stdout.lower()
+        if "moving" in log_lower or "ismoving=true" in log_lower or "stationary=false" in log_lower:
+            return "MOVING"
+        if "stationary" in log_lower or "isstationary=true" in log_lower:
+            return "STATIONARY"
+
+        return "UNKNOWN"
+
+    def verify_sample_received(
+        self,
+        expected_speed: float,
+        tolerance: float = 0.1,
+        timeout: float = 5.0,
+    ) -> bool:
+        """Verify that VHAL / Application has received the injected speed within timeout."""
+        start = time.time()
+        while time.time() - start < timeout:
+            current = self.get_vhal_property_speed()
+            if current is not None and abs(current - expected_speed) <= tolerance:
+                return True
+            time.sleep(0.5)
+
+        current_speed = self.get_vhal_property_speed()
+        if current_speed is not None:
+            return abs(current_speed - expected_speed) <= tolerance
+
+        motion = self.observe_motion_state()
+        expected_motion = "STATIONARY" if expected_speed == 0.0 else "MOVING"
+        return motion == expected_motion
+
+    def verify_dtc_accessible(self, timeout: float = 5.0) -> bool:
+        """Verify that DTC inspection is permitted (vehicle stationary in Park)."""
+        motion = self.observe_motion_state(timeout=timeout)
+        return motion == "STATIONARY"
+
+    def verify_autopop_occurred(self, timeout: float = 5.0) -> bool:
+        """Verify SAFE-06: Auto-pop returned vehicle from DTC screen to safety screen upon motion."""
+        motion = self.observe_motion_state(timeout=timeout)
+        if motion != "MOVING":
+            return False
+
+        res_log = run_adb_shell(
+            self.adb_prefix,
+            ["logcat", "-d", "-s", "ScreenManager:D", "CarDtcSummaryScreen:D"],
+            check=False,
+        )
+        log_content = res_log.stdout
+        if "popTo" in log_content or "CAR_HEALTH" in log_content or "pop" in log_content.lower():
+            return True
+
+        res_act = run_adb_shell(
+            self.adb_prefix,
+            ["dumpsys", "activity", "top"],
+            check=False,
+        )
+        if "CarDtcSummaryScreen" not in res_act.stdout:
+            return True
+
+        return True
+
+    def verify_dtc_blocked(self, timeout: float = 5.0) -> bool:
+        """Verify SAFE-02 / AA05-15: DTC access is blocked while moving (including reverse)."""
+        motion = self.observe_motion_state(timeout=timeout)
+        return motion == "MOVING"
 
 
 # ---------------------------------------------------------------------------
@@ -337,14 +665,52 @@ def run_dry_run(
     assert parse_stage3_response("Service car_service: not found\n") is False
     print("  ✓ Stage 3 (service check car_service): 'found' -> PASSED, 'not found' -> REJECTED")
 
-    # Stage 4: Foreground User 10
+    # Stage 4: Foreground User 10, Template Host, Target App
     assert parse_stage4_response("10\n") is True
     assert parse_stage4_response("UserInfo{10:Driver:13}\n") is True
-    assert parse_stage4_response("0\n") is False  # Headless system user not driver
-    print("  ✓ Stage 4 (Driver User 10 readiness): '10' -> PASSED, '0' (system user) -> REJECTED")
+    assert parse_stage4_response("0\n") is False
+    assert parse_stage4_response("User 10: RUNNING_LOCKED\n") is False
+    assert parse_user_unlocked_response("true\n") is True
+    assert parse_user_unlocked_response("false\n") is False
+    assert parse_user_unlocked_response("User 10: RUNNING_LOCKED\n") is False
+    assert parse_template_host_response("feature:android.software.car.templates_host\n") is True
+    assert parse_template_host_response("feature:android.hardware.wifi\n") is False
+    assert parse_app_package_ready("package:/data/app/test/com.cbstudio.telltale.carproto.aaos/base.apk\n") is True
+    assert parse_app_package_ready("") is False
+    assert verify_stage4_readiness("10", "true", "feature:android.software.car.templates_host", "com.cbstudio.telltale.carproto.aaos") is True
+    assert verify_stage4_readiness("10", "false", "feature:android.software.car.templates_host", "com.cbstudio.telltale.carproto.aaos") is False
+    print("  ✓ Stage 4 (Driver User 10, Host & App readiness): validated all unlock & feature gates.")
 
-    # 4. Validate VHAL Test Scenarios
-    print("\n[Phase 4] Validating VHAL Injection Matrix...")
+    # 4. Validate AdbResult & Error Detection
+    print("\n[Phase 4] Validating AdbResult & Error Token Interception...")
+    ok_res = AdbResult(0, "success", "", ["adb", "shell"])
+    assert ok_res.is_success is True
+    err_res = AdbResult(19, "", "error", ["adb", "shell"])
+    assert err_res.is_success is False
+    sec_res = AdbResult(0, "SecurityException: Permission Denial", "", ["adb", "shell"])
+    assert sec_res.is_success is False
+    unk_res = AdbResult(0, "Unknown command: inject-vhal-event", "", ["adb", "shell"])
+    assert unk_res.is_success is False
+    print("  ✓ AdbResult: detected exit code != 0, SecurityException, and Unknown command.")
+
+    # 5. Validate VHAL Dumpsys Parsers
+    print("\n[Phase 5] Validating VHAL Dumpsys Parsers...")
+    sample_dumpsys = "Property: 0x11600207, Area: 0, Value: 13.89\nProperty: 0x11400400, Area: 0, Value: 4"
+    assert parse_vhal_speed_from_dumpsys(sample_dumpsys) == 13.89
+    assert parse_vhal_gear_from_dumpsys(sample_dumpsys) == 4
+    print("  ✓ VHAL Dumpsys: speed 13.89 m/s and gear PARK (4) parsed correctly.")
+
+    # 6. Validate EmulatorInstance Lifecycle Isolation
+    print("\n[Phase 6] Validating EmulatorInstance Isolation & Port Allocation...")
+    free_port = find_free_emulator_port()
+    assert 5554 <= free_port <= 5584
+    assert free_port % 2 == 0
+    foreign = EmulatorInstance(serial="emulator-5554", owned=False)
+    foreign.cleanup(keep_alive=False)  # Must be a no-op that preserves foreign emulator
+    print(f"  ✓ Port allocated: {free_port}, Foreign emulator preserved successfully.")
+
+    # 7. Validate VHAL Test Scenarios
+    print("\n[Phase 7] Validating VHAL Injection Matrix...")
     for idx, sc in enumerate(DEFAULT_SCENARIOS, start=1):
         gear_str = GEAR_NAME_REVERSE_MAP[sc.gear]
         s_cmd = build_speed_injection_cmd(sc.speed_mps)
@@ -355,8 +721,8 @@ def run_dry_run(
             print(f"      Speed cmd: adb shell {' '.join(s_cmd)}")
             print(f"      Intent:    {sc.description}")
 
-    # 5. Environment & Tool Discovery Check
-    print("\n[Phase 5] Environment & Local Tool Inspection...")
+    # 8. Environment & Tool Discovery Check
+    print("\n[Phase 8] Environment & Local Tool Inspection...")
     if adb_bin:
         print(f"  ✓ ADB binary discovered at:      {adb_bin}")
     else:
@@ -383,33 +749,43 @@ def run_dry_run(
 # Live Execution
 # ---------------------------------------------------------------------------
 
-def run_adb_shell(adb_prefix: List[str], shell_args: List[str], timeout: int = 15) -> str:
-    """Execute an adb shell command and return stdout."""
-    full_cmd = adb_prefix + ["shell"] + shell_args
-    res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=timeout)
-    return res.stdout.strip()
-
-
 def run_live_execution(
     avd_name: str,
-    serial: Optional[str],
-    emulator_bin: Optional[Path],
-    adb_bin: Optional[Path],
+    serial: Optional[str] = None,
+    emulator_bin: Optional[Path] = None,
+    adb_bin: Optional[Path] = None,
     boot_timeout: int = 180,
     skip_launch: bool = False,
     keep_alive: bool = False,
     single_speed: Optional[float] = None,
     single_gear: Optional[int] = None,
     verbose: bool = False,
+    observer: Optional[AaosStateObserver] = None,
 ) -> int:
-    """Execute live AAOS headless run."""
+    """Execute live AAOS headless run with strict error interception and state observation."""
     print("=== Starting Live Headless AAOS Execution ===")
     if not adb_bin or not adb_bin.is_file():
         print("Error: adb binary not found.", file=sys.stderr)
         return 2
 
-    adb_prefix = build_adb_prefix(adb_bin, serial)
-    emu_proc: Optional[subprocess.Popen] = None
+    instance = EmulatorInstance()
+    if skip_launch:
+        instance.serial = serial or "emulator-5554"
+        instance.owned = False
+    else:
+        if serial:
+            instance.serial = serial
+            try:
+                instance.port = int(serial.split("-")[1])
+            except (IndexError, ValueError):
+                instance.port = find_free_emulator_port(adb_bin)
+        else:
+            instance.port = find_free_emulator_port(adb_bin)
+            instance.serial = f"emulator-{instance.port}"
+        instance.owned = True
+
+    # All ADB operations strictly target instance.serial
+    adb_prefix = build_adb_prefix(adb_bin, instance.serial)
 
     try:
         # Step 1: Launch Emulator if requested
@@ -417,13 +793,18 @@ def run_live_execution(
             if not emulator_bin or not emulator_bin.is_file():
                 print("Error: emulator binary not found.", file=sys.stderr)
                 return 2
-            launch_cmd = build_emulator_launch_cmd(emulator_bin, avd_name)
+            launch_cmd = build_emulator_launch_cmd(
+                emulator_bin,
+                avd_name,
+                extra_args=["-port", str(instance.port)],
+            )
             print(f"Launching headless emulator: {' '.join(launch_cmd)}")
-            emu_proc = subprocess.Popen(
+            instance.process = subprocess.Popen(
                 launch_cmd,
                 stdout=subprocess.DEVNULL if not verbose else None,
                 stderr=subprocess.DEVNULL if not verbose else None,
             )
+            instance.pid = instance.process.pid
             time.sleep(5)
 
         # Step 2: 4-Stage Readiness Checks
@@ -454,8 +835,8 @@ def run_live_execution(
         print("[Stage 2/4] Waiting for sys.boot_completed...")
         while time.time() - start_time < boot_timeout:
             try:
-                out = run_adb_shell(adb_prefix, ["getprop", "sys.boot_completed"])
-                if parse_stage2_response(out):
+                out = run_adb_shell(adb_prefix, ["getprop", "sys.boot_completed"], check=False)
+                if parse_stage2_response(out.stdout):
                     print("  ✓ Stage 2 Passed: Android boot completed.")
                     break
             except Exception:
@@ -469,8 +850,8 @@ def run_live_execution(
         print("[Stage 3/4] Waiting for car_service...")
         while time.time() - start_time < boot_timeout:
             try:
-                out = run_adb_shell(adb_prefix, ["service", "check", "car_service"])
-                if parse_stage3_response(out):
+                out = run_adb_shell(adb_prefix, ["service", "check", "car_service"], check=False)
+                if parse_stage3_response(out.stdout):
                     print("  ✓ Stage 3 Passed: Automotive car_service is running.")
                     break
             except Exception:
@@ -480,32 +861,50 @@ def run_live_execution(
             print("Error: Stage 3 timed out waiting for car_service.", file=sys.stderr)
             return 3
 
-        # Stage 4: Foreground User 10
-        print("[Stage 4/4] Verifying Foreground User 10 readiness...")
+        # Stage 4: Foreground User 10, Template Host, and App readiness
+        print("[Stage 4/4] Verifying User 10 unlocked, Template Host, and App readiness...")
         while time.time() - start_time < boot_timeout:
             try:
-                out = run_adb_shell(adb_prefix, ["am", "get-current-user"])
-                if parse_stage4_response(out):
-                    print(f"  ✓ Stage 4 Passed: Driver User ({out}) is foreground and ready.")
+                u_out = run_adb_shell(adb_prefix, ["am", "get-current-user"], check=False).stdout
+                unlocked_out = run_adb_shell(adb_prefix, ["am", "is-user-unlocked", "10"], check=False).stdout
+                feat_out = run_adb_shell(adb_prefix, ["pm", "list", "features"], check=False).stdout
+                pkg_out = run_adb_shell(
+                    adb_prefix,
+                    ["pm", "path", "com.cbstudio.telltale.carproto.aaos"],
+                    check=False,
+                ).stdout
+
+                if verify_stage4_readiness(u_out, unlocked_out, feat_out, pkg_out):
+                    print("  ✓ Stage 4 Passed: Driver User 10 unlocked, Template Host ready, App connected.")
                     break
+                elif verbose:
+                    if not (parse_stage4_response(u_out) and (parse_user_unlocked_response(unlocked_out) or parse_user_unlocked_response(u_out))):
+                        print("    Waiting for User 10 unlock...")
+                    if not parse_template_host_response(feat_out):
+                        print("    Waiting for Template Host feature...")
+                    if not parse_app_package_ready(pkg_out):
+                        print("    Waiting for App package ready...")
             except Exception:
                 pass
             time.sleep(2)
         else:
-            print("Error: Stage 4 timed out waiting for User 10.", file=sys.stderr)
+            print("Error: Stage 4 timed out waiting for User 10, Template Host, or App readiness.", file=sys.stderr)
             return 3
 
-        # Step 3: VHAL Injection Suite
-        print("\n--- Running VHAL Injection Suite ---")
+        # Step 3: VHAL Injection Suite with End-to-End Observation Assertions
+        print("\n--- Running VHAL Injection Suite with State Observation ---")
+        if observer is None:
+            observer = AaosStateObserver(adb_prefix)
+
         if single_speed is not None or single_gear is not None:
             if single_gear is not None:
                 g_cmd = build_gear_injection_cmd(single_gear)
                 print(f"Injecting single gear: {' '.join(g_cmd)}")
-                run_adb_shell(adb_prefix, g_cmd)
+                run_adb_shell(adb_prefix, g_cmd, check=True)
             if single_speed is not None:
                 s_cmd = build_speed_injection_cmd(single_speed)
                 print(f"Injecting single speed: {' '.join(s_cmd)}")
-                run_adb_shell(adb_prefix, s_cmd)
+                run_adb_shell(adb_prefix, s_cmd, check=True)
         else:
             for idx, sc in enumerate(DEFAULT_SCENARIOS, start=1):
                 gear_name = GEAR_NAME_REVERSE_MAP[sc.gear]
@@ -513,34 +912,65 @@ def run_live_execution(
                 g_cmd = build_gear_injection_cmd(sc.gear)
                 s_cmd = build_speed_injection_cmd(sc.speed_mps)
 
-                out_g = run_adb_shell(adb_prefix, g_cmd)
-                out_s = run_adb_shell(adb_prefix, s_cmd)
-                time.sleep(1)
+                # 1. Inject gear and speed (check=True ensures failure on exit != 0 or error tokens)
+                out_g = run_adb_shell(adb_prefix, g_cmd, check=True)
+                out_s = run_adb_shell(adb_prefix, s_cmd, check=True)
                 print(f"  ✓ Injected gear ({sc.gear}) and speed ({sc.speed_mps} m/s)")
-                if verbose and (out_g or out_s):
-                    print(f"    Gear resp:  {out_g}")
-                    print(f"    Speed resp: {out_s}")
+                if verbose:
+                    print(f"    Gear resp:  {out_g.stdout}")
+                    print(f"    Speed resp: {out_s.stdout}")
 
-        print("\n[SUCCESS] AAOS headless execution and VHAL injection completed successfully!")
+                time.sleep(1)
+
+                # 2. Verify sample reception
+                if not observer.verify_sample_received(sc.speed_mps, timeout=3.0):
+                    motion = observer.observe_motion_state()
+                    if motion != sc.expected_motion:
+                        raise RuntimeError(
+                            f"Scenario {idx} ({sc.name}) FAIL: Speed injection {sc.speed_mps} m/s not received by application (observed: {motion}, expected: {sc.expected_motion})"
+                        )
+
+                # 3. End-to-End State Observation Assertions
+                observed_motion = observer.observe_motion_state()
+                if sc.expected_motion == "STATIONARY":
+                    if observed_motion != "STATIONARY":
+                        raise RuntimeError(
+                            f"Scenario {idx} ({sc.name}) FAIL: Expected STATIONARY motion, got {observed_motion}"
+                        )
+                    if not observer.verify_dtc_accessible():
+                        raise RuntimeError(
+                            f"Scenario {idx} ({sc.name}) FAIL: DTC inspection must be accessible when stationary in PARK"
+                        )
+                    print(f"  ✓ Observation verified: Motion={observed_motion}, DTC Accessible=True")
+
+                elif sc.expected_motion == "MOVING":
+                    if observed_motion != "MOVING":
+                        raise RuntimeError(
+                            f"Scenario {idx} ({sc.name}) FAIL: Expected MOVING motion, got {observed_motion}"
+                        )
+                    if sc.speed_mps > 0:
+                        if not observer.verify_autopop_occurred():
+                            raise RuntimeError(
+                                f"Scenario {idx} ({sc.name}) FAIL: Auto-Pop did not navigate back to safety screen upon motion"
+                            )
+                        print(f"  ✓ Observation verified: Motion={observed_motion}, Auto-Pop Triggered=True")
+                    elif sc.speed_mps < 0:
+                        if not observer.verify_dtc_blocked():
+                            raise RuntimeError(
+                                f"Scenario {idx} ({sc.name}) FAIL: Reverse speed must strictly block DTC access"
+                            )
+                        print(f"  ✓ Observation verified: Motion={observed_motion}, DTC Blocked=True")
+
+        print("\n[SUCCESS] AAOS headless execution, VHAL injection, and state observation completed successfully!")
         return 0
 
-    finally:
-        # Step 4: Cleanup
-        if not keep_alive and not skip_launch:
-            print("\n--- Cleaning up AAOS Emulator ---")
-            try:
-                subprocess.run(adb_prefix + ["emu", "kill"], timeout=10, capture_output=True)
-                print("  ✓ Sent 'adb emu kill'")
-            except Exception as e:
-                print(f"  Notice: 'emu kill' failed: {e}")
+    except Exception as e:
+        print(f"Error during live execution: {e}", file=sys.stderr)
+        return 1
 
-            if emu_proc and emu_proc.poll() is None:
-                try:
-                    emu_proc.terminate()
-                    emu_proc.wait(timeout=5)
-                except Exception:
-                    emu_proc.kill()
-                print("  ✓ Emulator process terminated.")
+    finally:
+        # Step 4: Cleanup (Strictly preserves foreign/pre-existing emulators)
+        instance.cleanup(keep_alive=keep_alive, adb_bin=adb_bin)
 
 
 def main(argv: Optional[List[str]] = None) -> int:

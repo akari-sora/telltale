@@ -10,6 +10,15 @@ import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
 import com.cbstudio.telltale.car.hardware.CarHostSpeedSample
 import com.cbstudio.telltale.car.hardware.CarHostSpeedStatus
 import com.cbstudio.telltale.car.health.CarAlertCoordinator
+import com.cbstudio.telltale.car.diagnostics.CarDtcReport
+import com.cbstudio.telltale.car.diagnostics.CarDtcScanPhase
+import com.cbstudio.telltale.car.diagnostics.CarDtcState
+import com.cbstudio.telltale.car.diagnostics.CarDtcVerdict
+import com.cbstudio.telltale.car.diagnostics.DefaultCarDtcRepository
+import com.cbstudio.telltale.car.telemetry.CarConnectionPhase
+import com.cbstudio.telltale.car.telemetry.CarSignalInput
+import com.cbstudio.telltale.car.telemetry.CarSignalStatus
+import com.cbstudio.telltale.car.telemetry.CarTelemetryFrameInput
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -507,25 +516,47 @@ class CarSessionRuntimeTest {
         assertEquals(CarHostSpeedSample.INITIAL, speedRepo.sample.value)
     }
 
+    private fun sampleReport(sequence: Long = 1, epoch: Long = 1) = CarDtcReport(
+        schemaVersion = 1,
+        reportSequence = sequence,
+        connectionEpoch = epoch,
+        phase = CarDtcScanPhase.IDLE,
+        verdict = CarDtcVerdict.COMPLETE_CLEAN,
+        coverageComplete = true,
+        milOn = false,
+        totalCodes = 0,
+        freezeFrameReadIncomplete = false,
+        items = emptyList(),
+        freezeFrames = emptyList(),
+    )
+
+    private fun frameInput(
+        sequence: Long = 1,
+        epoch: Long = 1,
+        speed: Double = 0.0,
+    ) = CarTelemetryFrameInput(
+        schemaVersion = 1,
+        sequence = sequence,
+        connectionEpoch = epoch,
+        lifecycleEpoch = 0,
+        producedAtMonotonicUs = 1_000,
+        connectionPhase = CarConnectionPhase.CONNECTED,
+        speedKmh = CarSignalInput(CarSignalStatus.LIVE, speed),
+        rpm = CarSignalInput(CarSignalStatus.LIVE, 800.0),
+        coolantC = CarSignalInput(CarSignalStatus.LIVE, 90.0),
+        intakeAirC = CarSignalInput(CarSignalStatus.LIVE, 25.0),
+        controlModuleVoltageV = CarSignalInput(CarSignalStatus.LIVE, 14.0),
+        mapKpa = CarSignalInput(CarSignalStatus.LIVE, 35.0),
+        diagnosticsAvailable = true,
+        milOn = false,
+        dtcCount = 0,
+    )
+
     @Test
-    fun stopAndDestroyResetDtcRepository() = testScope.runTest {
-        val dtcRepo = com.cbstudio.telltale.car.diagnostics.DefaultCarDtcRepository()
-        dtcRepo.submit(
-            com.cbstudio.telltale.car.diagnostics.CarDtcReport(
-                schemaVersion = 1,
-                reportSequence = 1,
-                connectionEpoch = 1,
-                phase = com.cbstudio.telltale.car.diagnostics.CarDtcScanPhase.IDLE,
-                verdict = com.cbstudio.telltale.car.diagnostics.CarDtcVerdict.COMPLETE_CLEAN,
-                coverageComplete = true,
-                milOn = false,
-                totalCodes = 0,
-                freezeFrameReadIncomplete = false,
-                items = emptyList(),
-                freezeFrames = emptyList(),
-            ),
-        )
-        assertTrue(dtcRepo.state.value is com.cbstudio.telltale.car.diagnostics.CarDtcState.Current)
+    fun sessionRuntime_stopAndStart_seamlesslyRestoresDtcStateWithoutManualSubmit() = testScope.runTest {
+        val dtcRepo = DefaultCarDtcRepository()
+        dtcRepo.submit(sampleReport(sequence = 1, epoch = 1))
+        assertTrue(dtcRepo.state.value is CarDtcState.Current)
 
         val runtime = CarSessionRuntime(
             carContext = carContext,
@@ -537,31 +568,80 @@ class CarSessionRuntimeTest {
         runtime.start()
         assertTrue(runtime.isStarted)
 
-        // 1. stop() resets dtcRepository (SAFE-05)
+        // 1. stop() resets dtcRepository to Awaiting while preserving snapshot
         runtime.stop()
         assertFalse(runtime.isStarted)
-        assertEquals(com.cbstudio.telltale.car.diagnostics.CarDtcState.Awaiting, dtcRepo.state.value)
+        assertEquals(CarDtcState.Awaiting, dtcRepo.state.value)
 
-        // Re-submit
-        dtcRepo.submit(
-            com.cbstudio.telltale.car.diagnostics.CarDtcReport(
-                schemaVersion = 1,
-                reportSequence = 2,
-                connectionEpoch = 2,
-                phase = com.cbstudio.telltale.car.diagnostics.CarDtcScanPhase.IDLE,
-                verdict = com.cbstudio.telltale.car.diagnostics.CarDtcVerdict.COMPLETE_CLEAN,
-                coverageComplete = true,
-                milOn = false,
-                totalCodes = 0,
-                freezeFrameReadIncomplete = false,
-                items = emptyList(),
-                freezeFrames = emptyList(),
-            ),
-        )
-        assertTrue(dtcRepo.state.value is com.cbstudio.telltale.car.diagnostics.CarDtcState.Current)
+        // 2. start() seamlessly restores DTC state WITHOUT manual submit (R4)
+        runtime.start()
+        assertTrue(runtime.isStarted)
+        val restoredState = dtcRepo.state.value
+        assertTrue("Expected Current state on restart, was $restoredState", restoredState is CarDtcState.Current)
+        assertEquals(1L, (restoredState as CarDtcState.Current).report.connectionEpoch)
 
-        // 2. destroy() resets dtcRepository (SAFE-05)
+        // 3. destroy() resets dtcRepository and permanently wipes snapshot
         runtime.destroy()
-        assertEquals(com.cbstudio.telltale.car.diagnostics.CarDtcState.Awaiting, dtcRepo.state.value)
+        assertEquals(CarDtcState.Awaiting, dtcRepo.state.value)
+
+        // Re-starting after destroy must NOT restore anything
+        runtime.start()
+        assertEquals(CarDtcState.Awaiting, dtcRepo.state.value)
+    }
+
+    @Test
+    fun sessionRuntime_epochChangedDuringStop_strictlySuppressesOldDtcReportOnStart() = testScope.runTest {
+        val telemRepo = CarTelemetryRepository(
+            scope = backgroundScope,
+            elapsedRealtimeMs = { virtualTimeMs },
+        )
+        telemRepo.submit(frameInput(sequence = 1, epoch = 1, speed = 0.0))
+
+        val dtcRepo = DefaultCarDtcRepository()
+        dtcRepo.submit(sampleReport(sequence = 1, epoch = 1))
+
+        val runtime = CarSessionRuntime(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+        runtime.start()
+        assertTrue(dtcRepo.state.value is CarDtcState.Current)
+
+        // Backgrounded
+        runtime.stop()
+        assertEquals(CarDtcState.Awaiting, dtcRepo.state.value)
+
+        // Telemetry epoch changes while stopped (reconnected to new session / car)
+        telemRepo.submit(frameInput(sequence = 1, epoch = 2, speed = 0.0))
+
+        // Resumed
+        runtime.start()
+        // Must NOT restore old epoch 1 report!
+        assertEquals(CarDtcState.Awaiting, dtcRepo.state.value)
+    }
+
+    @Test
+    fun telemetryRepository_epochBump_purgesDtcSnapshotImmediately() = testScope.runTest {
+        val dtcRepo = DefaultCarDtcRepository()
+        dtcRepo.submit(sampleReport(sequence = 1, epoch = 1))
+        assertTrue(dtcRepo.state.value is CarDtcState.Current)
+
+        val telemRepo = CarTelemetryRepository(
+            scope = backgroundScope,
+            elapsedRealtimeMs = { virtualTimeMs },
+            dtcRepository = dtcRepo,
+        )
+        telemRepo.submit(frameInput(sequence = 1, epoch = 1, speed = 0.0))
+        assertEquals(1L, dtcRepo.latestValidReport?.connectionEpoch)
+
+        // Connection epoch bumps on telemetry
+        telemRepo.submit(frameInput(sequence = 1, epoch = 2, speed = 0.0))
+
+        // DTC snapshot and state must be purged immediately
+        assertEquals(CarDtcState.Awaiting, dtcRepo.state.value)
+        assertEquals(null, dtcRepo.latestValidReport)
     }
 }
