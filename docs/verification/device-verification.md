@@ -71,9 +71,14 @@ the artifact, not that they walked it, which is what this file is for. A
 weaker claim that is true beats a stronger one nobody can check, and the price
 of keeping it is one sentence in the release notes saying which claim it is.
 
-## 2026-10-12 — 1.0.18 signed release walk on physical Note9
+## 2026-10-12 — 1.0.18 historical signed candidate walk on physical Note9
 
 Device walk attested: 1.0.18
+
+This source-specific candidate record retains the original APK hashes and walk
+results. It does not establish final published APK provenance or subsequent
+acceptance; use the [GitLab 1.0.18 release](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.18)
+as the authoritative record for those results.
 
 A physical Samsung `SM-N960F` on Android 10 / API 29 walked the maintainer-signed
 arm64 `field` build from source
@@ -118,9 +123,9 @@ covered separately by the DHU record below; this phone walk does not establish
 Google approval, Play update compatibility, or the issue #106 reporter's
 original Bluetooth adapter and vehicle.
 
-## 2026-10-12 — 1.0.18 exact-source signed emulator acceptance
+## 2026-10-12 — 1.0.18 historical exact-source signed emulator acceptance
 
-This is the current release acceptance record for source
+This is the earlier candidate acceptance record for source
 `93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85` (tree
 `102f4b146fe94cb332b48255f199fad1abc63839`). This entry records emulator
 acceptance; the distinct physical-device walk and attestation are above.
@@ -172,8 +177,8 @@ a real vehicle, Android Auto light-theme rendering, or Google approval.
 ## Historical: 2026-10-12 — earlier 1.0.18 signed release update on an isolated phone emulator
 
 This pre-repair walk is retained as historical evidence. Its APK hashes and
-captures are intentionally not replaced; current release acceptance is the
-exact-source record above.
+captures are intentionally not replaced; the later source-specific candidate
+record is above; use the linked release notes for final release provenance.
 
 The maintainer-signed `field` arm64 APK was installed on a Pixel 9 Android 16
 emulator. Its version read back as `1.0.18` / versionCode `192`, SHA-256

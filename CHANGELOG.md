@@ -30,7 +30,14 @@ Android Auto / AAOS preview readability and lifecycle work merged after `v1.0.17
 - Fixed Android 13 locale API guards so Android lint can verify older-device
   compatibility without suppressing unsupported API access.
 
-Validation for source `93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85`
+The validation records below are for an earlier signed candidate and do not
+establish final published APK provenance or subsequent acceptance. Use the
+[GitLab 1.0.18 release](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.18)
+as the authoritative record for those results.
+The earlier records and hashes are retained rather than attributed to a later
+build.
+
+Earlier candidate validation for source `93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85`
 (tree `102f4b146fe94cb332b48255f199fad1abc63839`) passed 4,364 Flutter tests
 with 23 opt-in skips, `flutter analyze` with no issues, 62 native carProto
 tests, and Android lint with zero errors and 12 warnings. All six field/carProto
