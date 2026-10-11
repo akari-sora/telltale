@@ -10,6 +10,7 @@ Empirically tests and stress-tests:
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import List
@@ -118,20 +119,33 @@ def test_adversarial_patch_check_failure_aborts_without_file_write(tmp_path: Pat
     assert "SHA256_MATCH: True" in restore_content
 
 
-def test_adversarial_evidence_manifest_and_restore_txt_integrity():
-    """Verify that genuine SHA-256 and restoration method are reported in evidence."""
-    manifest_file = EVIDENCE_DIR / "manifest.json"
+def _assert_live_evidence_integrity(evidence_dir: Path) -> None:
+    """Validate hashes and restoration records from an explicitly supplied live run."""
+    manifest_file = evidence_dir / "manifest.json"
     assert manifest_file.exists(), "manifest.json does not exist"
 
     with open(manifest_file, "r", encoding="utf-8") as f:
         manifest = json.load(f)
 
+    assert manifest["control"]["status"] == "PASS"
+    assert manifest["control"]["executed"] is True
+    assert manifest["control"]["exit_code"] == 0
+    summary = manifest["summary"]
+    assert summary["execution_mode"] == "LIVE"
+    assert summary["verified"] is True
+    assert summary["mutants_killed"] == 4
+    assert summary["mutant_kill_rate_percent"] == 100.0
+    assert summary["all_restored_passed"] is True
+
     mutations = manifest.get("mutations", {})
-    assert len(mutations) == 4, f"Expected 4 mutations, got {len(mutations)}"
+    expected_ids = {mutation["id"] for mutation in MUTATIONS}
+    assert set(mutations) == expected_ids
 
     for mut_id, mut_data in mutations.items():
         assert mut_data["status"] == "KILLED_BY_TEST"
+        assert mut_data["mutant_killed"] is True
         assert mut_data["restore_sha_match"] is True
+        assert mut_data["restored_test_passed"] is True
 
         # Check real file on disk matches reported pre/post SHA-256
         rel_file = mut_data["target_file"]
@@ -143,7 +157,7 @@ def test_adversarial_evidence_manifest_and_restore_txt_integrity():
         assert current_sha == mut_data["post_restore_sha256"], f"Post-restore SHA mismatch for {mut_id}"
 
         # Verify restore.txt
-        restore_file = EVIDENCE_DIR / mut_id / "restore.txt"
+        restore_file = evidence_dir / mut_id / "restore.txt"
         assert restore_file.exists(), f"restore.txt does not exist for {mut_id}"
         content = restore_file.read_text(encoding="utf-8")
         assert "RESTORE_METHOD: direct_file_rewrite_and_verification" in content
@@ -151,6 +165,42 @@ def test_adversarial_evidence_manifest_and_restore_txt_integrity():
         assert f"POST_RESTORE_SHA256: {current_sha}" in content
         assert "SHA256_MATCH: True" in content
         assert "git checkout --" not in content, f"Fake git checkout found in restore.txt for {mut_id}"
+
+
+def test_adversarial_evidence_manifest_and_restore_txt_integrity():
+    """Keep committed dry-run state honest; validate live evidence only when supplied."""
+    manifest_file = EVIDENCE_DIR / "manifest.json"
+    assert manifest_file.exists(), "manifest.json does not exist"
+
+    with open(manifest_file, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    assert manifest["execution_mode"] == MutationResultStatus.NOT_EXECUTED.value
+    assert manifest["control"] == {
+        "status": "SKIPPED",
+        "executed": False,
+        "exit_code": None,
+    }
+    assert manifest["summary"]["verified"] is False
+    assert manifest["summary"]["mutants_killed"] == 0
+    assert manifest["summary"]["mutant_kill_rate_percent"] == 0.0
+
+    expected_ids = {mutation["id"] for mutation in MUTATIONS}
+    mutations = manifest.get("mutations", {})
+    assert set(mutations) == expected_ids
+    for mut_id, mut_data in mutations.items():
+        assert mut_data == {
+            "status": MutationResultStatus.NOT_EXECUTED.value,
+            "mutant_killed": False,
+        }
+        mutation_dir = EVIDENCE_DIR / mut_id
+        assert not mutation_dir.exists() or not any(mutation_dir.rglob("*")), (
+            f"Stale live evidence retained for {mut_id}"
+        )
+
+    live_evidence_dir = os.environ.get("TELLTALE_AA08_LIVE_EVIDENCE_DIR")
+    if live_evidence_dir:
+        _assert_live_evidence_integrity(Path(live_evidence_dir))
 
 
 def test_adversarial_malformed_junit_xml_resilience(tmp_path: Path):

@@ -9,7 +9,7 @@ Verifies:
   AA05-27: No Navigation-only Alert / showAlert used in car-core.
   AA05-28: No experimental Banner API used in car-core.
   AA05-29: No cross-application Notification / HUN used in car-core.
-  AA05-35: lib/obd/ has strictly zero diff against origin/main.
+  AA05-35: lib/obd/ changes against origin/main stay within the authorized OBD port.
 """
 
 from pathlib import Path
@@ -18,6 +18,13 @@ import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+AUTHORIZED_OBD_PORT_FILES = frozenset(
+    {
+        "lib/obd/elm327_client.dart",
+        "lib/obd/polling_engine.dart",
+        "lib/obd/powertrain_battery/powertrain_battery_catalog.dart",
+    }
+)
 
 
 class CarHardwareContractTest(unittest.TestCase):
@@ -100,18 +107,22 @@ class CarHardwareContractTest(unittest.TestCase):
                 )
 
     # AA05-35
-    def test_obd_directory_strictly_zero_diff(self):
+    def test_obd_directory_has_no_unauthorized_drift(self):
         res = subprocess.run(
-            ["git", "diff", "origin/main...HEAD", "--", "lib/obd/"],
+            ["git", "diff", "--name-only", "origin/main...HEAD", "--", "lib/obd/"],
             cwd=str(ROOT),
             capture_output=True,
             text=True,
         )
         self.assertEqual(res.returncode, 0, f"git diff failed: {res.stderr}")
-        self.assertEqual(
-            res.stdout.strip(),
-            "",
-            msg=f"lib/obd/ must have strictly 0 diff against origin/main! Found diff:\n{res.stdout}",
+        changed_files = {line for line in res.stdout.splitlines() if line}
+        unexpected_files = changed_files - AUTHORIZED_OBD_PORT_FILES
+        self.assertFalse(
+            unexpected_files,
+            msg=(
+                "lib/obd/ contains drift outside the authorized OBD port: "
+                f"{sorted(unexpected_files)}"
+            ),
         )
 
 

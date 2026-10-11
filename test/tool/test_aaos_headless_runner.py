@@ -657,7 +657,7 @@ class AaosHeadlessRunnerTest(unittest.TestCase):
                 returncode=0,
                 stdout="List of devices attached\nemulator-5554\tdevice\n\n",
             )
-            port = find_free_emulator_port(Path("/mock/adb"))
+            port = find_free_emulator_port(Path(sys.executable))
             self.assertGreaterEqual(port, 5556)
             self.assertLessEqual(port, 5584)
             self.assertEqual(port % 2, 0)

@@ -3,17 +3,38 @@
 set -Eeuo pipefail
 if [ "$(id -u)" != 0 ]; then
   command -v python3
+  python3 -c 'import PIL, pytest'
+  command -v cmake
+  command -v make
+  command -v c++
   command -v flutter
   exit 0
 fi
-if ! command -v python3 >/dev/null 2>&1; then
-  apt-get update
-  apt-get install -y --no-install-recommends python3
+
+missing_apt_packages=()
+for package in python3 python3-venv cmake build-essential; do
+  if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'ok installed'; then
+    missing_apt_packages+=("$package")
+  fi
+done
+if [ "${#missing_apt_packages[@]}" -gt 0 ]; then
+  apt_options=(
+    -o Acquire::Retries=3
+    -o Acquire::http::Timeout=30
+    -o Acquire::https::Timeout=30
+  )
+  apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
+  apt-get "${apt_options[@]}" install -y --no-install-recommends "${missing_apt_packages[@]}"
 fi
-if ! command -v cmake >/dev/null 2>&1; then
-  apt-get update
-  apt-get install -y --no-install-recommends cmake
-fi
+
+CI_PYTHON_VENV=/opt/telltale-ci-python
+python3 -m venv --clear "$CI_PYTHON_VENV"
+"$CI_PYTHON_VENV/bin/python" -m pip install \
+  --disable-pip-version-check \
+  --no-deps \
+  --only-binary=:all: \
+  --require-hashes \
+  --requirement "$CI_PROJECT_DIR/tool/ci/requirements-ci.lock"
 if id -u ubuntu >/dev/null 2>&1; then
   NONROOT=ubuntu
 elif id -u flutter >/dev/null 2>&1; then
@@ -63,7 +84,7 @@ fi
 chown -R "$NONROOT:$NONROOT" "$CI_PROJECT_DIR" "$ANDROID_SDK" "$FLUTTER_HOME"
 printf '%s\n' '#!/bin/bash' 'set -Eeuo pipefail' \
   '[ -f /tmp/ci-proxy-env.sh ] && source /tmp/ci-proxy-env.sh' \
-  "export PATH=\"$FLUTTER_HOME/bin:\$PATH\"" \
+  "export PATH=\"$CI_PYTHON_VENV/bin:$FLUTTER_HOME/bin:\$PATH\"" \
   "export PUB_CACHE=\"$CI_PROJECT_DIR/.pub-cache\"" \
   "export GRADLE_USER_HOME=\"$NONROOT_HOME/.gradle\"" \
   "export GRADLE_OPTS=\"-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true\"" \
