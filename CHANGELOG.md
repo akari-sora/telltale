@@ -30,17 +30,32 @@ Android Auto / AAOS preview readability and lifecycle work merged after `v1.0.17
 - Fixed Android 13 locale API guards so Android lint can verify older-device
   compatibility without suppressing unsupported API access.
 
-Local validation: 4,364 Flutter tests passed with 23 opt-in skips, and
-`flutter analyze` reported no issues. The continuity repair also passed 62
-native carProto tests and Android lint with zero errors. Earlier maintainer-signed `field` APKs passed
-signature, ZIP integrity and alignment checks for all three ABIs. An isolated
-Android 16 phone emulator retained language, theme, selected PIDs and a local
-session when updated from signed `1.0.17` to `1.0.18`; the seven principal
-screens and controlled ELM/TCP disconnect/reconnect flow were exercised.
-See `docs/verification/device-verification.md` for the evidence boundary.
-Fresh signed continuity-repair device acceptance, release CI, physical
-`1.0.18` validation, issue #106 reporter hardware and
-store rollout remain separate checks. Android Auto / AAOS remains an
+Validation for source `93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85`
+(tree `102f4b146fe94cb332b48255f199fad1abc63839`) passed 4,364 Flutter tests
+with 23 opt-in skips, `flutter analyze` with no issues, 62 native carProto
+tests, and Android lint with zero errors and 12 warnings. All six field/carProto
+ABI APKs passed maintainer-signature, ZIP integrity and 16 KiB alignment checks.
+The exact arm64 APKs accepted below were `field` SHA-256
+`1d0f23f816cd9c176fc54a5c4c6d3d4779cd0d099f36a42681a628e9134eb4da`
+and `carProto` SHA-256
+`f31b7d949b1a3883e69a37c1207b0e4646fab4140338814fc704ce5a77526466`.
+
+On an isolated Android 16 emulator, signed `1.0.17` → exact signed `1.0.18`
+retained system-language selection, Light theme, Minimal gauge style, six enabled
+PIDs, and a 254 KB prior transcript. Dashboard, trend chart, PID manager, custom
+PID create/edit, fault codes with freeze frame, timing, settings, Light and Dark
+themes, and controlled software ELM/TCP disconnect/reconnect passed. Custom PID
+retention across the update was not exercised. In the Android Auto walk, explicit
+phone HOME followed by 20 seconds without DHU produced zero fixture commands
+while the same TCP connection, foreground service, and app process remained
+alive. DHU reconnect reused that socket and resumed with `ATRV` before PID reads.
+Fault Codes stayed put with moving and unknown speed and opened for the
+stationary control; no toast text is claimed because none was persistently
+captured. See `docs/verification/device-verification.md` for the evidence boundary.
+
+Release CI, physical-device update compatibility, issue #106 reporter hardware,
+and store rollout remain separate checks. These emulator receipts do not prove
+Bluetooth, a real vehicle, or Google approval. Android Auto / AAOS remains an
 engineering preview; the production `field` APK has no car app service.
 
 ## 1.0.17 — 2026-10-07

@@ -70,7 +70,62 @@ the artifact, not that they walked it, which is what this file is for. A
 weaker claim that is true beats a stronger one nobody can check, and the price
 of keeping it is one sentence in the release notes saying which claim it is.
 
-## 2026-10-12 — 1.0.18 signed release update on an isolated phone emulator
+## 2026-10-12 — 1.0.18 exact-source signed emulator acceptance
+
+This is the current release acceptance record for source
+`93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85` (tree
+`102f4b146fe94cb332b48255f199fad1abc63839`). It is an emulator record; no
+physical-device attestation is added.
+
+### Exact signed field acceptance
+
+The maintainer-signed arm64 `field` APK read back as `1.0.18` /
+versionCode `192`, SHA-256
+`1d0f23f816cd9c176fc54a5c4c6d3d4779cd0d099f36a42681a628e9134eb4da`.
+A signed `1.0.17` baseline was seeded with system-default language resolving
+to English, Light theme, Minimal gauges, six enabled PIDs, and a prior session.
+After `adb install -r`, all of those settings and the 254 KB transcript card
+remained. The APK replacement disconnected the live runtime, so uninterrupted
+socket retention across an APK update is not claimed. Custom PID creation and
+editing passed on 1.0.18; cross-version custom PID retention was not exercised.
+
+Dashboard, trend chart, PID manager, custom PID create/edit, fault codes with
+freeze frame, timing, and settings passed in Light and Dark themes. A controlled
+software ELM/TCP fixture displayed 12.6 V, 800 rpm, and 0 km/h; an explicit UI
+disconnect followed by saved-adapter reconnect produced a new client connection,
+`ATRV`, and live PID traffic. The crash buffer was empty and no crash or ANR
+was observed.
+
+### Exact signed carProto acceptance
+
+The separate maintainer-signed arm64 `carProto` APK read back as
+`1.0.18-carproto` / versionCode `192`, SHA-256
+`f31b7d949b1a3883e69a37c1207b0e4646fab4140338814fc704ce5a77526466`.
+After DHU exit and an explicit phone HOME action, the launcher remained the top
+resumed phone activity across a bounded 20-second window. The fixture recorded
+zero events and zero commands while the existing TCP connection, producer
+foreground service, and app process remained alive. Reopening DHU did not
+foreground the phone: it reused the same process and socket, kept the service at
+one foreground start, and resumed with `ATRV` before live PID reads.
+
+A controlled phone-side scan supplied eight synthetic DTCs. DHU rendered the
+summary, P0133 detail, back navigation, and live Powertrain values. At 55 m/s
+and with speed unknown, Fault Codes did not navigate; at 0 m/s, the stationary
+control opened Diagnostic Codes. No persisted toast image or log was captured,
+so no visual feedback text is claimed. The final Android crash buffer was empty.
+
+The raw receipts remain in the external task bundles
+`device-field-reconnect` and `device-carproto-reconnect`. Those task paths
+are not durable repository URLs, so this permanent record keeps a compact,
+self-contained receipt summary rather than relative artifact links. This is
+controlled software TCP and DHU evidence only: it does not establish Bluetooth,
+a real vehicle, Android Auto light-theme rendering, or Google approval.
+
+## Historical: 2026-10-12 — earlier 1.0.18 signed release update on an isolated phone emulator
+
+This pre-repair walk is retained as historical evidence. Its APK hashes and
+captures are intentionally not replaced; current release acceptance is the
+exact-source record above.
 
 The maintainer-signed `field` arm64 APK was installed on a Pixel 9 Android 16
 emulator. Its version read back as `1.0.18` / versionCode `192`, SHA-256

@@ -1,8 +1,8 @@
 # AA-09 — Android Auto metric graphics
 
-Status: metric graphics and final-source background-first device handoff verified
-(2026-10-11). Remaining lifecycle cases, cleanup and MR/main CI are recorded in
-the closeout receipt.
+Status: metric graphics plus exact-source signed disconnect/reconnect and DTC
+navigation gates verified (2026-10-12). MR/main release CI remains an independent
+acceptance surface.
 
 Home, Health and Powertrain previously presented metrics as text-only rows.
 The graphic pass adds monochrome vector symbols for each metric and redundant
@@ -74,8 +74,8 @@ A signed-release DHU walk subsequently reproduced a separate defect: projection
 disconnect stopped the foreground service, Android closed the OBD TCP socket,
 and a new car session displayed missing values while the phone stayed hidden.
 The repair gives the user-connected OBD transport its own exact-generation
-service owner. Only a foreground phone with a connected physical transport may
-claim that owner; built-in Demo does not create a connected-device service.
+service owner. Only a foreground phone with a connected non-Demo OBD transport
+may claim that owner; built-in Demo does not create a connected-device service.
 Pending and confirmed owners retain the existing Flutter engine.
 
 Projection arm attaches to an already confirmed producer and never starts a
@@ -91,11 +91,28 @@ This ownership split follows Android's
 [foreground service start restrictions](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)
 and the independent [car Session lifecycle](https://developer.android.com/reference/androidx/car/app/Session).
 It does not assume a car callback exempts a background foreground-service start.
-The previous device receipts above remain historical; signed repair acceptance
-and final CI require their own fresh receipts.
+The previous device receipts above remain historical and were not overwritten.
+Fresh signed repair acceptance passed on source
+`93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85` (tree
+`102f4b146fe94cb332b48255f199fad1abc63839`) with the exact arm64
+`carProto` APK SHA-256
+`f31b7d949b1a3883e69a37c1207b0e4646fab4140338814fc704ce5a77526466`.
+The same source passed 4,364 Flutter tests with 23 opt-in skips, 62 native
+carProto tests, and Android lint with zero errors and 12 warnings.
 
-The final acceptance manifest records the final source, installed APK, screen
-profiles, warning/stale/missing cases, repeated lease checks, phone captures,
-owned cleanup and remote CI. Only cases with an actual receipt are passed.
-Controlled ELM data and simulated VHAL data do not prove an actual adapter,
-ECU, vehicle, or production Play eligibility.
+After DHU exit and explicit phone HOME, a controlled 20-second window produced
+zero fixture events and commands while the same TCP socket, producer foreground
+service, and app process remained alive. DHU reconnect did not foreground the
+phone; it reused that process and socket and resumed with `ATRV` before PID
+reads. DTC summary/detail/back and Powertrain navigation passed. Fault Codes did
+not navigate at 55 m/s or with unknown speed and opened at 0 m/s. No toast text
+is claimed because no persisted toast image or log was captured. The host
+remained dark, so Android Auto light-theme rendering is not claimed.
+
+The acceptance manifests record the exact source, installed APK, screen
+profiles, safety gates, phone-hidden interval, reconnect traffic, and owned
+cleanup. Raw receipts remain in the external task bundle and are summarized
+here without fragile repository-relative links. MR/main release CI is
+independent of this device acceptance. Controlled ELM data and simulated VHAL
+data do not prove Bluetooth, an actual adapter, ECU, real vehicle, Google
+approval, or production Play eligibility.
