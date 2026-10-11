@@ -433,7 +433,7 @@ void main() {
         // followed by a 5-second forced-exit budget. Subscribe to the actual
         // platform handoff before each tap instead of racing that protocol
         // with a fixed 15-second polling window under concurrent CI load.
-        const dispatchTimeout = Duration(seconds: 45);
+        const dispatchWait = Duration(seconds: 45);
 
         Future<void> awaitDispatchAndGateSettlement(
           Future<AppSharePlatformRequest> dispatch,
@@ -443,7 +443,7 @@ void main() {
           var dispatchCompleted = false;
           Object? dispatchFailure;
           StackTrace? dispatchStackTrace;
-          final trackedDispatch = dispatch.timeout(dispatchTimeout).then<void>(
+          final trackedDispatch = dispatch.then<void>(
             (_) => dispatchCompleted = true,
             onError: (Object error, StackTrace stackTrace) {
               dispatchFailure = error;
@@ -454,7 +454,10 @@ void main() {
           final observed = await harness.pumpUntil(
             tester,
             () => dispatchCompleted,
-            timeout: dispatchTimeout + const Duration(seconds: 1),
+            // L10nRootHarness.pumpUntil uses a real DateTime deadline while
+            // still pumping widget frames. Do not add Future.timeout here:
+            // its timer would run on the Flutter test FakeAsync clock.
+            timeout: dispatchWait,
           );
           expect(observed, isTrue, reason: '$label platform dispatch was not observed');
           await trackedDispatch;
