@@ -78,12 +78,39 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
   }
   // A handed-off Share lease survives install -r for 15 minutes. Clear its
   // staging cache only for a clean isolated rig; recovery launches retain it.
+  await _clearIsolatedRigShareStaging();
+
+  await startRigAppPreservingState(tester);
+}
+
+/// Removes only the isolated rig's Share leases and staging files.
+///
+/// Export preparation journeys may release verified rig-only handoffs between
+/// formats; production keeps its two-source bound and 15-minute retention.
+/// Captured copies and native recordings remain untouched.
+Future<void> clearIsolatedRigShareStaging(WidgetTester tester) async {
+  await requireIsolatedRigIdentity();
+  final container = ProviderScope.containerOf(
+    tester.element(find.byType(MaterialApp)),
+    listen: false,
+  );
+  expect(
+    await pumpUntil(
+      tester,
+      () => container.read(artifactOperationGateProvider).snapshot.isIdle,
+    ),
+    isTrue,
+    reason: 'rig Share operation did not finish before staging cleanup',
+  );
+  await _clearIsolatedRigShareStaging();
+}
+
+Future<void> _clearIsolatedRigShareStaging() async {
+  await requireIsolatedRigIdentity();
   final shareStaging = Directory(
     '${(await getApplicationCacheDirectory()).path}/telltale-app-shares',
   );
   if (await shareStaging.exists()) await shareStaging.delete(recursive: true);
-
-  await startRigAppPreservingState(tester);
 }
 
 /// Starts the isolated rig identity without deleting durable artifacts.

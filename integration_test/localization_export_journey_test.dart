@@ -589,14 +589,21 @@ void main() {
       findsNothing,
     );
 
-    final knownJson = {jsonFile.path};
+    // JSON and CSV have filled the production two-source lease bound. Their
+    // rig-only handoffs were already decoded above; release only that isolated
+    // staging cache while preserving both captures and the native recording.
+    await clearIsolatedRigShareStaging(tester);
+    expect(await jsonFile.exists(), isTrue);
+    expect(await csvFile.exists(), isTrue);
+    final knownCaptures = (await _capturePaths(captureRoot)).toSet();
     await _tapExportFormat(tester, 'Export JSON');
     final englishJson = await _waitForNewCapture(
       tester,
       captureRoot,
       'json',
-      knownJson,
+      knownCaptures,
     );
+    expect(englishJson.path, isNot(jsonFile.path));
     await _reopenJsonArtifact(
       jsonFile: englishJson,
       sessionId: sessionId,
