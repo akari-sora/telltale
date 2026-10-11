@@ -85,154 +85,148 @@ Future<void> _revealLazyDashboard(
     of: find.byType(DashboardScreen),
     matching: find.text(derivedTitle),
   );
-  await tester.scrollUntilVisible(
+  await revealInScrollable(
+    tester,
     target,
-    400,
     scrollable: _dashboardVerticalScrollable(),
-  );
-  await tester.pump(const Duration(milliseconds: 50));
-  expect(
-    target.hitTestable(),
-    findsOneWidget,
-    reason:
-        'Dashboard did not reveal $derivedTitle after scrolling lazy content',
   );
 }
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-    'Dashboard does not overflow at 320dp after Demo in both languages',
-    (tester) async {
-      tester.view.physicalSize = const Size(320, 640);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets('Dashboard does not overflow at 320dp after Demo in both languages', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
 
-      final overflows = <String>[];
-      final previous = FlutterError.onError;
-      FlutterError.onError = (details) {
-        final text = details.exceptionAsString();
-        if (text.contains('overflowed')) {
-          overflows.add(text);
-        }
-        previous?.call(details);
-      };
-      addTearDown(() {
-        FlutterError.onError = previous;
-      });
+    final overflows = <String>[];
+    final previous = FlutterError.onError;
+    FlutterError.onError = (details) {
+      final text = details.exceptionAsString();
+      if (text.contains('overflowed')) {
+        overflows.add(text);
+      }
+      previous?.call(details);
+    };
+    addTearDown(() {
+      FlutterError.onError = previous;
+    });
 
-      await startCleanRigApp(tester);
-      await connectDemoRig(tester);
+    await startCleanRigApp(tester);
+    await connectDemoRig(tester);
 
-      expect(
-        await pumpUntil(
-          tester,
-          () => find.byType(DashboardScreen).evaluate().isNotEmpty,
-        ),
-        isTrue,
-        reason: 'DashboardScreen did not open after Demo',
-      );
-      final chinese = _gaugesOnDashboard('儀表');
-      expect(
-        await pumpUntil(tester, () => chinese.evaluate().isNotEmpty),
-        isTrue,
-        reason: 'Dashboard workspace switch did not show 儀表 after Demo',
-      );
-      await Scrollable.ensureVisible(tester.element(chinese), alignment: 0.5);
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(chinese.hitTestable(), findsOneWidget);
-      await _revealLazyDashboard(tester, '推算數值');
-      await tester.pump(const Duration(milliseconds: 300));
-
-      await _tapNav(tester, '設定');
-      expect(
-        await pumpUntil(
-          tester,
-          () => find.byType(SettingsScreen).evaluate().isNotEmpty,
-        ),
-        isTrue,
-        reason: 'Settings did not open from the narrow dashboard',
-      );
-      // Settings retains its scroll position across shell visits. At 320dp
-      // the previous German row can leave English outside the lazy cache.
-      final settingsScroll = tester.state<ScrollableState>(
-        _settingsVerticalScrollable(),
-      );
-      settingsScroll.position.jumpTo(settingsScroll.position.minScrollExtent);
-      await tester.pump();
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('locale_english')),
-        400,
-        scrollable: _settingsVerticalScrollable(),
-      );
-      await tapLocatedLocaleSetting(
+    expect(
+      await pumpUntil(
         tester,
-        const Key('locale_english'),
-        expectedLanguageCode: 'en',
-      );
+        () => find.byType(DashboardScreen).evaluate().isNotEmpty,
+      ),
+      isTrue,
+      reason: 'DashboardScreen did not open after Demo',
+    );
+    final chinese = _gaugesOnDashboard('儀表');
+    expect(
+      await pumpUntil(tester, () => chinese.evaluate().isNotEmpty),
+      isTrue,
+      reason: 'Dashboard workspace switch did not show 儀表 after Demo',
+    );
+    await Scrollable.ensureVisible(tester.element(chinese), alignment: 0.5);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(chinese.hitTestable(), findsOneWidget);
+    await _revealLazyDashboard(tester, '推算數值');
+    await tester.pump(const Duration(milliseconds: 300));
 
-      await _tapNav(tester, 'Dashboard');
-      expect(
-        await pumpUntil(
-          tester,
-          () => find.byType(DashboardScreen).evaluate().isNotEmpty,
-        ),
-        isTrue,
-        reason: 'DashboardScreen did not open after language switch',
-      );
-      final english = _gaugesOnDashboard('Gauges');
-      expect(
-        await pumpUntil(tester, () => english.evaluate().isNotEmpty),
-        isTrue,
-        reason: 'Dashboard workspace switch did not show Gauges after language switch',
-      );
-      await Scrollable.ensureVisible(tester.element(english), alignment: 0.5);
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(english.hitTestable(), findsOneWidget);
-      expect(_gaugesOnDashboard('儀表'), findsNothing);
-      await _revealLazyDashboard(tester, 'Estimated values');
-      await tester.pump(const Duration(milliseconds: 300));
-
-      await _tapNav(tester, 'Settings');
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('locale_german')),
-        400,
-        scrollable: _settingsVerticalScrollable(),
-      );
-      await tapLocatedLocaleSetting(
+    await _tapNav(tester, '設定');
+    expect(
+      await pumpUntil(
         tester,
-        const Key('locale_german'),
-        expectedLanguageCode: 'de',
-      );
+        () => find.byType(SettingsScreen).evaluate().isNotEmpty,
+      ),
+      isTrue,
+      reason: 'Settings did not open from the narrow dashboard',
+    );
+    // Reset retained Settings scroll positions before revealing the English
+    // row through the narrow viewport's lazy cache.
+    final settingsScroll = tester.state<ScrollableState>(
+      _settingsVerticalScrollable(),
+    );
+    settingsScroll.position.jumpTo(settingsScroll.position.minScrollExtent);
+    await tester.pump();
+    await revealInScrollable(
+      tester,
+      find.byKey(const Key('locale_english')),
+      scrollable: _settingsVerticalScrollable(),
+    );
+    await tapLocatedLocaleSetting(
+      tester,
+      const Key('locale_english'),
+      expectedLanguageCode: 'en',
+    );
 
-      await _tapNav(tester, 'Dashboard');
-      expect(
-        await pumpUntil(
-          tester,
-          () => find.byType(DashboardScreen).evaluate().isNotEmpty,
-        ),
-        isTrue,
-        reason: 'DashboardScreen did not open after switching to German',
-      );
-      final german = _gaugesOnDashboard('Instrumente');
-      expect(
-        await pumpUntil(tester, () => german.evaluate().isNotEmpty),
-        isTrue,
-        reason: 'Dashboard workspace switch did not show Instrumente after switching to German',
-      );
-      expect(_gaugesOnDashboard('Gauges'), findsNothing);
-      await _revealLazyDashboard(tester, 'Geschätzte Werte');
-      await tester.pump(const Duration(milliseconds: 300));
+    await _tapNav(tester, 'Dashboard');
+    expect(
+      await pumpUntil(
+        tester,
+        () => find.byType(DashboardScreen).evaluate().isNotEmpty,
+      ),
+      isTrue,
+      reason: 'DashboardScreen did not open after language switch',
+    );
+    final english = _gaugesOnDashboard('Gauges');
+    expect(
+      await pumpUntil(tester, () => english.evaluate().isNotEmpty),
+      isTrue,
+      reason:
+          'Dashboard workspace switch did not show Gauges after language switch',
+    );
+    await Scrollable.ensureVisible(tester.element(english), alignment: 0.5);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(english.hitTestable(), findsOneWidget);
+    expect(_gaugesOnDashboard('儀表'), findsNothing);
+    await _revealLazyDashboard(tester, 'Estimated values');
+    await tester.pump(const Duration(milliseconds: 300));
 
-      expect(
-        overflows,
-        isEmpty,
-        reason:
-            'RenderFlex overflowed at 320dp after Demo:\n${overflows.join('\n')}',
-      );
-    },
-  );
+    await _tapNav(tester, 'Settings');
+    await tester.pump(const Duration(milliseconds: 300));
+    await revealInScrollable(
+      tester,
+      find.byKey(const Key('locale_german')),
+      scrollable: _settingsVerticalScrollable(),
+    );
+    await tapLocatedLocaleSetting(
+      tester,
+      const Key('locale_german'),
+      expectedLanguageCode: 'de',
+    );
+
+    await _tapNav(tester, 'Dashboard');
+    expect(
+      await pumpUntil(
+        tester,
+        () => find.byType(DashboardScreen).evaluate().isNotEmpty,
+      ),
+      isTrue,
+      reason: 'DashboardScreen did not open after switching to German',
+    );
+    final german = _gaugesOnDashboard('Instrumente');
+    expect(
+      await pumpUntil(tester, () => german.evaluate().isNotEmpty),
+      isTrue,
+      reason:
+          'Dashboard workspace switch did not show Instrumente after switching to German',
+    );
+    expect(_gaugesOnDashboard('Gauges'), findsNothing);
+    await _revealLazyDashboard(tester, 'Geschätzte Werte');
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      overflows,
+      isEmpty,
+      reason:
+          'RenderFlex overflowed at 320dp after Demo:\n${overflows.join('\n')}',
+    );
+  });
 }

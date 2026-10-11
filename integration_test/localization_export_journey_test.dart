@@ -14,6 +14,7 @@
 /// skip that looks like a pass.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -223,8 +224,12 @@ Future<void> _openExactRecording(WidgetTester tester, String sessionId) async {
     isTrue,
     reason: 'History did not list the recorded session $sessionId',
   );
-  await GoRouter.of(tester.element(find.byType(TelemetrySessionsScreen)))
-      .push('${TelemetrySessionsScreen.path}/$sessionId');
+  // A push Future resolves when this detail page is popped. Continue pumping
+  // so its actual route and session identity can be asserted before export.
+  unawaited(
+    GoRouter.of(tester.element(find.byType(TelemetrySessionsScreen)))
+        .push<void>('${TelemetrySessionsScreen.path}/$sessionId'),
+  );
   await tester.pump();
   expect(
     await pumpUntil(
@@ -241,19 +246,33 @@ Future<void> _openExactRecording(WidgetTester tester, String sessionId) async {
 }
 
 Future<void> _openExportSheet(WidgetTester tester, String label) async {
-  final button = find.descendant(
-    of: find.byType(TelemetrySessionDetailScreen),
-    matching: find.text(label),
+  final detail = find.byType(TelemetrySessionDetailScreen);
+  final verticalScroll = find.descendant(
+    of: detail,
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is Scrollable && widget.axisDirection == AxisDirection.down,
+    ),
   );
+  final button = find.descendant(of: detail, matching: find.text(label));
   expect(
-    await pumpUntil(tester, () => button.evaluate().isNotEmpty),
+    await pumpUntil(tester, () => verticalScroll.evaluate().isNotEmpty),
     isTrue,
-    reason:
-        'Export control $label did not appear on TelemetrySessionDetailScreen',
+    reason: 'recording detail did not finish loading its scrollable content',
   );
+  // The export action follows lazily built replay plots. Scroll to build and
+  // reveal it before looking for the localized action.
+  await tester.scrollUntilVisible(
+    button,
+    400,
+    scrollable: verticalScroll.first,
+  );
+  expect(button, findsOneWidget);
   await Scrollable.ensureVisible(tester.element(button), alignment: 0.5);
   await tester.pump(const Duration(milliseconds: 100));
-  await tester.tap(button.hitTestable());
+  final target = button.hitTestable();
+  expect(target, findsOneWidget);
+  await tester.tap(target);
   await tester.pump();
   expect(
     await pumpUntil(
@@ -490,6 +509,14 @@ void main() {
 
     Navigator.of(tester.element(find.byType(TelemetryExportSheet))).pop();
     await tester.pump();
+    expect(
+      await pumpUntil(
+        tester,
+        () => find.byType(TelemetryExportSheet).evaluate().isEmpty,
+      ),
+      isTrue,
+      reason: 'cancelled export sheet did not finish closing',
+    );
     expect(find.byType(TelemetryExportSheet), findsNothing);
     expect(await _capturePaths(captureRoot), isEmpty);
     await _expectNativeUnchanged(native, originalBytes);

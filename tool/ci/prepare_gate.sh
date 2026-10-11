@@ -67,6 +67,7 @@ ANDROID_SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/opt/android-sdk-linux}}"
 export ANDROID_HOME="$ANDROID_SDK" ANDROID_SDK_ROOT="$ANDROID_SDK"
 export PATH="$ANDROID_SDK/cmdline-tools/latest/bin:$PATH"
 if [ ! -d "$ANDROID_SDK/ndk/28.2.13676358" ] || \
+   [ ! -d "$ANDROID_SDK/platforms/android-34" ] || \
    [ ! -d "$ANDROID_SDK/platforms/android-36" ] || \
    [ ! -d "$ANDROID_SDK/build-tools/36.0.0" ]; then
   mkdir -p ci-artifacts
@@ -76,12 +77,16 @@ if [ ! -d "$ANDROID_SDK/ndk/28.2.13676358" ] || \
   sdk_exit=${PIPESTATUS[1]}
   set -e
   if [ "$sdk_exit" != 0 ]; then exit "$sdk_exit"; fi
-  sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+  sdkmanager --install 'platforms;android-34' 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
 fi
 if [ -f "$CI_PROJECT_DIR/android/gradlew" ]; then
   chmod +x "$CI_PROJECT_DIR/android/gradlew" 2>/dev/null || true
 fi
-chown -R "$NONROOT:$NONROOT" "$CI_PROJECT_DIR" "$ANDROID_SDK" "$FLUTTER_HOME"
+ANDROID_SDK_REAL=$(readlink -f "$ANDROID_SDK")
+chown -R "$NONROOT:$NONROOT" "$CI_PROJECT_DIR" "$ANDROID_SDK_REAL" "$FLUTTER_HOME"
+if [ -L "$ANDROID_SDK" ]; then
+  chown -h "$NONROOT:$NONROOT" "$ANDROID_SDK"
+fi
 printf '%s\n' '#!/bin/bash' 'set -Eeuo pipefail' \
   '[ -f /tmp/ci-proxy-env.sh ] && source /tmp/ci-proxy-env.sh' \
   "export PATH=\"$CI_PYTHON_VENV/bin:$FLUTTER_HOME/bin:\$PATH\"" \

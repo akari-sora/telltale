@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -219,23 +220,69 @@ Future<void> requireDashboard(
   expect(reached, isTrue, reason: 'the app never reached the dashboard');
 }
 
+/// Advances a lazy vertical viewport until [target] is built, then places it
+/// at a real tap location.
+///
+/// `scrollUntilVisible` starts each drag at the scrollable's center. On the
+/// 320dp live-device fixture that point did not hit the requested scrollable,
+/// and repeated drags did not reveal the target. Driving the viewport's own
+/// position keeps the query tied to the exact scrollable; the final hit-test
+/// still proves the user-facing target is actually tappable.
+Future<Finder> revealInScrollable(
+  WidgetTester tester,
+  Finder target, {
+  required Finder scrollable,
+  double step = 300,
+  double alignment = 0.5,
+  int maxScrolls = 80,
+}) async {
+  expect(scrollable, findsOneWidget);
+  final state = tester.state<ScrollableState>(scrollable);
+
+  for (
+    var attempt = 0;
+    attempt < maxScrolls && target.evaluate().isEmpty;
+    attempt += 1
+  ) {
+    final position = state.position;
+    final next = math.min(position.pixels + step, position.maxScrollExtent);
+    if (next <= position.pixels) break;
+    position.jumpTo(next);
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+
+  expect(target, findsOneWidget, reason: 'lazy target was not revealed');
+  await Scrollable.ensureVisible(tester.element(target), alignment: alignment);
+  await tester.pump(const Duration(milliseconds: 100));
+  final hitTestable = target.hitTestable();
+  expect(
+    hitTestable,
+    findsOneWidget,
+    reason: 'revealed target was not tappable',
+  );
+  return hitTestable;
+}
+
 /// Scrolls the connection wizard until its lazily built sliver contains
 /// [text]. Looking up the finder before scrolling is not sufficient: on a
 /// phone-sized viewport even the first transport card can be outside the
 /// initial sliver cache.
 Future<Finder> revealText(WidgetTester tester, String text) async {
-  final finder = find.text(text);
-  await tester.scrollUntilVisible(
-    finder,
-    300,
-    scrollable: find.byType(Scrollable).first,
+  final finder = find.descendant(
+    of: find.byType(ConnectScreen),
+    matching: find.text(text),
   );
-  expect(finder, findsOneWidget);
-  await Scrollable.ensureVisible(tester.element(finder), alignment: 0.5);
-  await tester.pump(const Duration(milliseconds: 300));
-  final hitTestable = finder.hitTestable();
-  expect(hitTestable, findsOneWidget);
-  return hitTestable;
+  final scrollable = find
+      .descendant(
+        of: find.byType(ConnectScreen),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.down,
+        ),
+      )
+      .first;
+  return revealInScrollable(tester, finder, scrollable: scrollable);
 }
 
 /// Taps a locale row that the journey has already scrolled into the tree.
@@ -683,8 +730,9 @@ final class _CapturingRigSharePlatform implements AppSharePlatform {
 
   @override
   Future<AppShareResult> share(AppSharePlatformRequest request) async {
-    byExtension[request.fileName.split('.').last] = await File(request.path)
-        .readAsBytes();
+    byExtension[request.fileName.split('.').last] = await File(
+      request.path,
+    ).readAsBytes();
     return AppShareResult.selected;
   }
 }
