@@ -62,7 +62,7 @@ not establish physical head-unit rendering performance.
 
 ## Projection handoff repair
 
-The UI pass reproduced an existing ordering defect: phone pause drained polling
+The initial UI pass reproduced an existing ordering defect: phone pause drained polling
 before Android Auto sent its active session lease. Both Dart and native admission
 then required the phone Activity to be foreground, blocking the existing
 background ATRV proof. Admission now uses the exact projection identity, current
@@ -70,11 +70,29 @@ projection connection and registered engine; the existing OBD generation and
 ATRV validation still decide whether polling resumes. No second engine or OBD
 connection is created.
 
-A consumed-generation guard also prevents repeated unarmed notifications from
-silently restarting a stopped service while the phone stays paused. A real
-projection disconnect followed by a newer generation permits one new background
-attempt. Foreground user recovery remains available. Android's service-start
-policy is respected; denial stays fail-closed.
+A signed-release DHU walk subsequently reproduced a separate defect: projection
+disconnect stopped the foreground service, Android closed the OBD TCP socket,
+and a new car session displayed missing values while the phone stayed hidden.
+The repair gives the user-connected OBD transport its own exact-generation
+service owner. Only a foreground phone with a connected physical transport may
+claim that owner; built-in Demo does not create a connected-device service.
+Pending and confirmed owners retain the existing Flutter engine.
+
+Projection arm attaches to an already confirmed producer and never starts a
+foreground service. Projection disconnect drains the read-only poller before
+acknowledgement, releases the wake lock, and retains the transport owner. A new
+projection reuses that connection and the existing ATRV validation before
+resuming periodic reads. Diagnostics remain foreground-only. Disconnect, link
+loss, replacement and runtime disposal retire the exact producer; stale
+callbacks cannot retire a newer connection. Missing drain acknowledgement
+still fails closed after eight seconds.
+
+This ownership split follows Android's
+[foreground service start restrictions](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)
+and the independent [car Session lifecycle](https://developer.android.com/reference/androidx/car/app/Session).
+It does not assume a car callback exempts a background foreground-service start.
+The previous device receipts above remain historical; signed repair acceptance
+and final CI require their own fresh receipts.
 
 The final acceptance manifest records the final source, installed APK, screen
 profiles, warning/stale/missing cases, repeated lease checks, phone captures,

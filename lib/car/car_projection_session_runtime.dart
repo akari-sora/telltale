@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../state/obd_session.dart';
+import '../obd/transport/obd_transport.dart';
 import 'generated/car_projection_session.g.dart';
 
 final class CarProjectionLeaseOrder {
@@ -39,7 +40,10 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
     _foregroundSubscription = ref
         .read(obdSessionProvider.notifier)
         .foregroundChanges
-        .listen((_) => _scheduleReconcile());
+        .listen((foreground) {
+          if (foreground) _producerClaimAttemptGeneration = null;
+          _scheduleReconcile();
+        });
     unawaited(_initialize());
   }
 
@@ -50,6 +54,9 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
   bool _arming = false;
   int _leaseRevision = 0;
   int _highestArmAttemptGeneration = -1;
+  int? _claimedProducerGeneration;
+  int? _producerClaimAttemptGeneration;
+  int _retiredProducerGeneration = -1;
   final CarProjectionLeaseOrder _leaseOrder = CarProjectionLeaseOrder();
   Future<void> _reducer = Future<void>.value();
   late final StreamSubscription<bool> _foregroundSubscription;
@@ -59,6 +66,7 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
       _enqueue(await _host.currentLease());
     } on Object {
       // Native absence is an inert non-car host, never background authority.
+      _scheduleReconcile();
     }
   }
 
@@ -68,6 +76,7 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
   }
 
   void _enqueue(CarProjectionLeaseMessage lease) {
+    if (_disposed) return;
     if (!_leaseOrder.admit(lease)) return;
     final revision = ++_leaseRevision;
     _append(() => _accept(lease, revision));
@@ -82,7 +91,7 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
       try {
         await action();
       } on Object {
-        await _failClosed();
+        if (!_disposed) await _failClosed();
       }
     });
   }
@@ -111,6 +120,8 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
     if (_disposed) return;
     final previous = _lease;
     _lease = lease;
+    await _reconcileProducer();
+    if (_disposed) return;
     if (lease.armed && lease.generation > _highestArmAttemptGeneration) {
       _highestArmAttemptGeneration = lease.generation;
     }
@@ -151,13 +162,17 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
     if (!confirmed.active ||
         !confirmed.armed ||
         confirmed.generation != lease.generation ||
-        confirmed.connectionGeneration != lease.connectionGeneration) {
+        confirmed.connectionGeneration != lease.connectionGeneration ||
+        confirmed.producerConnectionGeneration !=
+            confirmed.connectionGeneration) {
       _enqueue(confirmed);
       return;
     }
     final connectionGeneration = confirmed.connectionGeneration;
+    final state = ref.read(obdSessionProvider);
     final accepted =
         connectionGeneration != null &&
+        state.kind != TransportKind.demo &&
         await session.acceptProjectionContinuity(
           projectionGeneration: confirmed.generation,
           connectionGeneration: connectionGeneration,
@@ -174,7 +189,10 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
     if (lease == null || !lease.active || lease.armed) return;
     final state = ref.read(obdSessionProvider);
     final session = ref.read(obdSessionProvider.notifier);
-    if (!state.isConnected) return;
+    if (!state.isConnected || state.kind == TransportKind.demo) return;
+    if (lease.producerConnectionGeneration != session.connectionGeneration) {
+      return;
+    }
     if (!session.isForeground) {
       if (lease.generation <= _highestArmAttemptGeneration) return;
     }
@@ -200,6 +218,8 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
 
   Future<void> _reconcile() async {
     if (_disposed) return;
+    await _reconcileProducer();
+    if (_disposed) return;
     final lease = _lease;
     if (lease?.armed == true) {
       final state = ref.read(obdSessionProvider);
@@ -223,9 +243,72 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
     await _tryArm();
   }
 
+  Future<void> _reconcileProducer() async {
+    final state = ref.read(obdSessionProvider);
+    final session = ref.read(obdSessionProvider.notifier);
+    final generation = session.connectionGeneration;
+    final reportedProducer = _lease?.producerConnectionGeneration;
+    if (reportedProducer != null &&
+        reportedProducer > _retiredProducerGeneration) {
+      _claimedProducerGeneration ??= reportedProducer;
+    }
+    final previous = _claimedProducerGeneration;
+    if (previous != null &&
+        (!state.isConnected ||
+            state.kind == TransportKind.demo ||
+            previous != generation)) {
+      await _host.retireProducerConnection(previous);
+      if (previous > _retiredProducerGeneration) {
+        _retiredProducerGeneration = previous;
+      }
+      if (_claimedProducerGeneration == previous) {
+        _claimedProducerGeneration = null;
+      }
+    }
+    if (_disposed) return;
+    final currentState = ref.read(obdSessionProvider);
+    if (!currentState.isConnected ||
+        currentState.kind == TransportKind.demo ||
+        session.connectionGeneration != generation) {
+      return;
+    }
+    if (_lease?.producerConnectionGeneration == generation) {
+      _claimedProducerGeneration = generation;
+      return;
+    }
+    // Only a visible, user-connected phone may create the transport service.
+    // A hidden car callback may attach to a confirmed owner, never create one.
+    if (!session.isForeground ||
+        _producerClaimAttemptGeneration == generation) {
+      return;
+    }
+    _producerClaimAttemptGeneration = generation;
+    _claimedProducerGeneration = generation;
+    try {
+      _enqueue(await _host.claimProducerConnection(generation));
+    } on Object {
+      // A rejected foreground claim stays inert until a later visible resume.
+      // Remember its generation so disconnect/dispose can cancel a pending start.
+    }
+  }
+
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     unawaited(_foregroundSubscription.cancel());
     CarProjectionSessionFlutterApi.setUp(null);
+    // Pigeon methods use separate channels: finish any pending claim before
+    // retiring its owner, so disposal cannot race a late native service start.
+    _reducer = _reducer.then((_) async {
+      final producer = _claimedProducerGeneration;
+      _claimedProducerGeneration = null;
+      if (producer == null) return;
+      try {
+        await _host.retireProducerConnection(producer);
+      } on Object {
+        // Disposal must remain safe when the native engine is already gone.
+      }
+    });
+    unawaited(_reducer);
   }
 }

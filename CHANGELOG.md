@@ -17,6 +17,9 @@ Android Auto / AAOS preview readability and lifecycle work merged after `v1.0.17
   glanceable layouts.
 - Added projection session ownership and foreground continuity handling across
   connect, pause, resume, and disconnect transitions.
+- Kept the user-connected OBD transport alive across Android Auto disconnects,
+  pausing car sampling until a new projection validates the same connection.
+  Only a foreground phone may start its connected-device service.
 - Added parked-only guidance when fault inspection lacks speed evidence and
   when vehicle-speed permission must be completed on the phone.
 - Fixed the issue #106 post-connect path to publish the handshake voltage,
@@ -24,15 +27,19 @@ Android Auto / AAOS preview readability and lifecycle work merged after `v1.0.17
   work correctly across lifecycle interruption.
 - Added Android Auto / AAOS contract, lifecycle, graphics, and issue #106
   regression coverage.
+- Fixed Android 13 locale API guards so Android lint can verify older-device
+  compatibility without suppressing unsupported API access.
 
-Local validation: 4,355 Flutter tests passed with 23 opt-in skips, and
-`flutter analyze` reported no issues. Maintainer-signed `field` APKs passed
+Local validation: 4,364 Flutter tests passed with 23 opt-in skips, and
+`flutter analyze` reported no issues. The continuity repair also passed 62
+native carProto tests and Android lint with zero errors. Earlier maintainer-signed `field` APKs passed
 signature, ZIP integrity and alignment checks for all three ABIs. An isolated
 Android 16 phone emulator retained language, theme, selected PIDs and a local
 session when updated from signed `1.0.17` to `1.0.18`; the seven principal
 screens and controlled ELM/TCP disconnect/reconnect flow were exercised.
 See `docs/verification/device-verification.md` for the evidence boundary.
-Release CI, physical `1.0.18` validation, issue #106 reporter hardware and
+Fresh signed continuity-repair device acceptance, release CI, physical
+`1.0.18` validation, issue #106 reporter hardware and
 store rollout remain separate checks. Android Auto / AAOS remains an
 engineering preview; the production `field` APK has no car app service.
 

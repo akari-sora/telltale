@@ -10,8 +10,7 @@ import 'package:pigeon/pigeon.dart';
     dartOut: 'lib/car/generated/car_projection_session.g.dart',
     dartOptions: DartOptions(),
     dartPackageName: 'torque_obd',
-    kotlinOut:
-        'android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarProjectionSession.g.kt',
+    kotlinOut: 'android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarProjectionSession.g.kt',
     kotlinOptions: KotlinOptions(
       package: 'com.cbstudio.telltale.carbridge.generated.session',
     ),
@@ -23,17 +22,21 @@ class CarProjectionLeaseMessage {
     required this.generation,
     required this.armed,
     required this.connectionGeneration,
+    this.producerConnectionGeneration,
   });
 
   bool active;
   int generation;
   bool armed;
   int? connectionGeneration;
+  int? producerConnectionGeneration;
 }
 
 @HostApi()
 abstract class CarProjectionSessionHostApi {
   CarProjectionLeaseMessage currentLease();
+  CarProjectionLeaseMessage claimProducerConnection(int connectionGeneration);
+  void retireProducerConnection(int connectionGeneration);
   CarProjectionLeaseMessage armContinuity(
     int projectionGeneration,
     int connectionGeneration,
