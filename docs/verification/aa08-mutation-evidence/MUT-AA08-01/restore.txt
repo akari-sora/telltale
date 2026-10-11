@@ -1,5 +1,0 @@
-RESTORE_METHOD: direct_file_rewrite_and_verification
-TARGET_FILE: android/car-core/src/main/kotlin/com/cbstudio/telltale/car/hardware/CarVehicleMotionResolver.kt
-PRE_MUTATION_SHA256: df46d4760ac97b507ac32b163311f6eb9fcdad1cca1f5fa7a8a0c3200c982f46
-POST_RESTORE_SHA256: df46d4760ac97b507ac32b163311f6eb9fcdad1cca1f5fa7a8a0c3200c982f46
-SHA256_MATCH: True

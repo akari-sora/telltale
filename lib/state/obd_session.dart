@@ -308,6 +308,21 @@ class ObdSession extends Notifier<ObdConnectionState> {
   DiagnosticLinkOwnershipAuthority? _linkOwnership;
   Future<Set<String>?>? _censusInFlight;
 
+  void _trackResponderCensus(
+    Future<Set<String>?> censusFuture, {
+    void Function()? onComplete,
+  }) {
+    _censusInFlight = censusFuture;
+    unawaited(
+      censusFuture.catchError((_) => null).whenComplete(() {
+        if (identical(_censusInFlight, censusFuture)) {
+          _censusInFlight = null;
+        }
+        onComplete?.call();
+      }),
+    );
+  }
+
   /// Build provenance is compile-time in production and injectable only so
   /// unit tests can lock the safety boundary without launching an APK.
   @visibleForTesting
@@ -650,13 +665,11 @@ class ObdSession extends Notifier<ObdConnectionState> {
     _openForegroundAfterResumeValidation();
     _pausedByLifecycle = false;
     engine.start();
+    if (!_telemetry.isClosed) _telemetry.add(engine.current);
 
-    // Discovery is interrupted by a pause rather than answered by one, and
-    // nothing else would ever ask again — `_connectInner` fires it once. An
-    // incomplete capability map keeps batching shut, so leaving it incomplete
-    // costs the session its throughput for no reason.
+    // Let the resume census own the bus. Its restoration callback restarts
+    // support discovery after polling has been restored.
     if (!engine.supportDiscoveryComplete) {
-      unawaited(engine.discoverSupportedPids());
       // The responder census, taken once against the vehicle actually attached.
       // A fault-code scan can tell who answered but not who should have, and a
       // controller that stays silent shows up in no count at all.
@@ -664,12 +677,12 @@ class ObdSession extends Notifier<ObdConnectionState> {
       // deadline at all — and a scan starting a moment later joined it, so the
       // census the scan was blocked on could outlive the scan's own budget.
       final censusDeadline = DateTime.now().add(censusBudget);
-      unawaited(
+      _trackResponderCensus(
         _runDiagnosticOneShot<Set<String>?>(
           operationName: 'resumeResponderCensus',
           deadline: censusDeadline,
           action: () => engine.discoverResponders(deadline: censusDeadline),
-        ).catchError((_) => null),
+        ),
       );
     }
   }
@@ -1489,20 +1502,22 @@ class ObdSession extends Notifier<ObdConnectionState> {
       },
     );
 
+    // The provider already contains the default dashboard before connect, so
+    // its listener does not fire here. Install those PIDs before the census
+    // pauses polling or the first dashboard cycle can start empty.
+    syncActivePids(ref.read(activePidsProvider));
+
     // A protocol search can take 25 seconds, and the user may well have put
     // the phone down during it. Starting to poll from the background is both
     // rude and unsafe — an OS freeze mid-command splits a request from its
     // reply — so the session is left parked for the next resume to recover.
     if (_foreground) {
       engine.start();
+      if (!_telemetry.isClosed) _telemetry.add(engine.current);
     } else {
       _pausedByLifecycle = true;
       if (!_telemetry.isClosed) _telemetry.add(const TelemetrySnapshot());
     }
-
-    // Support discovery runs in the background: it is useful for greying out
-    // PIDs the car does not have, but nothing should wait on it.
-    unawaited(engine.discoverSupportedPids());
 
     _sessionProtocol = client.protocolDescription.isEmpty
         ? client.protocolNumber
@@ -1531,12 +1546,9 @@ class ObdSession extends Notifier<ObdConnectionState> {
       deadline: censusDeadline,
       action: () => engine.discoverResponders(deadline: censusDeadline),
     );
-    _censusInFlight = censusFuture;
-    unawaited(
-      censusFuture.catchError((_) => null).whenComplete(() {
-        if (identical(_censusInFlight, censusFuture)) {
-          _censusInFlight = null;
-        }
+    _trackResponderCensus(
+      censusFuture,
+      onComplete: () {
         if (_generation == generation &&
             identical(_engine, engine) &&
             _foreground &&
@@ -1547,7 +1559,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
             unawaited(engine.discoverSupportedPids());
           }
         }
-      }),
+      },
     );
 
     return true;
@@ -1992,6 +2004,18 @@ class ObdSession extends Notifier<ObdConnectionState> {
         kind: DtcReadFailure.disconnected,
       );
     }
+    try {
+      await ensureResponderCensus(deadline: deadline);
+    } on Object {
+      // A census failure does not itself supply a DTC result. The engine still
+      // applies its normal coverage rules to the evidence it has.
+    }
+    if (!identical(_engine, engine)) {
+      throw const DtcReadException(
+        'The connection is down',
+        kind: DtcReadFailure.disconnected,
+      );
+    }
     return engine.readDtcs(kind, deadline: deadline);
   }
 
@@ -2022,6 +2046,12 @@ class ObdSession extends Notifier<ObdConnectionState> {
     }
     _clearInFlight = true;
     try {
+      if (!identical(_engine, engine)) {
+        throw const DtcReadException(
+          'The connection is down',
+          kind: DtcReadFailure.disconnected,
+        );
+      }
       return await engine.clearDtcs();
     } finally {
       _clearInFlight = false;

@@ -164,6 +164,24 @@ class CarDtcMotionGateTest {
     }
 
     @Test
+    fun disconnectedPhaseRequiresBothHostChannelsToBeKnownZero() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput(speedKmh = live(0.0), phase = CarConnectionPhase.DISCONNECTED))
+        for (sample in listOf(
+            CarHostSpeedSample(status = CarHostSpeedStatus.LIVE, displaySpeedMetersPerSecond = 0f),
+            CarHostSpeedSample(status = CarHostSpeedStatus.LIVE, rawMetersPerSecond = 0f),
+        )) {
+            assertEquals(CarDtcMotionState.UNKNOWN, CarDtcMotionGate.evaluate(repo.state.value, sample))
+        }
+        val bothZero = CarHostSpeedSample(
+            status = CarHostSpeedStatus.LIVE,
+            displaySpeedMetersPerSecond = 0f,
+            rawMetersPerSecond = 0f,
+        )
+        assertEquals(CarDtcMotionState.STATIONARY, CarDtcMotionGate.evaluate(repo.state.value, bothZero))
+    }
+
+    @Test
     fun hostSpeedReverseEvaluatesToMoving() {
         // AA05-15: Host raw speed < 0 (reverse) is non-zero -> MOVING
         val hostSample = CarHostSpeedSample(

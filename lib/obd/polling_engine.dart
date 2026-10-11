@@ -810,6 +810,25 @@ class PollingEngine {
     });
   }
 
+  /// Waits for a responder census that is already running without starting
+  /// another one. A caller deadline bounds only this join; the original
+  /// census remains owned by the caller that started it.
+  Future<void> _joinInFlightResponderCensus(DateTime? deadline) async {
+    final running = _censusInFlight;
+    if (running == null) return;
+    if (deadline == null) {
+      await running;
+      return;
+    }
+    final left = deadline.difference(DateTime.now());
+    if (left <= Duration.zero) return;
+    try {
+      await running.timeout(left);
+    } on TimeoutException {
+      // The joining operation stops waiting; the census keeps running.
+    }
+  }
+
   Future<Set<String>?> _discoverRespondersOnce(DateTime? deadline) async {
     // One policy, every consumer. J1939 was refused here and an *unidentified*
     // bus was not, so a protocol B slot whose PP 2C could not be read had its
@@ -1365,6 +1384,8 @@ class PollingEngine {
     // Captured, not sampled. Re-checked before every attempt, so a retry that
     // slept across an interruption does not resume on the other side of it.
     final owner = lifecycleEpoch?.call();
+    await _joinInFlightResponderCensus(deadline);
+    _requireStillOwned(owner);
     // What *this* read could not account for, accumulated across its retries.
     //
     // Not a reset of the stored set at entry, which is where this started. A
@@ -1536,6 +1557,12 @@ class PollingEngine {
       return result;
     }
 
+    Future<List<Dtc>> covered(Set<String> heard, Iterable<Dtc> codes) async {
+      await _joinInFlightResponderCensus(deadline);
+      _requireStillOwned(owner);
+      return finish(heard, codes);
+    }
+
     final owed = <String>{};
     // Cumulative, and the counterpart to `found`. A controller that has given
     // a terminal answer during this logical read has answered, full stop — and
@@ -1592,7 +1619,7 @@ class PollingEngine {
           // transmission holding P0715 that simply never replies would leave
           // the engine's `43 00` standing as the whole vehicle's result.
           //
-          return finish(finished, found.values);
+          return await covered(finished, found.values);
         }
         throw DtcReadException(
           '${owed.length} controller(s) promised a later reply and never delivered it. '
@@ -1621,7 +1648,7 @@ class PollingEngine {
         // answer to — and on the third pass a vehicle that had answered
         // everything reported the PID unsupported instead.
         if (e.kind == DtcReadFailure.pending && owed.isEmpty) {
-          return finish(finished, found.values);
+          return await covered(finished, found.values);
         }
         // Ask the silent ones by name, once, before giving up on them.
         //
@@ -1658,7 +1685,9 @@ class PollingEngine {
             finished.addAll(reached);
             owed.removeAll(reached);
             final stillSilent = e.silentSources.difference(reached);
-            if (stillSilent.isEmpty) return finish(finished, found.values);
+            if (stillSilent.isEmpty) {
+              return await covered(finished, found.values);
+            }
           }
         }
         final outOfTime =
@@ -2495,6 +2524,13 @@ class PollingEngine {
       bytes.length == 1 && bytes.first == 0x44;
 
   Future<ClearOutcome> clearDtcs() async {
+    // Capture the lifecycle lease before yielding to an in-flight census. A
+    // background/resume during the wait must not authorize a clear that was
+    // started under the previous epoch.
+    final owner = lifecycleEpoch?.call();
+    _requireStillOwned(owner);
+    await _joinInFlightResponderCensus(null);
+    _requireStillOwned(owner);
     // Set for the same reason the read sets it, and it was missing here: the
     // clear's own reply goes through the same ambiguity, and without this a
     // bare `7E8` acknowledging the clear would be an open question instead of
@@ -2516,8 +2552,6 @@ class PollingEngine {
     // has no Mode 04, and an undetermined one cannot be shown to have carried
     // the request at all.
     _requireObd2Bus('fault codes');
-    final owner = lifecycleEpoch?.call();
-    _requireStillOwned(owner);
     final ObdResponse response;
     final clearAudit = client.beginWriteAudit();
     try {
@@ -3745,6 +3779,9 @@ class PollingEngine {
       onTimeout: () {},
     );
     _loopDone.remove(epoch);
+    // The in-flight request was already popped. Retire the remainder so the
+    // next start rebuilds the schedule and retries the interrupted PID.
+    scheduler.retireQueuedRequests(const {});
     // A pause is a gap by definition. Keeping the smoothed derivative across
     // one pairs a value measured before the pause with the first speed sample
     // after it — and the formula cache has the same problem, so both go.

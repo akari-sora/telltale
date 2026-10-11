@@ -33,6 +33,10 @@ import 'package:torque_obd/ui/screens/dashboard/dashboard_screen.dart';
 /// successful connection or transcript.
 Future<void> startCleanRigApp(WidgetTester tester) async {
   await requireIsolatedRigIdentity();
+  // Live device tests can retain the previous root between journeys. Dispose
+  // its providers and poller before clearing this isolated rig's artifacts.
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
   final prefs = await SharedPreferences.getInstance();
   await prefs.clear();
   // The rig asserts shipped Traditional Chinese copy. Without this the
@@ -69,7 +73,8 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
 /// an empty install.
 Future<void> startRigAppPreservingState(WidgetTester tester) async {
   await requireIsolatedRigIdentity();
-
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
   unawaited(app.main());
   final ready = await pumpUntil(
     tester,

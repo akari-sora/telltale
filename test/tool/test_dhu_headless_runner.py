@@ -8,6 +8,7 @@ and R6 (luminance, host chrome crop, perimeter variance gates).
 from __future__ import annotations
 
 import io
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -40,10 +41,12 @@ from tool.dhu_headless_runner import (
     list_scripts,
     main,
     parse_and_validate_script,
+    review_existing_run,
     run_dry_run,
     run_live_execution,
     run_matrix_execution,
     save_execution_artifacts,
+    verify_semantic_evidence,
     validate_profile_ini,
     verify_non_black_screen,
 )
@@ -181,6 +184,77 @@ class DhuHeadlessRunnerTest(unittest.TestCase):
         """Verify main() with --dry-run exits with 0."""
         ret = main(["--dry-run"])
         self.assertEqual(ret, 0)
+
+    def test_dry_run_reports_zero_executed_and_passed(self):
+        stream = io.StringIO()
+        with patch("sys.stdout", stream):
+            ret = run_dry_run(
+                configs_dir=DEFAULT_CONFIGS_DIR,
+                scripts_dir=DEFAULT_SCRIPTS_DIR,
+                evidence_dir=DEFAULT_EVIDENCE_DIR,
+                target_profiles=[DEFAULT_CONFIGS_DIR / "p1-small-landscape.ini"],
+                target_scripts=[DEFAULT_SCRIPTS_DIR / "baseline.txt"],
+            )
+        self.assertEqual(ret, 0)
+        self.assertIn("Planned: 1, Executed: 0, Passed: 0", stream.getvalue())
+        self.assertNotIn("100% PASSED", stream.getvalue())
+
+    def test_semantic_evidence_rejects_missing_stale_hash_and_unrelated_image(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            image_path = run_dir / "screen.png"
+            Image.new("RGB", (800, 480), (20, 80, 160)).save(image_path)
+            ok, _, _ = verify_semantic_evidence(None, "scenario", ["screen.png"], run_dir)
+            self.assertFalse(ok)
+
+            receipt = run_dir / "receipt.json"
+            receipt.write_text(json.dumps({
+                "scenario_id": "scenario",
+                "screenshots": {"screen.png": {
+                    "sha256": "0" * 64,
+                    "observed_state": "expected dashboard",
+                    "observer": "manual-review",
+                }},
+            }), encoding="utf-8")
+            ok, message, _ = verify_semantic_evidence(receipt, "scenario", ["screen.png"], run_dir)
+            self.assertFalse(ok)
+            self.assertIn("hash mismatch", message)
+
+            receipt.write_text(json.dumps({
+                "scenario_id": "wrong-scenario",
+                "screenshots": {},
+            }), encoding="utf-8")
+            ok, message, _ = verify_semantic_evidence(receipt, "scenario", ["screen.png"], run_dir)
+            self.assertFalse(ok)
+            self.assertIn("scenario_id", message)
+
+    def test_post_review_accepts_exact_fresh_observed_image(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            image_path = run_dir / "screen.png"
+            image = Image.new("RGB", (800, 480), (15, 18, 25))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle([40, 40, 760, 420], fill=(30, 100, 180), outline=(255, 255, 255))
+            image.save(image_path)
+            start_time = time.time() - 1
+            (run_dir / "result.json").write_text(json.dumps({
+                "scenario_id": "scenario",
+                "expected_screenshots": ["screen.png"],
+                "start_time": start_time,
+            }), encoding="utf-8")
+            digest = hashlib.sha256(image_path.read_bytes()).hexdigest()
+            receipt = run_dir / "receipt.json"
+            receipt.write_text(json.dumps({
+                "scenario_id": "scenario",
+                "screenshots": {"screen.png": {
+                    "sha256": digest,
+                    "observed_state": "Telltale dashboard with telemetry cards",
+                    "observer": "manual-review",
+                }},
+            }), encoding="utf-8")
+            code, message = review_existing_run(run_dir, receipt)
+            self.assertEqual(code, 0, message)
+            self.assertTrue((run_dir / "semantic-review.json").is_file())
 
     # =========================================================================
     # Defect R1: Runner Hardening, Freshness, Manifest & Exit Code Enforcement

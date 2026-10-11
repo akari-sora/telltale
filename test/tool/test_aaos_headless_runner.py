@@ -386,16 +386,16 @@ class AaosHeadlessRunnerTest(unittest.TestCase):
     def test_observer_state_evaluation_stationary(self):
         """Verify AaosStateObserver evaluates Park & speed 0 as STATIONARY and DTC accessible."""
         observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
-        with patch.object(observer, "get_vhal_property_speed", return_value=0.0):
-            with patch.object(observer, "get_vhal_property_gear", return_value=GEAR_PARK):
+        with patch("tool.aaos_headless_runner.run_adb_shell", return_value=AdbResult(0, "", "", [])):
+            with patch.object(observer, "observe_app_ui", return_value='text="Telltale" text="Vehicle stationary" text="DTC"'):
                 self.assertEqual(observer.observe_motion_state(), "STATIONARY")
                 self.assertTrue(observer.verify_dtc_accessible())
 
     def test_observer_state_evaluation_moving(self):
         """Verify AaosStateObserver evaluates speed > 0 as MOVING, auto-pop triggered, and DTC not accessible."""
         observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
-        with patch.object(observer, "get_vhal_property_speed", return_value=13.89):
-            with patch.object(observer, "get_vhal_property_gear", return_value=GEAR_DRIVE):
+        with patch("tool.aaos_headless_runner.run_adb_shell", return_value=AdbResult(0, "", "", [])):
+            with patch.object(observer, "observe_app_ui", return_value='text="Telltale" text="Vehicle moving" text="Health"'):
                 self.assertEqual(observer.observe_motion_state(), "MOVING")
                 self.assertFalse(observer.verify_dtc_accessible())
                 with patch("tool.aaos_headless_runner.run_adb_shell") as mock_shell:
@@ -405,11 +405,39 @@ class AaosHeadlessRunnerTest(unittest.TestCase):
     def test_observer_state_evaluation_reverse(self):
         """Verify AaosStateObserver evaluates reverse speed as MOVING and DTC strictly blocked."""
         observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
-        with patch.object(observer, "get_vhal_property_speed", return_value=-2.0):
-            with patch.object(observer, "get_vhal_property_gear", return_value=GEAR_REVERSE):
+        with patch("tool.aaos_headless_runner.run_adb_shell", return_value=AdbResult(0, "", "", [])):
+            with patch.object(observer, "observe_app_ui", return_value='text="Telltale" text="Vehicle moving" text="Park to view DTC"'):
                 self.assertEqual(observer.observe_motion_state(), "MOVING")
                 self.assertTrue(observer.verify_dtc_blocked())
                 self.assertFalse(observer.verify_dtc_accessible())
+
+    def test_vhal_echo_without_app_observation_is_unknown(self):
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        with patch.object(observer, "get_vhal_property_speed", return_value=13.89):
+            with patch.object(observer, "get_vhal_property_gear", return_value=GEAR_DRIVE):
+                with patch("tool.aaos_headless_runner.run_adb_shell", return_value=AdbResult(0, "", "", [])):
+                    with patch.object(observer, "observe_app_ui", return_value=""):
+                        self.assertEqual(observer.observe_motion_state(), "UNKNOWN")
+                        self.assertFalse(observer.verify_autopop_occurred())
+                        self.assertFalse(observer.verify_dtc_blocked())
+
+    def test_unrelated_nonempty_ui_is_not_application_evidence(self):
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        with patch.object(observer, "observe_app_ui", return_value='text="Maps" text="Vehicle moving" text="Health"'):
+            self.assertEqual(observer.observe_motion_state(), "UNKNOWN")
+            self.assertFalse(observer.verify_dtc_accessible())
+            self.assertFalse(observer.verify_autopop_occurred())
+
+    def test_failed_fresh_ui_dump_never_reuses_stale_xml(self):
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        responses = [
+            AdbResult(0, "", "", []),
+            AdbResult(1, "", "dump failed", []),
+            AdbResult(0, 'text="Telltale" text="Vehicle moving"', "", []),
+        ]
+        with patch("tool.aaos_headless_runner.run_adb_shell", side_effect=responses) as shell:
+            self.assertEqual(observer.observe_app_ui(), "")
+            self.assertEqual(shell.call_count, 2)
 
     def _create_fake_adb_run(self, fail_inject_cmd: bool = False, inject_exit_code: int = 0, inject_output: str = "success"):
         def fake_run(cmd, *args, **kwargs):

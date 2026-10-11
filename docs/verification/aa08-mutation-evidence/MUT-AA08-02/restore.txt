@@ -1,5 +1,0 @@
-RESTORE_METHOD: direct_file_rewrite_and_verification
-TARGET_FILE: android/car-core/src/main/kotlin/com/cbstudio/telltale/car/safety/CarDtcMotionGate.kt
-PRE_MUTATION_SHA256: 1b38d698a2810f2d1406caa28ee7b620929aa614a37ef737ff91bac3d5d240a7
-POST_RESTORE_SHA256: 1b38d698a2810f2d1406caa28ee7b620929aa614a37ef737ff91bac3d5d240a7
-SHA256_MATCH: True

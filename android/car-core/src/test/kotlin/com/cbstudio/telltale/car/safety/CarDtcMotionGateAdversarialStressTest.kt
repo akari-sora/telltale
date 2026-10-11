@@ -467,7 +467,7 @@ class CarDtcMotionGateAdversarialStressTest {
         assertEquals(CarDtcMotionState.MOVING, CarDtcMotionGate.evaluate(stateConnectedTinyRev, hostZero))
         assertFalse(CarDtcMotionGate.isStationary(stateConnectedTinyRev, hostZero))
 
-        // 7. Non-connected phase with display = 0f, raw = null
+        // 7. Non-connected phase with display = 0f, raw = null is unknown
         val stateDisconnectedZero = getState(0.0, CarSignalStatus.LIVE, CarConnectionPhase.DISCONNECTED)
         val hostDisplayZeroOnly = CarHostSpeedSample(
             status = CarHostSpeedStatus.LIVE,
@@ -475,22 +475,22 @@ class CarDtcMotionGateAdversarialStressTest {
             rawMetersPerSecond = null,
         )
         assertEquals(
-            CarDtcMotionState.STATIONARY,
+            CarDtcMotionState.UNKNOWN,
             CarDtcMotionGate.evaluate(stateDisconnectedZero, hostDisplayZeroOnly)
         )
-        assertTrue(CarDtcMotionGate.isStationary(stateDisconnectedZero, hostDisplayZeroOnly))
+        assertFalse(CarDtcMotionGate.isStationary(stateDisconnectedZero, hostDisplayZeroOnly))
 
-        // 8. Non-connected phase with display = null, raw = 0f
+        // 8. Non-connected phase with display = null, raw = 0f is unknown
         val hostRawZeroOnly = CarHostSpeedSample(
             status = CarHostSpeedStatus.LIVE,
             displaySpeedMetersPerSecond = null,
             rawMetersPerSecond = 0.0f,
         )
         assertEquals(
-            CarDtcMotionState.STATIONARY,
+            CarDtcMotionState.UNKNOWN,
             CarDtcMotionGate.evaluate(stateDisconnectedZero, hostRawZeroOnly)
         )
-        assertTrue(CarDtcMotionGate.isStationary(stateDisconnectedZero, hostRawZeroOnly))
+        assertFalse(CarDtcMotionGate.isStationary(stateDisconnectedZero, hostRawZeroOnly))
 
         // 9. Non-connected phase with display = 0f, raw = -0.0001f
         val hostDisplayZeroRawRev = CarHostSpeedSample(

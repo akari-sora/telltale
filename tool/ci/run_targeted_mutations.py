@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Targeted Mutation Testing Suite for Automotive Safety Guards (AA-08 Milestone M4 / SAFE-08).
 
-Proves that the test suite has a 100% kill rate against deliberate, dangerous mutations
+Measures whether the test suite kills deliberate, dangerous mutations
 in the automotive core safety guards (:car-core):
   - MUT-AA08-01: Reverse speed check weakening in CarVehicleMotionResolver.kt
   - MUT-AA08-02: Motion gate disconnected phase speed check weakening in CarDtcMotionGate.kt
@@ -56,6 +56,7 @@ class MutationResultStatus(str, Enum):
     INVALID_MUTATION = "INVALID_MUTATION"
     INFRA_ERROR = "INFRA_ERROR"
     TIMEOUT = "TIMEOUT"
+    NOT_EXECUTED = "NOT_EXECUTED"
 
 
 @dataclass
@@ -92,11 +93,11 @@ MUTATIONS: List[Dict[str, Any]] = [
     },
     {
         "id": "MUT-AA08-02",
-        "name": "Motion gate disconnected phase speed check weakening",
-        "description": "Change host speed zero check from OR '||' to AND '&&' in non-connected phase, refusing single-channel zero",
+        "name": "Motion gate non-connected fail-open",
+        "description": "Treat unresolved non-connected host motion as stationary, allowing DTC access without live zero-speed evidence",
         "file": "android/car-core/src/main/kotlin/com/cbstudio/telltale/car/safety/CarDtcMotionGate.kt",
-        "target": "                        ((hostSpeedSample.displaySpeedMetersPerSecond ?: 1f) == 0f ||\n                         (hostSpeedSample.rawMetersPerSecond ?: 1f) == 0f)) {",
-        "replacement": "                        ((hostSpeedSample.displaySpeedMetersPerSecond ?: 1f) == 0f &&\n                         (hostSpeedSample.rawMetersPerSecond ?: 1f) == 0f)) {",
+        "target": "                    } else {\n                        CarDtcMotionState.UNKNOWN\n                    }",
+        "replacement": "                    } else {\n                        CarDtcMotionState.STATIONARY\n                    }",
         "expected_failing_classes": [
             "CarDtcMotionGateTest",
             "CarDtcMotionGateAdversarialStressTest",
@@ -553,12 +554,11 @@ def run_single_mutation(
         m_file_abs.write_text(mut_content, encoding="utf-8")
 
         if dry_run:
-            print("  [DRY-RUN] Verified patch generation and application without running test suite.")
-            mut_code = 1
-            mut_log = "[DRY-RUN] Test execution simulated"
-            junit_summary = parse_gradle_junit_reports(res_dir, fallback_to_defaults=True)
-            status = MutationResultStatus.KILLED_BY_TEST
-            reason = "[DRY-RUN] Verified patch, apply-check, write/restore, and SHA-256 match"
+            print("  [DRY-RUN] Patch generation/application checked; tests were NOT EXECUTED.")
+            mut_code = None
+            mut_log = ""
+            status = MutationResultStatus.NOT_EXECUTED
+            reason = "DRY_RUN: mutation tests and JUnit parsing were not executed"
         else:
             t0 = time.time()
             mut_code, mut_log = run_cmd_fn(test_cmd, cwd=repo_root)
@@ -604,8 +604,8 @@ def run_single_mutation(
         restored_passed = (post_code == 0)
         print(f"  [RESTORED RUN] Exit code: {post_code} (Passed: {restored_passed}, duration={post_elapsed:.1f}s)")
     else:
-        post_code = 0
-        restored_passed = True
+        post_code = None
+        restored_passed = False
 
     mutant_killed = (status == MutationResultStatus.KILLED_BY_TEST)
 
@@ -676,7 +676,8 @@ def main():
     tree_sha = get_git_rev("HEAD^{tree}")
 
     # Control Run
-    control_code = 0
+    control_code = None
+    control_status = "SKIPPED"
     if not args.dry_run and not args.skip_control:
         print("\n[Phase 1] Executing Control Test (Baseline)...")
         t0 = time.time()
@@ -690,6 +691,7 @@ def main():
             print(f"❌ Control test FAILED with exit code {control_code} in {elapsed:.1f}s!")
             sys.exit(1)
         print(f"✅ Control test PASSED in {elapsed:.1f}s.")
+        control_status = "PASS"
     else:
         print("\n[Phase 1] Skipping control test (dry-run or skip-control).")
 
@@ -701,7 +703,8 @@ def main():
         "control": {
             "command": " ".join(TEST_CMD),
             "exit_code": control_code,
-            "status": "PASS" if control_code == 0 else "FAIL",
+            "status": control_status,
+            "executed": control_code is not None,
         },
         "mutations": {},
     }
@@ -744,7 +747,8 @@ def main():
         "mutant_kill_rate_percent": kill_rate,
         "status_breakdown": status_breakdown,
         "all_restored_passed": all_restored,
-        "verified": (all_killed and all_restored),
+        "verified": (not args.dry_run and control_status == "PASS" and all_killed and all_restored),
+        "execution_mode": "DRY_RUN" if args.dry_run else "LIVE",
     }
 
     # Write manifest
@@ -777,11 +781,14 @@ def main():
     print(f"SHA256SUMS Written:      {sha256_file}")
     print("=" * 70)
 
-    if all_killed and all_restored:
+    if manifest["summary"]["verified"]:
         print("🏆 100% MUTATION INTERCEPTION VERIFIED - ALL GUARDS PROVED ACTIVE!")
         sys.exit(0)
     else:
-        print("❌ MUTATION TEST FAILED - NOT ALL MUTANTS KILLED BY TESTS!")
+        if args.dry_run:
+            print("ℹ️ DRY RUN COMPLETE - MUTATION INTERCEPTION WAS NOT EXECUTED OR VERIFIED.")
+        else:
+            print("❌ MUTATION TEST FAILED - NOT ALL MUTANTS KILLED BY TESTS!")
         sys.exit(1)
 
 

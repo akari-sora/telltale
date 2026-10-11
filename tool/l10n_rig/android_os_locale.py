@@ -56,6 +56,7 @@ def validate_candidate_locale_report(
     report: object,
     *,
     expected_candidate_sha: str | None = None,
+    expected_candidate_apk: Path | str | None = None,
     expected_source_sha: str | None = None,
     expected_tree_sha: str | None = None,
 ) -> dict:
@@ -67,6 +68,10 @@ def validate_candidate_locale_report(
         raise GateError("candidate report requires profile='candidate-native-locale'")
     if report.get("provenanceLevel") != "NATIVE_LOCALE_CANDIDATE_N1_ACCEPTED":
         raise GateError("candidate report missing NATIVE_LOCALE_CANDIDATE_N1_ACCEPTED provenance")
+
+    status = report.get("status")
+    if status is not None and status != "PASS":
+        raise GateError(f"candidate-locale status is {status}, must be PASS")
 
     device = report.get("device")
     if not isinstance(device, str) or not device.strip():
@@ -93,6 +98,26 @@ def validate_candidate_locale_report(
     if expected_candidate_sha and cand_sha != expected_candidate_sha:
         raise GateError(f"candidate_sha256 {cand_sha} does not match expected {expected_candidate_sha}")
 
+    if expected_candidate_apk is not None:
+        cand_path = Path(expected_candidate_apk)
+        if not cand_path.is_file():
+            raise GateError(f"candidate-locale candidate APK not found or not a regular file: {cand_path}")
+        file_sha = hashlib.sha256(cand_path.read_bytes()).hexdigest()
+        if cand_sha != file_sha:
+            raise GateError(f"candidate APK file SHA256 {file_sha} does not match report candidate_sha256 {cand_sha}")
+
+    if "candidate_apk" in report:
+        apk_val = report.get("candidate_apk")
+        if not isinstance(apk_val, str) or not apk_val.strip():
+            raise GateError("candidate-locale candidate_apk in report must be a non-empty string")
+        apk_path = Path(apk_val)
+        if apk_path.is_absolute() or apk_path.exists():
+            if not apk_path.is_file():
+                raise GateError(f"candidate-locale candidate_apk path {apk_path} is not a valid file")
+            file_sha = hashlib.sha256(apk_path.read_bytes()).hexdigest()
+            if cand_sha != file_sha:
+                raise GateError(f"candidate-locale candidate_apk file SHA256 {file_sha} mismatch with report {cand_sha}")
+
     source_sha = report.get("source_sha") or report.get("runner_head_sha")
     if not isinstance(source_sha, str) or len(source_sha) != 40:
         raise GateError("candidate-locale missing 40-hex source_sha")
@@ -115,6 +140,18 @@ def validate_candidate_locale_report(
     if (pkg == PACKAGE and flavor != "rig") or (pkg == "com.cbstudio.telltale" and flavor != "field"):
         raise GateError(f"candidate-locale package {pkg} incompatible with flavor {flavor}")
 
+    vname = report.get("version_name")
+    if not isinstance(vname, str) or not vname.strip():
+        raise GateError("candidate-locale missing valid version_name")
+
+    vcode = report.get("version_code")
+    if not isinstance(vcode, int) or vcode <= 0:
+        raise GateError(f"candidate-locale version_code must be positive integer (found: {vcode})")
+
+    abi = report.get("device_abi") or report.get("abi")
+    if abi is not None and abi not in ("arm64-v8a", "armeabi-v7a", "x86_64", "x86"):
+        raise GateError(f"candidate-locale invalid device_abi: {abi}")
+
     sig = report.get("signature_digest")
     if not isinstance(sig, str) or not SHA256_RE.fullmatch(sig) or sig == "0" * 64:
         raise GateError("candidate-locale missing valid signature_digest")
@@ -123,7 +160,9 @@ def validate_candidate_locale_report(
     if report.get("manifest_locale_config_valid") is not True:
         raise GateError("candidate-locale N01 failed: manifest localeConfig is invalid or missing")
     supported = report.get("supported_locales")
-    if not isinstance(supported, list) or not {"en", "zh-Hant"}.issubset(set(supported)):
+    if not isinstance(supported, list) or not supported or not all(isinstance(x, str) and x.strip() for x in supported):
+        raise GateError("candidate-locale N01 failed: supported_locales must be non-empty list of strings")
+    if not {"en", "zh-Hant"}.issubset(set(supported)):
         raise GateError("candidate-locale N01 failed: supported_locales must include en and zh-Hant")
 
     # N02: OS -> App Sync
@@ -155,8 +194,11 @@ def validate_candidate_locale_report(
         raise GateError("candidate-locale N06 failed: teardown restoration was not verified")
 
     # N07: Exit & Case IDs & Screenshots
-    if report.get("exit") != 0:
-        raise GateError("candidate-locale nonzero exit is not PASS")
+    exit_val = report.get("exit")
+    if not isinstance(exit_val, int):
+        raise GateError(f"candidate-locale non-integer exit ({exit_val}) is not PASS")
+    if exit_val != 0:
+        raise GateError(f"candidate-locale nonzero exit ({exit_val}) is not PASS")
 
     case_ids = report.get("case_ids")
     if not isinstance(case_ids, list) or not all(c in case_ids for c in CANDIDATE_CASE_IDS):
@@ -170,8 +212,8 @@ def validate_candidate_locale_report(
             raise GateError(f"candidate-locale {tag} screenshot hash invalid")
 
     command = report.get("command")
-    if not isinstance(command, list) or not command:
-        raise GateError("candidate-locale missing executed command")
+    if not isinstance(command, list) or not command or not all(isinstance(c, str) and c.strip() for c in command):
+        raise GateError("candidate-locale missing or invalid executed command")
 
     return report
 
@@ -180,6 +222,7 @@ def validate_android_os_locale_report(
     report: object,
     *,
     expected_candidate_sha: str | None = None,
+    expected_candidate_apk: Path | str | None = None,
     expected_source_sha: str | None = None,
     expected_tree_sha: str | None = None,
 ) -> dict:
@@ -187,6 +230,7 @@ def validate_android_os_locale_report(
         return validate_candidate_locale_report(
             report,
             expected_candidate_sha=expected_candidate_sha,
+            expected_candidate_apk=expected_candidate_apk,
             expected_source_sha=expected_source_sha,
             expected_tree_sha=expected_tree_sha,
         )
@@ -521,6 +565,7 @@ def main(argv: list[str] | None = None) -> int:
             validate_android_os_locale_report(
                 report_data,
                 expected_candidate_sha=args.candidate_sha,
+                expected_candidate_apk=args.candidate_apk,
                 expected_source_sha=args.source_sha,
                 expected_tree_sha=args.tree_sha,
             )
@@ -557,6 +602,7 @@ def main(argv: list[str] | None = None) -> int:
         validate_android_os_locale_report(
             report,
             expected_candidate_sha=args.candidate_sha,
+            expected_candidate_apk=args.candidate_apk,
             expected_source_sha=args.source_sha,
             expected_tree_sha=args.tree_sha,
         )

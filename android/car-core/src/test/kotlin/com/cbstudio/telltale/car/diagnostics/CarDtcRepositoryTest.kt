@@ -168,17 +168,17 @@ class CarDtcRepositoryTest {
     }
 
     @Test
-    fun replaySnapshotRestoresStateWhenExpectedEpochIsNull() {
+    fun replaySnapshotPurgesSnapshotWhenExpectedEpochIsUnknown() {
         val rep = report(reportSequence = 1, connectionEpoch = 3)
         repository.submit(rep)
         repository.reset(clearSnapshot = false)
         assertEquals(CarDtcState.Awaiting, repository.state.value)
 
         val success = repository.replaySnapshot(expectedEpoch = null)
-        assertTrue(success)
-        val state = repository.state.value
-        assertTrue(state is CarDtcState.Current)
-        assertEquals(rep, (state as CarDtcState.Current).report)
+        assertFalse(success)
+        assertEquals(CarDtcState.Awaiting, repository.state.value)
+        assertNull(repository.latestValidReport)
+        assertFalse(repository.replaySnapshot(expectedEpoch = 3))
     }
 
     @Test

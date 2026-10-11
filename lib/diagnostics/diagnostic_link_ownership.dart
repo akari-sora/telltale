@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'diagnostic_link.dart';
 
-typedef DiagnosticCancellationToken = DiagnosticCancellation;
-
 /// Authority that coordinates half-duplex access to the diagnostic link
 /// within a single connection lifecycle.
 ///

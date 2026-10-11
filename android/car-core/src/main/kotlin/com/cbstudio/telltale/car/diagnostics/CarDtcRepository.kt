@@ -73,7 +73,7 @@ class DefaultCarDtcRepository : CarDtcRepository {
     override fun replaySnapshot(expectedEpoch: Long?): Boolean {
         synchronized(lock) {
             val cached = snapshot ?: return false
-            if (expectedEpoch != null && cached.connectionEpoch != expectedEpoch) {
+            if (expectedEpoch == null || cached.connectionEpoch != expectedEpoch) {
                 clearSnapshot()
                 _state.value = CarDtcState.Awaiting
                 return false

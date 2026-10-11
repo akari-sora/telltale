@@ -189,11 +189,17 @@ class CarSessionLifecycleEmpiricalTest {
 
     @Test
     fun empirical_destroyPermanentlyClearsSnapshot() = testScope.runTest {
+        val telemRepo = CarTelemetryRepository(
+            scope = backgroundScope,
+            elapsedRealtimeMs = { virtualTimeMs },
+        )
+        telemRepo.submit(frameInput(sequence = 1, epoch = 5))
         val dtcRepo = DefaultCarDtcRepository()
         dtcRepo.submit(sampleReport(sequence = 1, epoch = 5))
 
         val runtime = CarSessionRuntime(
             carContext = carContext,
+            telemetryRepository = telemRepo,
             dtcRepository = dtcRepo,
             hostSpeedGateway = NoopSpeedGateway(),
             clock = { virtualTimeMs },

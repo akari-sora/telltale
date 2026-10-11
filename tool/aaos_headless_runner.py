@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Headless Android Automotive OS (AAOS) Emulator Automation Runner.
 
-Automates Headless AAOS AVD execution and VHAL state machine verification:
+Automates Headless AAOS AVD execution and fail-closed observation:
 - Background headless AVD launch (-no-window -no-audio -no-boot-anim).
 - 4-Stage Readiness Verification:
     1. ADB Device State: `adb get-state` -> 'device'
@@ -472,31 +472,46 @@ class AaosStateObserver:
         )
         return parse_vhal_gear_from_dumpsys(res.stdout)
 
+    def observe_app_ui(self) -> str:
+        """Return externally observable app UI text/content descriptions, or empty."""
+        run_adb_shell(
+            self.adb_prefix,
+            ["rm", "-f", "/data/local/tmp/telltale-aa08-ui.xml"],
+            check=False,
+        )
+        dump_result = run_adb_shell(
+            self.adb_prefix,
+            ["uiautomator", "dump", "/data/local/tmp/telltale-aa08-ui.xml"],
+            check=False,
+        )
+        if not dump_result.is_success:
+            return ""
+        result = run_adb_shell(
+            self.adb_prefix,
+            ["cat", "/data/local/tmp/telltale-aa08-ui.xml"],
+            check=False,
+        )
+        return result.stdout if result.returncode == 0 else ""
+
+    @staticmethod
+    def _is_telltale_ui(ui: str) -> bool:
+        return "telltale" in ui.lower()
+
     def observe_motion_state(self, timeout: float = 5.0) -> str:
-        """Observe application motion state via VHAL property or logcat.
+        """Observe application motion state from app UI/log output.
+
+        VHAL values are injection/input evidence only. They never establish that
+        the application consumed the value or enforced a safety decision.
         
         Returns:
             'STATIONARY', 'MOVING', or 'UNKNOWN'
         """
-        speed = self.get_vhal_property_speed()
-        gear = self.get_vhal_property_gear()
-
-        if speed is not None:
-            if speed != 0.0:
-                return "MOVING"
-            if gear is None or gear == GEAR_PARK:
-                return "STATIONARY"
-            return "STATIONARY"
-
-        res_log = run_adb_shell(
-            self.adb_prefix,
-            ["logcat", "-d", "-s", "CarDtcMotionGate:D", "CarVehicleMotionResolver:D", "CarDtcSummaryScreen:D"],
-            check=False,
-        )
-        log_lower = res_log.stdout.lower()
-        if "moving" in log_lower or "ismoving=true" in log_lower or "stationary=false" in log_lower:
+        ui_lower = self.observe_app_ui().lower()
+        if not self._is_telltale_ui(ui_lower):
+            return "UNKNOWN"
+        if any(token in ui_lower for token in ("vehicle moving", "driving", "motion blocked")):
             return "MOVING"
-        if "stationary" in log_lower or "isstationary=true" in log_lower:
+        if any(token in ui_lower for token in ("vehicle stationary", "parked", "stationary")):
             return "STATIONARY"
 
         return "UNKNOWN"
@@ -507,26 +522,27 @@ class AaosStateObserver:
         tolerance: float = 0.1,
         timeout: float = 5.0,
     ) -> bool:
-        """Verify that VHAL / Application has received the injected speed within timeout."""
+        """Verify the application observed the expected motion; VHAL echo is insufficient."""
         start = time.time()
         while time.time() - start < timeout:
-            current = self.get_vhal_property_speed()
-            if current is not None and abs(current - expected_speed) <= tolerance:
+            motion = self.observe_motion_state()
+            expected_motion = "STATIONARY" if expected_speed == 0.0 else "MOVING"
+            if motion == expected_motion:
                 return True
             time.sleep(0.5)
-
-        current_speed = self.get_vhal_property_speed()
-        if current_speed is not None:
-            return abs(current_speed - expected_speed) <= tolerance
 
         motion = self.observe_motion_state()
         expected_motion = "STATIONARY" if expected_speed == 0.0 else "MOVING"
         return motion == expected_motion
 
     def verify_dtc_accessible(self, timeout: float = 5.0) -> bool:
-        """Verify that DTC inspection is permitted (vehicle stationary in Park)."""
-        motion = self.observe_motion_state(timeout=timeout)
-        return motion == "STATIONARY"
+        """Verify visible DTC UI, not merely a stationary VHAL input."""
+        ui = self.observe_app_ui().lower()
+        if not self._is_telltale_ui(ui):
+            return False
+        has_dtc = any(token in ui for token in ("diagnostic trouble", "dtc", "trouble code"))
+        blocked = any(token in ui for token in ("blocked", "unavailable while driving", "park to view"))
+        return has_dtc and not blocked
 
     def verify_autopop_occurred(self, timeout: float = 5.0) -> bool:
         """Verify SAFE-06: Auto-pop returned vehicle from DTC screen to safety screen upon motion."""
@@ -534,29 +550,19 @@ class AaosStateObserver:
         if motion != "MOVING":
             return False
 
-        res_log = run_adb_shell(
-            self.adb_prefix,
-            ["logcat", "-d", "-s", "ScreenManager:D", "CarDtcSummaryScreen:D"],
-            check=False,
-        )
-        log_content = res_log.stdout
-        if "popTo" in log_content or "CAR_HEALTH" in log_content or "pop" in log_content.lower():
-            return True
-
-        res_act = run_adb_shell(
-            self.adb_prefix,
-            ["dumpsys", "activity", "top"],
-            check=False,
-        )
-        if "CarDtcSummaryScreen" not in res_act.stdout:
-            return True
-
-        return True
+        ui = self.observe_app_ui().lower()
+        if not self._is_telltale_ui(ui):
+            return False
+        health_visible = any(token in ui for token in ("vehicle health", "health", "powertrain"))
+        dtc_visible = any(token in ui for token in ("diagnostic trouble", "dtc summary"))
+        return health_visible and not dtc_visible
 
     def verify_dtc_blocked(self, timeout: float = 5.0) -> bool:
         """Verify SAFE-02 / AA05-15: DTC access is blocked while moving (including reverse)."""
-        motion = self.observe_motion_state(timeout=timeout)
-        return motion == "MOVING"
+        ui = self.observe_app_ui().lower()
+        if not self._is_telltale_ui(ui):
+            return False
+        return any(token in ui for token in ("blocked", "unavailable while driving", "park to view"))
 
 
 # ---------------------------------------------------------------------------
@@ -740,7 +746,7 @@ def run_dry_run(
         print("  ℹ Emulator binary not found in standard paths (acceptable in CI).")
 
     print("\n" + "=" * 70)
-    print(" [AAOS-HEADLESS-RUNNER] DRY-RUN VERIFICATION 100% PASSED")
+    print(" [AAOS-HEADLESS-RUNNER] DRY-RUN TOOLING VALIDATION COMPLETE; LIVE ACCEPTANCE NOT EXECUTED")
     print("=" * 70)
     return 0
 
@@ -861,8 +867,9 @@ def run_live_execution(
             print("Error: Stage 3 timed out waiting for car_service.", file=sys.stderr)
             return 3
 
-        # Stage 4: Foreground User 10, Template Host, and App readiness
-        print("[Stage 4/4] Verifying User 10 unlocked, Template Host, and App readiness...")
+        # Stage 4: Foreground User 10, Template Host, and package installation.
+        # Application observation happens below and must fail closed if absent.
+        print("[Stage 4/4] Verifying User 10 unlocked, Template Host, and package installation...")
         while time.time() - start_time < boot_timeout:
             try:
                 u_out = run_adb_shell(adb_prefix, ["am", "get-current-user"], check=False).stdout
@@ -875,7 +882,7 @@ def run_live_execution(
                 ).stdout
 
                 if verify_stage4_readiness(u_out, unlocked_out, feat_out, pkg_out):
-                    print("  ✓ Stage 4 Passed: Driver User 10 unlocked, Template Host ready, App connected.")
+                    print("  ✓ Stage 4 Passed: Driver User 10 unlocked, Template Host ready, package installed.")
                     break
                 elif verbose:
                     if not (parse_stage4_response(u_out) and (parse_user_unlocked_response(unlocked_out) or parse_user_unlocked_response(u_out))):

@@ -724,9 +724,16 @@ class Elm327Client {
     // when the others were clamped, which made it the way round them: suspend
     // and resume with 70 ms of a scan's budget left and the command got five
     // seconds back. The suspension does not extend what the caller asked for.
-    if (_pending != null) {
-      _armPendingTimer(_withinDeadline(commandTimeout), _onCommandTimeout);
+    if (_pending == null) return;
+    final timeout = _withinDeadline(commandTimeout);
+    // A zero-duration timer is queued behind timers that have already fired,
+    // including a reply that arrived after the caller's deadline. Fail the
+    // command synchronously so a late prompt cannot hand spent budget back.
+    if (timeout <= Duration.zero) {
+      _onCommandTimeout();
+      return;
     }
+    _armPendingTimer(timeout, _onCommandTimeout);
   }
 
   String deviceVersion = '';

@@ -554,12 +554,18 @@ class CarSessionRuntimeTest {
 
     @Test
     fun sessionRuntime_stopAndStart_seamlesslyRestoresDtcStateWithoutManualSubmit() = testScope.runTest {
+        val telemRepo = CarTelemetryRepository(
+            scope = backgroundScope,
+            elapsedRealtimeMs = { virtualTimeMs },
+        )
+        telemRepo.submit(frameInput(sequence = 1, epoch = 1, speed = 0.0))
         val dtcRepo = DefaultCarDtcRepository()
         dtcRepo.submit(sampleReport(sequence = 1, epoch = 1))
         assertTrue(dtcRepo.state.value is CarDtcState.Current)
 
         val runtime = CarSessionRuntime(
             carContext = carContext,
+            telemetryRepository = telemRepo,
             dtcRepository = dtcRepo,
             clock = { virtualTimeMs },
             coroutineScope = backgroundScope,
@@ -587,6 +593,27 @@ class CarSessionRuntimeTest {
         // Re-starting after destroy must NOT restore anything
         runtime.start()
         assertEquals(CarDtcState.Awaiting, dtcRepo.state.value)
+    }
+
+    @Test
+    fun sessionRuntime_unknownTelemetryEpochSuppressesCachedDtc() = testScope.runTest {
+        val dtcRepo = DefaultCarDtcRepository()
+        dtcRepo.submit(sampleReport(sequence = 1, epoch = 1))
+        dtcRepo.reset(clearSnapshot = false)
+        val runtime = CarSessionRuntime(
+            carContext = carContext,
+            telemetryRepository = CarTelemetryRepository(
+                scope = backgroundScope,
+                elapsedRealtimeMs = { virtualTimeMs },
+            ),
+            dtcRepository = dtcRepo,
+            clock = { virtualTimeMs },
+            coroutineScope = backgroundScope,
+        )
+        runtime.start()
+        assertEquals(CarDtcState.Awaiting, dtcRepo.state.value)
+        assertEquals(null, dtcRepo.latestValidReport)
+        runtime.destroy()
     }
 
     @Test

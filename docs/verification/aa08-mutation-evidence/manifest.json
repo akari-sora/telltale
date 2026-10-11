@@ -1,123 +1,23 @@
 {
-  "evidence_version": "1.0.0",
+  "evidence_version": "2.0.0",
   "task_id": "AA08-TARGETED-MUTATION-VERIFICATION",
-  "product_head_sha": "259a4bdebd72928a4712baf958c0bbf6b3c78d32",
-  "product_tree_sha": "7a83778ac37a73130f539aea39f74fb70fa6cf3b",
+  "execution_mode": "NOT_EXECUTED",
   "control": {
-    "command": "./android/gradlew -p android :car-core:testDebugUnitTest",
-    "exit_code": 0,
-    "status": "PASS"
+    "status": "SKIPPED",
+    "executed": false,
+    "exit_code": null
   },
   "mutations": {
-    "MUT-AA08-01": {
-      "id": "MUT-AA08-01",
-      "status": "KILLED_BY_TEST",
-      "status_reason": "[DRY-RUN] Verified patch, apply-check, write/restore, and SHA-256 match",
-      "target_file": "android/car-core/src/main/kotlin/com/cbstudio/telltale/car/hardware/CarVehicleMotionResolver.kt",
-      "target_test": "MUT-AA08-01 (Reverse speed check weakening)",
-      "description": "Weaken reverse motion check from 'it != 0.0' to 'it > 0.0', ignoring negative speeds",
-      "patch_sha256": "6d2985c7dfbcdf454c414f6a3f1a16a1c4cd8f585d0c5999db9985586c1a2070",
-      "apply_check_exit": 0,
-      "mutant_test_exit": 1,
-      "mutant_killed": true,
-      "pre_mutation_sha256": "df46d4760ac97b507ac32b163311f6eb9fcdad1cca1f5fa7a8a0c3200c982f46",
-      "post_restore_sha256": "df46d4760ac97b507ac32b163311f6eb9fcdad1cca1f5fa7a8a0c3200c982f46",
-      "restore_sha_match": true,
-      "restored_test_exit": 0,
-      "restored_test_passed": true,
-      "junit_summary": {
-        "total_tests": 221,
-        "total_failures": 0,
-        "total_errors": 0,
-        "total_skipped": 0,
-        "failures_count": 0
-      }
-    },
-    "MUT-AA08-02": {
-      "id": "MUT-AA08-02",
-      "status": "KILLED_BY_TEST",
-      "status_reason": "[DRY-RUN] Verified patch, apply-check, write/restore, and SHA-256 match",
-      "target_file": "android/car-core/src/main/kotlin/com/cbstudio/telltale/car/safety/CarDtcMotionGate.kt",
-      "target_test": "MUT-AA08-02 (Motion gate disconnected phase speed check weakening)",
-      "description": "Change host speed zero check from OR '||' to AND '&&' in non-connected phase, refusing single-channel zero",
-      "patch_sha256": "fe93af8669e22004b2eaecd42bfdce17b7159023d525d8aba3c21a3af18c142a",
-      "apply_check_exit": 0,
-      "mutant_test_exit": 1,
-      "mutant_killed": true,
-      "pre_mutation_sha256": "1b38d698a2810f2d1406caa28ee7b620929aa614a37ef737ff91bac3d5d240a7",
-      "post_restore_sha256": "1b38d698a2810f2d1406caa28ee7b620929aa614a37ef737ff91bac3d5d240a7",
-      "restore_sha_match": true,
-      "restored_test_exit": 0,
-      "restored_test_passed": true,
-      "junit_summary": {
-        "total_tests": 221,
-        "total_failures": 0,
-        "total_errors": 0,
-        "total_skipped": 0,
-        "failures_count": 0
-      }
-    },
-    "MUT-AA08-03": {
-      "id": "MUT-AA08-03",
-      "status": "KILLED_BY_TEST",
-      "status_reason": "[DRY-RUN] Verified patch, apply-check, write/restore, and SHA-256 match",
-      "target_file": "android/car-core/src/main/kotlin/com/cbstudio/telltale/car/health/CarHealthEvaluator.kt",
-      "target_test": "MUT-AA08-03 (ConnectionEpoch isolation removal)",
-      "description": "Remove connectionEpoch isolation check in matchingDtcReport, allowing cross-epoch report pollution",
-      "patch_sha256": "de1b6c3adbe56436b9e21a7c4dbaebfdcd463c72511b7abe3007fa75c74390ec",
-      "apply_check_exit": 0,
-      "mutant_test_exit": 1,
-      "mutant_killed": true,
-      "pre_mutation_sha256": "48de5543fd5245a3d92826460f4671ccd044edcbd87cd95912e1830afdca2622",
-      "post_restore_sha256": "48de5543fd5245a3d92826460f4671ccd044edcbd87cd95912e1830afdca2622",
-      "restore_sha_match": true,
-      "restored_test_exit": 0,
-      "restored_test_passed": true,
-      "junit_summary": {
-        "total_tests": 221,
-        "total_failures": 0,
-        "total_errors": 0,
-        "total_skipped": 0,
-        "failures_count": 0
-      }
-    },
-    "MUT-AA08-04": {
-      "id": "MUT-AA08-04",
-      "status": "KILLED_BY_TEST",
-      "status_reason": "[DRY-RUN] Verified patch, apply-check, write/restore, and SHA-256 match",
-      "target_file": "android/car-core/src/main/kotlin/com/cbstudio/telltale/car/CarDtcSummaryScreen.kt",
-      "target_test": "MUT-AA08-04 (Pre-render secondary isStationary verification removal)",
-      "description": "Remove pre-render isStationary secondary safety check and popTo in CarDtcSummaryScreen.onGetTemplate",
-      "patch_sha256": "a314489545489a6044f0e4a3f03d21ebe03da274d6a483b1dab7e20f14b0410f",
-      "apply_check_exit": 0,
-      "mutant_test_exit": 1,
-      "mutant_killed": true,
-      "pre_mutation_sha256": "3a4898ccdbd13e66fc2c534d204aecfd38aef0e365764e0e5846f04fad3a8c21",
-      "post_restore_sha256": "3a4898ccdbd13e66fc2c534d204aecfd38aef0e365764e0e5846f04fad3a8c21",
-      "restore_sha_match": true,
-      "restored_test_exit": 0,
-      "restored_test_passed": true,
-      "junit_summary": {
-        "total_tests": 221,
-        "total_failures": 0,
-        "total_errors": 0,
-        "total_skipped": 0,
-        "failures_count": 0
-      }
-    }
+    "MUT-AA08-01": {"status": "NOT_EXECUTED", "mutant_killed": false},
+    "MUT-AA08-02": {"status": "NOT_EXECUTED", "mutant_killed": false},
+    "MUT-AA08-03": {"status": "NOT_EXECUTED", "mutant_killed": false},
+    "MUT-AA08-04": {"status": "NOT_EXECUTED", "mutant_killed": false}
   },
   "summary": {
     "total_mutations": 4,
-    "mutants_killed": 4,
-    "mutant_kill_rate_percent": 100.0,
-    "status_breakdown": {
-      "KILLED_BY_TEST": 4,
-      "SURVIVED": 0,
-      "INVALID_MUTATION": 0,
-      "INFRA_ERROR": 0,
-      "TIMEOUT": 0
-    },
-    "all_restored_passed": true,
-    "verified": true
+    "mutants_killed": 0,
+    "mutant_kill_rate_percent": 0.0,
+    "verified": false,
+    "note": "Previous committed artifacts came from dry-run simulation and were removed. Run the live mutation suite to produce verification evidence."
   }
 }

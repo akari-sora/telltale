@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import configparser
 from dataclasses import dataclass, field
+import hashlib
 import itertools
 import json
 import math
@@ -392,6 +393,92 @@ def verify_non_black_screen(
     return True, "Non-black screen verified", stats
 
 
+def verify_semantic_evidence(
+    evidence_path: Optional[Path],
+    scenario_id: str,
+    screenshots: List[str],
+    run_dir: Path,
+) -> Tuple[bool, str, Dict[str, Dict[str, str]]]:
+    """Bind an external UI observation to the exact screenshot bytes.
+
+    Pixel checks establish capture integrity only. Acceptance additionally
+    requires a human/semantic observer receipt with a SHA-256 for every image.
+    """
+    if evidence_path is None or not evidence_path.is_file():
+        return False, "semantic evidence receipt is missing", {}
+    try:
+        payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f"semantic evidence receipt is unreadable: {exc}", {}
+    if payload.get("scenario_id") != scenario_id:
+        return False, "semantic evidence scenario_id does not match", {}
+    observations = payload.get("screenshots")
+    if not isinstance(observations, dict):
+        return False, "semantic evidence screenshots map is missing", {}
+    verified: Dict[str, Dict[str, str]] = {}
+    for name in screenshots:
+        observation = observations.get(name)
+        if not isinstance(observation, dict):
+            return False, f"semantic observation missing for {name}", {}
+        observed_state = observation.get("observed_state")
+        observer = observation.get("observer")
+        expected_hash = observation.get("sha256")
+        if not all(isinstance(value, str) and value.strip() for value in (observed_state, observer, expected_hash)):
+            return False, f"semantic observation incomplete for {name}", {}
+        actual_hash = hashlib.sha256((run_dir / name).read_bytes()).hexdigest()
+        if expected_hash.lower() != actual_hash:
+            return False, f"semantic observation hash mismatch for {name}", {}
+        verified[name] = {
+            "observed_state": observed_state.strip(),
+            "observer": observer.strip(),
+            "sha256": actual_hash,
+        }
+    return True, "semantic observations bound to fresh screenshots", verified
+
+
+def review_existing_run(run_dir: Path, semantic_evidence: Path) -> Tuple[int, str]:
+    """Complete semantic review for a previously captured fail-closed run."""
+    result_path = run_dir / "result.json"
+    if not result_path.is_file():
+        return 1, "run result.json is missing"
+    try:
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return 1, f"run result.json is unreadable: {exc}"
+    scenario_id = result.get("scenario_id")
+    screenshots = result.get("expected_screenshots")
+    start_time = result.get("start_time")
+    if not isinstance(scenario_id, str) or not isinstance(screenshots, list) or not screenshots:
+        return 1, "run result lacks scenario or screenshot metadata"
+    if not isinstance(start_time, (int, float)):
+        return 1, "run result lacks start time"
+    for name in screenshots:
+        if not isinstance(name, str):
+            return 1, "run result has invalid screenshot name"
+        image_path = run_dir / name
+        if not image_path.is_file() or image_path.stat().st_mtime < (start_time - 1.0):
+            return 1, f"fresh screenshot is missing for {name}"
+        pixel_ok, pixel_message, _ = verify_non_black_screen(image_path)
+        if not pixel_ok:
+            return 1, f"pixel precondition failed for {name}: {pixel_message}"
+    semantic_ok, message, observations = verify_semantic_evidence(
+        semantic_evidence,
+        scenario_id,
+        screenshots,
+        run_dir,
+    )
+    if not semantic_ok:
+        return 1, message
+    review = {
+        "scenario_id": scenario_id,
+        "status": "PASSED",
+        "semantic_evidence": str(semantic_evidence),
+        "screenshots": observations,
+    }
+    (run_dir / "semantic-review.json").write_text(json.dumps(review, indent=2), encoding="utf-8")
+    return 0, "capture and semantic evidence verified"
+
+
 def save_execution_artifacts(record: DhuExecutionRecord, run_dir: Path) -> None:
     """Save execution logs and result.json manifest to the run directory."""
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -452,6 +539,7 @@ def run_live_execution(
     adb_port: int = 5277,
     timeout: int = 60,
     verbose: bool = False,
+    semantic_evidence: Optional[Path] = None,
 ) -> Tuple[int, DhuExecutionRecord]:
     """Execute live DHU headless run with physical/emulator connection."""
     scenario_id = f"{profile_path.stem}__{script_path.stem}"
@@ -657,6 +745,20 @@ def run_live_execution(
             print(f"✓ Screenshot {shot_name}: OK (mean={stats['mean_luminance']}, var={stats['variance']})")
             record.verified_screenshots[shot_name] = stats
 
+    if not failed_screenshots:
+        semantic_ok, semantic_message, semantic_observations = verify_semantic_evidence(
+            semantic_evidence,
+            scenario_id,
+            screenshots,
+            run_dir,
+        )
+        if not semantic_ok:
+            print(f"✗ Semantic acceptance FAILED: {semantic_message}", file=sys.stderr)
+            failed_screenshots.extend(screenshots)
+        else:
+            for name, observation in semantic_observations.items():
+                record.verified_screenshots[name]["semantic_observation"] = observation
+
     record.failed_screenshots = failed_screenshots
     record.end_time = time.time()
     record.duration_seconds = record.end_time - start_time
@@ -671,7 +773,7 @@ def run_live_execution(
 
     record.status = "PASSED"
     save_execution_artifacts(record, run_dir)
-    print("\n[SUCCESS] Headless DHU run passed all checks!")
+    print("\n[SUCCESS] Headless DHU run passed capture and semantic checks!")
     return 0, record
 
 
@@ -684,6 +786,7 @@ def run_matrix_execution(
     timeout: int = 60,
     fail_fast: bool = False,
     verbose: bool = False,
+    semantic_evidence_dir: Optional[Path] = None,
 ) -> Tuple[int, MatrixResult]:
     """Execute multi-combination matrix with isolated evidence dirs and summary tracking."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -714,6 +817,7 @@ def run_matrix_execution(
             adb_port=adb_port,
             timeout=timeout,
             verbose=verbose,
+            semantic_evidence=(semantic_evidence_dir / f"{scenario_id}.json") if semantic_evidence_dir else None,
         )
         matrix.records.append(record)
         if code == 0 and record.status == "PASSED":
@@ -894,7 +998,7 @@ def run_dry_run(
     combinations = list(itertools.product(profs_to_eval, scripts_to_eval))
 
     print(f"\n[Phase 5] Matrix Scheduling Plan: {len(combinations)} combinations ({len(profs_to_eval)} profiles × {len(scripts_to_eval)} scripts)")
-    print(f"  Planned: {len(combinations)}, Executed: {len(combinations)}, Passed: {len(combinations)}, Failed: 0, Skipped: 0")
+    print(f"  Planned: {len(combinations)}, Executed: 0, Passed: 0, Failed: 0, Skipped: {len(combinations)}")
     for prof, scr in combinations:
         scenario_id = f"{prof.stem}__{scr.stem}"
         if verbose:
@@ -902,7 +1006,7 @@ def run_dry_run(
     print(f"  ✓ Matrix scheduling validated ({len(combinations)} combinations ready).")
 
     print("\n" + "=" * 70)
-    print(" [DHU-HEADLESS-RUNNER] DRY-RUN VERIFICATION 100% PASSED")
+    print(" [DHU-HEADLESS-RUNNER] DRY-RUN TOOLING VALIDATION COMPLETE; LIVE ACCEPTANCE NOT EXECUTED")
     print("=" * 70)
     return 0
 
@@ -980,6 +1084,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Execution timeout in seconds",
     )
     parser.add_argument(
+        "--semantic-evidence",
+        type=Path,
+        default=None,
+        help="JSON observer receipt binding semantic observations to screenshot SHA-256 values",
+    )
+    parser.add_argument(
+        "--semantic-evidence-dir",
+        type=Path,
+        default=None,
+        help="Directory of <profile>__<script>.json semantic receipts for matrix execution",
+    )
+    parser.add_argument(
+        "--review-run-dir",
+        type=Path,
+        default=None,
+        help="Post-review an existing run directory using --semantic-evidence",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Validate configs, scripts, and non-black detection without hardware",
@@ -1026,6 +1148,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     combinations = list(itertools.product(target_profiles, target_scripts))
 
+    if args.review_run_dir is not None:
+        if args.semantic_evidence is None:
+            print("Error: --review-run-dir requires --semantic-evidence", file=sys.stderr)
+            return 1
+        code, message = review_existing_run(args.review_run_dir, args.semantic_evidence)
+        print(message, file=sys.stdout if code == 0 else sys.stderr)
+        return code
+
     if args.dry_run:
         return run_dry_run(
             configs_dir=args.configs_dir,
@@ -1050,6 +1180,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             adb_port=args.adb_port,
             timeout=args.timeout,
             verbose=args.verbose,
+            semantic_evidence=args.semantic_evidence,
         )
         return code
     else:
@@ -1062,6 +1193,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             timeout=args.timeout,
             fail_fast=args.fail_fast,
             verbose=args.verbose,
+            semantic_evidence_dir=args.semantic_evidence_dir,
         )
         return code
 

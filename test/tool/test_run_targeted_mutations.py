@@ -444,3 +444,44 @@ def test_classify_runtime_infra_error_on_test_error():
     )
     assert status == MutationResultStatus.INFRA_ERROR
     assert "Runtime infrastructure error" in reason
+
+
+def test_dry_run_is_not_executed_and_never_reuses_junit(tmp_path: Path):
+    target = tmp_path / "sample.kt"
+    target.write_text("val motion = UNKNOWN\n", encoding="utf-8")
+    stale_results = tmp_path / "results"
+    stale_results.mkdir()
+    (stale_results / "TEST-stale.xml").write_text(
+        '<testsuite tests="1" failures="1"><testcase classname="GuardTest" name="fails">'
+        '<failure type="AssertionError">old</failure></testcase></testsuite>',
+        encoding="utf-8",
+    )
+    mutation = {
+        "id": "MUT-DRY",
+        "name": "dry run",
+        "description": "dry-run classification",
+        "file": "sample.kt",
+        "target": "UNKNOWN",
+        "replacement": "STATIONARY",
+        "expected_failing_classes": ["GuardTest"],
+    }
+
+    def fake_cmd(cmd, cwd=tmp_path):
+        return 0, ""
+
+    result = run_single_mutation(
+        mutation,
+        tmp_path,
+        tmp_path / "evidence",
+        junit_results_dir=stale_results,
+        dry_run=True,
+        run_cmd_fn=fake_cmd,
+    )
+
+    assert result["status"] == MutationResultStatus.NOT_EXECUTED.value
+    assert result["mutant_killed"] is False
+    assert result["mutant_test_exit"] is None
+    assert result["restored_test_exit"] is None
+    assert result["restored_test_passed"] is False
+    assert result["junit_summary"]["total_tests"] == 0
+    assert not (tmp_path / "evidence" / "MUT-DRY" / "mutant-test.txt").exists()
