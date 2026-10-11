@@ -76,4 +76,5 @@
     <string name="car_alert_attention">注意</string>
     <string name="car_action_enable_speed">啟用車速</string>
     <string name="car_speed_permission_phone_handoff">請在停車時於手機完成車速權限設定。</string>
+    <string name="car_speed_permission_handoff">請在停車時完成車速權限設定。</string>
 </resources>

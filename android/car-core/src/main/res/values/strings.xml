@@ -76,4 +76,5 @@
     <string name="car_alert_attention">Attention</string>
     <string name="car_action_enable_speed">Enable vehicle speed</string>
     <string name="car_speed_permission_phone_handoff">Complete vehicle speed permission on your phone while parked.</string>
+    <string name="car_speed_permission_handoff">Complete vehicle speed permission while parked.</string>
 </resources>

@@ -420,6 +420,17 @@ class CarHealthScreen(
         }
     }
 
+    private fun speedPermissionFeedbackStringRes(): Int {
+        val projectedPermissionDeclared = CarHostSpeedPermissionCoordinator
+            .resolveRequiredPermissions(carContext)
+            .contains(CarHostSpeedPermissionCoordinator.PERMISSION_CAR_SPEED_PROJECTED)
+        return if (projectedPermissionDeclared) {
+            R.string.car_speed_permission_phone_handoff
+        } else {
+            R.string.car_speed_permission_handoff
+        }
+    }
+
     override fun onGetTemplate(): Template {
         val model = buildDisplayModel(telemetryRepository.state.value, dtcRepository.state.value)
         lastRenderedModel = model
@@ -499,7 +510,7 @@ class CarHealthScreen(
                 .setTitle(carContext.getString(R.string.car_action_enable_speed))
                 .setOnClickListener(
                     ParkedOnlyOnClickListener.create {
-                        showFeedback(R.string.car_speed_permission_phone_handoff)
+                        showFeedback(speedPermissionFeedbackStringRes())
                         requestSpeedPermission()
                     }
                 )

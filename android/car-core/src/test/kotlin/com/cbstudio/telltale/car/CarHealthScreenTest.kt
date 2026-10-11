@@ -462,6 +462,48 @@ class CarHealthScreenTest {
     }
 
     @Test
+    fun healthScreen_automotiveSpeedPermissionUsesGenericParkedFeedback() = runTest {
+        val packageInfo = carContext.packageManager.getPackageInfo(carContext.packageName, 0).apply {
+            requestedPermissions = arrayOf(
+                CarHostSpeedPermissionCoordinator.PERMISSION_CAR_SPEED_AUTOMOTIVE,
+                CarHostSpeedPermissionCoordinator.PERMISSION_READ_DISPLAY_UNITS,
+            )
+        }
+        org.robolectric.Shadows.shadowOf(carContext.packageManager).installPackage(packageInfo)
+        val telemRepo = createTelemetryRepo()
+        val dtcRepo = DefaultCarDtcRepository()
+        val hostRepo = CarHostSpeedRepository()
+        hostRepo.updateSample(CarHostSpeedSample(status = CarHostSpeedStatus.PERMISSION_DENIED))
+        val feedback = mutableListOf<Int>()
+        var feedbackPrecededRequest = false
+        val screen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            hostSpeedRepository = hostRepo,
+            contentLimitProvider = { 6 },
+            showFeedback = {
+                feedbackPrecededRequest = carContext.lastPermissionRequestInfo == null
+                feedback.add(it)
+            },
+        )
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val action = template.actionStrip!!.actions.single()
+        assertTrue(action.onClickDelegate!!.isParkedOnly)
+
+        action.onClickDelegate!!.sendClick(object : OnDoneCallback {})
+
+        assertEquals(
+            listOf(carContext.getString(R.string.car_speed_permission_handoff)),
+            feedback.map { carContext.getString(it) },
+        )
+        assertTrue(feedbackPrecededRequest)
+        assertNotNull(carContext.lastPermissionRequestInfo)
+    }
+
+    @Test
     fun healthScreen_speedPermissionGrantedTriggersRetryAndRemovesAction() = runTest {
         val telemRepo = createTelemetryRepo()
         val dtcRepo = DefaultCarDtcRepository()

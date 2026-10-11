@@ -42,7 +42,7 @@
 - **Provisional Candidate Clauses:** 1 (AA07-01 Category Fit determination on Closed Track)
 - **Total Blocking Defects:** 0
 - **Automated Test Coverage:**
-  - `:car-core:testDebugUnitTest`: 229/229 PASS (including string parity, BiDi isolation, and screen-level rendering)
+  - `:car-core:testDebugUnitTest`: 230/230 PASS (including string parity, BiDi isolation, and screen-level rendering)
   - `fvm flutter test test/car`: 64/64 PASS
   - `python3 tool/ci/verify_car_manifest_isolation.py`: 100% PASS
   - `python3 -m unittest discover -s test/tool`: 792/792 PASS
