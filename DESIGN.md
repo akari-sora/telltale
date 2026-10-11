@@ -9,7 +9,7 @@ graphics; it does not establish Google Play category eligibility.
 Evidence reviewed: `lib/core/theme/app_colors.dart`, `app_theme.dart`, the
 Home/Health/Powertrain screens and tests in `android/car-core`,
 `docs/android-auto/aa-00-eligibility.md`, and the actual 800×480 DHU dashboard
-captured during the October 11 device run. The dashboard currently gives each
+captured during the October 11 baseline device run. That baseline gave each
 metric a title and secondary reading, without a metric graphic.
 
 Official references checked on this date:
@@ -34,7 +34,7 @@ Help drivers locate a metric quickly and distinguish a valid reading from a
 warning or absent data. Retain read-only telemetry and parked diagnostic flows.
 This pass adds recognizable metric graphics and redundant warning cues. It
 does not add chart history, pairing, custom driving surfaces, or new navigation.
-Success means clear actual DHU captures, unchanged telemetry behavior, and
+Success means clear actual DHU captures, preserved telemetry semantics, and
 passing native template, localization, lifecycle, and boundary tests.
 
 ## Personas and jobs
@@ -117,6 +117,9 @@ read-only bridge and motion gates. Do not promote the prototype category into
 production. Test icon presence/state mapping, title stability, missing/stale
 data, RTL and existing behavioral tests. Build projected and automotive variants;
 capture actual DHU day/night and screen-size evidence with APK/source hashes.
+The device pass also found a late projection handoff rejected after phone
+pause. Repair that existing handoff with exact native lease identity and the
+existing background ATRV proof; do not create a second OBD/Flutter session.
 
 ## Open questions
 
