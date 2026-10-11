@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.LocaleList
 import android.os.StatFs
 import android.os.SystemClock
+import androidx.annotation.RequiresApi
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.net.InetAddress
@@ -144,13 +145,22 @@ internal object ApplicationPlatformChannels {
     private fun readAppLocales(context: Context): Map<String, Any> {
         val sdk = Build.VERSION.SDK_INT
         val configurationTags = languageTags(context.resources.configuration.locales)
-        if (!AppLocalePolicy.apiSupported(sdk)) return mapOf(
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return mapOf(
             "apiSupported" to false,
             "sdkInt" to sdk,
             "followsSystem" to true,
             "overrideTags" to emptyList<String>(),
             "configurationTags" to configurationTags,
         )
+        return readAppLocalesApi33(context, sdk, configurationTags)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun readAppLocalesApi33(
+        context: Context,
+        sdk: Int,
+        configurationTags: List<String>,
+    ): Map<String, Any> {
         val app = context.getSystemService(LocaleManager::class.java)?.applicationLocales
             ?: LocaleList.getEmptyLocaleList()
         val override = AppLocalePolicy.overrideFromLocaleListTags(languageTags(app))
@@ -165,7 +175,7 @@ internal object ApplicationPlatformChannels {
 
     private fun setAppLocales(context: Context, tags: List<String>, result: MethodChannel.Result) {
         val sdk = Build.VERSION.SDK_INT
-        if (!AppLocalePolicy.apiSupported(sdk)) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             result.error("below_api_33", "LocaleManager applicationLocales requires API 33", mapOf("sdkInt" to sdk))
             return
         }
@@ -174,6 +184,16 @@ internal object ApplicationPlatformChannels {
             result.error("unsupported_locale", "not a shipped UI locale", mapOf("tags" to tags))
             return
         }
+        setAppLocalesApi33(context, sdk, override, result)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun setAppLocalesApi33(
+        context: Context,
+        sdk: Int,
+        override: AppLocaleOverride,
+        result: MethodChannel.Result,
+    ) {
         val manager = context.getSystemService(LocaleManager::class.java)
         if (manager == null) {
             result.error("no_locale_manager", "LocaleManager is unavailable", null)
@@ -182,7 +202,13 @@ internal object ApplicationPlatformChannels {
         val encoded = AppLocalePolicy.languageTagsForLocaleList(override)
         manager.applicationLocales = if (encoded.isEmpty()) LocaleList.getEmptyLocaleList()
         else LocaleList.forLanguageTags(encoded)
-        result.success(readAppLocales(context))
+        result.success(
+            readAppLocalesApi33(
+                context,
+                sdk,
+                languageTags(context.resources.configuration.locales),
+            ),
+        )
     }
 
     private fun languageTags(list: LocaleList): List<String> =

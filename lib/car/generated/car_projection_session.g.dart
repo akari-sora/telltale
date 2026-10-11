@@ -113,6 +113,7 @@ class CarProjectionLeaseMessage {
     required this.generation,
     required this.armed,
     this.connectionGeneration,
+    this.producerConnectionGeneration,
   });
 
   bool active;
@@ -123,12 +124,15 @@ class CarProjectionLeaseMessage {
 
   int? connectionGeneration;
 
+  int? producerConnectionGeneration;
+
   List<Object?> _toList() {
     return <Object?>[
       active,
       generation,
       armed,
       connectionGeneration,
+      producerConnectionGeneration,
     ];
   }
 
@@ -142,6 +146,7 @@ class CarProjectionLeaseMessage {
       generation: result[1]! as int,
       armed: result[2]! as bool,
       connectionGeneration: result[3] as int?,
+      producerConnectionGeneration: result[4] as int?,
     );
   }
 
@@ -154,7 +159,7 @@ class CarProjectionLeaseMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(active, other.active) && _deepEquals(generation, other.generation) && _deepEquals(armed, other.armed) && _deepEquals(connectionGeneration, other.connectionGeneration);
+    return _deepEquals(active, other.active) && _deepEquals(generation, other.generation) && _deepEquals(armed, other.armed) && _deepEquals(connectionGeneration, other.connectionGeneration) && _deepEquals(producerConnectionGeneration, other.producerConnectionGeneration);
   }
 
   @override
@@ -163,7 +168,7 @@ class CarProjectionLeaseMessage {
 
   @override
   String toString() {
-    return 'CarProjectionLeaseMessage(active: $active, generation: $generation, armed: $armed, connectionGeneration: $connectionGeneration)';
+    return 'CarProjectionLeaseMessage(active: $active, generation: $generation, armed: $armed, connectionGeneration: $connectionGeneration, producerConnectionGeneration: $producerConnectionGeneration)';
   }
 }
 
@@ -228,6 +233,43 @@ class CarProjectionSessionHostApi {
     )
     ;
     return pigeonVar_replyValue! as CarProjectionLeaseMessage;
+  }
+
+  Future<CarProjectionLeaseMessage> claimProducerConnection(int connectionGeneration) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.torque_obd.CarProjectionSessionHostApi.claimProducerConnection$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[connectionGeneration]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as CarProjectionLeaseMessage;
+  }
+
+  Future<void> retireProducerConnection(int connectionGeneration) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.torque_obd.CarProjectionSessionHostApi.retireProducerConnection$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[connectionGeneration]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<CarProjectionLeaseMessage> armContinuity(int projectionGeneration, int connectionGeneration) async {

@@ -1,7 +1,8 @@
 # What was verified on hardware, and what that is worth
 
-The Android device used below is a Samsung `SM-S9280` on Android 16. Earlier
-rounds were manual screen walks; the 2026-08-23 BLE run used Flutter's
+The historical Android device below is a Samsung `SM-S9280` on Android 16.
+The 1.0.18 physical walk used a Samsung `SM-N960F` on Android 10 (API 29).
+Earlier rounds were manual screen walks; the 2026-08-23 BLE run used Flutter's
 integration-test driver on the same physical phone so a locked screen could not
 turn UI automation into a false negative.
 
@@ -70,7 +71,114 @@ the artifact, not that they walked it, which is what this file is for. A
 weaker claim that is true beats a stronger one nobody can check, and the price
 of keeping it is one sentence in the release notes saying which claim it is.
 
-## 2026-10-12 — 1.0.18 signed release update on an isolated phone emulator
+## 2026-10-12 — 1.0.18 historical signed candidate walk on physical Note9
+
+Device walk attested: 1.0.18
+
+This source-specific candidate record retains the original APK hashes and walk
+results. It does not establish final published APK provenance or subsequent
+acceptance; use the [GitLab 1.0.18 release](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.18)
+as the authoritative record for those results.
+
+A physical Samsung `SM-N960F` on Android 10 / API 29 walked the maintainer-signed
+arm64 `field` build from source
+`93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85`. The APK installed on the phone was
+read back and matched the staged release byte for byte: package
+`com.cbstudio.telltale`, version `1.0.18`, versionCode `192`, SHA-256
+`1d0f23f816cd9c176fc54a5c4c6d3d4779cd0d099f36a42681a628e9134eb4da`,
+certificate SHA-256
+`362133c004bee5e4f458f77d4a5d199948a3c5cdb9f0868be27d6f5d9109a579`.
+Installed-APK ZIP integrity also passed.
+
+The phone initially had no Telltale field app. A genuine, same-certificate
+`1.0.17` / versionCode `182` baseline was installed and seeded with synthetic
+Demo data. A normal `adb install -r` update to `1.0.18` retained the original
+installation time, Light theme, Minimal gauge style, system-default language,
+six enabled PIDs, and a 624 KB Demo transcript. Cross-version custom-PID
+retention was not exercised: the incomplete 1.0.17 editor draft was abandoned
+without saving. On 1.0.18, custom-PID creation, editing with visible readback,
+and deletion with confirmed absence all passed.
+
+Connection/Demo, dashboard with rendered trend charts, Performance/timing,
+faults with synthetic freeze-frame data, PID management, PID editor, and Settings
+were walked in both Light and Dark themes. Captures include trend curves and axes in
+both themes, plus stationary software-fixture recording. Moving Demo correctly
+refused parked-only recording actions.
+
+A task-owned software ELM fixture reached the physical phone through a
+device-scoped ADB reverse. Initial connection, explicit UI disconnect,
+saved-adapter direct reconnect, and final disconnect passed. The screen showed
+12.6 V, 800 rpm, and 0.0 km/h; fixture evidence included two handshakes,
+`ATSP0` twice, `ATRV` 13 times, and live `010C` / `010D` traffic. This is
+localhost software TCP evidence, not Bluetooth or a vehicle observation.
+
+The app-scoped 580-line stability scan found zero fatal exceptions, Flutter
+errors, render overflows, out-of-memory errors, or ANRs. The external
+`device-note9-physical-v18` task bundle retains the sanitized acceptance report
+and 43 original 1080 × 2220 screenshots. After the walk, the UI disconnected,
+the task reverse and fixture were removed, the task-created field app was
+uninstalled, and the launcher resumed, restoring the initial package-absent
+state. No pre-existing S24 installation was changed. Android Auto / AAOS is
+covered separately by the DHU record below; this phone walk does not establish
+Google approval, Play update compatibility, or the issue #106 reporter's
+original Bluetooth adapter and vehicle.
+
+## 2026-10-12 — 1.0.18 historical exact-source signed emulator acceptance
+
+This is the earlier candidate acceptance record for source
+`93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85` (tree
+`102f4b146fe94cb332b48255f199fad1abc63839`). This entry records emulator
+acceptance; the distinct physical-device walk and attestation are above.
+
+### Exact signed field acceptance
+
+The maintainer-signed arm64 `field` APK read back as `1.0.18` /
+versionCode `192`, SHA-256
+`1d0f23f816cd9c176fc54a5c4c6d3d4779cd0d099f36a42681a628e9134eb4da`.
+A signed `1.0.17` baseline was seeded with system-default language resolving
+to English, Light theme, Minimal gauges, six enabled PIDs, and a prior session.
+After `adb install -r`, all of those settings and the 254 KB transcript card
+remained. The APK replacement disconnected the live runtime, so uninterrupted
+socket retention across an APK update is not claimed. Custom PID creation and
+editing passed on 1.0.18; cross-version custom PID retention was not exercised.
+
+Dashboard, trend chart, PID manager, custom PID create/edit, fault codes with
+freeze frame, timing, and settings passed in Light and Dark themes. A controlled
+software ELM/TCP fixture displayed 12.6 V, 800 rpm, and 0 km/h; an explicit UI
+disconnect followed by saved-adapter reconnect produced a new client connection,
+`ATRV`, and live PID traffic. The crash buffer was empty and no crash or ANR
+was observed.
+
+### Exact signed carProto acceptance
+
+The separate maintainer-signed arm64 `carProto` APK read back as
+`1.0.18-carproto` / versionCode `192`, SHA-256
+`f31b7d949b1a3883e69a37c1207b0e4646fab4140338814fc704ce5a77526466`.
+After DHU exit and an explicit phone HOME action, the launcher remained the top
+resumed phone activity across a bounded 20-second window. The fixture recorded
+zero events and zero commands while the existing TCP connection, producer
+foreground service, and app process remained alive. Reopening DHU did not
+foreground the phone: it reused the same process and socket, kept the service at
+one foreground start, and resumed with `ATRV` before live PID reads.
+
+A controlled phone-side scan supplied eight synthetic DTCs. DHU rendered the
+summary, P0133 detail, back navigation, and live Powertrain values. At 55 m/s
+and with speed unknown, Fault Codes did not navigate; at 0 m/s, the stationary
+control opened Diagnostic Codes. No persisted toast image or log was captured,
+so no visual feedback text is claimed. The final Android crash buffer was empty.
+
+The raw receipts remain in the external task bundles
+`device-field-reconnect` and `device-carproto-reconnect`. Those task paths
+are not durable repository URLs, so this permanent record keeps a compact,
+self-contained receipt summary rather than relative artifact links. This is
+controlled software TCP and DHU evidence only: it does not establish Bluetooth,
+a real vehicle, Android Auto light-theme rendering, or Google approval.
+
+## Historical: 2026-10-12 — earlier 1.0.18 signed release update on an isolated phone emulator
+
+This pre-repair walk is retained as historical evidence. Its APK hashes and
+captures are intentionally not replaced; the later source-specific candidate
+record is above; use the linked release notes for final release provenance.
 
 The maintainer-signed `field` arm64 APK was installed on a Pixel 9 Android 16
 emulator. Its version read back as `1.0.18` / versionCode `192`, SHA-256

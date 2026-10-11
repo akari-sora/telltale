@@ -61,11 +61,18 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
     @Synchronized
     fun onProjectionLease(next: CarProjectionSessionLeaseRuntime.Snapshot) {
         val priorGeneration = state.projectionGeneration
+        val priorConnectionGeneration = state.connectionGeneration
         state.onProjectionLease(next.active, next.generation)
-        if (!next.active) {
+        if (!next.active && state.releaseAwaitingAck == next.generation) {
             scheduleReleaseWatchdogLocked(next.generation)
-        } else if (next.generation > priorGeneration) {
-            cancelReleaseWatchdogLocked()
+        } else if (next.active && next.generation > priorGeneration) {
+            if (!state.shouldHoldWakeLock) {
+                ProjectionForegroundService.setProjectionArmed(
+                    priorConnectionGeneration,
+                    armed = false,
+                )
+            }
+            if (state.releaseAwaitingAck == null) cancelReleaseWatchdogLocked()
             releaseEngineIfUnownedLocked()
         }
         publishLocked()
@@ -75,87 +82,115 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
     override fun currentLease(): CarProjectionLeaseMessage = messageLocked()
 
     @Synchronized
-    override fun armContinuity(projectionGeneration: Long, connectionGeneration: Long): CarProjectionLeaseMessage {
+    override fun claimProducerConnection(connectionGeneration: Long): CarProjectionLeaseMessage {
+        if (state.producerConnectionGeneration == connectionGeneration) return messageLocked()
         val context = applicationContext
-        if (context == null || !state.canStart(
-                requestedProjectionGeneration = projectionGeneration,
+        if (context == null || !state.canClaimProducer(
                 requestedConnectionGeneration = connectionGeneration,
                 activityResumed = activityResumed,
                 hasEngine = engine != null,
-                projectionConnected = CarProjectionSessionLeaseRuntime.isProjectionConnected(),
             )
         ) return messageLocked()
 
-        state.beginStart(projectionGeneration, connectionGeneration)
+        state.beginProducerClaim(connectionGeneration)
         try {
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, ProjectionForegroundService::class.java)
-                    .putExtra(ProjectionForegroundService.EXTRA_PROJECTION_GENERATION, projectionGeneration)
+                    .setAction(ProjectionForegroundService.ACTION_CLAIM_PRODUCER)
                     .putExtra(ProjectionForegroundService.EXTRA_CONNECTION_GENERATION, connectionGeneration),
             )
         } catch (_: RuntimeException) {
-            state.cancelStart(projectionGeneration, connectionGeneration)
+            state.cancelProducerClaim(connectionGeneration)
         }
         return messageLocked()
     }
 
     @Synchronized
-    override fun retireContinuity(projectionGeneration: Long, connectionGeneration: Long) {
-        if (!state.retire(projectionGeneration, connectionGeneration)) return
-        scheduleReleaseWatchdogLocked(projectionGeneration)
-        applicationContext?.let { it.stopService(Intent(it, ProjectionForegroundService::class.java)) }
+    override fun retireProducerConnection(connectionGeneration: Long) {
+        if (!state.retireProducer(connectionGeneration)) return
+        cancelReleaseWatchdogLocked()
+        ProjectionForegroundService.stopProducer(connectionGeneration)
         publishLocked()
+        releaseEngineIfUnownedLocked()
     }
 
     @Synchronized
-    fun markServiceArmed(projectionGeneration: Long, connectionGeneration: Long): Boolean {
-        if (!state.markArmed(projectionGeneration, connectionGeneration, engine != null)) return false
+    override fun armContinuity(projectionGeneration: Long, connectionGeneration: Long): CarProjectionLeaseMessage {
+        if (!state.canArm(
+                requestedProjectionGeneration = projectionGeneration,
+                requestedConnectionGeneration = connectionGeneration,
+                hasEngine = engine != null,
+                projectionConnected = CarProjectionSessionLeaseRuntime.isProjectionConnected(),
+            )
+        ) return messageLocked()
+
+        if (!state.markArmed(projectionGeneration, connectionGeneration)) return messageLocked()
+        if (!ProjectionForegroundService.setProjectionArmed(connectionGeneration, armed = true)) {
+            state.serviceStopped(connectionGeneration)
+            publishLocked()
+            releaseEngineIfUnownedLocked()
+            return messageLocked()
+        }
         cancelReleaseWatchdogLocked()
         publishLocked()
-        return true
+        return messageLocked()
     }
 
     @Synchronized
-    fun hasArmedService(): Boolean = state.armed
-
-    @Synchronized
-    fun markServiceStopped(projectionGeneration: Long, connectionGeneration: Long) {
-        if (!state.serviceStopped(projectionGeneration, connectionGeneration)) return
+    override fun retireContinuity(projectionGeneration: Long, connectionGeneration: Long) {
+        if (!state.retireProjection(projectionGeneration, connectionGeneration)) return
         scheduleReleaseWatchdogLocked(projectionGeneration)
         publishLocked()
     }
 
     @Synchronized
     override fun acknowledgeRelease(projectionGeneration: Long) {
+        val connectionGeneration = state.releaseConnectionGeneration
         if (!state.acknowledgeRelease(projectionGeneration)) return
         if (releaseWatchdogGeneration == projectionGeneration) cancelReleaseWatchdogLocked()
-        applicationContext?.let { it.stopService(Intent(it, ProjectionForegroundService::class.java)) }
-        if (activity?.get() == null) {
-            val retiredEngine = engine
-            engine = null
-            // Let Pigeon's reply leave the engine messenger before detaching
-            // the isolate that sent the exact drain acknowledgement.
-            mainHandler.post { retiredEngine?.destroy() }
-        }
+        ProjectionForegroundService.setProjectionArmed(connectionGeneration, armed = false)
+        publishLocked()
+        releaseEngineIfUnownedLocked()
     }
+
+    @Synchronized
+    fun markServiceProducerConfirmed(connectionGeneration: Long): Boolean {
+        val priorReleaseGeneration = state.releaseAwaitingAck
+        if (!state.confirmProducer(connectionGeneration, engine != null)) return false
+        if (priorReleaseGeneration != null && state.releaseAwaitingAck == null) {
+            cancelReleaseWatchdogLocked()
+        }
+        publishLocked()
+        return true
+    }
+
+    @Synchronized
+    fun markServiceStopped(connectionGeneration: Long) {
+        if (!state.serviceStopped(connectionGeneration)) return
+        cancelReleaseWatchdogLocked()
+        publishLocked()
+        releaseEngineIfUnownedLocked()
+    }
+
+    @Synchronized
+    fun hasProducerOwnerOrPendingClaim(): Boolean = state.hasProducerOrPending
+
+    @Synchronized
+    fun isProjectionArmedFor(connectionGeneration: Long): Boolean =
+        state.armed && state.connectionGeneration == connectionGeneration
 
     private fun scheduleReleaseWatchdogLocked(projectionGeneration: Long) {
         cancelReleaseWatchdogLocked()
         releaseWatchdogGeneration = projectionGeneration
         val watchdog = Runnable {
             synchronized(this) {
-                if (!state.forceRelease(projectionGeneration)) return@synchronized
+                val producerGeneration = state.forceRelease(projectionGeneration) ?: return@synchronized
                 releaseWatchdogGeneration = null
                 releaseWatchdog = null
-                applicationContext?.let {
-                    it.stopService(Intent(it, ProjectionForegroundService::class.java))
-                }
-                if (!activityResumed) {
-                    val retiredEngine = engine
-                    engine = null
-                    retiredEngine?.destroy()
-                }
+                ProjectionForegroundService.stopProducer(producerGeneration)
+                publishLocked()
+                releaseEngineIfUnownedLocked()
             }
         }
         releaseWatchdog = watchdog
@@ -187,6 +222,7 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
         generation = state.projectionGeneration,
         armed = state.armed,
         connectionGeneration = state.connectionGeneration,
+        producerConnectionGeneration = state.producerConnectionGeneration,
     )
 
     private fun publishLocked() {

@@ -206,7 +206,8 @@ data class CarProjectionLeaseMessage (
   val active: Boolean,
   val generation: Long,
   val armed: Boolean,
-  val connectionGeneration: Long? = null
+  val connectionGeneration: Long? = null,
+  val producerConnectionGeneration: Long? = null
 )
  {
   companion object {
@@ -215,7 +216,8 @@ data class CarProjectionLeaseMessage (
       val generation = pigeonVar_list[1] as Long
       val armed = pigeonVar_list[2] as Boolean
       val connectionGeneration = pigeonVar_list[3] as Long?
-      return CarProjectionLeaseMessage(active, generation, armed, connectionGeneration)
+      val producerConnectionGeneration = pigeonVar_list[4] as Long?
+      return CarProjectionLeaseMessage(active, generation, armed, connectionGeneration, producerConnectionGeneration)
     }
   }
   fun toList(): List<Any?> {
@@ -224,6 +226,7 @@ data class CarProjectionLeaseMessage (
       generation,
       armed,
       connectionGeneration,
+      producerConnectionGeneration,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -234,7 +237,7 @@ data class CarProjectionLeaseMessage (
       return true
     }
     val other = other as CarProjectionLeaseMessage
-    return CarProjectionSessionPigeonUtils.deepEquals(this.active, other.active) && CarProjectionSessionPigeonUtils.deepEquals(this.generation, other.generation) && CarProjectionSessionPigeonUtils.deepEquals(this.armed, other.armed) && CarProjectionSessionPigeonUtils.deepEquals(this.connectionGeneration, other.connectionGeneration)
+    return CarProjectionSessionPigeonUtils.deepEquals(this.active, other.active) && CarProjectionSessionPigeonUtils.deepEquals(this.generation, other.generation) && CarProjectionSessionPigeonUtils.deepEquals(this.armed, other.armed) && CarProjectionSessionPigeonUtils.deepEquals(this.connectionGeneration, other.connectionGeneration) && CarProjectionSessionPigeonUtils.deepEquals(this.producerConnectionGeneration, other.producerConnectionGeneration)
   }
 
   override fun hashCode(): Int {
@@ -243,10 +246,11 @@ data class CarProjectionLeaseMessage (
     result = 31 * result + CarProjectionSessionPigeonUtils.deepHash(this.generation)
     result = 31 * result + CarProjectionSessionPigeonUtils.deepHash(this.armed)
     result = 31 * result + CarProjectionSessionPigeonUtils.deepHash(this.connectionGeneration)
+    result = 31 * result + CarProjectionSessionPigeonUtils.deepHash(this.producerConnectionGeneration)
     return result
   }
   override fun toString(): String {
-    return "CarProjectionLeaseMessage(active=$active, generation=$generation, armed=$armed, connectionGeneration=$connectionGeneration)"
+    return "CarProjectionLeaseMessage(active=$active, generation=$generation, armed=$armed, connectionGeneration=$connectionGeneration, producerConnectionGeneration=$producerConnectionGeneration)"
   }
 }
 private open class CarProjectionSessionPigeonCodec : StandardMessageCodec() {
@@ -274,6 +278,8 @@ private open class CarProjectionSessionPigeonCodec : StandardMessageCodec() {
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface CarProjectionSessionHostApi {
   fun currentLease(): CarProjectionLeaseMessage
+  fun claimProducerConnection(connectionGeneration: Long): CarProjectionLeaseMessage
+  fun retireProducerConnection(connectionGeneration: Long)
   fun armContinuity(projectionGeneration: Long, connectionGeneration: Long): CarProjectionLeaseMessage
   fun retireContinuity(projectionGeneration: Long, connectionGeneration: Long)
   fun acknowledgeRelease(projectionGeneration: Long)
@@ -293,6 +299,41 @@ interface CarProjectionSessionHostApi {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
               listOf(api.currentLease())
+            } catch (exception: Throwable) {
+              CarProjectionSessionPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.torque_obd.CarProjectionSessionHostApi.claimProducerConnection$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val connectionGenerationArg = args[0] as Long
+            val wrapped: List<Any?> = try {
+              listOf(api.claimProducerConnection(connectionGenerationArg))
+            } catch (exception: Throwable) {
+              CarProjectionSessionPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.torque_obd.CarProjectionSessionHostApi.retireProducerConnection$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val connectionGenerationArg = args[0] as Long
+            val wrapped: List<Any?> = try {
+              api.retireProducerConnection(connectionGenerationArg)
+              listOf(null)
             } catch (exception: Throwable) {
               CarProjectionSessionPigeonUtils.wrapError(exception)
             }

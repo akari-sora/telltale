@@ -59,14 +59,80 @@ class CarSkeletonContractTest(unittest.TestCase):
             "android/app/src/carProto/kotlin/com/cbstudio/telltale/"
             "ProjectionForegroundService.kt"
         )
+        on_destroy = service[
+            service.index("override fun onDestroy()"):
+            service.index("override fun onBind")
+        ]
 
         self.assertIn("return START_NOT_STICKY", service)
         self.assertIn("PowerManager.PARTIAL_WAKE_LOCK", service)
         self.assertIn("wakeLock?.takeIf { it.isHeld }?.release()", service)
-        self.assertIn("ProjectionContinuityRuntime.markServiceStopped", service)
+        self.assertIn("releaseWakeLock()", on_destroy)
+        self.assertIn("ProjectionContinuityRuntime.markServiceStopped", on_destroy)
         self.assertLess(
-            service.index("wakeLock?.takeIf { it.isHeld }?.release()"),
-            service.index("super.onDestroy()"),
+            on_destroy.index("releaseWakeLock()"),
+            on_destroy.index("ProjectionContinuityRuntime.markServiceStopped"),
+        )
+        self.assertLess(
+            on_destroy.index("ProjectionContinuityRuntime.markServiceStopped"),
+            on_destroy.index("super.onDestroy()"),
+        )
+
+    def test_projection_service_claim_and_retirement_are_generation_scoped(self):
+        service = self.read(
+            "android/app/src/carProto/kotlin/com/cbstudio/telltale/"
+            "ProjectionForegroundService.kt"
+        )
+        runtime = self.read(
+            "android/app/src/carProto/kotlin/com/cbstudio/telltale/"
+            "ProjectionContinuityRuntime.kt"
+        )
+        on_start = service[
+            service.index("override fun onStartCommand"):
+            service.index("override fun onDestroy()")
+        ]
+        stop_producer = service[
+            service.index("private fun stopProducer"):
+            service.index("private fun startInForeground")
+        ]
+        claim_producer = runtime[
+            runtime.index("override fun claimProducerConnection"):
+            runtime.index("override fun retireProducerConnection")
+        ]
+
+        self.assertIn("intent?.action == ACTION_CLAIM_PRODUCER", on_start)
+        self.assertIn(
+            "ProjectionContinuityRuntime.markServiceProducerConfirmed(requestedConnectionGeneration)",
+            on_start,
+        )
+        self.assertIn("connectionGeneration = priorConnectionGeneration", on_start)
+        self.assertIn(
+            "if (!ProjectionContinuityRuntime.hasProducerOwnerOrPendingClaim())",
+            on_start,
+        )
+        self.assertIn(
+            "if (this.connectionGeneration != connectionGeneration) return false",
+            stop_producer,
+        )
+        self.assertLess(
+            stop_producer.index("setProjectionArmed(armed = false)"),
+            stop_producer.index("stopSelfResult(latestStartId)"),
+        )
+
+        self.assertIn("state.canClaimProducer(", claim_producer)
+        self.assertIn("activityResumed = activityResumed", claim_producer)
+        self.assertIn("hasEngine = engine != null", claim_producer)
+        self.assertEqual(claim_producer.count("startForegroundService("), 1)
+        self.assertLess(
+            claim_producer.index("state.beginProducerClaim(connectionGeneration)"),
+            claim_producer.index("startForegroundService("),
+        )
+        self.assertIn("state.cancelProducerClaim(connectionGeneration)", claim_producer)
+        self.assertEqual(runtime.count("startForegroundService("), 1)
+        self.assertNotIn("stopService(", runtime)
+        self.assertIn(
+            "ProjectionForegroundService.stopProducer(connectionGeneration)",
+            runtime,
         )
 
     def test_aaos_manifest_has_no_projected_metadata(self):

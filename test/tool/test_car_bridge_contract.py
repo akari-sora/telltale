@@ -243,12 +243,27 @@ class CarBridgeContractTest(unittest.TestCase):
                 for token in forbidden:
                     self.assertNotIn(token, text, msg=f"{token} in {path.relative_to(ROOT)}")
 
-        allowed_runtime = {
-            "android/app/src/carProto/AndroidManifest.xml",
-            "android/app/src/carProto/kotlin/com/cbstudio/telltale/ProjectionContinuityRuntime.kt",
-            "android/app/src/carProto/kotlin/com/cbstudio/telltale/ProjectionForegroundService.kt",
+        service_path = (
+            "android/app/src/carProto/kotlin/com/cbstudio/telltale/"
+            "ProjectionForegroundService.kt"
+        )
+        runtime_path = (
+            "android/app/src/carProto/kotlin/com/cbstudio/telltale/"
+            "ProjectionContinuityRuntime.kt"
+        )
+        platform_api_scopes = {
+            "android.os.PowerManager": {service_path},
+            "PowerManager.WakeLock": {service_path},
+            "PowerManager.PARTIAL_WAKE_LOCK": {service_path},
+            ".newWakeLock(": {service_path},
+            "startForeground(": {service_path},
+            "startForegroundService(": {runtime_path},
+            "FOREGROUND_SERVICE": {
+                "android/app/src/carProto/AndroidManifest.xml",
+                service_path,
+            },
         }
-        for token in ("WakeLock", "startForeground", "FOREGROUND_SERVICE"):
+        for token, allowed_runtime in platform_api_scopes.items():
             hits = {
                 str(path.relative_to(ROOT))
                 for root in roots

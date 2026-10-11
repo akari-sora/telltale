@@ -7,8 +7,8 @@
 
 > **安裝／停機指引：** 建議優先
 > **[Google Play](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)**；
-> 社群 APK **[GitLab v1.0.15](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.15)**，或
-> **[Codeberg Releases](https://codeberg.org/ImL1s/telltale/releases)**；
+> **[GitLab Releases 上由維護者簽章的 APK](https://gitlab.com/aa22396584/telltale/-/releases)**。
+> **[較舊的 Codeberg releases](https://codeberg.org/ImL1s/telltale/releases)** 屬於另一個發行管道；
 > [Obtainium](https://github.com/ImranR98/Obtainium) 請指向
 > `https://gitlab.com/aa22396584/telltale/-/releases` 或
 > `https://codeberg.org/ImL1s/telltale/releases`。
@@ -47,21 +47,24 @@ OBD2 故障診斷。它的設計原則是誠實呈現不確定性，不把格式
 
 **Google Play 版付費，但 App 功能相同。** Play 版不會解鎖額外的遙測或診斷功能；
 它提供由 Google Play 直接安裝與更新的便利，購買也會支持持續開發與維護。
-下方的社群簽章 APK 與自行從原始碼建置仍可免費使用。
+下方由維護者簽章的 APK 與自行從原始碼建置仍可免費使用。
 
-**社群簽章 APK**（功能與 Play 版相同；原始碼目錄不含 release 產物）：
+**GitLab 維護者簽章 APK**（原始碼目錄不含 release 產物）：
 
-1. **[GitLab aa22396584 v1.0.14](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.14)**
-2. **[Codeberg v1.0.14](https://codeberg.org/ImL1s/telltale/releases/tag/v1.0.14)**
-3. **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**
+**[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**
 
-打開該版本，選擇其中的 `.apk` 檔。[Obtainium](https://github.com/ImranR98/Obtainium)
-可從 `https://gitlab.com/aa22396584/telltale/-/releases` 或
-`https://codeberg.org/ImL1s/telltale/releases` 追蹤更新。
+打開該版本，選擇適用一般手機 App、且 ABI 與裝置相符的 `field` APK。另一個
+`carproto` APK 是 Android Auto／AAOS 工程預覽版；`field` APK 不含車載 App
+service。[Obtainium](https://github.com/ImranR98/Obtainium) 可從
+`https://gitlab.com/aa22396584/telltale/-/releases` 追蹤更新。
 
-社群建置使用與 Google Play **不同的簽章金鑰**，無法更新 Play 版，也無法由
-Play 版直接更新。兩者互換時必須先解除安裝；解除安裝會刪除 App 本機資料，
-請先匯出需要保留的內容。
+GitLab 使用[發行程序](docs/maintainers/release.md)所述的維護者簽章沿革。Android
+只有在已安裝 APK 與替代 APK 的簽章相容時，才允許原地更新。已實測由 GitLab
+簽章版 1.0.17 不解除安裝更新至 1.0.18；這不代表與 Google Play 更新相容，因為
+Play 可能使用不同的 App 簽章憑證。GitHub 社群建置與
+[較舊的 Codeberg releases](https://codeberg.org/ImL1s/telltale/releases) 屬於不同
+發行管道。若更新因簽章檢查而遭拒，請保留已安裝的 App 與資料；若確定要解除安裝，
+請先匯出資料。
 
 ## 支援功能
 

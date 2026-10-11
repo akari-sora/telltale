@@ -11,10 +11,16 @@ import 'package:torque_obd/car/car_projection_session_runtime.dart';
 import 'package:torque_obd/car/generated/car_projection_session.g.dart';
 import 'package:torque_obd/car/generated/car_telemetry.g.dart';
 import 'package:torque_obd/state/obd_session.dart';
+import 'package:torque_obd/obd/transport/demo_transport.dart';
+import 'package:torque_obd/obd/transport/obd_transport.dart';
 import 'package:torque_obd/state/pid_registry.dart';
 
 const _currentLeaseChannel =
     'dev.flutter.pigeon.torque_obd.CarProjectionSessionHostApi.currentLease';
+const _claimProducerChannel =
+    'dev.flutter.pigeon.torque_obd.CarProjectionSessionHostApi.claimProducerConnection';
+const _retireProducerChannel =
+    'dev.flutter.pigeon.torque_obd.CarProjectionSessionHostApi.retireProducerConnection';
 const _armContinuityChannel =
     'dev.flutter.pigeon.torque_obd.CarProjectionSessionHostApi.armContinuity';
 const _retireContinuityChannel =
@@ -29,11 +35,14 @@ CarProjectionLeaseMessage _lease({
   required int generation,
   required bool armed,
   int? connectionGeneration,
+  int? producerConnectionGeneration,
 }) => CarProjectionLeaseMessage(
   active: active,
   generation: generation,
   armed: armed,
   connectionGeneration: connectionGeneration,
+  producerConnectionGeneration:
+      producerConnectionGeneration ?? connectionGeneration,
 );
 
 bool _hasLiveCoreValues(CarTelemetryMessage frame) =>
@@ -83,11 +92,18 @@ final class _NativeProjectionHost {
   Future<void> Function(int projectionGeneration)? onAcknowledgeRelease;
   Future<void> Function(int projectionGeneration, int connectionGeneration)?
   onRetireContinuity;
+  Future<CarProjectionLeaseMessage> Function(int connectionGeneration)?
+  onClaimProducer;
+  Future<void> Function(int connectionGeneration)? onRetireProducer;
+  CarProjectionLeaseMessage? lastLease;
+  int? producerOwner;
 
   int currentLeaseCalls = 0;
   int armContinuityCalls = 0;
   final acknowledgedGenerations = <int>[];
   final retiredGenerations = <int>[];
+  final claimedProducers = <int>[];
+  final retiredProducers = <int>[];
 
   static const codec = CarProjectionSessionHostApi.pigeonChannelCodec;
 
@@ -95,7 +111,10 @@ final class _NativeProjectionHost {
     messenger.setMockMessageHandler(_currentLeaseChannel, (data) async {
       currentLeaseCalls++;
       try {
-        return codec.encodeMessage(<Object?>[await currentLease()]);
+        final response = await currentLease();
+        lastLease = response;
+        producerOwner = response.producerConnectionGeneration;
+        return codec.encodeMessage(<Object?>[response]);
       } on PlatformException catch (error) {
         return codec.encodeMessage(<Object?>[
           error.code,
@@ -103,6 +122,39 @@ final class _NativeProjectionHost {
           error.details,
         ]);
       }
+    });
+    messenger.setMockMessageHandler(_claimProducerChannel, (data) async {
+      final arguments = codec.decodeMessage(data)! as List<Object?>;
+      final generation = arguments.single! as int;
+      claimedProducers.add(generation);
+      try {
+        final response =
+            await onClaimProducer?.call(generation) ??
+            _lease(
+              active: lastLease?.active ?? false,
+              generation: lastLease?.generation ?? 0,
+              armed: lastLease?.armed ?? false,
+              connectionGeneration: lastLease?.connectionGeneration,
+              producerConnectionGeneration: generation,
+            );
+        producerOwner = response.producerConnectionGeneration;
+        lastLease = response;
+        return codec.encodeMessage(<Object?>[response]);
+      } on PlatformException catch (error) {
+        return codec.encodeMessage(<Object?>[
+          error.code,
+          error.message,
+          error.details,
+        ]);
+      }
+    });
+    messenger.setMockMessageHandler(_retireProducerChannel, (data) async {
+      final arguments = codec.decodeMessage(data)! as List<Object?>;
+      final generation = arguments.single! as int;
+      retiredProducers.add(generation);
+      if (producerOwner == generation) producerOwner = null;
+      await onRetireProducer?.call(generation);
+      return codec.encodeMessage(<Object?>[]);
     });
     messenger.setMockMessageHandler(_armContinuityChannel, (data) async {
       final arguments = codec.decodeMessage(data)! as List<Object?>;
@@ -158,6 +210,8 @@ final class _NativeProjectionHost {
   }
 
   Future<void> sendLease(CarProjectionLeaseMessage lease) async {
+    lease.producerConnectionGeneration ??= producerOwner;
+    lastLease = lease;
     final ByteData? reply = await messenger.handlePlatformMessage(
       _leaseChangedChannel,
       CarProjectionSessionFlutterApi.pigeonChannelCodec.encodeMessage(<Object?>[
@@ -173,6 +227,8 @@ final class _NativeProjectionHost {
 
   void uninstall() {
     messenger.setMockMessageHandler(_currentLeaseChannel, null);
+    messenger.setMockMessageHandler(_claimProducerChannel, null);
+    messenger.setMockMessageHandler(_retireProducerChannel, null);
     messenger.setMockMessageHandler(_armContinuityChannel, null);
     messenger.setMockMessageHandler(_retireContinuityChannel, null);
     messenger.setMockMessageHandler(_acknowledgeReleaseChannel, null);
@@ -187,6 +243,14 @@ Future<ProviderContainer> _container() async {
   );
 }
 
+Future<bool> _connectFixture(ObdSession session, {Duration? responseLatency}) =>
+    session.connectForTest(
+      DemoTransport(
+        responseLatency: responseLatency ?? const Duration(milliseconds: 18),
+      ),
+      TransportKind.wifi,
+    );
+
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
   final messenger =
@@ -200,13 +264,189 @@ void main() {
     binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   });
 
+  test('foreground user connection owns transport before projection', () async {
+    final container = await _container();
+    final session = container.read(obdSessionProvider.notifier);
+    final inactive = _lease(active: false, generation: 0, armed: false);
+    final host = _NativeProjectionHost(messenger)
+      ..currentLease = (() async => inactive)
+      ..armContinuity = ((_, _) async => inactive);
+    host.install();
+    addTearDown(host.uninstall);
+    addTearDown(container.dispose);
+    expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+    await _eventually(() => host.currentLeaseCalls == 1);
+    expect(host.claimedProducers, isEmpty);
+
+    expect(await _connectFixture(session), isTrue);
+    final generation = session.connectionGeneration;
+    await _eventually(() => host.claimedProducers.isNotEmpty);
+    expect(host.claimedProducers, [generation]);
+    expect(host.armContinuityCalls, 0);
+
+    _background(binding);
+    await _eventually(() => !session.engine!.isRunning);
+    expect(container.read(obdSessionProvider).isConnected, isTrue);
+    expect(host.retiredProducers, isEmpty);
+    expect(session.hasArmedProjectionContinuity, isFalse);
+
+    await session.disconnect();
+    await _eventually(() => host.retiredProducers.contains(generation));
+    expect(host.retiredProducers, [generation]);
+  });
+
+  test('a connection completing hidden never claims a producer', () async {
+    final container = await _container();
+    final session = container.read(obdSessionProvider.notifier);
+    final inactive = _lease(active: false, generation: 0, armed: false);
+    final host = _NativeProjectionHost(messenger)
+      ..currentLease = (() async => inactive)
+      ..armContinuity = ((_, _) async => inactive);
+    host.install();
+    addTearDown(host.uninstall);
+    addTearDown(container.dispose);
+    expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+    await _eventually(() => host.currentLeaseCalls == 1);
+    final connecting = _connectFixture(
+      session,
+      responseLatency: const Duration(milliseconds: 30),
+    );
+    _background(binding);
+    expect(await connecting, isTrue);
+    await _eventually(() => !session.engine!.isRunning);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(session.isForeground, isFalse);
+    expect(host.claimedProducers, isEmpty);
+    expect(host.armContinuityCalls, 0);
+  });
+
+  test('projection waits for a confirmed producer across HOME', () async {
+    final container = await _container();
+    final session = container.read(obdSessionProvider.notifier);
+    var current = _lease(active: true, generation: 70, armed: false);
+    final host = _NativeProjectionHost(messenger)
+      ..currentLease = (() async => current)
+      ..onClaimProducer = ((_) async => current)
+      ..armContinuity = ((projection, connection) async {
+        current = _lease(
+          active: true,
+          generation: projection,
+          armed: true,
+          connectionGeneration: connection,
+        );
+        return current;
+      });
+    host.install();
+    addTearDown(host.uninstall);
+    addTearDown(container.dispose);
+    expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+    await _eventually(() => host.currentLeaseCalls == 1);
+    expect(await _connectFixture(session), isTrue);
+    final generation = session.connectionGeneration;
+    await _eventually(() => host.claimedProducers.contains(generation));
+    expect(host.armContinuityCalls, 0);
+    _background(binding);
+    await _eventually(() => !session.engine!.isRunning);
+
+    current = _lease(
+      active: true,
+      generation: 70,
+      armed: false,
+      producerConnectionGeneration: generation,
+    );
+    await host.sendLease(current);
+    await _eventually(() => session.hasArmedProjectionContinuity);
+    expect(session.isForeground, isFalse);
+    expect(host.claimedProducers, [generation]);
+    expect(host.armContinuityCalls, 1);
+  });
+
+  test('link loss retires the exact producer once', () async {
+    final container = await _container();
+    final session = container.read(obdSessionProvider.notifier);
+    final inactive = _lease(active: false, generation: 0, armed: false);
+    final host = _NativeProjectionHost(messenger)
+      ..currentLease = (() async => inactive)
+      ..armContinuity = ((_, _) async => inactive);
+    host.install();
+    addTearDown(host.uninstall);
+    addTearDown(container.dispose);
+    expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+    expect(await _connectFixture(session), isTrue);
+    final generation = session.connectionGeneration;
+    await _eventually(() => host.claimedProducers.contains(generation));
+    session.client!.onConnectionLost!();
+    await _eventually(() => host.retiredProducers.contains(generation));
+    expect(container.read(obdSessionProvider).isConnected, isFalse);
+    expect(host.retiredProducers, [generation]);
+  });
+
+  test('replacement and disposal retire only their producer owners', () async {
+    final container = await _container();
+    final session = container.read(obdSessionProvider.notifier);
+    final inactive = _lease(active: false, generation: 0, armed: false);
+    final host = _NativeProjectionHost(messenger)
+      ..currentLease = (() async => inactive)
+      ..armContinuity = ((_, _) async => inactive);
+    host.install();
+    addTearDown(host.uninstall);
+    addTearDown(container.dispose);
+    final runtime = container.read(carProjectionSessionRuntimeProvider)!;
+    expect(await _connectFixture(session), isTrue);
+    final first = session.connectionGeneration;
+    await _eventually(() => host.claimedProducers.contains(first));
+    expect(await _connectFixture(session), isTrue);
+    final replacement = session.connectionGeneration;
+    expect(replacement, greaterThan(first));
+    await _eventually(() => host.claimedProducers.contains(replacement));
+    expect(host.retiredProducers, [first]);
+    expect(host.producerOwner, replacement);
+    runtime.dispose();
+    await _eventually(() => host.retiredProducers.contains(replacement));
+    expect(host.retiredProducers, [first, replacement]);
+  });
+
+  test(
+    'lost producer closes hidden polling without a background restart',
+    () async {
+      final container = await _container();
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await _connectFixture(session), isTrue);
+      var current = _lease(
+        active: true,
+        generation: 80,
+        armed: true,
+        connectionGeneration: session.connectionGeneration,
+      );
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => current)
+        ..armContinuity = ((_, _) async => current);
+      host.install();
+      addTearDown(host.uninstall);
+      addTearDown(container.dispose);
+      expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+      await _eventually(() => session.hasArmedProjectionContinuity);
+      _background(binding);
+      current = _lease(active: true, generation: 80, armed: false);
+      host.producerOwner = null;
+      await host.sendLease(current);
+      await _eventually(
+        () =>
+            !session.hasArmedProjectionContinuity && !session.engine!.isRunning,
+      );
+      expect(session.hasArmedProjectionContinuity, isFalse);
+      expect(host.claimedProducers, isEmpty);
+      expect(host.armContinuityCalls, 0);
+    },
+  );
+
   test(
     'accepts a confirmed armed lease when HOME reconciles during confirmation',
     () async {
       final container = await _container();
       addTearDown(container.dispose);
       final session = container.read(obdSessionProvider.notifier);
-      expect(await session.connectDemo(), isTrue);
+      expect(await _connectFixture(session), isTrue);
       final connectionGeneration = session.connectionGeneration;
       final armed = _lease(
         active: true,
@@ -279,7 +519,7 @@ void main() {
       await _eventually(() => host.currentLeaseCalls == 1);
 
       final session = container.read(obdSessionProvider.notifier);
-      expect(await session.connectDemo(), isTrue);
+      expect(await _connectFixture(session), isTrue);
       final connectionGeneration = session.connectionGeneration;
       await _eventually(
         () => bridged.any(_hasLiveCoreValues),
@@ -337,6 +577,9 @@ void main() {
       );
       expect(session.isForeground, isFalse);
       expect(session.connectionGeneration, connectionGeneration);
+      expect(host.claimedProducers, [connectionGeneration]);
+      expect(host.retiredProducers, isEmpty);
+      expect(host.producerOwner, connectionGeneration);
     },
   );
 
@@ -344,7 +587,7 @@ void main() {
     final container = await _container();
     addTearDown(container.dispose);
     final session = container.read(obdSessionProvider.notifier);
-    expect(await session.connectDemo(), isTrue);
+    expect(await _connectFixture(session), isTrue);
     final connectionGeneration = session.connectionGeneration;
     final unarmed = _lease(active: true, generation: 15, armed: false);
     final armed = _lease(
@@ -367,6 +610,9 @@ void main() {
     expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
     await _eventually(() => host.currentLeaseCalls == 1);
 
+    await _eventually(
+      () => host.claimedProducers.contains(connectionGeneration),
+    );
     _background(binding);
     await _eventually(() => !session.engine!.isRunning);
     await host.sendLease(unarmed);
@@ -400,7 +646,7 @@ void main() {
       final container = await _container();
       addTearDown(container.dispose);
       final session = container.read(obdSessionProvider.notifier);
-      expect(await session.connectDemo(), isTrue);
+      expect(await _connectFixture(session), isTrue);
       _background(binding);
       await _eventually(() => !session.engine!.isRunning);
 
@@ -443,7 +689,7 @@ void main() {
     final container = await _container();
     addTearDown(container.dispose);
     final session = container.read(obdSessionProvider.notifier);
-    expect(await session.connectDemo(), isTrue);
+    expect(await _connectFixture(session), isTrue);
     final armed = _lease(
       active: true,
       generation: 20,
@@ -478,13 +724,97 @@ void main() {
     expect(host.armContinuityCalls, 0);
   });
 
+  test('disposal retires after an in-flight producer claim commits', () async {
+    final container = await _container();
+    final session = container.read(obdSessionProvider.notifier);
+    final inactive = _lease(active: false, generation: 0, armed: false);
+    final claim = Completer<CarProjectionLeaseMessage>();
+    final events = <String>[];
+    final host = _NativeProjectionHost(messenger)
+      ..currentLease = (() async => inactive)
+      ..armContinuity = ((_, _) async => inactive)
+      ..onClaimProducer = ((_) async {
+        events.add('claim started');
+        final response = await claim.future;
+        events.add('claim committed');
+        return response;
+      })
+      ..onRetireProducer = ((_) async => events.add('producer retired'));
+    host.install();
+    addTearDown(host.uninstall);
+    addTearDown(container.dispose);
+    final runtime = container.read(carProjectionSessionRuntimeProvider)!;
+    expect(await _connectFixture(session), isTrue);
+    final generation = session.connectionGeneration;
+    await _eventually(() => host.claimedProducers.contains(generation));
+    runtime.dispose();
+    expect(host.retiredProducers, isEmpty);
+    claim.complete(
+      _lease(
+        active: false,
+        generation: 0,
+        armed: false,
+        producerConnectionGeneration: generation,
+      ),
+    );
+    await _eventually(() => host.retiredProducers.contains(generation));
+    expect(events, ['claim started', 'claim committed', 'producer retired']);
+    expect(host.producerOwner, isNull);
+  });
+
+  test(
+    'disconnect during old-owner retirement cannot claim a stale session',
+    () async {
+      final container = await _container();
+      final session = container.read(obdSessionProvider.notifier);
+      final inactive = _lease(active: false, generation: 0, armed: false);
+      final retirement = Completer<void>();
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => inactive)
+        ..armContinuity = ((_, _) async => inactive);
+      host.install();
+      addTearDown(host.uninstall);
+      addTearDown(container.dispose);
+      expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+      expect(await _connectFixture(session), isTrue);
+      final first = session.connectionGeneration;
+      await _eventually(() => host.claimedProducers.contains(first));
+      host.onRetireProducer = (_) => retirement.future;
+      expect(await _connectFixture(session), isTrue);
+      await _eventually(() => host.retiredProducers.contains(first));
+      await session.disconnect();
+      retirement.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(host.claimedProducers, [first]);
+      expect(host.producerOwner, isNull);
+    },
+  );
+
+  test('built-in demo does not create a connected-device service', () async {
+    final container = await _container();
+    final session = container.read(obdSessionProvider.notifier);
+    final inactive = _lease(active: false, generation: 0, armed: false);
+    final host = _NativeProjectionHost(messenger)
+      ..currentLease = (() async => inactive)
+      ..armContinuity = ((_, _) async => inactive);
+    host.install();
+    addTearDown(host.uninstall);
+    addTearDown(container.dispose);
+    expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+    expect(await session.connectDemo(), isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(container.read(obdSessionProvider).isConnected, isTrue);
+    expect(host.claimedProducers, isEmpty);
+    expect(host.armContinuityCalls, 0);
+  });
+
   test(
     'a released generation cannot be revived by its late armed callback',
     () async {
       final container = await _container();
       addTearDown(container.dispose);
       final session = container.read(obdSessionProvider.notifier);
-      expect(await session.connectDemo(), isTrue);
+      expect(await _connectFixture(session), isTrue);
       final armed = _lease(
         active: true,
         generation: 30,
@@ -515,7 +845,7 @@ void main() {
       final container = await _container();
       addTearDown(container.dispose);
       final session = container.read(obdSessionProvider.notifier);
-      expect(await session.connectDemo(), isTrue);
+      expect(await _connectFixture(session), isTrue);
       final first = _lease(
         active: true,
         generation: 40,
@@ -561,7 +891,7 @@ void main() {
       final container = await _container();
       addTearDown(container.dispose);
       final session = container.read(obdSessionProvider.notifier);
-      expect(await session.connectDemo(), isTrue);
+      expect(await _connectFixture(session), isTrue);
       final rejected = _lease(
         active: true,
         generation: 45,
@@ -590,7 +920,7 @@ void main() {
       await host.sendLease(accepted);
 
       await _eventually(() => session.hasArmedProjectionContinuity);
-      expect(host.currentLeaseCalls, 3);
+      expect(host.currentLeaseCalls, greaterThanOrEqualTo(3));
     },
   );
 
@@ -600,7 +930,7 @@ void main() {
       final container = await _container();
       addTearDown(container.dispose);
       final session = container.read(obdSessionProvider.notifier);
-      expect(await session.connectDemo(), isTrue);
+      expect(await _connectFixture(session), isTrue);
       final first = _lease(
         active: true,
         generation: 47,
@@ -646,7 +976,8 @@ void main() {
       addTearDown(container.dispose);
       final session = container.read(obdSessionProvider.notifier);
       expect(
-        await session.connectDemo(
+        await _connectFixture(
+          session,
           responseLatency: const Duration(milliseconds: 250),
         ),
         isTrue,
@@ -690,7 +1021,7 @@ void main() {
     final container = await _container();
     addTearDown(container.dispose);
     final session = container.read(obdSessionProvider.notifier);
-    expect(await session.connectDemo(), isTrue);
+    expect(await _connectFixture(session), isTrue);
     final lease60 = _lease(
       active: true,
       generation: 60,

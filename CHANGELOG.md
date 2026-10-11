@@ -17,6 +17,9 @@ Android Auto / AAOS preview readability and lifecycle work merged after `v1.0.17
   glanceable layouts.
 - Added projection session ownership and foreground continuity handling across
   connect, pause, resume, and disconnect transitions.
+- Kept the user-connected OBD transport alive across Android Auto disconnects,
+  pausing car sampling until a new projection validates the same connection.
+  Only a foreground phone may start its connected-device service.
 - Added parked-only guidance when fault inspection lacks speed evidence and
   when vehicle-speed permission must be completed on the phone.
 - Fixed the issue #106 post-connect path to publish the handshake voltage,
@@ -24,16 +27,52 @@ Android Auto / AAOS preview readability and lifecycle work merged after `v1.0.17
   work correctly across lifecycle interruption.
 - Added Android Auto / AAOS contract, lifecycle, graphics, and issue #106
   regression coverage.
+- Fixed Android 13 locale API guards so Android lint can verify older-device
+  compatibility without suppressing unsupported API access.
 
-Local validation: 4,355 Flutter tests passed with 23 opt-in skips, and
-`flutter analyze` reported no issues. Maintainer-signed `field` APKs passed
-signature, ZIP integrity and alignment checks for all three ABIs. An isolated
-Android 16 phone emulator retained language, theme, selected PIDs and a local
-session when updated from signed `1.0.17` to `1.0.18`; the seven principal
-screens and controlled ELM/TCP disconnect/reconnect flow were exercised.
-See `docs/verification/device-verification.md` for the evidence boundary.
-Release CI, physical `1.0.18` validation, issue #106 reporter hardware and
-store rollout remain separate checks. Android Auto / AAOS remains an
+The validation records below are for an earlier signed candidate and do not
+establish final published APK provenance or subsequent acceptance. Use the
+[GitLab 1.0.18 release](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.18)
+as the authoritative record for those results.
+The earlier records and hashes are retained rather than attributed to a later
+build.
+
+Earlier candidate validation for source `93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85`
+(tree `102f4b146fe94cb332b48255f199fad1abc63839`) passed 4,364 Flutter tests
+with 23 opt-in skips, `flutter analyze` with no issues, 62 native carProto
+tests, and Android lint with zero errors and 12 warnings. All six field/carProto
+ABI APKs passed maintainer-signature, ZIP integrity and 16 KiB alignment checks.
+The exact arm64 APKs accepted below were `field` SHA-256
+`1d0f23f816cd9c176fc54a5c4c6d3d4779cd0d099f36a42681a628e9134eb4da`
+and `carProto` SHA-256
+`f31b7d949b1a3883e69a37c1207b0e4646fab4140338814fc704ce5a77526466`.
+
+On an isolated Android 16 emulator, signed `1.0.17` → exact signed `1.0.18`
+retained system-language selection, Light theme, Minimal gauge style, six enabled
+PIDs, and a 254 KB prior transcript. Dashboard, trend chart, PID manager, custom
+PID create/edit, fault codes with freeze frame, timing, settings, Light and Dark
+themes, and controlled software ELM/TCP disconnect/reconnect passed. Custom PID
+retention across the update was not exercised. In the Android Auto walk, explicit
+phone HOME followed by 20 seconds without DHU produced zero fixture commands
+while the same TCP connection, foreground service, and app process remained
+alive. DHU reconnect reused that socket and resumed with `ATRV` before PID reads.
+Fault Codes stayed put with moving and unknown speed and opened for the
+stationary control; no toast text is claimed because none was persistently
+captured. See `docs/verification/device-verification.md` for the evidence boundary.
+
+The exact signed field ARM64 build also passed a physical Samsung Note9
+(Android 10 / API 29) walk. A same-certificate 1.0.17 → 1.0.18 update retained
+the installation time, theme, gauge style, language selection, six enabled PIDs,
+and a 624 KB Demo transcript. Both themes, rendered trend curves and axes,
+custom-PID create/edit/delete, fault freeze frames, timing, settings, and
+controlled software TCP connect/disconnect/saved-adapter reconnect passed.
+Cross-version custom-PID retention was not exercised. Installed-APK readback
+matched the accepted SHA-256 above, and the app-scoped stability scan found no
+crash, Flutter error, overflow, out-of-memory error, or ANR.
+
+Release CI, issue #106 reporter hardware, Play update compatibility, and store
+rollout remain separate checks. These software-fixture receipts do not prove
+Bluetooth, a real vehicle, or Google approval. Android Auto / AAOS remains an
 engineering preview; the production `field` APK has no car app service.
 
 ## 1.0.17 — 2026-10-07
