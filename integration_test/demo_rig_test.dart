@@ -231,16 +231,49 @@ Future<void> _recordAndInspectTelemetryJourney(WidgetTester tester) async {
       reason: 'recording controls disappeared on $destination',
     );
   }
-  await tester.tap(find.byKey(const ValueKey('telemetry-shell-stop')));
-  await tester.pump();
+  final stop = find.byKey(const ValueKey('telemetry-shell-stop'));
+  expect(stop, findsOneWidget);
+  await Scrollable.ensureVisible(tester.element(stop), alignment: 0.5);
+  await tester.pump(const Duration(milliseconds: 100));
   expect(
     await pumpUntil(
       tester,
-      () => controller.state.phase == TelemetryRecorderPhase.completed,
-      timeout: const Duration(seconds: 30),
+      () => stop.hitTestable().evaluate().length == 1,
+      timeout: const Duration(seconds: 2),
+      step: const Duration(milliseconds: 25),
     ),
     isTrue,
-    reason: 'Demo telemetry recording did not finalize',
+    reason: 'Demo telemetry Stop did not become hit-testable',
+  );
+  await tester.tap(stop.hitTestable());
+  await tester.pump();
+  var recorderState = controller.state;
+  expect(
+    recorderState.phase,
+    isNot(TelemetryRecorderPhase.recording),
+    reason:
+        'Demo telemetry Stop tap was not admitted: '
+        'phase=${recorderState.phase.name}, '
+        'error=${recorderState.errorCategory?.name}, '
+        'requiresRestart=${recorderState.requiresRestart}, '
+        'terminalReason=${recorderState.terminalReason?.name}',
+  );
+  final reachedTerminal = await pumpUntil(tester, () {
+    recorderState = controller.state;
+    return recorderState.phase == TelemetryRecorderPhase.completed ||
+        recorderState.phase == TelemetryRecorderPhase.failed ||
+        recorderState.requiresRestart;
+  }, timeout: const Duration(seconds: 30));
+  recorderState = controller.state;
+  expect(
+    reachedTerminal && recorderState.phase == TelemetryRecorderPhase.completed,
+    isTrue,
+    reason:
+        'Demo telemetry recording did not finalize successfully: '
+        'phase=${recorderState.phase.name}, '
+        'error=${recorderState.errorCategory?.name}, '
+        'requiresRestart=${recorderState.requiresRestart}, '
+        'terminalReason=${recorderState.terminalReason?.name}',
   );
   debugPrint('DEMO_RIG phase=recorded');
 

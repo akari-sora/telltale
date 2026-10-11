@@ -45,10 +45,31 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
   // journey's German override would otherwise win the shipped startup sync.
   // The identity check above limits this reset to the isolated debug rig.
   AppLocalesPlatform.live = true;
-  if ((await AppLocalesPlatform.get()).apiSupported) {
-    final localeReset = await AppLocalesPlatform.setOverrideTags(['zh-Hant']);
-    expect(localeReset?.apiSupported, isTrue);
-    expect(localeReset?.overrideTags, ['zh-Hant']);
+  var localeSnapshot = await AppLocalesPlatform.get();
+  final localeDeadline = DateTime.now().add(const Duration(seconds: 5));
+  while (localeSnapshot.sdkInt == null &&
+      DateTime.now().isBefore(localeDeadline)) {
+    await tester.pump(const Duration(milliseconds: 50));
+    localeSnapshot = await AppLocalesPlatform.get();
+  }
+  expect(
+    localeSnapshot.sdkInt,
+    isNotNull,
+    reason: 'rig locale host unavailable',
+  );
+  if (localeSnapshot.apiSupported) {
+    // Changing the OS locale can outlive the platform call's 500ms timeout
+    // during cold startup. Submit once, then prove the actual host state.
+    await AppLocalesPlatform.setOverrideTags(['zh-Hant']);
+    final resetDeadline = DateTime.now().add(const Duration(seconds: 5));
+    do {
+      await tester.pump(const Duration(milliseconds: 50));
+      localeSnapshot = await AppLocalesPlatform.get();
+    } while ((!localeSnapshot.apiSupported ||
+            !listEquals(localeSnapshot.overrideTags, ['zh-Hant'])) &&
+        DateTime.now().isBefore(resetDeadline));
+    expect(localeSnapshot.apiSupported, isTrue);
+    expect(localeSnapshot.overrideTags, ['zh-Hant']);
   }
   final prefs = await SharedPreferences.getInstance();
   await prefs.clear();
@@ -264,14 +285,15 @@ Future<Finder> revealInScrollable(
   int maxScrolls = 80,
 }) async {
   expect(scrollable, findsOneWidget);
-  final state = tester.state<ScrollableState>(scrollable);
-
   for (
     var attempt = 0;
     attempt < maxScrolls && target.evaluate().isEmpty;
     attempt += 1
   ) {
-    final position = state.position;
+    // Pumping may rebuild the connection wizard's viewport. Resolve the
+    // current state each time instead of retaining a disposed position.
+    expect(scrollable, findsOneWidget);
+    final position = tester.state<ScrollableState>(scrollable).position;
     final next = math.min(position.pixels + step, position.maxScrollExtent);
     if (next <= position.pixels) break;
     position.jumpTo(next);
