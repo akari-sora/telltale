@@ -1,7 +1,9 @@
 package com.cbstudio.telltale.car
 
 import androidx.car.app.model.Action
+import androidx.car.app.model.CarColor
 import androidx.car.app.model.PaneTemplate
+import androidx.car.app.model.Row
 import androidx.car.app.testing.ScreenController
 import androidx.car.app.testing.TestCarContext
 import androidx.lifecycle.Lifecycle
@@ -126,6 +128,7 @@ class CarHomeScreenTest {
         assertEquals(Action.APP_ICON, template.headerAction)
         assertTrue("Pane must have no action buttons (read-only DDG compliance)", template.pane.actions.isEmpty())
         assertEquals(6, template.pane.rows.size)
+        assertTrue(template.pane.rows.all { it.image?.tint == CarColor.DEFAULT })
     }
 
     @Test
@@ -300,6 +303,19 @@ class CarHomeScreenTest {
         // Boost & Load are missing in schema v1
         assertEquals("--", rows[4].texts[0].toString())
         assertEquals("--", rows[5].texts[0].toString())
+        assertEquals(
+            listOf(
+                R.drawable.ic_car_metric_speed,
+                R.drawable.ic_car_metric_rpm,
+                R.drawable.ic_car_metric_temperature,
+                R.drawable.ic_car_metric_battery,
+                R.drawable.ic_car_metric_pressure,
+                R.drawable.ic_car_metric_load,
+            ),
+            rows.map { it.image?.icon?.resId },
+        )
+        assertTrue(rows.all { it.rowImageType == Row.IMAGE_TYPE_SMALL })
+        assertTrue(rows.all { it.image?.tint == CarColor.DEFAULT })
     }
 
     @Test
@@ -790,6 +806,8 @@ class CarHomeScreenTest {
         val coolantRow = template.pane.rows[2]
         assertEquals("Coolant", coolantRow.title?.toString())
         assertEquals("108 °C · High", coolantRow.texts[0].toString())
+        assertEquals(R.drawable.ic_car_metric_temperature, coolantRow.image?.icon?.resId)
+        assertEquals(CarColor.RED, coolantRow.image?.tint)
     }
 
     @Test
@@ -866,6 +884,76 @@ class CarHomeScreenTest {
         assertEquals("Coolant", coolantRow.title?.toString())
         // Must NOT render alert high suffix because epoch does not match
         assertEquals("108 °C", coolantRow.texts[0].toString())
+        assertEquals(CarColor.DEFAULT, coolantRow.image?.tint)
+    }
+
+    @Test
+    fun homeScreen_unknownAfterWarningKeepsWarningCueWithoutClaimingCurrentReading() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput(coolantC = stale()))
+        runCurrent()
+
+        val alertRepo = CarAlertRepository()
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(
+                level = CarAlertLevel.UNKNOWN,
+                coolant = CarAlertPhase.UNKNOWN_AFTER_WARNING,
+                connectionEpoch = 1L,
+            ),
+        )
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            alertRepository = alertRepo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val coolantRow = template.pane.rows[2]
+        assertEquals("Stale", coolantRow.texts[0].toString())
+        assertEquals(CarColor.RED, coolantRow.image?.tint)
+    }
+
+    @Test
+    fun homeScreen_metricTitlesAndIconsRemainStableAcrossTelemetryUpdates() = runTest {
+        val repo = createRepository()
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        val expectedTitles = listOf("Speed", "RPM", "Coolant", "Module Voltage", "Boost", "Engine Load")
+        val expectedIcons = listOf(
+            R.drawable.ic_car_metric_speed,
+            R.drawable.ic_car_metric_rpm,
+            R.drawable.ic_car_metric_temperature,
+            R.drawable.ic_car_metric_battery,
+            R.drawable.ic_car_metric_pressure,
+            R.drawable.ic_car_metric_load,
+        )
+
+        repeat(12) { index ->
+            repo.submit(
+                frameInput(
+                    sequence = index.toLong() + 1,
+                    speedKmh = live(index * 7.0),
+                    rpm = live(700.0 + index * 250.0),
+                ),
+            )
+            runCurrent()
+
+            @Suppress("DEPRECATION")
+            val template = screen.onGetTemplate() as PaneTemplate
+            assertEquals(expectedTitles, template.pane.rows.map { it.title?.toString() })
+            assertEquals(expectedIcons, template.pane.rows.map { it.image?.icon?.resId })
+            assertTrue(template.pane.rows.all { it.onClickDelegate == null })
+        }
     }
 
     @Test

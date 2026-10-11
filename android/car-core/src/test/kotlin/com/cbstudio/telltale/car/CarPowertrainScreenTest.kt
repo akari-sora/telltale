@@ -1,7 +1,9 @@
 package com.cbstudio.telltale.car
 
 import androidx.car.app.model.Action
+import androidx.car.app.model.CarColor
 import androidx.car.app.model.PaneTemplate
+import androidx.car.app.model.Row
 import androidx.car.app.testing.ScreenController
 import androidx.car.app.testing.TestCarContext
 import androidx.lifecycle.Lifecycle
@@ -59,22 +61,24 @@ class CarPowertrainScreenTest {
     private fun live(value: Double) = CarSignalInput(CarSignalStatus.LIVE, value)
 
     private fun frameInput(
+        sequence: Long = 1,
         rpm: Double = 1800.0,
         coolant: Double = 90.0,
+        coolantSignal: CarSignalInput? = null,
         iat: Double = 25.0,
         map: Double = 35.0,
         voltage: Double = 14.1,
         speed: Double = 45.0,
     ) = CarTelemetryFrameInput(
         schemaVersion = 1,
-        sequence = 1,
+        sequence = sequence,
         connectionEpoch = 1,
         lifecycleEpoch = 0,
         producedAtMonotonicUs = 1_000,
         connectionPhase = CarConnectionPhase.CONNECTED,
         speedKmh = live(speed),
         rpm = live(rpm),
-        coolantC = live(coolant),
+        coolantC = coolantSignal ?: live(coolant),
         intakeAirC = live(iat),
         controlModuleVoltageV = live(voltage),
         mapKpa = live(map),
@@ -138,6 +142,19 @@ class CarPowertrainScreenTest {
         assertEquals("35 kPa", rows[3].texts[0].toString())
         assertEquals("14.1 V", rows[4].texts[0].toString())
         assertEquals("45 km/h", rows[5].texts[0].toString())
+        assertEquals(
+            listOf(
+                R.drawable.ic_car_metric_rpm,
+                R.drawable.ic_car_metric_temperature,
+                R.drawable.ic_car_metric_temperature,
+                R.drawable.ic_car_metric_pressure,
+                R.drawable.ic_car_metric_battery,
+                R.drawable.ic_car_metric_speed,
+            ),
+            rows.map { it.image?.icon?.resId },
+        )
+        assertTrue(rows.all { it.rowImageType == Row.IMAGE_TYPE_SMALL })
+        assertTrue(rows.all { it.onClickDelegate == null })
     }
 
     @Test
@@ -191,6 +208,28 @@ class CarPowertrainScreenTest {
         val coolantRow = template.pane.rows[1]
         assertEquals("Coolant", coolantRow.title?.toString())
         assertEquals("108 °C · High", coolantRow.texts[0].toString())
+        assertEquals(CarColor.RED, coolantRow.image?.tint)
+
+        repo.submit(
+            frameInput(
+                sequence = 2,
+                coolantSignal = CarSignalInput(CarSignalStatus.STALE, null),
+            ),
+        )
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(
+                level = CarAlertLevel.UNKNOWN,
+                coolant = CarAlertPhase.UNKNOWN_AFTER_WARNING,
+                connectionEpoch = 1L,
+            ),
+        )
+        runCurrent()
+
+        @Suppress("DEPRECATION")
+        val unknownTemplate = screen.onGetTemplate() as PaneTemplate
+        val unknownCoolantRow = unknownTemplate.pane.rows[1]
+        assertEquals("Stale", unknownCoolantRow.texts[0].toString())
+        assertEquals(CarColor.RED, unknownCoolantRow.image?.tint)
     }
 
     @Test
@@ -242,6 +281,7 @@ class CarPowertrainScreenTest {
         val coolantRow = template.pane.rows[1]
         assertEquals("Coolant", coolantRow.title?.toString())
         assertEquals("108 °C", coolantRow.texts[0].toString())
+        assertEquals(CarColor.DEFAULT, coolantRow.image?.tint)
     }
 
     @Test

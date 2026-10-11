@@ -63,6 +63,8 @@ class CarPowertrainScreen(
     internal data class MetricRow(
         val title: String,
         val text: String,
+        val icon: CarMetricIcon,
+        val warning: Boolean = false,
     )
 
     internal data class DisplayModel(
@@ -276,6 +278,8 @@ class CarPowertrainScreen(
         // Coolant with alert status
         val coolantBase = formatSignal(frame?.coolantC, "°C", "%.0f")
         val alertSnapshot = matchingAlertSnapshot(state, alertRepository.snapshot.value)
+        val coolantWarning = alertSnapshot?.coolant == CarAlertPhase.ACTIVE ||
+                alertSnapshot?.coolant == CarAlertPhase.UNKNOWN_AFTER_WARNING
         val coolantText = when {
             alertSnapshot?.coolant == CarAlertPhase.ACTIVE -> {
                 if (coolantBase != missingText && coolantBase != staleText) {
@@ -320,12 +324,17 @@ class CarPowertrainScreen(
         }
 
         return listOf(
-            MetricRow(carContext.getString(R.string.car_powertrain_rpm_title), rpmText),
-            MetricRow(carContext.getString(R.string.car_powertrain_coolant_title), coolantText),
-            MetricRow(carContext.getString(R.string.car_powertrain_iat_title), iatText),
-            MetricRow(carContext.getString(R.string.car_powertrain_map_title), mapText),
-            MetricRow(carContext.getString(R.string.car_powertrain_voltage_title), voltageText),
-            MetricRow(carContext.getString(R.string.car_powertrain_speed_title), speedText),
+            MetricRow(carContext.getString(R.string.car_powertrain_rpm_title), rpmText, CarMetricIcon.RPM),
+            MetricRow(
+                carContext.getString(R.string.car_powertrain_coolant_title),
+                coolantText,
+                CarMetricIcon.TEMPERATURE,
+                warning = coolantWarning,
+            ),
+            MetricRow(carContext.getString(R.string.car_powertrain_iat_title), iatText, CarMetricIcon.TEMPERATURE),
+            MetricRow(carContext.getString(R.string.car_powertrain_map_title), mapText, CarMetricIcon.PRESSURE),
+            MetricRow(carContext.getString(R.string.car_powertrain_voltage_title), voltageText, CarMetricIcon.VOLTAGE),
+            MetricRow(carContext.getString(R.string.car_powertrain_speed_title), speedText, CarMetricIcon.SPEED),
         )
     }
 
@@ -339,6 +348,7 @@ class CarPowertrainScreen(
                 Row.Builder()
                     .setTitle(row.title)
                     .addText(row.text)
+                    .setImage(row.icon.toCarIcon(carContext, row.warning), Row.IMAGE_TYPE_SMALL)
                     .build(),
             )
         }

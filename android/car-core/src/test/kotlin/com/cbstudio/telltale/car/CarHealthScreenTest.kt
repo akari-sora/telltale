@@ -3,8 +3,10 @@ package com.cbstudio.telltale.car
 import androidx.car.app.CarContext
 import androidx.car.app.ScreenManager
 import androidx.car.app.model.Action
+import androidx.car.app.model.CarColor
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.ParkedOnlyOnClickListener
+import androidx.car.app.model.Row
 import androidx.car.app.testing.ScreenController
 import androidx.car.app.testing.TestCarContext
 import androidx.lifecycle.Lifecycle
@@ -194,6 +196,19 @@ class CarHealthScreenTest {
         assertEquals("0 codes", rows[2].texts[0].toString())
         assertEquals("88 °C", rows[3].texts[0].toString())
         assertEquals("14.2 V", rows[4].texts[0].toString())
+        assertEquals(
+            listOf(
+                R.drawable.ic_car_metric_health,
+                R.drawable.ic_car_metric_engine,
+                R.drawable.ic_car_metric_dtc,
+                R.drawable.ic_car_metric_temperature,
+                R.drawable.ic_car_metric_battery,
+            ),
+            rows.map { it.image?.icon?.resId },
+        )
+        assertTrue(rows.all { it.rowImageType == Row.IMAGE_TYPE_SMALL })
+        assertTrue(rows.all { it.image?.tint == CarColor.DEFAULT })
+        assertTrue(rows.all { it.onClickDelegate == null })
     }
 
     @Test
@@ -219,6 +234,9 @@ class CarHealthScreenTest {
         assertEquals("Attention", rows[0].texts[0].toString())
         assertEquals("On", rows[1].texts[0].toString())
         assertEquals("1 codes", rows[2].texts[0].toString())
+        assertEquals(CarColor.RED, rows[0].image?.tint)
+        assertEquals(CarColor.RED, rows[1].image?.tint)
+        assertEquals(CarColor.RED, rows[2].image?.tint)
     }
 
     @Test
@@ -471,6 +489,9 @@ class CarHealthScreenTest {
         // MIL and DTC count display telemetry frame values, ignoring Epoch 2 DTC report
         assertEquals("Off", rows[1].texts[0].toString())
         assertEquals("0 codes", rows[2].texts[0].toString())
+        assertEquals(CarColor.DEFAULT, rows[0].image?.tint)
+        assertEquals(CarColor.DEFAULT, rows[1].image?.tint)
+        assertEquals(CarColor.DEFAULT, rows[2].image?.tint)
     }
 
     @Test
