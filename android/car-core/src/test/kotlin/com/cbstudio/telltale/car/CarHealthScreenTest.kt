@@ -1,6 +1,7 @@
 package com.cbstudio.telltale.car
 
 import androidx.car.app.CarContext
+import androidx.car.app.OnDoneCallback
 import androidx.car.app.ScreenManager
 import androidx.car.app.model.Action
 import androidx.car.app.model.CarColor
@@ -285,22 +286,90 @@ class CarHealthScreenTest {
     }
 
     @Test
-    fun healthScreen_faultCodesActionWrappedInParkedOnlyClickListener() = runTest {
+    fun healthScreen_faultCodesUnknownMotionShowsFeedbackWithoutNavigation() = runTest {
         val telemRepo = createTelemetryRepo()
         val dtcRepo = DefaultCarDtcRepository()
+        val feedback = mutableListOf<Int>()
         val screen = CarHealthScreen(
             carContext = carContext,
             telemetryRepository = telemRepo,
             dtcRepository = dtcRepo,
             contentLimitProvider = { 6 },
+            showFeedback = feedback::add,
         )
+        val screenManager = carContext.getCarService(ScreenManager::class.java)
+        screenManager.push(screen)
 
         @Suppress("DEPRECATION")
         val template = screen.onGetTemplate() as PaneTemplate
         val faultCodesAction = template.pane.actions[1]
 
         assertEquals("Fault Codes", faultCodesAction.title?.toString())
-        assertNotNull(faultCodesAction.onClickDelegate)
+        assertTrue(faultCodesAction.onClickDelegate!!.isParkedOnly)
+
+        faultCodesAction.onClickDelegate!!.sendClick(object : OnDoneCallback {})
+
+        assertEquals(screen, screenManager.top)
+        assertEquals(
+            listOf(carContext.getString(R.string.car_dtc_speed_unavailable)),
+            feedback.map { carContext.getString(it) },
+        )
+    }
+
+    @Test
+    fun healthScreen_faultCodesStationaryTelemetryPushesSummary() = runTest {
+        val telemRepo = createTelemetryRepo()
+        val dtcRepo = DefaultCarDtcRepository()
+        telemRepo.submit(frameInput(speed = 0.0))
+        runCurrent()
+        val feedback = mutableListOf<Int>()
+        val screen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            contentLimitProvider = { 6 },
+            showFeedback = feedback::add,
+        )
+        val screenManager = carContext.getCarService(ScreenManager::class.java)
+        screenManager.push(screen)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        template.pane.actions[1].onClickDelegate!!.sendClick(object : OnDoneCallback {})
+
+        assertTrue(screenManager.top is CarDtcSummaryScreen)
+        assertTrue(feedback.isEmpty())
+    }
+
+    @Test
+    fun healthScreen_faultCodesMovingTelemetryStaysPutWithParkedOnlyFeedback() = runTest {
+        val telemRepo = createTelemetryRepo()
+        val dtcRepo = DefaultCarDtcRepository()
+        telemRepo.submit(frameInput(speed = 12.0))
+        runCurrent()
+        val feedback = mutableListOf<Int>()
+        val screen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            contentLimitProvider = { 6 },
+            showFeedback = feedback::add,
+        )
+        val screenManager = carContext.getCarService(ScreenManager::class.java)
+        screenManager.push(screen)
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val action = template.pane.actions[1]
+        assertTrue(action.onClickDelegate!!.isParkedOnly)
+
+        action.onClickDelegate!!.sendClick(object : OnDoneCallback {})
+
+        assertEquals(screen, screenManager.top)
+        assertEquals(
+            listOf(carContext.getString(R.string.car_dtc_parked_only_notice)),
+            feedback.map { carContext.getString(it) },
+        )
     }
 
     @Test
@@ -351,11 +420,13 @@ class CarHealthScreenTest {
     }
 
     @Test
-    fun healthScreen_speedPermissionDeniedShowsParkedOnlyEnableAction() = runTest {
+    fun healthScreen_speedPermissionDeniedShowsFeedbackThenRequestsOnPhone() = runTest {
         val telemRepo = createTelemetryRepo()
         val dtcRepo = DefaultCarDtcRepository()
         val hostRepo = CarHostSpeedRepository()
         hostRepo.updateSample(CarHostSpeedSample(status = CarHostSpeedStatus.PERMISSION_DENIED))
+        val feedback = mutableListOf<Int>()
+        var feedbackPrecededRequest = false
 
         val screen = CarHealthScreen(
             carContext = carContext,
@@ -363,6 +434,10 @@ class CarHealthScreenTest {
             dtcRepository = dtcRepo,
             hostSpeedRepository = hostRepo,
             contentLimitProvider = { 6 },
+            showFeedback = {
+                feedbackPrecededRequest = carContext.lastPermissionRequestInfo == null
+                feedback.add(it)
+            },
         )
         val controller = ScreenController(screen)
         controller.moveToState(Lifecycle.State.RESUMED)
@@ -373,7 +448,59 @@ class CarHealthScreenTest {
         assertNotNull(actionStrip)
         assertEquals(1, actionStrip!!.actions.size)
         assertEquals("Enable vehicle speed", actionStrip.actions[0].title?.toString())
-        assertNotNull(actionStrip.actions[0].onClickDelegate)
+        val action = actionStrip.actions[0]
+        assertTrue(action.onClickDelegate!!.isParkedOnly)
+
+        action.onClickDelegate!!.sendClick(object : OnDoneCallback {})
+
+        assertEquals(
+            listOf(carContext.getString(R.string.car_speed_permission_phone_handoff)),
+            feedback.map { carContext.getString(it) },
+        )
+        assertTrue(feedbackPrecededRequest)
+        assertNotNull(carContext.lastPermissionRequestInfo)
+    }
+
+    @Test
+    fun healthScreen_automotiveSpeedPermissionUsesGenericParkedFeedback() = runTest {
+        val packageInfo = carContext.packageManager.getPackageInfo(carContext.packageName, 0).apply {
+            requestedPermissions = arrayOf(
+                CarHostSpeedPermissionCoordinator.PERMISSION_CAR_SPEED_AUTOMOTIVE,
+                CarHostSpeedPermissionCoordinator.PERMISSION_READ_DISPLAY_UNITS,
+            )
+        }
+        org.robolectric.Shadows.shadowOf(carContext.packageManager).installPackage(packageInfo)
+        val telemRepo = createTelemetryRepo()
+        val dtcRepo = DefaultCarDtcRepository()
+        val hostRepo = CarHostSpeedRepository()
+        hostRepo.updateSample(CarHostSpeedSample(status = CarHostSpeedStatus.PERMISSION_DENIED))
+        val feedback = mutableListOf<Int>()
+        var feedbackPrecededRequest = false
+        val screen = CarHealthScreen(
+            carContext = carContext,
+            telemetryRepository = telemRepo,
+            dtcRepository = dtcRepo,
+            hostSpeedRepository = hostRepo,
+            contentLimitProvider = { 6 },
+            showFeedback = {
+                feedbackPrecededRequest = carContext.lastPermissionRequestInfo == null
+                feedback.add(it)
+            },
+        )
+
+        @Suppress("DEPRECATION")
+        val template = screen.onGetTemplate() as PaneTemplate
+        val action = template.actionStrip!!.actions.single()
+        assertTrue(action.onClickDelegate!!.isParkedOnly)
+
+        action.onClickDelegate!!.sendClick(object : OnDoneCallback {})
+
+        assertEquals(
+            listOf(carContext.getString(R.string.car_speed_permission_handoff)),
+            feedback.map { carContext.getString(it) },
+        )
+        assertTrue(feedbackPrecededRequest)
+        assertNotNull(carContext.lastPermissionRequestInfo)
     }
 
     @Test

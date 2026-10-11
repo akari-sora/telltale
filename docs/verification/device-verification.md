@@ -70,6 +70,64 @@ the artifact, not that they walked it, which is what this file is for. A
 weaker claim that is true beats a stronger one nobody can check, and the price
 of keeping it is one sentence in the release notes saying which claim it is.
 
+## 2026-10-12 — 1.0.18 signed release update on an isolated phone emulator
+
+The maintainer-signed `field` arm64 APK was installed on a Pixel 9 Android 16
+emulator. Its version read back as `1.0.18` / versionCode `192`, SHA-256
+`0e1e53cd21f0c64f758d58b1801edbd7977ea9d41df3ede2083d30f6c69eb8da`,
+with the same maintainer certificate as the published `1.0.17` APK:
+`362133c004bee5e4f458f77d4a5d199948a3c5cdb9f0868be27d6f5d9109a579`.
+
+The earlier signed `1.0.17` / `182` was installed first. After creating a
+Traditional Chinese, light-theme baseline with five selected PIDs and a
+609 KB local session, `adb install -r` updated it to the release APK.
+The first-install timestamp stayed unchanged; language, theme, prior session
+and PID selections remained present after relaunch.
+
+Connection and Demo, dashboard, performance, DTC results and freeze frame,
+PID management, PID editing, and settings were exercised, including light
+and dark themes. A controlled software ELM endpoint over emulator TCP
+displayed 12.6 V, 0 km/h and 88 degrees Celsius. Stopping the fixture returned
+to the connection page; restarting it and choosing Direct Connect restored
+the live dashboard and voltage. This is software-fixture recovery evidence;
+it does not establish Bluetooth, adapter, ECU or vehicle compatibility.
+
+The walk saved 31 raw 1080 x 2424 PNGs, 30 UI XML captures and 1,631 fixture
+events. The app-scoped logcat scan found no fatal exceptions, layout errors,
+missing plugins or OOM patterns. The private emulator, ADB and fixture were
+stopped; the protected AVD seed digest remained unchanged.
+
+This entry carries no physical-device attestation. At the time of this walk,
+the S24 Ultra had a debug-signed `1.0.16` installation; Android cannot retain
+its data while replacing it with this differently signed maintainer APK.
+Physical release validation remains pending the user's decision under release procedure
+sections 5 and 5.5. Earlier S24 Android Auto preview observations do not
+attest this `field` release build.
+
+### Initial signed Android Auto preview on the isolated DHU host
+
+The separate maintainer-signed `com.cbstudio.telltale.carproto` APK read back
+as `1.0.18-carproto` / versionCode `192`, SHA-256
+`c909fba87a0cb71ceba3dc37581bb3e20fd7d75fd975985accc9b60a63f3ae28`.
+An installed, Google-signed Android Auto `17.7.663654-release` host was reused
+on the isolated emulator without copying account or application data.
+Desktop Head Unit 2.0 negotiated protocol 1.7 and TLS 1.2 with certificate
+verification. Telltale appeared in the launcher, its car app service bound,
+and Home, Health and Powertrain rendered without a fatal exception or ANR.
+Four raw DHU captures were saved.
+
+Only the car app service was launched in this initial smoke; the same-package
+phone telemetry producer was not configured. Readings were `--` and health
+was `Unknown`. Fault Codes correctly remained blocked without fresh speed
+evidence. The Enable vehicle speed action opened the system permission flow
+on the phone, as confirmed by package-scoped logs; that flow was not visible
+in the DHU-only capture. DHU day/night commands retained dark rendering.
+These observations establish preview launch and rendering, not complete
+vehicle functionality or Google category eligibility. The
+production `field` APK remains isolated from the car app service.
+The owned emulator, ADB forward and DHU were stopped, and the protected AVD
+seed digest was unchanged.
+
 ## 2026-10-07 — 1.0.17 release build on Galaxy S24 Ultra and a Pixel 9 Pro Fold emulator
 
 Device walk attested: 1.0.17

@@ -54,6 +54,7 @@
     <string name="car_dtc_status_unavailable">Diagnostics unavailable / incomplete</string>
     <string name="car_dtc_more_items_format">%d additional diagnostic codes not shown</string>
     <string name="car_dtc_parked_only_notice">Parked only</string>
+    <string name="car_dtc_speed_unavailable">Vehicle speed unavailable. Connect telemetry or enable vehicle speed while parked.</string>
     <string name="car_dtc_detail_title">Code Details</string>
     <string name="car_dtc_detail_class">Class</string>
     <string name="car_dtc_detail_controller">Controller</string>
@@ -74,4 +75,6 @@
     <string name="car_alert_high">High</string>
     <string name="car_alert_attention">Attention</string>
     <string name="car_action_enable_speed">Enable vehicle speed</string>
+    <string name="car_speed_permission_phone_handoff">Complete vehicle speed permission on your phone while parked.</string>
+    <string name="car_speed_permission_handoff">Complete vehicle speed permission while parked.</string>
 </resources>

@@ -7,12 +7,36 @@
 順序是有意義的：**第 1 步一定要在 build 之前**，第 5 節那道閘門一定要在上傳
 之前。中間的步驟可以查著做，那兩個不行。
 
-以下相對路徑與指令都以 Flutter App 根目錄為工作目錄：在私有 `torque` checkout
-先執行 `cd app`；公開 `telltale` checkout 的 repository 根目錄本身就是 App 根目錄。
+以下相對路徑與指令都以 Flutter App 根目錄為工作目錄：私有 `torque` checkout
+和公開 `telltale` checkout 的 repository 根目錄都是 App 根目錄，直接在 checkout
+根目錄執行。
 
 ---
 
-## 0. GitHub community APK 與 Google Play 是兩條發布線
+## 0. GitLab maintainer release、GitHub community APK 與 Google Play 是三條發布線
+
+目前 `aa22396584/telltale` 的 GitLab Release 使用 maintainer/Play upload
+簽章血緣。私有簽章環境的 canonical checkout 是
+`/Users/iml1s/Documents/mine/apps/auto/torque`，其 App 根目錄是該 checkout
+本身；舊文件裡的 `torque/app/` 路徑已過期。該環境持有被忽略的
+`android/torque-release.jks` 與 `android/key.properties`，但兩者都不可提交、
+複製到公開 repo 或在輸出中揭露內容。
+
+GitLab maintainer release 的安全順序是：以公開 `telltale` `main` 的目標
+commit 作為唯一 source tree，從受控的 Torque signing environment 以絕對路徑
+引用既有 keystore，先驗證 maintainer certificate fingerprint，再完成 pinned
+Flutter gates、release build 與安裝走查，再建立 GitLab tag/release 與校驗檔，
+最後重新下載公開資產，核對 package/version/signature/hash readback。不要以 Torque feature branch
+作為目前公開 source，也不要把 debug、rig、community-key 或
+`-PallowUnsignedRelease=true` 產物發布到這條線。GitLab CI 目前提供 gate jobs；
+它本身沒有 release publish script，因此 GitLab Release 建立與資產核對必須各自
+留下可讀的 API/UI readback。
+
+GitLab maintainer certificate 與 GitHub community certificate 是不同 lineage，
+不能互相更新已安裝的 APK。以下 GitHub workflow 說明只適用 community APK，不能
+拿來代替 maintainer release。
+
+## 0.1 GitHub community APK 與 Google Play 是兩條發布線
 
 公開 [`aa22396584/telltale`](https://gitlab.com/aa22396584/telltale) 的 tag 會觸發
 `.github/workflows/release.yml`，由 GitHub Actions 內的 **community key** 產生
@@ -21,14 +45,15 @@ universal `field` APK。這把金鑰不是 Play upload key；兩邊的 APK 不�
 
 GitHub APK 發布順序：
 
-1. 只在私有 `torque/app/` 修改，依 `CLAUDE.md` 的 fail-closed rsync recipe
+1. 舊私有同步流程曾使用 `torque/app/`；目前 App 根目錄是 `torque/`。依各
+   checkout 的有效 guidance 和 fail-closed rsync recipe
    單向同步到公開 repo；不得 force-push。
 2. 確認公開 `main` 的 exact-head CI 通過，而且 `pubspec.yaml` 的
    `versionName` 與 tag 主版號一致。
 3. **打 tag 之前要先落地的兩份紀錄。** 兩者都在 build 之前被檢查，沒有就擋下
    tag —— 用四十分鐘 build 換一個一秒就能給的拒絕，是另一種浪費。
 
-   **(a) 實機走查（只有正式版要）。** 依 §0.1 決定 tag 帶不帶預發行後綴。要發
+   **(a) 實機走查（只有正式版要）。** 依 §0.2 決定 tag 帶不帶預發行後綴。要發
    正式版，先把
 
    ```
@@ -37,7 +62,7 @@ GitHub APK 發布順序：
 
    這一行加進 `docs/verification/device-verification.md` 的走查條目裡並 commit ——
    `tool/release/require_device_walk.sh` 會查它。完整規則、以及那一行**沒有**
-   宣稱的兩件事，見 §0.1。
+   宣稱的兩件事，見 §0.2。
 
    **(b) `CHANGELOG.md` 的 `## <版本>` 區段（預發行也要）。**
    `tool/release/release_notes.sh changelog` 會查它，而且這一段會被原樣放進
@@ -48,7 +73,7 @@ GitHub APK 發布順序：
    | 情況 | 為什麼 |
    |---|---|
    | `## Unreleased` | 那底下的東西按定義不在這個 build 裡 |
-   | 柵欄程式碼區塊裡的標題 | 對讀者是範例。gate 被自己的文件滿足過一次了（見 §0.1） |
+   | 柵欄程式碼區塊裡的標題 | 對讀者是範例。gate 被自己的文件滿足過一次了（見 §0.2） |
    | HTML 註解裡的標題 | 讀者根本看不到 |
    | 只有標題、底下沒有內容 | 標題不是「改了什麼」的說明 |
    | 同一個版本兩個區段 | 檔案沒有說哪一個才是這次發布 |
@@ -91,7 +116,7 @@ GitHub APK 發布順序：
 這些步驟只宣告 GitHub community APK 發布。它不等於 Google Play
 production、不等於實車驗證，也不等於公開上架已可在每個區域下載。
 
-### 0.1 預發行後綴的意思，只有一個
+### 0.2 預發行後綴的意思，只有一個
 
 ```
 v1.0.12         正式版   docs/verification/device-verification.md 裡有

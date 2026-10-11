@@ -4,19 +4,20 @@ The original Grok on-demand main runner/image remain the default. Its paused or
 offline state is an execution dependency, not a test PASS. This repository does
 not unpause a runner or run a privileged host command from job code.
 
-Same-project merge requests use a GitLab-hosted small Linux runner and the public
-`plugfox/flutter:3.47.0-android` image pinned to its amd64 manifest digest. Both jobs
-execute the same non-root gate. The SDK version is checked against `.fvmrc`; any
-missing Android36/build-tools36/NDK28.2 packages are installed in the ephemeral
-container before dropping privileges. There is no floating `latest`/localhost
-fallback or weakening of root-permission tests. Hosted jobs consume the project's
-normal GitLab compute allowance; each job is capped at one hour. If allowance or
-runner access is unavailable, the job remains blocked, never considered passed.
+Main and same-project merge requests use the same project-specific tags
+`grok-box`, `ondemand`, and `telltale`, and
+`localhost/telltale-ci-flutter:3.47.0`. SaaS gate routing is disabled in
+`.gitlab-ci.yml`; `CI_GATE_RUNNER=hosted` does not enable a fallback job.
+An offline runner cannot be bypassed by setting that variable.
 
-An explicitly requested API/web pipeline may select `CI_GATE_RUNNER=hosted` on a
-review branch or main. This substitutes the execution host, not gate contents.
-Same-project MR rules exclude forks from the trusted project's job. No deploy or
-store action is present.
+The local image is based on the public `plugfox/flutter:3.47.0-android`
+amd64 manifest pinned below, with `/opt/android-sdk-linux` pointing to
+`/opt/android`. A replacement execution environment must verify that image,
+project scope, exact tags, host isolation, and single-job ownership before
+activation. It must execute the unchanged gate and preserve complete artifacts.
+The SDK version is checked against `.fvmrc`; missing Android 36/build-tools
+36/NDK 28.2 packages are installed inside the isolated job container before
+non-root execution. No deployment or store action is part of the gate.
 
 `full_gate.sh` preserves each command, separate stdout/stderr and original exit,
 runs analysis, Python tool tests, Python reference tests, all Flutter tests,
@@ -34,4 +35,4 @@ passed; Python compilation, bash syntax and YAML parsing also passed. Flutter an
 APK build results must come from the actual candidate pipeline, not these tests.
 
 Image source: https://hub.docker.com/layers/plugfox/flutter/3.47.0-android/images/sha256-9cc3fb4d2c742c21d8bb6ab16eef657810b27ac78429920c6cd644dc8e158e22
-Runner: https://docs.gitlab.com/ci/runners/hosted_runners/linux/
+Runner: https://docs.gitlab.com/runner/executors/docker/

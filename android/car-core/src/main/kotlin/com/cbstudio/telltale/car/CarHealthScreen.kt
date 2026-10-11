@@ -2,6 +2,7 @@ package com.cbstudio.telltale.car
 
 import android.os.SystemClock
 import androidx.car.app.CarContext
+import androidx.car.app.CarToast
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
@@ -30,6 +31,7 @@ import com.cbstudio.telltale.car.health.CarObservedHealth
 import com.cbstudio.telltale.car.health.matchingAlertSnapshot
 import com.cbstudio.telltale.car.localization.CarTextIsolation
 import com.cbstudio.telltale.car.safety.CarDtcMotionGate
+import com.cbstudio.telltale.car.safety.CarDtcMotionState
 import com.cbstudio.telltale.car.telemetry.CarSignalStatus
 import com.cbstudio.telltale.car.telemetry.CarSignalValue
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
@@ -69,6 +71,9 @@ class CarHealthScreen(
     private val motionResolver: CarVehicleMotionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
     private val alertRepository: CarAlertRepository = sessionRuntime?.alertRepository ?: CarAlertRepository(),
     private val permissionCoordinator: CarHostSpeedPermissionCoordinator = sessionRuntime?.permissionCoordinator ?: CarHostSpeedPermissionCoordinator(),
+    private val showFeedback: (Int) -> Unit = { stringRes ->
+        CarToast.makeText(carContext, stringRes, CarToast.LENGTH_SHORT).show()
+    },
 ) : Screen(carContext), DefaultLifecycleObserver {
 
     companion object {
@@ -415,6 +420,17 @@ class CarHealthScreen(
         }
     }
 
+    private fun speedPermissionFeedbackStringRes(): Int {
+        val projectedPermissionDeclared = CarHostSpeedPermissionCoordinator
+            .resolveRequiredPermissions(carContext)
+            .contains(CarHostSpeedPermissionCoordinator.PERMISSION_CAR_SPEED_PROJECTED)
+        return if (projectedPermissionDeclared) {
+            R.string.car_speed_permission_phone_handoff
+        } else {
+            R.string.car_speed_permission_handoff
+        }
+    }
+
     override fun onGetTemplate(): Template {
         val model = buildDisplayModel(telemetryRepository.state.value, dtcRepository.state.value)
         lastRenderedModel = model
@@ -457,19 +473,28 @@ class CarHealthScreen(
                 .setTitle(carContext.getString(R.string.car_action_fault_codes))
                 .setOnClickListener(
                     ParkedOnlyOnClickListener.create {
-                        if (CarDtcMotionGate.isStationary(telemetryRepository.state.value, hostSpeedRepository.sample.value, motionResolver)) {
-                            screenManager.push(
-                                CarDtcSummaryScreen(
-                                    carContext = carContext,
-                                    telemetryRepository = telemetryRepository,
-                                    dtcRepository = dtcRepository,
-                                    constraintManager = constraintManager,
-                                    contentLimitProvider = contentLimitProvider,
-                                    sessionRuntime = sessionRuntime,
-                                    hostSpeedRepository = hostSpeedRepository,
-                                    motionResolver = motionResolver,
-                                ),
-                            )
+                        val motion = CarDtcMotionGate.evaluate(
+                            telemetryRepository.state.value,
+                            hostSpeedRepository.sample.value,
+                            motionResolver,
+                        )
+                        when (motion) {
+                            CarDtcMotionState.STATIONARY -> {
+                                screenManager.push(
+                                    CarDtcSummaryScreen(
+                                        carContext = carContext,
+                                        telemetryRepository = telemetryRepository,
+                                        dtcRepository = dtcRepository,
+                                        constraintManager = constraintManager,
+                                        contentLimitProvider = contentLimitProvider,
+                                        sessionRuntime = sessionRuntime,
+                                        hostSpeedRepository = hostSpeedRepository,
+                                        motionResolver = motionResolver,
+                                    ),
+                                )
+                            }
+                            CarDtcMotionState.UNKNOWN -> showFeedback(R.string.car_dtc_speed_unavailable)
+                            CarDtcMotionState.MOVING -> showFeedback(R.string.car_dtc_parked_only_notice)
                         }
                     },
                 )
@@ -485,6 +510,7 @@ class CarHealthScreen(
                 .setTitle(carContext.getString(R.string.car_action_enable_speed))
                 .setOnClickListener(
                     ParkedOnlyOnClickListener.create {
+                        showFeedback(speedPermissionFeedbackStringRes())
                         requestSpeedPermission()
                     }
                 )
