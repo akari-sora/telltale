@@ -99,10 +99,34 @@ stopped; the protected AVD seed digest remained unchanged.
 
 This entry carries no physical-device attestation. At the time of this walk,
 the S24 Ultra had a debug-signed `1.0.16` installation; Android cannot retain
-its data while replacing it with this differently signed maintainer APK. Physical release
-validation remains pending the user's decision under release procedure
+its data while replacing it with this differently signed maintainer APK.
+Physical release validation remains pending the user's decision under release procedure
 sections 5 and 5.5. Earlier S24 Android Auto preview observations do not
 attest this `field` release build.
+
+### Initial signed Android Auto preview on the isolated DHU host
+
+The separate maintainer-signed `com.cbstudio.telltale.carproto` APK read back
+as `1.0.18-carproto` / versionCode `192`, SHA-256
+`c909fba87a0cb71ceba3dc37581bb3e20fd7d75fd975985accc9b60a63f3ae28`.
+An installed, Google-signed Android Auto `17.7.663654-release` host was reused
+on the isolated emulator without copying account or application data.
+Desktop Head Unit 2.0 negotiated protocol 1.7 and TLS 1.2 with certificate
+verification. Telltale appeared in the launcher, its car app service bound,
+and Home, Health and Powertrain rendered without a fatal exception or ANR.
+Four raw DHU captures were saved.
+
+Only the car app service was launched in this initial smoke; the same-package
+phone telemetry producer was not configured. Readings were `--` and health
+was `Unknown`. Fault Codes correctly remained blocked without fresh speed
+evidence. The Enable vehicle speed action opened the system permission flow
+on the phone, as confirmed by package-scoped logs; that flow was not visible
+in the DHU-only capture. DHU day/night commands retained dark rendering.
+These observations establish preview launch and rendering, not complete
+vehicle functionality or Google category eligibility. The
+production `field` APK remains isolated from the car app service.
+The owned emulator, ADB forward and DHU were stopped, and the protected AVD
+seed digest was unchanged.
 
 ## 2026-10-07 — 1.0.17 release build on Galaxy S24 Ultra and a Pixel 9 Pro Fold emulator
 

@@ -54,6 +54,7 @@
     <string name="car_dtc_status_unavailable">诊断不可用 / 不完整</string>
     <string name="car_dtc_more_items_format">另有 %d 条诊断故障码未显示</string>
     <string name="car_dtc_parked_only_notice">仅限停车时使用</string>
+    <string name="car_dtc_speed_unavailable">无法获取车速。请在停车时连接遥测或启用车速权限。</string>
     <string name="car_dtc_detail_title">故障码详情</string>
     <string name="car_dtc_detail_class">类别</string>
     <string name="car_dtc_detail_controller">控制器</string>
@@ -74,4 +75,5 @@
     <string name="car_alert_high">过高</string>
     <string name="car_alert_attention">注意</string>
     <string name="car_action_enable_speed">启用车速</string>
+    <string name="car_speed_permission_phone_handoff">请在停车时于手机完成车速权限设置。</string>
 </resources>

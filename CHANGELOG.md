@@ -13,11 +13,12 @@ Dates are the date the build was made, not the date it reached anyone.
 Android Auto / AAOS preview readability and lifecycle work merged after `v1.0.17`:
 
 - Added consistent car metric icons and clearer Home, Health, and Powertrain
-  preview
-  telemetry surfaces, with high coolant temperature emphasis and safer
+  preview telemetry surfaces, with high coolant temperature emphasis and safer
   glanceable layouts.
 - Added projection session ownership and foreground continuity handling across
   connect, pause, resume, and disconnect transitions.
+- Added parked-only guidance when fault inspection lacks speed evidence and
+  when vehicle-speed permission must be completed on the phone.
 - Fixed the issue #106 post-connect path to publish the handshake voltage,
   restore PID capability census state, and retire or retry in-flight polling
   work correctly across lifecycle interruption.
