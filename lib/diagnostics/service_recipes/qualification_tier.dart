@@ -521,50 +521,6 @@ final class ActiveTestAuthorizationIssuer {
   }
 }
 
-/// Legacy authorization token (Issue #132).
-///
-/// Deprecated: Replaced by [ActiveTestExecutionCapability] issued by
-/// [ActiveTestAuthorizationIssuer] with atomic consumption.
-@Deprecated('Use ActiveTestExecutionCapability and ActiveTestAuthorizationIssuer')
-final class ActiveTestAuthorizationToken {
-  const ActiveTestAuthorizationToken({
-    required this.tokenId,
-    required this.recipeHash,
-    required this.targetCanHeader,
-    required this.connectionGeneration,
-    required this.expiresAt,
-    this.isUsed = false,
-  });
-
-  final String tokenId;
-  final String recipeHash;
-  final String targetCanHeader;
-  final int connectionGeneration;
-  final DateTime expiresAt;
-  final bool isUsed;
-
-  /// Verifies that this authorization token is valid and matches all active context bindings.
-  bool isValidFor({
-    required String expectedRecipeHash,
-    required String expectedTargetCanHeader,
-    required int currentConnectionGeneration,
-    required DateTime now,
-    BusAddressingType busType = BusAddressingType.can11Bit,
-  }) {
-    if (isUsed) return false;
-    if (tokenId.trim().isEmpty) return false;
-    // Strict expiry check: exact equality is rejected!
-    if (!now.isBefore(expiresAt)) return false;
-    if (recipeHash.trim() != expectedRecipeHash.trim()) return false;
-    if (!TransportAddressing.areHeadersEquivalent(
-        targetCanHeader, expectedTargetCanHeader, busType)) {
-      return false;
-    }
-    if (connectionGeneration != currentConnectionGeneration) return false;
-    return true;
-  }
-}
-
 /// Snapshot of the live qualification and support state for an active test.
 final class ActiveTestSupportSnapshot {
   const ActiveTestSupportSnapshot({
@@ -664,28 +620,6 @@ final class ActiveTestEligibilityGate {
     }
 
     return ActiveTestEligibilityVerdict.eligible;
-  }
-
-  /// Deprecated alias to [previewEligibility].
-  @Deprecated('Use previewEligibility for read-only preview')
-  static ActiveTestEligibilityVerdict evaluate({
-    required ActiveTestProfile? profile,
-    required EcuSupportStatus ecuSupport,
-    required bool benchQualified,
-    required bool vehicleQualified,
-    required bool preconditionsSatisfied,
-    required bool operatorConsentGranted,
-    ExecutionTargetScope targetScope = ExecutionTargetScope.vehicle,
-  }) {
-    return previewEligibility(
-      profile: profile,
-      ecuSupport: ecuSupport,
-      benchQualified: benchQualified,
-      vehicleQualified: vehicleQualified,
-      preconditionsSatisfied: preconditionsSatisfied,
-      operatorConsentGranted: operatorConsentGranted,
-      targetScope: targetScope,
-    );
   }
 }
 
