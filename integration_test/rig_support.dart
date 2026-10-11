@@ -1,17 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:torque_obd/core/share/app_share_platform_bridge.dart';
 import 'package:torque_obd/core/share/rig_app_share_platform.dart';
+import 'package:torque_obd/core/app_locales_platform.dart';
 import 'package:torque_obd/l10n/locale_resolution.dart';
 import 'package:torque_obd/main.dart' as app;
 import 'package:torque_obd/obd/session_evidence.dart';
@@ -20,6 +23,7 @@ import 'package:torque_obd/obd/transcript_store.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
 import 'package:torque_obd/state/app_share_coordinator.dart';
 import 'package:torque_obd/state/artifact_operation_gate.dart';
+import 'package:torque_obd/state/locale_settings.dart';
 import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/state/telemetry_recorder.dart';
 import 'package:torque_obd/state/telemetry_runtime.dart';
@@ -28,11 +32,45 @@ import 'package:torque_obd/telemetry/session/telemetry_recorder.dart';
 import 'package:torque_obd/telemetry/session/telemetry_session.dart';
 import 'package:torque_obd/telemetry/session/telemetry_session_reader.dart';
 import 'package:torque_obd/ui/screens/dashboard/dashboard_screen.dart';
+import 'package:torque_obd/ui/screens/connect/connect_screen.dart';
 
 /// Starts the isolated `.rig` app from a state that cannot inherit a prior
 /// successful connection or transcript.
 Future<void> startCleanRigApp(WidgetTester tester) async {
   await requireIsolatedRigIdentity();
+  // Live device tests can retain the previous root between journeys. Dispose
+  // its providers and poller before clearing this isolated rig's artifacts.
+  await _disposeRigRoot(tester);
+  // Android 13+ keeps per-app language outside SharedPreferences. A prior
+  // journey's German override would otherwise win the shipped startup sync.
+  // The identity check above limits this reset to the isolated debug rig.
+  AppLocalesPlatform.live = true;
+  var localeSnapshot = await AppLocalesPlatform.get();
+  final localeDeadline = DateTime.now().add(const Duration(seconds: 5));
+  while (localeSnapshot.sdkInt == null &&
+      DateTime.now().isBefore(localeDeadline)) {
+    await tester.pump(const Duration(milliseconds: 50));
+    localeSnapshot = await AppLocalesPlatform.get();
+  }
+  expect(
+    localeSnapshot.sdkInt,
+    isNotNull,
+    reason: 'rig locale host unavailable',
+  );
+  if (localeSnapshot.apiSupported) {
+    // Changing the OS locale can outlive the platform call's 500ms timeout
+    // during cold startup. Submit once, then prove the actual host state.
+    await AppLocalesPlatform.setOverrideTags(['zh-Hant']);
+    final resetDeadline = DateTime.now().add(const Duration(seconds: 5));
+    do {
+      await tester.pump(const Duration(milliseconds: 50));
+      localeSnapshot = await AppLocalesPlatform.get();
+    } while ((!localeSnapshot.apiSupported ||
+            !listEquals(localeSnapshot.overrideTags, ['zh-Hant'])) &&
+        DateTime.now().isBefore(resetDeadline));
+    expect(localeSnapshot.apiSupported, isTrue);
+    expect(localeSnapshot.overrideTags, ['zh-Hant']);
+  }
   final prefs = await SharedPreferences.getInstance();
   await prefs.clear();
   // The rig asserts shipped Traditional Chinese copy. Without this the
@@ -48,7 +86,8 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
   expect(
     clearOutcome.succeeded,
     isTrue,
-    reason: 'rig start refused to clear last-session.log: ${clearOutcome.error}',
+    reason:
+        'rig start refused to clear last-session.log: ${clearOutcome.error}',
   );
   final telemetry = Directory(
     '${(await getApplicationDocumentsDirectory()).path}/telltale-telemetry',
@@ -58,8 +97,41 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
   if (await capturedShares.exists()) {
     await capturedShares.delete(recursive: true);
   }
+  // A handed-off Share lease survives install -r for 15 minutes. Clear its
+  // staging cache only for a clean isolated rig; recovery launches retain it.
+  await _clearIsolatedRigShareStaging();
 
   await startRigAppPreservingState(tester);
+}
+
+/// Removes only the isolated rig's Share leases and staging files.
+///
+/// Export preparation journeys may release verified rig-only handoffs between
+/// formats; production keeps its two-source bound and 15-minute retention.
+/// Captured copies and native recordings remain untouched.
+Future<void> clearIsolatedRigShareStaging(WidgetTester tester) async {
+  await requireIsolatedRigIdentity();
+  final container = ProviderScope.containerOf(
+    tester.element(find.byType(MaterialApp)),
+    listen: false,
+  );
+  expect(
+    await pumpUntil(
+      tester,
+      () => container.read(artifactOperationGateProvider).snapshot.isIdle,
+    ),
+    isTrue,
+    reason: 'rig Share operation did not finish before staging cleanup',
+  );
+  await _clearIsolatedRigShareStaging();
+}
+
+Future<void> _clearIsolatedRigShareStaging() async {
+  await requireIsolatedRigIdentity();
+  final shareStaging = Directory(
+    '${(await getApplicationCacheDirectory()).path}/telltale-app-shares',
+  );
+  if (await shareStaging.exists()) await shareStaging.delete(recursive: true);
 }
 
 /// Starts the isolated rig identity without deleting durable artifacts.
@@ -69,14 +141,36 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
 /// an empty install.
 Future<void> startRigAppPreservingState(WidgetTester tester) async {
   await requireIsolatedRigIdentity();
-
+  await _disposeRigRoot(tester);
+  // testWidgets resets lifecycle state between journeys; a new root must
+  // receive the same foreground event as a newly launched Android activity.
+  resumeApp(tester);
   unawaited(app.main());
-  final ready = await pumpUntil(
-    tester,
-    () => find.text('選擇連線方式').evaluate().isNotEmpty,
-    timeout: const Duration(seconds: 15),
-  );
+  var routeReset = false;
+  final ready = await pumpUntil(tester, () {
+    // testWidgets already unmounts the previous tree, but the shipped
+    // process-wide router retains its last route. Reset the newly mounted
+    // router after startup completes, when its public config is available.
+    if (!routeReset) {
+      for (final widget in tester.widgetList<MaterialApp>(
+        find.byType(MaterialApp),
+      )) {
+        final router = widget.routerConfig;
+        if (router is GoRouter) {
+          router.go(ConnectScreen.path);
+          routeReset = true;
+          return false;
+        }
+      }
+    }
+    return routeReset && find.byType(ConnectScreen).evaluate().isNotEmpty;
+  }, timeout: const Duration(seconds: 15));
   expect(ready, isTrue, reason: 'the connection screen did not become ready');
+}
+
+Future<void> _disposeRigRoot(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
 }
 
 /// Non-destructively proves the live process is the exact debug rig package.
@@ -174,23 +268,104 @@ Future<void> requireDashboard(
   expect(reached, isTrue, reason: 'the app never reached the dashboard');
 }
 
-/// Scrolls the connection wizard until its lazily built sliver contains
-/// [text]. Looking up the finder before scrolling is not sufficient: on a
-/// phone-sized viewport even the first transport card can be outside the
-/// initial sliver cache.
+/// Advances a lazy vertical viewport until [target] is built, then places it
+/// at a real tap location.
+///
+/// `scrollUntilVisible` starts each drag at the scrollable's center. On the
+/// 320dp live-device fixture that point did not hit the requested scrollable,
+/// and repeated drags did not reveal the target. Driving the viewport's own
+/// position keeps the query tied to the exact scrollable; the final hit-test
+/// still proves the user-facing target is actually tappable.
+Future<Finder> revealInScrollable(
+  WidgetTester tester,
+  Finder target, {
+  required Finder scrollable,
+  double step = 300,
+  double alignment = 0.5,
+  int maxScrolls = 80,
+}) async {
+  expect(scrollable, findsOneWidget);
+  for (
+    var attempt = 0;
+    attempt < maxScrolls && target.evaluate().isEmpty;
+    attempt += 1
+  ) {
+    // Pumping may rebuild the connection wizard's viewport. Resolve the
+    // current state each time instead of retaining a disposed position.
+    expect(scrollable, findsOneWidget);
+    final position = tester.state<ScrollableState>(scrollable).position;
+    final next = math.min(position.pixels + step, position.maxScrollExtent);
+    if (next <= position.pixels) break;
+    position.jumpTo(next);
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+
+  expect(target, findsOneWidget, reason: 'lazy target was not revealed');
+  await Scrollable.ensureVisible(tester.element(target), alignment: alignment);
+  await tester.pump(const Duration(milliseconds: 100));
+  final hitTestable = target.hitTestable();
+  expect(
+    hitTestable,
+    findsOneWidget,
+    reason: 'revealed target was not tappable',
+  );
+  return hitTestable;
+}
+
+/// Reveals [text] in the active page's lazy vertical viewport. This serves
+/// Connect, recording detail, and Settings journeys; the target must finish
+/// at an actual tap location.
 Future<Finder> revealText(WidgetTester tester, String text) async {
   final finder = find.text(text);
-  await tester.scrollUntilVisible(
-    finder,
-    300,
-    scrollable: find.byType(Scrollable).first,
+  final scrollable = find.byWidgetPredicate(
+    (widget) =>
+        widget is Scrollable && widget.axisDirection == AxisDirection.down,
+  ).first;
+  return revealInScrollable(tester, finder, scrollable: scrollable);
+}
+
+/// Taps a locale row that the journey has already scrolled into the tree.
+///
+/// `scrollUntilVisible` stops as soon as a render object is inside the
+/// viewport, even when the persistent bottom navigation still covers its tap
+/// target. Reposition the row, prove the real hit target, then wait for both
+/// the selection, inherited locale, and persisted preference to agree.
+Future<void> tapLocatedLocaleSetting(
+  WidgetTester tester,
+  Key key, {
+  required String expectedLanguageCode,
+}) async {
+  final locale = find.byKey(key);
+  expect(locale, findsOneWidget, reason: 'locale $key was not located');
+  await Scrollable.ensureVisible(tester.element(locale), alignment: 0.35);
+  await tester.pump(const Duration(milliseconds: 100));
+
+  final target = locale.hitTestable();
+  expect(target, findsOneWidget, reason: 'locale $key was not hit-testable');
+  await tester.tap(target);
+
+  final updated = await pumpUntil(
+    tester,
+    () {
+      final matches = locale.evaluate();
+      if (matches.length != 1) return false;
+      final element = tester.element(locale);
+      final controller = ProviderScope.containerOf(
+        element,
+        listen: false,
+      ).read(localePreferenceProvider.notifier);
+      final tile = tester.widget<ListTile>(locale);
+      final expected = localePreferenceFromStored(expectedLanguageCode);
+      return tile.selected &&
+          Localizations.localeOf(element).languageCode ==
+              expectedLanguageCode &&
+          controller.committed == expected &&
+          !controller.needsReconcile;
+    },
+    timeout: const Duration(seconds: 10),
+    step: const Duration(milliseconds: 100),
   );
-  expect(finder, findsOneWidget);
-  await Scrollable.ensureVisible(tester.element(finder), alignment: 0.5);
-  await tester.pump(const Duration(milliseconds: 300));
-  final hitTestable = finder.hitTestable();
-  expect(hitTestable, findsOneWidget);
-  return hitTestable;
+  expect(updated, isTrue, reason: 'locale $key did not finish updating');
 }
 
 bool hasNonZeroPidRate(WidgetTester tester) =>
@@ -594,8 +769,9 @@ final class _CapturingRigSharePlatform implements AppSharePlatform {
 
   @override
   Future<AppShareResult> share(AppSharePlatformRequest request) async {
-    byExtension[request.fileName.split('.').last] = await File(request.path)
-        .readAsBytes();
+    byExtension[request.fileName.split('.').last] = await File(
+      request.path,
+    ).readAsBytes();
     return AppShareResult.selected;
   }
 }

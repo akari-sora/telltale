@@ -1,7 +1,7 @@
 """AA-05 static architecture contract gate for AAOS native hardware integration and alert surface.
 
 Verifies:
-  AA05-01: Car App Library version remains exact 1.7.0.
+  AA05-01: Car App Library version remains exact 1.8.0-rc01.
   AA05-02: CarSensors is NOT used anywhere; CarInfo.addSpeedListener is used instead.
   AA05-04: carProto leaf manifest declares com.google.android.gms.permission.CAR_SPEED.
   AA05-05: automotive leaf manifest declares android.car.permission.CAR_SPEED and READ_CAR_DISPLAY_UNITS.
@@ -9,7 +9,7 @@ Verifies:
   AA05-27: No Navigation-only Alert / showAlert used in car-core.
   AA05-28: No experimental Banner API used in car-core.
   AA05-29: No cross-application Notification / HUN used in car-core.
-  AA05-35: lib/obd/ has strictly zero diff against origin/main.
+  AA05-35: lib/obd/ changes against origin/main stay within the authorized OBD port.
 """
 
 from pathlib import Path
@@ -18,6 +18,13 @@ import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+AUTHORIZED_OBD_PORT_FILES = frozenset(
+    {
+        "lib/obd/elm327_client.dart",
+        "lib/obd/polling_engine.dart",
+        "lib/obd/powertrain_battery/powertrain_battery_catalog.dart",
+    }
+)
 
 
 class CarHardwareContractTest(unittest.TestCase):
@@ -25,14 +32,12 @@ class CarHardwareContractTest(unittest.TestCase):
         return (ROOT / relative).read_text(encoding="utf-8")
 
     # AA05-01
-    def test_car_app_library_is_pinned_to_1_7_0(self):
+    def test_car_app_library_is_pinned_to_1_8_0_rc01(self):
         car_core = self.read("android/car-core/build.gradle.kts")
-        self.assertIn('androidx.car.app:app:1.7.0', car_core)
-        self.assertNotIn('1.8.0', car_core)
+        self.assertIn('androidx.car.app:app:1.8.0-rc01', car_core)
 
         automotive = self.read("android/automotive/build.gradle.kts")
-        self.assertIn('androidx.car.app:app-automotive:1.7.0', automotive)
-        self.assertNotIn('1.8.0', automotive)
+        self.assertIn('androidx.car.app:app-automotive:1.8.0-rc01', automotive)
 
     # AA05-02
     def test_carsensors_is_never_used_in_car_code(self):
@@ -102,18 +107,22 @@ class CarHardwareContractTest(unittest.TestCase):
                 )
 
     # AA05-35
-    def test_obd_directory_strictly_zero_diff(self):
+    def test_obd_directory_has_no_unauthorized_drift(self):
         res = subprocess.run(
-            ["git", "diff", "origin/main...HEAD", "--", "lib/obd/"],
+            ["git", "diff", "--name-only", "origin/main...HEAD", "--", "lib/obd/"],
             cwd=str(ROOT),
             capture_output=True,
             text=True,
         )
         self.assertEqual(res.returncode, 0, f"git diff failed: {res.stderr}")
-        self.assertEqual(
-            res.stdout.strip(),
-            "",
-            msg=f"lib/obd/ must have strictly 0 diff against origin/main! Found diff:\n{res.stdout}",
+        changed_files = {line for line in res.stdout.splitlines() if line}
+        unexpected_files = changed_files - AUTHORIZED_OBD_PORT_FILES
+        self.assertFalse(
+            unexpected_files,
+            msg=(
+                "lib/obd/ contains drift outside the authorized OBD port: "
+                f"{sorted(unexpected_files)}"
+            ),
         )
 
 

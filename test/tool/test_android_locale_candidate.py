@@ -257,6 +257,75 @@ class AndroidLocaleCandidateTest(unittest.TestCase):
             validate_candidate_locale_report(report)
         self.assertIn("screenshot hash invalid", str(ctx.exception))
 
+    def test_n00_missing_candidate_apk_on_disk_rejected(self):
+        report = _candidate_pass()
+        with self.assertRaises(GateError) as ctx:
+            validate_candidate_locale_report(report, expected_candidate_apk="/nonexistent/missing.apk")
+        self.assertIn("candidate APK not found", str(ctx.exception))
+
+    def test_n00_candidate_apk_hash_mismatch_rejected(self):
+        report = _candidate_pass(candidate_sha256="a" * 64)
+        with tempfile.NamedTemporaryFile(suffix=".apk") as f:
+            f.write(b"content")
+            f.flush()
+            with self.assertRaises(GateError) as ctx:
+                validate_candidate_locale_report(report, expected_candidate_apk=f.name)
+            self.assertIn("does not match report candidate_sha256", str(ctx.exception))
+
+    def test_n00_candidate_apk_matching_file_accepted(self):
+        import hashlib
+        content = b"valid apk content"
+        content_sha = hashlib.sha256(content).hexdigest()
+        report = _candidate_pass(candidate_sha256=content_sha)
+        with tempfile.NamedTemporaryFile(suffix=".apk") as f:
+            f.write(content)
+            f.flush()
+            validated = validate_candidate_locale_report(report, expected_candidate_apk=f.name)
+            self.assertEqual(validated["candidate_sha256"], content_sha)
+
+    def test_n00_missing_version_name_rejected(self):
+        report = _candidate_pass()
+        report.pop("version_name")
+        with self.assertRaises(GateError) as ctx:
+            validate_candidate_locale_report(report)
+        self.assertIn("missing valid version_name", str(ctx.exception))
+
+    def test_n00_invalid_version_code_rejected(self):
+        report = _candidate_pass(version_code=0)
+        with self.assertRaises(GateError) as ctx:
+            validate_candidate_locale_report(report)
+        self.assertIn("version_code must be positive integer", str(ctx.exception))
+
+    def test_n00_status_fail_rejected(self):
+        report = _candidate_pass(status="FAIL")
+        with self.assertRaises(GateError) as ctx:
+            validate_candidate_locale_report(report)
+        self.assertIn("status is FAIL, must be PASS", str(ctx.exception))
+
+    def test_n00_invalid_abi_rejected(self):
+        report = _candidate_pass(device_abi="mips")
+        with self.assertRaises(GateError) as ctx:
+            validate_candidate_locale_report(report)
+        self.assertIn("invalid device_abi", str(ctx.exception))
+
+    def test_n01_supported_locales_non_string_rejected(self):
+        report = _candidate_pass(supported_locales=["en", "zh-Hant", 123])
+        with self.assertRaises(GateError) as ctx:
+            validate_candidate_locale_report(report)
+        self.assertIn("must be non-empty list of strings", str(ctx.exception))
+
+    def test_n07_command_with_empty_string_rejected(self):
+        report = _candidate_pass(command=["flutter", ""])
+        with self.assertRaises(GateError) as ctx:
+            validate_candidate_locale_report(report)
+        self.assertIn("missing or invalid executed command", str(ctx.exception))
+
+    def test_n07_exit_non_int_rejected(self):
+        report = _candidate_pass(exit="0")
+        with self.assertRaises(GateError) as ctx:
+            validate_candidate_locale_report(report)
+        self.assertIn("non-integer exit", str(ctx.exception))
+
     # Routing through validate_android_os_locale_report
     def test_routing_candidate_profile(self):
         report = _candidate_pass()
@@ -277,6 +346,25 @@ class AndroidLocaleCandidateTest(unittest.TestCase):
             report_file.write_text(json.dumps(_candidate_pass(exit=1)), encoding="utf-8")
             exit_code = main(["--report", str(report_file)])
             self.assertEqual(exit_code, 1)
+
+    def test_cli_offline_report_missing_candidate_apk_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            report_file = Path(tmpdir) / "candidate_report.json"
+            report_file.write_text(json.dumps(_candidate_pass()), encoding="utf-8")
+            exit_code = main(["--report", str(report_file), "--candidate-apk", "/nonexistent/path.apk"])
+            self.assertEqual(exit_code, 1)
+
+    def test_cli_offline_report_valid_candidate_apk_succeeds(self):
+        import hashlib
+        content = b"valid content"
+        content_sha = hashlib.sha256(content).hexdigest()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            apk_file = Path(tmpdir) / "app.apk"
+            apk_file.write_bytes(content)
+            report_file = Path(tmpdir) / "candidate_report.json"
+            report_file.write_text(json.dumps(_candidate_pass(candidate_sha256=content_sha)), encoding="utf-8")
+            exit_code = main(["--report", str(report_file), "--candidate-apk", str(apk_file)])
+            self.assertEqual(exit_code, 0)
 
 
 if __name__ == "__main__":

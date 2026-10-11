@@ -56,6 +56,7 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
   /// Equal values are not the same request: a second tap of English while
   /// the first save is in flight must not restore System over it.
   Future<bool> set(LocalePreference preference) {
+    if (!ref.mounted) return Future<bool>.value(false);
     final block = ref.read(languageSwitchBlockProvider);
     if (block != LanguageSwitchBlock.none) {
       return Future<bool>.value(false);
@@ -64,10 +65,18 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
     state = preference;
     final done = Completer<bool>();
     _persistQueue = _persistQueue.then((_) async {
+      if (!ref.mounted) {
+        done.complete(false);
+        return;
+      }
       try {
         done.complete(await _persist(preference, attempt));
       } on Object catch (error, stack) {
-        done.completeError(error, stack);
+        if (ref.mounted) {
+          done.completeError(error, stack);
+        } else {
+          done.complete(false);
+        }
       }
     });
     return done.future;
@@ -77,6 +86,7 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
     var wroteOs = false;
     var storeWritten = false;
     try {
+      if (!ref.mounted) return false;
       if (ref.read(languageSwitchBlockProvider) != LanguageSwitchBlock.none) {
         if (attempt == _attempt) state = _committed;
         return false;
@@ -87,6 +97,7 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
       // never waits on an unanswered MethodChannel.
       if (AppLocalesPlatform.live) {
         final current = await AppLocalesPlatform.get();
+        if (!ref.mounted) return false;
         if (attempt != _attempt) return false;
         if (ref.read(languageSwitchBlockProvider) != LanguageSwitchBlock.none) {
           if (attempt == _attempt) state = _committed;
@@ -95,6 +106,7 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
         if (current.apiSupported) {
           final expectedTags = tagsForPreference(preference);
           final written = await AppLocalesPlatform.setOverrideTags(expectedTags);
+          if (!ref.mounted) return false;
           final matches = _isOsSnapshotMatch(written, preference);
           if (matches) {
             wroteOs = true;
@@ -129,6 +141,7 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
       } on Object {
         ok = false;
       }
+      if (!ref.mounted) return false;
       if (!ok) {
         if (ref.read(languageSwitchBlockProvider) != LanguageSwitchBlock.none) {
           _needsReconcile = true;
@@ -137,10 +150,12 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
             final rollback = await AppLocalesPlatform.setOverrideTags(
               tagsForPreference(_committed),
             );
+            if (!ref.mounted) return false;
             if (!_isOsSnapshotMatch(rollback, _committed)) {
               _needsReconcile = true;
             }
           } on Object {
+            if (!ref.mounted) return false;
             _needsReconcile = true;
           }
         }
@@ -164,6 +179,7 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
         } on Object {
           migratedOk = false;
         }
+        if (!ref.mounted) return false;
         if (!migratedOk) {
           _needsReconcile = true;
           // Store already acknowledged preference! Do NOT rollback OS.
@@ -186,6 +202,7 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
       }
       return true;
     } on Object {
+      if (!ref.mounted) return false;
       if (storeWritten) {
         _committed = preference;
         _needsReconcile = true;
@@ -201,10 +218,12 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
             final rollback = await AppLocalesPlatform.setOverrideTags(
               tagsForPreference(_committed),
             );
+            if (!ref.mounted) return false;
             if (!_isOsSnapshotMatch(rollback, _committed)) {
               _needsReconcile = true;
             }
           } on Object {
+            if (!ref.mounted) return false;
             _needsReconcile = true;
           }
         }
@@ -222,6 +241,7 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
   Future<bool> synchronize(
     Future<AppLocalesSyncResult?> Function(int version) syncAction,
   ) {
+    if (!ref.mounted) return Future<bool>.value(false);
     final block = ref.read(languageSwitchBlockProvider);
     if (block != LanguageSwitchBlock.none) {
       return Future<bool>.value(false);
@@ -229,6 +249,10 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
     final expectedVersion = _attempt;
     final done = Completer<bool>();
     _persistQueue = _persistQueue.then((_) async {
+      if (!ref.mounted) {
+        done.complete(false);
+        return;
+      }
       try {
         if (ref.read(languageSwitchBlockProvider) != LanguageSwitchBlock.none ||
             expectedVersion != _attempt) {
@@ -236,6 +260,10 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
           return;
         }
         final result = await syncAction(expectedVersion);
+        if (!ref.mounted) {
+          done.complete(false);
+          return;
+        }
         if (result == null) {
           done.complete(false);
           return;
@@ -288,7 +316,11 @@ class LocalePreferenceController extends Notifier<LocalePreference> {
           done.complete(false);
         }
       } on Object catch (error, stack) {
-        done.completeError(error, stack);
+        if (ref.mounted) {
+          done.completeError(error, stack);
+        } else {
+          done.complete(false);
+        }
       }
     });
     return done.future;

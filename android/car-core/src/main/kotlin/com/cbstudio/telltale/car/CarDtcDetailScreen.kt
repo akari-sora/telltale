@@ -4,6 +4,7 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
+import androidx.car.app.model.Header
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.Row
@@ -202,19 +203,61 @@ class CarDtcDetailScreen(
     }
 
     override fun onGetTemplate(): Template {
+        // SAFE-04 / SAFE-06: Secondary motion check right before rendering template
+        if (!CarDtcMotionGate.isStationary(telemetryRepository.state.value, hostSpeedRepository.sample.value, motionResolver)) {
+            try {
+                screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
+            } catch (_: Throwable) {
+                try {
+                    screenManager.pop()
+                } catch (_: Throwable) {
+                }
+            }
+            val header = Header.Builder()
+                .setTitle(carContext.getString(R.string.car_dtc_detail_title))
+                .setStartHeaderAction(Action.BACK)
+                .build()
+
+            return ListTemplate.Builder()
+                .setHeader(header)
+                .setSingleList(
+                    ItemList.Builder()
+                        .addItem(
+                            Row.Builder()
+                                .setTitle(carContext.getString(R.string.car_dtc_status_unavailable))
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build()
+        }
+
         val currentReport = matchingDtcReport(telemetryRepository.state.value, dtcRepository.state.value)
         val currentItem = currentReport?.items?.firstOrNull { sameIdentity(it, item) }
 
         if (currentReport == null || currentItem == null) {
+            // SAFE-05: Actively pop back when report or item is no longer available / epoch mismatch
+            try {
+                screenManager.popTo(CarHealthScreen.CAR_HEALTH_MARKER)
+            } catch (_: Throwable) {
+                try {
+                    screenManager.pop()
+                } catch (_: Throwable) {
+                }
+            }
             val listBuilder = ItemList.Builder()
                 .addItem(
                     Row.Builder()
                         .setTitle(carContext.getString(R.string.car_dtc_status_unavailable))
                         .build(),
                 )
-            return ListTemplate.Builder()
+            val header = Header.Builder()
                 .setTitle(carContext.getString(R.string.car_dtc_detail_title))
-                .setHeaderAction(Action.BACK)
+                .setStartHeaderAction(Action.BACK)
+                .build()
+
+            return ListTemplate.Builder()
+                .setHeader(header)
                 .setSingleList(listBuilder.build())
                 .build()
         }
@@ -296,9 +339,13 @@ class CarDtcDetailScreen(
 
         val displayCode = CarTextIsolation.wrapDtcCode(currentItem.code, isRtl)
 
-        return ListTemplate.Builder()
+        val header = Header.Builder()
             .setTitle(displayCode)
-            .setHeaderAction(Action.BACK)
+            .setStartHeaderAction(Action.BACK)
+            .build()
+
+        return ListTemplate.Builder()
+            .setHeader(header)
             .setSingleList(listBuilder.build())
             .build()
     }

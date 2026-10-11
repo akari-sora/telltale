@@ -25,6 +25,7 @@ run_step pub-get flutter pub get
 run_step car-pigeon-codegen bash tool/ci/verify_car_pigeon_codegen.sh
 run_step analyze flutter analyze
 run_step python-tools python3 -m unittest discover -s test/tool -p 'test_*.py'
+run_step python-aa08-pytest python3 -m pytest -q test/tool/test_challenger_empirical_r3.py test/tool/test_run_targeted_mutations.py
 run_step python-mode08 python3 -m unittest discover -s tool/obd_test_rig -p 'test_mode08_replay_reference.py'
 run_step car-core-unit ./android/gradlew -p android :car-core:testDebugUnitTest
 run_step car-proto-unit ./android/gradlew -p android :app:testCarProtoDebugUnitTest

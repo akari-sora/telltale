@@ -1,0 +1,23 @@
+{
+  "evidence_version": "2.0.0",
+  "task_id": "AA08-TARGETED-MUTATION-VERIFICATION",
+  "execution_mode": "NOT_EXECUTED",
+  "control": {
+    "status": "SKIPPED",
+    "executed": false,
+    "exit_code": null
+  },
+  "mutations": {
+    "MUT-AA08-01": {"status": "NOT_EXECUTED", "mutant_killed": false},
+    "MUT-AA08-02": {"status": "NOT_EXECUTED", "mutant_killed": false},
+    "MUT-AA08-03": {"status": "NOT_EXECUTED", "mutant_killed": false},
+    "MUT-AA08-04": {"status": "NOT_EXECUTED", "mutant_killed": false}
+  },
+  "summary": {
+    "total_mutations": 4,
+    "mutants_killed": 0,
+    "mutant_kill_rate_percent": 0.0,
+    "verified": false,
+    "note": "Previous committed artifacts came from dry-run simulation and were removed. Run the live mutation suite to produce verification evidence."
+  }
+}

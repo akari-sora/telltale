@@ -790,6 +790,23 @@ void main() {
       expect(authority, isNotNull);
       expect(authority!.displacedRestorationCount, 0);
 
+      final discoveryDeadline = DateTime.now().add(const Duration(seconds: 3));
+      while (DateTime.now().isBefore(discoveryDeadline) &&
+          engine.capabilitySummary.phase !=
+              ObdCapabilityDiscoveryPhase.running) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(
+        engine.capabilitySummary.phase,
+        ObdCapabilityDiscoveryPhase.running,
+        reason: 'support discovery starts after the post-connect census',
+      );
+      expect(
+        authority.displacedRestorationCount,
+        1,
+        reason: 'the initial census restores polling before discovery starts',
+      );
+
       // Interrupt discovery to enforce that support discovery is genuinely incomplete
       engine.interruptCapabilityDiscovery();
       expect(
@@ -811,8 +828,14 @@ void main() {
         originalOnRestored?.call();
       };
 
-      // Perform one-shot takeover (responder census)
-      await session.ensureResponderCensus();
+      // The connect census already populated responders. Run a later
+      // diagnostic one-shot to prove the same restoration path.
+      await authority.runOneShot<void>(
+        operationName: 'b13DisplacePolling',
+        action: () async {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        },
+      );
 
       // Assert onDisplacedPollingRestored was invoked and displaced polling was restored
       expect(
@@ -822,8 +845,8 @@ void main() {
       );
       expect(
         authority.displacedRestorationCount,
-        1,
-        reason: 'Displaced restoration count must increment to 1',
+        2,
+        reason: 'the later diagnostic restores polling a second time',
       );
       expect(
         engine.isRunning,
@@ -914,6 +937,71 @@ void main() {
 
       await session.disconnect();
     });
+
+    test('a scan arriving during resume joins the one resume census', () async {
+      final binding = TestWidgetsFlutterBinding.ensureInitialized();
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final container = await _createContainer({});
+      addTearDown(container.dispose);
+
+      final adapter = _createBmsAdapter();
+      adapter.slowCommands['0120'] = const Duration(milliseconds: 500);
+      adapter.onCommandWritten = (command) {
+        final log = adapter.commandLog;
+        if (command == '0100' &&
+            log.length >= 2 &&
+            log[log.length - 2] == 'ATSH7DF') {
+          // Keep responders unknown so ensureResponderCensus cannot return
+          // early. The command still reaches the wire and remains countable.
+          adapter.forceReply('0100', '41 00 BE 1F A8 13');
+        }
+      };
+
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await session.connectForTest(adapter, TransportKind.demo), isTrue);
+      final authority = session.linkOwnership!;
+      final initialDeadline = DateTime.now().add(_eventWatchdog);
+      while (authority.displacedRestorationCount < 1 &&
+          DateTime.now().isBefore(initialDeadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(authority.displacedRestorationCount, 1);
+      expect(session.engine?.responders, isNull);
+
+      final discoveryDeadline = DateTime.now().add(_eventWatchdog);
+      while (session.engine?.capabilitySummary.phase !=
+              ObdCapabilityDiscoveryPhase.running &&
+          DateTime.now().isBefore(discoveryDeadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      session.engine!.interruptCapabilityDiscovery();
+      expect(session.engine!.supportDiscoveryComplete, isFalse);
+
+      final beforeResume =
+          adapter.commandLog.where((command) => command == 'ATSH7DF').length;
+      adapter.slowCommands['0100'] = const Duration(milliseconds: 250);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+
+      await _waitForWireCommand(
+        adapter,
+        'ATSH7DF',
+        afterCount: beforeResume,
+      );
+      await session.ensureResponderCensus();
+
+      expect(
+        adapter.commandLog.where((command) => command == 'ATSH7DF').length,
+        beforeResume + 1,
+        reason: 'the scan must join the resume census instead of queueing a '
+            'second whole-vehicle 0100 takeover',
+      );
+      await session.disconnect();
+    }, timeout: const Timeout(Duration(seconds: 30)));
 
     test('B9 wire-level proof: normal 010D polling is held during slow BMS probe and resumes afterward', () async {
       // Fixed input: the persisted dashboard is exactly vehicle speed. The

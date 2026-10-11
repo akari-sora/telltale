@@ -1971,32 +1971,40 @@ void main() {
           ),
         ],
       );
-      final engine = await _connect(transport);
-      // The reply lands *between* the caller's deadline and where an unclamped
-      // rearm would have fired. A 500 ms reply could not tell the two apart —
-      // both versions timed out first — which Codex's round-12 mutation run
-      // demonstrated by reverting the clamp and watching this stay green.
-      //
-      //   budget    t0 + 450 ms
-      //   markAlive t0 + 300 ms   ← unclamped, this rearms to t0 + 500 ms
-      //   43 …      t0 + 480 ms   ← in time for the rearm, too late for the
-      //                             caller
-      transport.slowCommands['03'] = const Duration(milliseconds: 480);
+      final client = Elm327Client(
+        transport,
+        commandTimeout: const Duration(seconds: 7),
+        responsePendingTimeout: const Duration(seconds: 8),
+        watchdogTimeout: const Duration(seconds: 30),
+      );
+      expect(await client.connect(), isTrue);
+      final engine = PollingEngine(client);
+      Timer? resume;
+      transport.onCommandWritten = (command) {
+        if (command != '03' || resume != null) return;
+        resume = Timer(const Duration(seconds: 7), client.markAlive);
+      };
+      transport.slowCommands['03'] = const Duration(seconds: 13);
 
-      final started = DateTime.now();
+      final elapsed = Stopwatch()..start();
       final read = engine.readDtcs(DtcKind.stored,
-          deadline: started.add(const Duration(milliseconds: 450)));
-      final expectation = expectLater(read, throwsA(anything),
-          reason: 'the interruption does not extend what the caller asked for '
-              '— the reply arrives in time for a fresh command timeout and '
-              'too late for the budget that was set');
-      // The resume probe, arriving while the service is still outstanding.
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      engine.client.markAlive();
-
-      await expectation;
-      await engine.dispose();
-    }, timeout: const Timeout(Duration(seconds: 20)));
+          deadline: DateTime.now().add(const Duration(seconds: 12)));
+      try {
+        await expectLater(read, throwsA(isA<TimeoutException>()),
+            reason: 'resume does not extend the caller deadline even when a '
+                'fresh command timeout would accept the late reply');
+        expect(transport.commandLog, contains('03'));
+        expect(resume, isNotNull,
+            reason: 'resume is anchored to the Mode 03 write');
+        expect(elapsed.elapsed, greaterThan(const Duration(seconds: 9)),
+            reason: 'the exchange reached the caller deadline instead of '
+                'failing the preflight before Mode 03');
+      } finally {
+        resume?.cancel();
+        await engine.dispose();
+        await client.dispose();
+      }
+    }, timeout: const Timeout(Duration(seconds: 30)));
 
     test('R8-9: an adapter too old to wait is asked again', () async {
       // GPT-5.6 Pro. Round 7 keyed the retry on CAN-versus-legacy, reading the
@@ -8463,7 +8471,6 @@ void main() {
       expect(await client.connect(), isTrue);
 
       var epoch = 0;
-      client.mayTransmit = (owner) => owner == null || owner == epoch;
       final engine = PollingEngine(client)..lifecycleEpoch = () => epoch;
       await engine.discoverResponders();
 
@@ -8841,5 +8848,96 @@ void main() {
               'erased its memory and produced a bad frame');
       await engine.dispose();
     });
+  });
+
+  group('responder census ownership joins', () {
+    test('a DTC read joins a census that starts while Mode 03 is in flight',
+        () async {
+      final transport = FakeElm327(
+        protocol: BusProtocol.can11,
+        ecus: [
+          FakeEcu(
+            name: 'ECM',
+            requestId: '7E0',
+            responseId: '7E8',
+            responses: {
+              ..._physicsReplies(),
+              '03': [0x43, 0x01, 0x03, 0x01],
+            },
+          ),
+        ],
+      );
+      final engine = await _connect(transport);
+      transport.slowCommands['03'] = const Duration(milliseconds: 120);
+
+      Future<Set<String>?>? census;
+      transport.onCommandWritten = (command) {
+        if (command == '03' && census == null) {
+          census = engine.discoverResponders();
+        }
+      };
+
+      final codes = await engine.readDtcs(DtcKind.stored);
+      expect(census, isNotNull,
+          reason: 'the census must have started while Mode 03 owned the wire');
+      expect(codes.map((code) => code.code), contains('P0301'));
+      expect(engine.responders, contains('7E8'),
+          reason: 'the read waits for the census before judging coverage');
+      await engine.dispose();
+    }, timeout: const Timeout(Duration(seconds: 20)));
+
+    test('a clear keeps the lifecycle lease it had before joining census',
+        () async {
+      final transport = FakeElm327(
+        protocol: BusProtocol.can11,
+        ecus: [
+          FakeEcu(
+            name: 'ECM',
+            requestId: '7E0',
+            responseId: '7E8',
+            responses: {..._physicsReplies(), '04': [0x44]},
+          ),
+        ],
+      );
+      final client = Elm327Client(
+        transport,
+        commandTimeout: const Duration(seconds: 1),
+      );
+      expect(await client.connect(), isTrue);
+
+      var epoch = 0;
+      final engine = PollingEngine(client)..lifecycleEpoch = () => epoch;
+      transport.slowCommands['0100'] = const Duration(milliseconds: 180);
+      final censusWritesBefore =
+          transport.commandLog.where((command) => command == '0100').length;
+      final census = engine.discoverResponders();
+      final censusDeadline = DateTime.now().add(const Duration(seconds: 2));
+      while (DateTime.now().isBefore(censusDeadline) &&
+          transport.commandLog
+                  .where((command) => command == '0100')
+                  .length <=
+              censusWritesBefore) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(
+        transport.commandLog.where((command) => command == '0100').length,
+        greaterThan(censusWritesBefore),
+        reason: 'the census must own the wire before clear starts',
+      );
+
+      final clear = engine.clearDtcs();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      epoch++;
+
+      await expectLater(
+        clear,
+        throwsA(isA<OperationRetiredException>()),
+      );
+      await census;
+      expect(transport.commandLog, isNot(contains('04')),
+          reason: 'resume cannot grant a new lease to an abandoned clear');
+      await engine.dispose();
+      await client.dispose();
+    }, timeout: const Timeout(Duration(seconds: 20)));
   });
 }

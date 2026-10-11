@@ -34,7 +34,7 @@ object CarDtcMotionGate {
                 val current = state as? CarTelemetryState.Current
                 if (current != null && current.frame.connectionPhase != CarConnectionPhase.CONNECTED) {
                     if (hostSpeedSample.status == CarHostSpeedStatus.LIVE &&
-                        ((hostSpeedSample.displaySpeedMetersPerSecond ?: 1f) == 0f ||
+                        ((hostSpeedSample.displaySpeedMetersPerSecond ?: 1f) == 0f &&
                          (hostSpeedSample.rawMetersPerSecond ?: 1f) == 0f)) {
                         CarDtcMotionState.STATIONARY
                     } else {

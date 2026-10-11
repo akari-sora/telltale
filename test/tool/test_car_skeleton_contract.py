@@ -66,7 +66,7 @@ class CarSkeletonContractTest(unittest.TestCase):
             gradle,
         )
         self.assertIn(
-            'add(\n        "carProtoImplementation",\n        "androidx.car.app:app-projected:1.7.0",\n    )',
+            'add(\n        "carProtoImplementation",\n        "androidx.car.app:app-projected:1.8.0-rc01",\n    )',
             gradle,
         )
 

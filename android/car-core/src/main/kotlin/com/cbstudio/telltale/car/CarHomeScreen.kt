@@ -5,7 +5,7 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
-import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.Header
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
@@ -337,7 +337,6 @@ class CarHomeScreen(
         )
     }
 
-    @Suppress("DEPRECATION")
     override fun onGetTemplate(): Template {
         val model = buildDisplayModel(repository.state.value)
         lastRenderedModel = model
@@ -352,33 +351,33 @@ class CarHomeScreen(
             )
         }
 
-        val actionStrip = ActionStrip.Builder()
-            .addAction(
-                Action.Builder()
-                    .setTitle(carContext.getString(R.string.car_action_health))
-                    .setOnClickListener {
-                        screenManager.push(
-                            CarHealthScreen(
-                                carContext = carContext,
-                                telemetryRepository = repository,
-                                constraintManager = constraintManager,
-                                contentLimitProvider = contentLimitProvider,
-                                clock = clock,
-                                sessionRuntime = sessionRuntime,
-                                hostSpeedRepository = hostSpeedRepository,
-                                motionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
-                                alertRepository = alertRepository,
-                            ),
-                        )
-                    }
-                    .build(),
-            )
+        val healthAction = Action.Builder()
+            .setTitle(carContext.getString(R.string.car_action_health))
+            .setOnClickListener {
+                screenManager.push(
+                    CarHealthScreen(
+                        carContext = carContext,
+                        telemetryRepository = repository,
+                        constraintManager = constraintManager,
+                        contentLimitProvider = contentLimitProvider,
+                        clock = clock,
+                        sessionRuntime = sessionRuntime,
+                        hostSpeedRepository = hostSpeedRepository,
+                        motionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
+                        alertRepository = alertRepository,
+                    ),
+                )
+            }
+            .build()
+
+        val header = Header.Builder()
+            .setTitle(carContext.getString(R.string.car_app_name))
+            .setStartHeaderAction(Action.APP_ICON)
+            .addEndHeaderAction(healthAction)
             .build()
 
         return PaneTemplate.Builder(paneBuilder.build())
-            .setTitle(carContext.getString(R.string.car_app_name))
-            .setHeaderAction(Action.APP_ICON)
-            .setActionStrip(actionStrip)
+            .setHeader(header)
             .build()
     }
 }

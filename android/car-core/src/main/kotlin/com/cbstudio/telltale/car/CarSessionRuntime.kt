@@ -2,6 +2,8 @@ package com.cbstudio.telltale.car
 
 import android.os.SystemClock
 import androidx.car.app.CarContext
+import com.cbstudio.telltale.car.diagnostics.CarDtcRepository
+import com.cbstudio.telltale.car.diagnostics.CarDtcRuntime
 import com.cbstudio.telltale.car.hardware.AndroidCarHardwareSpeedGateway
 import com.cbstudio.telltale.car.hardware.CarHardwareSpeedGateway
 import com.cbstudio.telltale.car.hardware.CarHostSpeedPermissionCoordinator
@@ -12,6 +14,7 @@ import com.cbstudio.telltale.car.health.CarAlertCoordinator
 import com.cbstudio.telltale.car.health.CarAlertRepository
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRuntime
+import com.cbstudio.telltale.car.telemetry.CarTelemetryState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,6 +29,7 @@ import kotlinx.coroutines.launch
 class CarSessionRuntime(
     val carContext: CarContext,
     val telemetryRepository: CarTelemetryRepository = CarTelemetryRuntime.repository,
+    val dtcRepository: CarDtcRepository = CarDtcRuntime.repository,
     val hostSpeedGateway: CarHardwareSpeedGateway = AndroidCarHardwareSpeedGateway(carContext),
     val hostSpeedRepository: CarHostSpeedRepository = CarHostSpeedRepository(),
     val speedResolver: CarSpeedResolver = CarSpeedResolver(),
@@ -58,6 +62,14 @@ class CarSessionRuntime(
 
         alertCoordinator.start()
 
+        // R4: Seamless snapshot replay if producer and connection epoch have not changed
+        val currentTelemetryEpoch = when (val tState = telemetryRepository.state.value) {
+            is CarTelemetryState.Current -> tState.frame.connectionEpoch
+            is CarTelemetryState.Stale -> tState.connectionEpoch
+            else -> null
+        }
+        dtcRepository.replaySnapshot(expectedEpoch = currentTelemetryEpoch)
+
         val scope = getScope()
         freshnessJob = scope.launch {
             while (true) {
@@ -89,6 +101,7 @@ class CarSessionRuntime(
         hostSpeedGateway.stopListening()
         hostSpeedRepository.reset()
         alertCoordinator.stop()
+        dtcRepository.reset(clearSnapshot = false)
     }
 
     fun destroy() {
@@ -99,6 +112,7 @@ class CarSessionRuntime(
 
         alertCoordinator.destroy()
         hostSpeedRepository.reset()
+        dtcRepository.reset(clearSnapshot = true)
     }
 
     private fun getScope(): CoroutineScope {

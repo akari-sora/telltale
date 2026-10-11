@@ -1,6 +1,8 @@
 package com.cbstudio.telltale.car.diagnostics
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -113,5 +115,103 @@ class CarDtcRepositoryTest {
         repository.submit(report(reportSequence = 1, connectionEpoch = 1))
         val state = repository.state.value as CarDtcState.Current
         assertEquals(1L, state.report.connectionEpoch)
+    }
+
+    @Test
+    fun latestValidReportTracksMostRecentValidSubmission() {
+        assertNull(repository.latestValidReport)
+
+        val rep1 = report(reportSequence = 1, connectionEpoch = 1)
+        repository.submit(rep1)
+        assertEquals(rep1, repository.latestValidReport)
+
+        val rep2 = report(reportSequence = 2, connectionEpoch = 1)
+        repository.submit(rep2)
+        assertEquals(rep2, repository.latestValidReport)
+    }
+
+    @Test
+    fun resetWithClearSnapshotFalsePreservesLatestValidReportAndSnapshot() {
+        val rep = report(reportSequence = 1, connectionEpoch = 1)
+        repository.submit(rep)
+        assertEquals(rep, repository.latestValidReport)
+        assertTrue(repository.state.value is CarDtcState.Current)
+
+        repository.reset(clearSnapshot = false)
+        assertEquals(CarDtcState.Awaiting, repository.state.value)
+        assertEquals(rep, repository.latestValidReport)
+    }
+
+    @Test
+    fun resetWithClearSnapshotTrueClearsSnapshotAndLatestValidReport() {
+        val rep = report(reportSequence = 1, connectionEpoch = 1)
+        repository.submit(rep)
+        assertEquals(rep, repository.latestValidReport)
+
+        repository.reset(clearSnapshot = true)
+        assertEquals(CarDtcState.Awaiting, repository.state.value)
+        assertNull(repository.latestValidReport)
+    }
+
+    @Test
+    fun replaySnapshotRestoresStateWhenExpectedEpochMatches() {
+        val rep = report(reportSequence = 1, connectionEpoch = 3)
+        repository.submit(rep)
+        repository.reset(clearSnapshot = false)
+        assertEquals(CarDtcState.Awaiting, repository.state.value)
+
+        val success = repository.replaySnapshot(expectedEpoch = 3)
+        assertTrue(success)
+        val state = repository.state.value
+        assertTrue(state is CarDtcState.Current)
+        assertEquals(rep, (state as CarDtcState.Current).report)
+    }
+
+    @Test
+    fun replaySnapshotPurgesSnapshotWhenExpectedEpochIsUnknown() {
+        val rep = report(reportSequence = 1, connectionEpoch = 3)
+        repository.submit(rep)
+        repository.reset(clearSnapshot = false)
+        assertEquals(CarDtcState.Awaiting, repository.state.value)
+
+        val success = repository.replaySnapshot(expectedEpoch = null)
+        assertFalse(success)
+        assertEquals(CarDtcState.Awaiting, repository.state.value)
+        assertNull(repository.latestValidReport)
+        assertFalse(repository.replaySnapshot(expectedEpoch = 3))
+    }
+
+    @Test
+    fun replaySnapshotPurgesSnapshotAndFailsWhenExpectedEpochMismatches() {
+        val rep = report(reportSequence = 1, connectionEpoch = 3)
+        repository.submit(rep)
+        repository.reset(clearSnapshot = false)
+        assertEquals(CarDtcState.Awaiting, repository.state.value)
+
+        val success = repository.replaySnapshot(expectedEpoch = 4)
+        assertFalse(success)
+        assertEquals(CarDtcState.Awaiting, repository.state.value)
+        assertNull(repository.latestValidReport)
+
+        // Subsequent replay also fails because snapshot was purged
+        assertFalse(repository.replaySnapshot(expectedEpoch = 3))
+    }
+
+    @Test
+    fun replaySnapshotReturnsFalseWhenNoSnapshotCached() {
+        assertFalse(repository.replaySnapshot())
+        assertEquals(CarDtcState.Awaiting, repository.state.value)
+    }
+
+    @Test
+    fun clearSnapshotDirectlyClearsSnapshotAndSetsAwaiting() {
+        val rep = report(reportSequence = 1, connectionEpoch = 1)
+        repository.submit(rep)
+        assertTrue(repository.state.value is CarDtcState.Current)
+
+        repository.clearSnapshot()
+        assertEquals(CarDtcState.Awaiting, repository.state.value)
+        assertNull(repository.latestValidReport)
+        assertFalse(repository.replaySnapshot())
     }
 }

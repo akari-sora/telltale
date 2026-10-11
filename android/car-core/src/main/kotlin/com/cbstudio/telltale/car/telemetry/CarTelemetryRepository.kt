@@ -46,6 +46,7 @@ class CarTelemetryRepository(
     private val scope: CoroutineScope,
     private val elapsedRealtimeMs: () -> Long,
     private val staleAfterMs: Long = DEFAULT_STALE_AFTER_MS,
+    private val dtcRepository: com.cbstudio.telltale.car.diagnostics.CarDtcRepository? = null,
 ) {
     private val lock = Any()
     private val mutableState = MutableStateFlow<CarTelemetryState>(CarTelemetryState.Awaiting)
@@ -75,6 +76,9 @@ class CarTelemetryRepository(
             lastLifecycleEpoch = null
             lastReceivedAtElapsedMs = null
             mutableState.value = CarTelemetryState.Awaiting
+            val targetDtcRepo = dtcRepository ?: com.cbstudio.telltale.car.diagnostics.CarDtcRuntime.repository
+            targetDtcRepo.clearSnapshot()
+            targetDtcRepo.reset(clearSnapshot = true)
         }
     }
 
@@ -97,9 +101,15 @@ class CarTelemetryRepository(
             }
 
             val previousEpoch = lastConnectionEpoch
+            val targetDtcRepo = dtcRepository ?: com.cbstudio.telltale.car.diagnostics.CarDtcRuntime.repository
             if (previousEpoch != null) {
                 if (input.connectionEpoch < previousEpoch) {
                     return CarTelemetrySubmitResult.DROPPED_OLD_CONNECTION_EPOCH
+                }
+                if (input.connectionEpoch > previousEpoch) {
+                    // SAFE-05: Connection epoch bumped - strictly purge old DTC snapshot
+                    targetDtcRepo.clearSnapshot()
+                    targetDtcRepo.reset(clearSnapshot = true)
                 }
                 if (input.connectionEpoch == previousEpoch) {
                     val previousSequence = lastSequence
@@ -110,6 +120,12 @@ class CarTelemetryRepository(
                     if (previousLifecycle != null && input.lifecycleEpoch < previousLifecycle) {
                         return CarTelemetrySubmitResult.DROPPED_LIFECYCLE_REGRESSION
                     }
+                }
+            } else {
+                val cached = targetDtcRepo.latestValidReport
+                if (cached != null && cached.connectionEpoch != input.connectionEpoch) {
+                    targetDtcRepo.clearSnapshot()
+                    targetDtcRepo.reset(clearSnapshot = true)
                 }
             }
 

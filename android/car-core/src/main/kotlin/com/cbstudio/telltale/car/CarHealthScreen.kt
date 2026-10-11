@@ -5,7 +5,7 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
-import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.Header
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.ParkedOnlyOnClickListener
@@ -391,7 +391,6 @@ class CarHealthScreen(
         }
     }
 
-    @Suppress("DEPRECATION")
     override fun onGetTemplate(): Template {
         val model = buildDisplayModel(telemetryRepository.state.value, dtcRepository.state.value)
         lastRenderedModel = model
@@ -452,26 +451,24 @@ class CarHealthScreen(
                 .build(),
         )
 
-        val templateBuilder = PaneTemplate.Builder(paneBuilder.build())
+        val headerBuilder = Header.Builder()
             .setTitle(carContext.getString(R.string.car_health_title))
-            .setHeaderAction(Action.BACK)
+            .setStartHeaderAction(Action.BACK)
 
         if (hostSpeedRepository.sample.value.status == CarHostSpeedStatus.PERMISSION_DENIED) {
-            val actionStrip = ActionStrip.Builder()
-                .addAction(
-                    Action.Builder()
-                        .setTitle(carContext.getString(R.string.car_action_enable_speed))
-                        .setOnClickListener(
-                            ParkedOnlyOnClickListener.create {
-                                requestSpeedPermission()
-                            }
-                        )
-                        .build()
+            val enableSpeedAction = Action.Builder()
+                .setTitle(carContext.getString(R.string.car_action_enable_speed))
+                .setOnClickListener(
+                    ParkedOnlyOnClickListener.create {
+                        requestSpeedPermission()
+                    }
                 )
                 .build()
-            templateBuilder.setActionStrip(actionStrip)
+            headerBuilder.addEndHeaderAction(enableSpeedAction)
         }
 
-        return templateBuilder.build()
+        return PaneTemplate.Builder(paneBuilder.build())
+            .setHeader(headerBuilder.build())
+            .build()
     }
 }

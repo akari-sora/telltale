@@ -114,14 +114,71 @@ class CarDtcMotionGateTest {
     }
 
     @Test
-    fun nonFiniteOrNegativeSpeedEvaluatesToUnknown() = runTest {
+    fun nonFiniteSpeedEvaluatesToUnknown() = runTest {
         val repo = createRepository()
 
         repo.submit(frameInput(speedKmh = live(Double.NaN), phase = CarConnectionPhase.CONNECTED))
         assertEquals(CarDtcMotionState.UNKNOWN, CarDtcMotionGate.evaluate(repo.state.value))
+        assertFalse(CarDtcMotionGate.isStationary(repo.state.value))
+    }
 
+    @Test
+    fun negativeSpeedEvaluatesToMoving() = runTest {
+        val repo = createRepository()
+
+        // SAFE-02: Reverse speed < 0 is non-zero movement, must evaluate to MOVING
         repo.submit(frameInput(speedKmh = live(-1.0), phase = CarConnectionPhase.CONNECTED))
-        assertEquals(CarDtcMotionState.UNKNOWN, CarDtcMotionGate.evaluate(repo.state.value))
+        assertEquals(CarDtcMotionState.MOVING, CarDtcMotionGate.evaluate(repo.state.value))
+        assertFalse(CarDtcMotionGate.isStationary(repo.state.value))
+
+        repo.submit(frameInput(speedKmh = live(-15.0), phase = CarConnectionPhase.CONNECTED))
+        assertEquals(CarDtcMotionState.MOVING, CarDtcMotionGate.evaluate(repo.state.value))
+        assertFalse(CarDtcMotionGate.isStationary(repo.state.value))
+
+        repo.submit(frameInput(speedKmh = live(-0.0005), phase = CarConnectionPhase.CONNECTED))
+        assertEquals(CarDtcMotionState.MOVING, CarDtcMotionGate.evaluate(repo.state.value))
+        assertFalse(CarDtcMotionGate.isStationary(repo.state.value))
+    }
+
+    @Test
+    fun exactNegativeZeroEvaluatesToStationary() = runTest {
+        val repo = createRepository()
+
+        repo.submit(frameInput(speedKmh = live(-0.0), phase = CarConnectionPhase.CONNECTED))
+        assertEquals(CarDtcMotionState.STATIONARY, CarDtcMotionGate.evaluate(repo.state.value))
+        assertTrue(CarDtcMotionGate.isStationary(repo.state.value))
+    }
+
+    @Test
+    fun disconnectedPhaseWithZeroDisplayAndNegativeRawHostSpeedEvaluatesToMoving() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput(speedKmh = live(0.0), phase = CarConnectionPhase.DISCONNECTED))
+
+        val hostSample = CarHostSpeedSample(
+            status = CarHostSpeedStatus.LIVE,
+            displaySpeedMetersPerSecond = 0.0f,
+            rawMetersPerSecond = -2.0f,
+        )
+        assertEquals(CarDtcMotionState.MOVING, CarDtcMotionGate.evaluate(repo.state.value, hostSample))
+        assertFalse(CarDtcMotionGate.isStationary(repo.state.value, hostSample))
+    }
+
+    @Test
+    fun disconnectedPhaseRequiresBothHostChannelsToBeKnownZero() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput(speedKmh = live(0.0), phase = CarConnectionPhase.DISCONNECTED))
+        for (sample in listOf(
+            CarHostSpeedSample(status = CarHostSpeedStatus.LIVE, displaySpeedMetersPerSecond = 0f),
+            CarHostSpeedSample(status = CarHostSpeedStatus.LIVE, rawMetersPerSecond = 0f),
+        )) {
+            assertEquals(CarDtcMotionState.UNKNOWN, CarDtcMotionGate.evaluate(repo.state.value, sample))
+        }
+        val bothZero = CarHostSpeedSample(
+            status = CarHostSpeedStatus.LIVE,
+            displaySpeedMetersPerSecond = 0f,
+            rawMetersPerSecond = 0f,
+        )
+        assertEquals(CarDtcMotionState.STATIONARY, CarDtcMotionGate.evaluate(repo.state.value, bothZero))
     }
 
     @Test
