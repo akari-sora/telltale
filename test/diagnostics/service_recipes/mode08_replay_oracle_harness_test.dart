@@ -904,6 +904,7 @@ void main() {
       );
     });
 
+    // The outer test must outlive the 45-second child deadline and server startup.
     test('subprocess positive control: Flutter test in required-mode passes with exit code 0', () async {
       final server = await startDedicatedReplayServer(fixturesPath: oracleFixturesRelativePath);
       final flutterBin = resolveFlutterExecutable();
@@ -939,7 +940,7 @@ void main() {
         testProc?.kill();
         server.process.kill();
       }
-    });
+    }, timeout: const Timeout(Duration(seconds: 60)));
 
     test('subprocess negative control: Flutter test in required-mode exits non-zero on unsupported fixture version', () async {
       final server = await startDedicatedReplayServer(fixturesPath: oracleFixturesRelativePath);
@@ -992,7 +993,7 @@ void main() {
         server.process.kill();
         tempDir.deleteSync(recursive: true);
       }
-    });
+    }, timeout: const Timeout(Duration(seconds: 60)));
 
     test('subprocess negative control: Flutter test in required-mode exits non-zero when server is unstarted', () async {
       const deadPort = 35499;
@@ -1034,7 +1035,7 @@ void main() {
       } finally {
         testProc?.kill();
       }
-    });
+    }, timeout: const Timeout(Duration(seconds: 60)));
 
     test('subprocess negative control: Flutter test in required-mode exits non-zero when fixture file is missing', () async {
       final server = await startDedicatedReplayServer(fixturesPath: oracleFixturesRelativePath);
@@ -1079,6 +1080,6 @@ void main() {
         testProc?.kill();
         server.process.kill();
       }
-    });
+    }, timeout: const Timeout(Duration(seconds: 60)));
   });
 }
