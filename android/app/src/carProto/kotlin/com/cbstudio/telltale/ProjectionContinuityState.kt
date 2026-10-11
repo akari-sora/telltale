@@ -11,13 +11,16 @@ internal class ProjectionContinuityState {
     var connectionGeneration: Long? = null
         private set
     private var pendingProjectionGeneration: Long? = null
+    private var highestStartAttemptGeneration: Long = -1
     var releaseAwaitingAck: Long? = null
         private set
 
     fun onProjectionLease(active: Boolean, generation: Long) {
+        val supersedesPendingGeneration =
+            active && generation > projectionGeneration && pendingProjectionGeneration != null
         val supersedesReleasedGeneration =
             active && generation > projectionGeneration && releaseAwaitingAck != null
-        if (supersedesReleasedGeneration) {
+        if (supersedesPendingGeneration || supersedesReleasedGeneration) {
             releaseAwaitingAck = null
             armedGeneration = null
             pendingProjectionGeneration = null
@@ -31,16 +34,22 @@ internal class ProjectionContinuityState {
     fun canStart(
         requestedProjectionGeneration: Long,
         requestedConnectionGeneration: Long,
+        activityResumed: Boolean,
         hasEngine: Boolean,
         projectionConnected: Boolean,
     ): Boolean =
         projectionActive &&
             projectionGeneration == requestedProjectionGeneration &&
             requestedConnectionGeneration > 0 &&
+            pendingProjectionGeneration == null &&
+            (activityResumed || requestedProjectionGeneration > highestStartAttemptGeneration) &&
             hasEngine &&
             projectionConnected
 
     fun beginStart(projectionGeneration: Long, connectionGeneration: Long) {
+        if (projectionGeneration > highestStartAttemptGeneration) {
+            highestStartAttemptGeneration = projectionGeneration
+        }
         pendingProjectionGeneration = projectionGeneration
         this.connectionGeneration = connectionGeneration
     }
@@ -58,6 +67,9 @@ internal class ProjectionContinuityState {
             pendingProjectionGeneration != projectionGeneration ||
             this.connectionGeneration != connectionGeneration || !hasEngine
         ) return false
+        if (projectionGeneration > highestStartAttemptGeneration) {
+            highestStartAttemptGeneration = projectionGeneration
+        }
         armedGeneration = projectionGeneration
         pendingProjectionGeneration = null
         releaseAwaitingAck = null

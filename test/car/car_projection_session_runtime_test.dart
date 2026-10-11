@@ -64,6 +64,12 @@ void _background(TestWidgetsFlutterBinding binding) {
   binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
 }
 
+void _foreground(TestWidgetsFlutterBinding binding) {
+  binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+  binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+}
+
 final class _NativeProjectionHost {
   _NativeProjectionHost(this.messenger);
 
@@ -334,6 +340,60 @@ void main() {
     },
   );
 
+  test('a failed paused arm is consumed until foreground resumes', () async {
+    final container = await _container();
+    addTearDown(container.dispose);
+    final session = container.read(obdSessionProvider.notifier);
+    expect(await session.connectDemo(), isTrue);
+    final connectionGeneration = session.connectionGeneration;
+    final unarmed = _lease(active: true, generation: 15, armed: false);
+    final armed = _lease(
+      active: true,
+      generation: 15,
+      armed: true,
+      connectionGeneration: connectionGeneration,
+    );
+    var succeed = false;
+    final host = _NativeProjectionHost(messenger);
+    host.currentLease = () async {
+      if (host.currentLeaseCalls == 1) {
+        throw PlatformException(code: 'not-ready');
+      }
+      return armed;
+    };
+    host.armContinuity = (_, _) async => succeed ? armed : unarmed;
+    host.install();
+    addTearDown(host.uninstall);
+    expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+    await _eventually(() => host.currentLeaseCalls == 1);
+
+    _background(binding);
+    await _eventually(() => !session.engine!.isRunning);
+    await host.sendLease(unarmed);
+    await _eventually(() => host.armContinuityCalls == 1);
+
+    await host.sendLease(unarmed);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(host.armContinuityCalls, 1);
+    expect(session.hasArmedProjectionContinuity, isFalse);
+
+    succeed = true;
+    _foreground(binding);
+    await _eventually(
+      () => session.isForeground,
+      reason: 'resume validation must reopen the foreground retry gate',
+      timeout: const Duration(seconds: 12),
+    );
+    if (host.armContinuityCalls == 1) {
+      await host.sendLease(unarmed);
+    }
+    await _eventually(
+      () =>
+          host.armContinuityCalls >= 2 && session.hasArmedProjectionContinuity,
+      reason: 'foreground resume may retry the consumed generation',
+    );
+  });
+
   test(
     'a stale release cannot cancel a newer lease awaiting confirmation',
     () async {
@@ -413,6 +473,9 @@ void main() {
     await _eventually(() => host.acknowledgedGenerations.contains(20));
     expect(drainedAtAcknowledgement, isTrue);
     expect(session.hasArmedProjectionContinuity, isFalse);
+    await host.sendLease(_lease(active: true, generation: 20, armed: false));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(host.armContinuityCalls, 0);
   });
 
   test(

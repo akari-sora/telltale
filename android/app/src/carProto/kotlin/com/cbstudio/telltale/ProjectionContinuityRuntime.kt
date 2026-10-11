@@ -80,6 +80,7 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
         if (context == null || !state.canStart(
                 requestedProjectionGeneration = projectionGeneration,
                 requestedConnectionGeneration = connectionGeneration,
+                activityResumed = activityResumed,
                 hasEngine = engine != null,
                 projectionConnected = CarProjectionSessionLeaseRuntime.isProjectionConnected(),
             )

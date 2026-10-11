@@ -10,13 +10,50 @@ class ProjectionContinuityStateTest {
         val state = ProjectionContinuityState()
         state.onProjectionLease(active = true, generation = 7)
 
-        assertTrue(state.canStart(7, 11, hasEngine = true, projectionConnected = true))
-        assertFalse(state.canStart(6, 11, hasEngine = true, projectionConnected = true))
-        assertFalse(state.canStart(7, 0, hasEngine = true, projectionConnected = true))
-        assertFalse(state.canStart(7, 11, hasEngine = false, projectionConnected = true))
-        assertFalse(state.canStart(7, 11, hasEngine = true, projectionConnected = false))
+        assertTrue(state.canStart(7, 11, activityResumed = false, hasEngine = true, projectionConnected = true))
+        assertFalse(state.canStart(6, 11, activityResumed = false, hasEngine = true, projectionConnected = true))
+        assertFalse(state.canStart(7, 0, activityResumed = false, hasEngine = true, projectionConnected = true))
+        assertFalse(state.canStart(7, 11, activityResumed = false, hasEngine = false, projectionConnected = true))
+        assertFalse(state.canStart(7, 11, activityResumed = false, hasEngine = true, projectionConnected = false))
         state.onProjectionLease(active = false, generation = 7)
-        assertFalse(state.canStart(7, 11, hasEngine = true, projectionConnected = true))
+        assertFalse(state.canStart(7, 11, activityResumed = false, hasEngine = true, projectionConnected = true))
+    }
+
+    @Test
+    fun `paused start allowance is consumed before service result and never reopened`() {
+        val state = ProjectionContinuityState()
+        state.onProjectionLease(active = true, generation = 20)
+
+        assertTrue(state.canStart(20, 31, activityResumed = false, hasEngine = true, projectionConnected = true))
+        state.beginStart(projectionGeneration = 20, connectionGeneration = 31)
+        state.cancelStart(projectionGeneration = 20, connectionGeneration = 31)
+        assertFalse(state.canStart(20, 31, activityResumed = false, hasEngine = true, projectionConnected = true))
+
+        state.onProjectionLease(active = true, generation = 20)
+        assertFalse(state.canStart(20, 31, activityResumed = false, hasEngine = true, projectionConnected = true))
+        assertTrue(state.canStart(20, 31, activityResumed = true, hasEngine = true, projectionConnected = true))
+
+        state.beginStart(projectionGeneration = 20, connectionGeneration = 31)
+        state.onProjectionLease(active = true, generation = 21)
+        assertTrue(state.canStart(21, 31, activityResumed = false, hasEngine = true, projectionConnected = true))
+    }
+
+    @Test
+    fun `exact release ack preserves consumed generation and newer projection gets one attempt`() {
+        val state = ProjectionContinuityState()
+        state.onProjectionLease(active = true, generation = 40)
+        state.beginStart(projectionGeneration = 40, connectionGeneration = 51)
+        assertTrue(state.markArmed(40, 51, hasEngine = true))
+        assertTrue(state.serviceStopped(40, 51))
+        assertTrue(state.acknowledgeRelease(40))
+
+        state.onProjectionLease(active = true, generation = 40)
+        assertFalse(state.canStart(40, 51, activityResumed = false, hasEngine = true, projectionConnected = true))
+        state.onProjectionLease(active = false, generation = 40)
+        state.onProjectionLease(active = true, generation = 41)
+        assertTrue(state.canStart(41, 51, activityResumed = false, hasEngine = true, projectionConnected = true))
+        state.beginStart(projectionGeneration = 41, connectionGeneration = 51)
+        assertFalse(state.canStart(41, 51, activityResumed = false, hasEngine = true, projectionConnected = true))
     }
 
     @Test

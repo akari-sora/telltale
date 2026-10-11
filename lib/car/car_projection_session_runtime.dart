@@ -49,6 +49,7 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
   bool _disposed = false;
   bool _arming = false;
   int _leaseRevision = 0;
+  int _highestArmAttemptGeneration = -1;
   final CarProjectionLeaseOrder _leaseOrder = CarProjectionLeaseOrder();
   Future<void> _reducer = Future<void>.value();
   late final StreamSubscription<bool> _foregroundSubscription;
@@ -110,6 +111,9 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
     if (_disposed) return;
     final previous = _lease;
     _lease = lease;
+    if (lease.armed && lease.generation > _highestArmAttemptGeneration) {
+      _highestArmAttemptGeneration = lease.generation;
+    }
     final session = ref.read(obdSessionProvider.notifier);
     if (!lease.active) {
       if (previous?.generation == lease.generation ||
@@ -127,11 +131,7 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
       }
       await _host.acknowledgeRelease(lease.generation);
       if (!_disposed && revision == _leaseRevision) {
-        // The first lease for a generation can arrive after Activity pause.
-        // A service loss from an already-armed lease stays fail-closed until
-        // foreground, while a released lease followed by a newer generation
-        // can perform the same projection-attested handoff again.
-        await _tryArm(allowWhilePaused: previous?.armed != true);
+        await _tryArm();
       }
       return;
     }
@@ -168,14 +168,20 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
     }
   }
 
-  Future<void> _tryArm({bool allowWhilePaused = false}) async {
+  Future<void> _tryArm() async {
     if (_disposed || _arming) return;
     final lease = _lease;
     if (lease == null || !lease.active || lease.armed) return;
     final state = ref.read(obdSessionProvider);
     final session = ref.read(obdSessionProvider.notifier);
-    if (!state.isConnected || (!session.isForeground && !allowWhilePaused)) {
-      return;
+    if (!state.isConnected) return;
+    if (!session.isForeground) {
+      if (lease.generation <= _highestArmAttemptGeneration) return;
+    }
+    // Record every attempt before calling native. Foreground may explicitly
+    // retry a consumed generation; moving back to background may not.
+    if (lease.generation > _highestArmAttemptGeneration) {
+      _highestArmAttemptGeneration = lease.generation;
     }
     _arming = true;
     try {
