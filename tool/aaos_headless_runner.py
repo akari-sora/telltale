@@ -453,6 +453,7 @@ class AaosStateObserver:
     """Observes AAOS VHAL and Car App motion/screen states via dumpsys and logcat."""
     def __init__(self, adb_prefix: List[str]):
         self.adb_prefix = adb_prefix
+        self._dtc_origin_ui: Optional[str] = None
 
     def get_vhal_property_speed(self) -> Optional[float]:
         """Query current VHAL speed from CarPropertyService."""
@@ -497,6 +498,41 @@ class AaosStateObserver:
     def _is_telltale_ui(ui: str) -> bool:
         return "telltale" in ui.lower()
 
+    @classmethod
+    def _is_unique_dtc_screen(cls, ui: str) -> bool:
+        lowered = ui.lower()
+        return cls._is_telltale_ui(lowered) and "vehicle health" not in lowered and any(
+            marker in lowered
+            for marker in ("diagnostic codes", "diagnostic trouble codes", "dtc summary")
+        )
+
+    def navigate_to_dtc_screen(self, timeout: float = 5.0) -> bool:
+        """Tap a uniquely labelled DTC entry and capture the resulting DTC screen."""
+        ui = self.observe_app_ui()
+        match = re.search(
+            r'(?:text|content-desc)="(?:Diagnostic Codes|Diagnostic Trouble Codes)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',
+            ui,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return False
+        x1, y1, x2, y2 = (int(value) for value in match.groups())
+        tap = run_adb_shell(
+            self.adb_prefix,
+            ["input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2)],
+            check=False,
+        )
+        if not tap.is_success:
+            return False
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            candidate = self.observe_app_ui()
+            if candidate != ui and self._is_unique_dtc_screen(candidate):
+                self._dtc_origin_ui = candidate
+                return True
+            time.sleep(0.25)
+        return False
+
     def observe_motion_state(self, timeout: float = 5.0) -> str:
         """Observe application motion state from app UI/log output.
 
@@ -540,7 +576,7 @@ class AaosStateObserver:
         ui = self.observe_app_ui().lower()
         if not self._is_telltale_ui(ui):
             return False
-        has_dtc = any(token in ui for token in ("diagnostic trouble", "dtc", "trouble code"))
+        has_dtc = self._is_unique_dtc_screen(ui)
         blocked = any(token in ui for token in ("blocked", "unavailable while driving", "park to view"))
         return has_dtc and not blocked
 
@@ -550,12 +586,15 @@ class AaosStateObserver:
         if motion != "MOVING":
             return False
 
+        origin = self._dtc_origin_ui
+        if origin is None or not self._is_unique_dtc_screen(origin):
+            return False
+
         ui = self.observe_app_ui().lower()
         if not self._is_telltale_ui(ui):
             return False
-        health_visible = any(token in ui for token in ("vehicle health", "health", "powertrain"))
-        dtc_visible = any(token in ui for token in ("diagnostic trouble", "dtc summary"))
-        return health_visible and not dtc_visible
+        health_visible = any(token in ui for token in ("vehicle health", "powertrain health"))
+        return health_visible and not self._is_unique_dtc_screen(ui) and ui != origin.lower()
 
     def verify_dtc_blocked(self, timeout: float = 5.0) -> bool:
         """Verify SAFE-02 / AA05-15: DTC access is blocked while moving (including reverse)."""
@@ -944,11 +983,11 @@ def run_live_execution(
                         raise RuntimeError(
                             f"Scenario {idx} ({sc.name}) FAIL: Expected STATIONARY motion, got {observed_motion}"
                         )
-                    if not observer.verify_dtc_accessible():
+                    if not observer.navigate_to_dtc_screen():
                         raise RuntimeError(
-                            f"Scenario {idx} ({sc.name}) FAIL: DTC inspection must be accessible when stationary in PARK"
+                            f"Scenario {idx} ({sc.name}) FAIL: could not navigate to and observe the unique Diagnostic Codes screen while stationary"
                         )
-                    print(f"  ✓ Observation verified: Motion={observed_motion}, DTC Accessible=True")
+                    print(f"  ✓ Observation verified: Motion={observed_motion}, Diagnostic Codes screen observed")
 
                 elif sc.expected_motion == "MOVING":
                     if observed_motion != "MOVING":

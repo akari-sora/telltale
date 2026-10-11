@@ -387,20 +387,46 @@ class AaosHeadlessRunnerTest(unittest.TestCase):
         """Verify AaosStateObserver evaluates Park & speed 0 as STATIONARY and DTC accessible."""
         observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
         with patch("tool.aaos_headless_runner.run_adb_shell", return_value=AdbResult(0, "", "", [])):
-            with patch.object(observer, "observe_app_ui", return_value='text="Telltale" text="Vehicle stationary" text="DTC"'):
+            with patch.object(observer, "observe_app_ui", return_value='text="Telltale" text="Vehicle stationary" text="Diagnostic Codes"'):
                 self.assertEqual(observer.observe_motion_state(), "STATIONARY")
                 self.assertTrue(observer.verify_dtc_accessible())
 
     def test_observer_state_evaluation_moving(self):
         """Verify AaosStateObserver evaluates speed > 0 as MOVING, auto-pop triggered, and DTC not accessible."""
         observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        observer._dtc_origin_ui = 'text="Telltale" text="Diagnostic Codes"'
         with patch("tool.aaos_headless_runner.run_adb_shell", return_value=AdbResult(0, "", "", [])):
-            with patch.object(observer, "observe_app_ui", return_value='text="Telltale" text="Vehicle moving" text="Health"'):
+            with patch.object(observer, "observe_app_ui", return_value='text="Telltale" text="Vehicle moving" text="Vehicle Health"'):
                 self.assertEqual(observer.observe_motion_state(), "MOVING")
                 self.assertFalse(observer.verify_dtc_accessible())
                 with patch("tool.aaos_headless_runner.run_adb_shell") as mock_shell:
                     mock_shell.return_value = AdbResult(0, "popTo CAR_HEALTH", "", [])
                     self.assertTrue(observer.verify_autopop_occurred())
+
+    def test_identical_health_before_and_after_is_not_autopop(self):
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        identical = 'text="Telltale" text="Vehicle Health" text="Vehicle moving"'
+        observer._dtc_origin_ui = identical
+        with patch.object(observer, "observe_motion_state", return_value="MOVING"):
+            with patch.object(observer, "observe_app_ui", return_value=identical):
+                self.assertFalse(observer.verify_autopop_occurred())
+
+    def test_navigate_to_dtc_requires_unique_diagnostic_codes_destination(self):
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        source = (
+            'text="Telltale" text="Vehicle Health" '
+            'text="Diagnostic Codes" bounds="[100,200][500,300]"'
+        )
+        destination = 'text="Telltale" text="Diagnostic Codes" text="Trouble code list"'
+        with patch.object(observer, "observe_app_ui", side_effect=[source, destination]):
+            with patch("tool.aaos_headless_runner.run_adb_shell", return_value=AdbResult(0, "", "", [])) as shell:
+                self.assertTrue(observer.navigate_to_dtc_screen(timeout=0.1))
+                self.assertEqual(observer._dtc_origin_ui, destination)
+                self.assertIn("input", shell.call_args.args[1])
+
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        with patch.object(observer, "observe_app_ui", return_value='text="Telltale" text="DTC status"'):
+            self.assertFalse(observer.navigate_to_dtc_screen(timeout=0.01))
 
     def test_observer_state_evaluation_reverse(self):
         """Verify AaosStateObserver evaluates reverse speed as MOVING and DTC strictly blocked."""

@@ -241,6 +241,10 @@ class DhuHeadlessRunnerTest(unittest.TestCase):
                 "scenario_id": "scenario",
                 "expected_screenshots": ["screen.png"],
                 "start_time": start_time,
+                "status": "PENDING_SEMANTIC_REVIEW",
+                "exit_code": 0,
+                "capture_preconditions_passed": True,
+                "failed_screenshots": [],
             }), encoding="utf-8")
             digest = hashlib.sha256(image_path.read_bytes()).hexdigest()
             receipt = run_dir / "receipt.json"
@@ -255,6 +259,43 @@ class DhuHeadlessRunnerTest(unittest.TestCase):
             code, message = review_existing_run(run_dir, receipt)
             self.assertEqual(code, 0, message)
             self.assertTrue((run_dir / "semantic-review.json").is_file())
+
+    def test_post_review_rejects_non_capture_failures(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            image_path = run_dir / "screen.png"
+            image = Image.new("RGB", (800, 480), (15, 18, 25))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle([40, 40, 760, 420], fill=(30, 100, 180), outline=(255, 255, 255))
+            image.save(image_path)
+            digest = hashlib.sha256(image_path.read_bytes()).hexdigest()
+            receipt = run_dir / "receipt.json"
+            receipt.write_text(json.dumps({
+                "scenario_id": "scenario",
+                "screenshots": {"screen.png": {
+                    "sha256": digest,
+                    "observed_state": "Telltale dashboard",
+                    "observer": "manual-review",
+                }},
+            }), encoding="utf-8")
+            for status, exit_code, preconditions in [
+                ("FAILED", 1, True),
+                ("TIMEOUT", None, False),
+                ("ADB_ERROR", 1, False),
+                ("PENDING_SEMANTIC_REVIEW", 7, True),
+                ("PENDING_SEMANTIC_REVIEW", 0, False),
+            ]:
+                (run_dir / "result.json").write_text(json.dumps({
+                    "scenario_id": "scenario",
+                    "expected_screenshots": ["screen.png"],
+                    "start_time": time.time() - 1,
+                    "status": status,
+                    "exit_code": exit_code,
+                    "capture_preconditions_passed": preconditions,
+                    "failed_screenshots": [],
+                }), encoding="utf-8")
+                code, _ = review_existing_run(run_dir, receipt)
+                self.assertEqual(code, 1, (status, exit_code, preconditions))
 
     # =========================================================================
     # Defect R1: Runner Hardening, Freshness, Manifest & Exit Code Enforcement
@@ -334,6 +375,37 @@ class DhuHeadlessRunnerTest(unittest.TestCase):
             data = json.loads(result_file.read_text(encoding="utf-8"))
             self.assertEqual(data["status"], "FAILED")
             self.assertEqual(data["exit_code"], 37)
+
+    @patch("subprocess.run")
+    @patch("subprocess.Popen")
+    def test_successful_capture_without_receipt_is_pending_semantic_review(self, mock_popen, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        def popen_factory(*args, **kwargs):
+            return MockDhuProcess(
+                returncode=0,
+                cwd=kwargs.get("cwd", "."),
+                create_shots=["aa06-baseline-home.png"],
+            )
+
+        mock_popen.side_effect = popen_factory
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            dhu_bin = out_dir / "dhu_mock"
+            dhu_bin.touch(mode=0o755)
+            code, record = run_live_execution(
+                profile_path=DEFAULT_CONFIGS_DIR / "p1-small-landscape.ini",
+                script_path=DEFAULT_SCRIPTS_DIR / "baseline.txt",
+                output_dir=out_dir,
+                dhu_bin=dhu_bin,
+            )
+            self.assertEqual(code, 1)
+            self.assertEqual(record.status, "PENDING_SEMANTIC_REVIEW")
+            self.assertTrue(record.capture_preconditions_passed)
+            self.assertEqual(record.exit_code, 0)
+            self.assertEqual(record.failed_screenshots, [])
+            result = json.loads((Path(record.run_dir) / "result.json").read_text(encoding="utf-8"))
+            self.assertTrue(result["capture_preconditions_passed"])
 
     @patch("subprocess.run")
     @patch("subprocess.Popen")

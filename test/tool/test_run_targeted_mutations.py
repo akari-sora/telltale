@@ -23,6 +23,7 @@ from tool.ci.run_targeted_mutations import (
     TestFailureDetail,
     classify_mutation_outcome,
     compute_sha256,
+    create_evidence_run_dir,
     generate_patch,
     parse_gradle_junit_reports,
     run_single_mutation,
@@ -485,3 +486,23 @@ def test_dry_run_is_not_executed_and_never_reuses_junit(tmp_path: Path):
     assert result["restored_test_passed"] is False
     assert result["junit_summary"]["total_tests"] == 0
     assert not (tmp_path / "evidence" / "MUT-DRY" / "mutant-test.txt").exists()
+
+
+def test_isolated_evidence_run_preserves_and_excludes_seeded_stale_logs(tmp_path: Path):
+    evidence_root = tmp_path / "evidence"
+    evidence_root.mkdir()
+    stale_log = evidence_root / "MUT-AA08-01" / "mutant-test.txt"
+    stale_log.parent.mkdir()
+    stale_log.write_text("STALE LIVE LOG", encoding="utf-8")
+    unrelated = evidence_root / "README.md"
+    unrelated.write_text("keep me", encoding="utf-8")
+
+    run_dir = create_evidence_run_dir(evidence_root, dry_run=True)
+    (run_dir / "manifest.json").write_text('{"verified": false}\n', encoding="utf-8")
+
+    assert run_dir.parent == evidence_root
+    assert "dry-run" in run_dir.name
+    assert stale_log.read_text(encoding="utf-8") == "STALE LIVE LOG"
+    assert unrelated.read_text(encoding="utf-8") == "keep me"
+    assert not (run_dir / "MUT-AA08-01" / "mutant-test.txt").exists()
+    assert list(run_dir.rglob("*.txt")) == []

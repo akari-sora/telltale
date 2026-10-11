@@ -32,6 +32,7 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
@@ -48,6 +49,15 @@ DEFAULT_JUNIT_RESULTS_DIRS = [
     REPO_ROOT / "build" / "car-core" / "test-results" / "testDebugUnitTest",
     REPO_ROOT / "android" / "car-core" / "build" / "test-results" / "testDebugUnitTest",
 ]
+
+
+def create_evidence_run_dir(base_dir: Path, dry_run: bool) -> Path:
+    """Create an isolated runner-owned directory without touching prior evidence."""
+    base_dir.mkdir(parents=True, exist_ok=True)
+    mode = "dry-run" if dry_run else "live"
+    run_dir = base_dir / f"run-{int(time.time())}-{mode}-{uuid.uuid4().hex[:8]}"
+    run_dir.mkdir(parents=False, exist_ok=False)
+    return run_dir
 
 
 class MutationResultStatus(str, Enum):
@@ -661,14 +671,15 @@ def main():
     )
     args = parser.parse_args()
 
-    out_dir = args.output_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
+    evidence_root = args.output_dir
+    out_dir = create_evidence_run_dir(evidence_root, args.dry_run)
 
     print("=" * 70)
     print("AA-08 / SAFE-08 Targeted Mutation Testing Suite")
     print("=" * 70)
     print(f"Repository Root: {REPO_ROOT}")
-    print(f"Evidence Directory: {out_dir}")
+    print(f"Evidence Root: {evidence_root}")
+    print(f"Isolated Run Directory: {out_dir}")
     print(f"Test Command: {' '.join(TEST_CMD)}")
     print(f"Dry Run Mode: {'ENABLED' if args.dry_run else 'DISABLED'}")
 

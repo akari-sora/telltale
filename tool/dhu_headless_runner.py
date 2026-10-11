@@ -98,6 +98,7 @@ class DhuExecutionRecord:
     expected_screenshots: List[str]
     verified_screenshots: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     failed_screenshots: List[str] = field(default_factory=list)
+    capture_preconditions_passed: bool = False
     error_message: Optional[str] = None
     run_dir: Optional[str] = None
 
@@ -452,6 +453,14 @@ def review_existing_run(run_dir: Path, semantic_evidence: Path) -> Tuple[int, st
         return 1, "run result lacks scenario or screenshot metadata"
     if not isinstance(start_time, (int, float)):
         return 1, "run result lacks start time"
+    if result.get("status") != "PENDING_SEMANTIC_REVIEW":
+        return 1, "run is not pending semantic review"
+    if result.get("exit_code") != 0:
+        return 1, "run process did not exit successfully"
+    if result.get("capture_preconditions_passed") is not True:
+        return 1, "capture preconditions did not pass"
+    if result.get("failed_screenshots"):
+        return 1, "run contains failed screenshots"
     for name in screenshots:
         if not isinstance(name, str):
             return 1, "run result has invalid screenshot name"
@@ -497,6 +506,7 @@ def save_execution_artifacts(record: DhuExecutionRecord, run_dir: Path) -> None:
         "expected_screenshots": record.expected_screenshots,
         "verified_screenshots": record.verified_screenshots,
         "failed_screenshots": record.failed_screenshots,
+        "capture_preconditions_passed": record.capture_preconditions_passed,
         "error_message": record.error_message,
         "run_dir": str(run_dir),
     }
@@ -745,7 +755,8 @@ def run_live_execution(
             print(f"✓ Screenshot {shot_name}: OK (mean={stats['mean_luminance']}, var={stats['variance']})")
             record.verified_screenshots[shot_name] = stats
 
-    if not failed_screenshots:
+    record.capture_preconditions_passed = not failed_screenshots
+    if record.capture_preconditions_passed:
         semantic_ok, semantic_message, semantic_observations = verify_semantic_evidence(
             semantic_evidence,
             scenario_id,
@@ -754,7 +765,13 @@ def run_live_execution(
         )
         if not semantic_ok:
             print(f"✗ Semantic acceptance FAILED: {semantic_message}", file=sys.stderr)
-            failed_screenshots.extend(screenshots)
+            record.failed_screenshots = []
+            record.status = "PENDING_SEMANTIC_REVIEW"
+            record.error_message = semantic_message
+            record.end_time = time.time()
+            record.duration_seconds = record.end_time - start_time
+            save_execution_artifacts(record, run_dir)
+            return 1, record
         else:
             for name, observation in semantic_observations.items():
                 record.verified_screenshots[name]["semantic_observation"] = observation

@@ -31,11 +31,15 @@ its digest must match the exact captured bytes. Missing, stale, wrong-scenario,
 or unrelated-image receipts fail acceptance.
 
 When a live run first captures screenshots without a receipt, it fails closed
-but retains the run directory. Review those exact images, create the receipt,
+as `PENDING_SEMANTIC_REVIEW` and retains the run directory. That state is written
+only after the DHU exits zero and every screenshot passes freshness and pixel
+checks. Review those exact images, create the receipt,
 then complete the bounded post-review with
 `--review-run-dir <run-dir> --semantic-evidence <receipt.json>`. The post-review
 rechecks capture freshness, pixel preconditions, and every bound digest before
-writing `semantic-review.json`.
+writing `semantic-review.json`. Runs marked `FAILED`, `TIMEOUT`, `ADB_ERROR`,
+with a non-zero exit, or without passed capture preconditions cannot be promoted
+by post-review.
 
 Dry runs validate configuration, commands, parsers, and scheduling only. Their
 summary is always `Executed=0, Passed=0`; they never establish live acceptance.

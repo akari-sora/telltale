@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -28,6 +29,7 @@ import 'package:torque_obd/telemetry/session/telemetry_recorder.dart';
 import 'package:torque_obd/telemetry/session/telemetry_session.dart';
 import 'package:torque_obd/telemetry/session/telemetry_session_reader.dart';
 import 'package:torque_obd/ui/screens/dashboard/dashboard_screen.dart';
+import 'package:torque_obd/ui/screens/connect/connect_screen.dart';
 
 /// Starts the isolated `.rig` app from a state that cannot inherit a prior
 /// successful connection or transcript.
@@ -35,8 +37,7 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
   await requireIsolatedRigIdentity();
   // Live device tests can retain the previous root between journeys. Dispose
   // its providers and poller before clearing this isolated rig's artifacts.
-  await tester.pumpWidget(const SizedBox.shrink());
-  await tester.pump();
+  await _disposeRigRoot(tester);
   final prefs = await SharedPreferences.getInstance();
   await prefs.clear();
   // The rig asserts shipped Traditional Chinese copy. Without this the
@@ -73,8 +74,10 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
 /// an empty install.
 Future<void> startRigAppPreservingState(WidgetTester tester) async {
   await requireIsolatedRigIdentity();
-  await tester.pumpWidget(const SizedBox.shrink());
-  await tester.pump();
+  await _disposeRigRoot(tester);
+  // testWidgets resets lifecycle state between journeys; a new root must
+  // receive the same foreground event as a newly launched Android activity.
+  resumeApp(tester);
   unawaited(app.main());
   final ready = await pumpUntil(
     tester,
@@ -82,6 +85,18 @@ Future<void> startRigAppPreservingState(WidgetTester tester) async {
     timeout: const Duration(seconds: 15),
   );
   expect(ready, isTrue, reason: 'the connection screen did not become ready');
+}
+
+Future<void> _disposeRigRoot(WidgetTester tester) async {
+  // The shipped router lives for the process, so disposing only the widget
+  // tree leaves the previous journey's route in the next fresh provider root.
+  final navigators = find.byType(Navigator);
+  if (navigators.evaluate().isNotEmpty) {
+    GoRouter.maybeOf(tester.element(navigators.first))?.go(ConnectScreen.path);
+    await tester.pump();
+  }
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
 }
 
 /// Non-destructively proves the live process is the exact debug rig package.

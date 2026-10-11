@@ -11,3 +11,7 @@ have not been executed for this checkout. Run
 evidence. A dry run validates patch creation and restoration only; it exits
 non-zero, records every mutation as `NOT_EXECUTED`, and sets `verified` to
 `false`.
+
+Every invocation writes to a unique `run-<timestamp>-<mode>-<id>` child
+directory. The runner hashes only that child. It does not delete, overwrite, or
+re-sign prior runs, this README, or other files in the evidence root.
