@@ -13,14 +13,18 @@ generated=(
   android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarTelemetry.g.kt
   lib/car/generated/car_diagnostics.g.dart
   android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarDiagnostics.g.kt
+  lib/car/generated/car_projection_session.g.dart
+  android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarProjectionSession.g.kt
 )
 
 # CI images put the Flutter SDK's dart on PATH; local checkouts may only
 # expose it through fvm (.fvmrc pins the same SDK).
-if command -v dart >/dev/null 2>&1; then
-  dart_cmd=(dart)
-elif command -v fvm >/dev/null 2>&1; then
+# Prefer the repository's .fvmrc pin even when an unrelated system Dart is
+# also installed; a lower SDK cannot resolve this package's dependencies.
+if [[ -f .fvmrc ]] && command -v fvm >/dev/null 2>&1; then
   dart_cmd=(fvm dart)
+elif command -v dart >/dev/null 2>&1; then
+  dart_cmd=(dart)
 else
   echo "Neither dart nor fvm is on PATH; cannot verify Pigeon codegen." >&2
   exit 1
@@ -28,6 +32,7 @@ fi
 
 "${dart_cmd[@]}" run pigeon --input pigeons/car_telemetry.dart
 "${dart_cmd[@]}" run pigeon --input pigeons/car_diagnostics.dart
+"${dart_cmd[@]}" run pigeon --input pigeons/car_projection_session.dart
 
 status="$(git status --porcelain -- "${generated[@]}")"
 if [[ -n "$status" ]]; then

@@ -23,6 +23,9 @@ class CarSkeletonContractTest(unittest.TestCase):
             "androidx.car.app.category.IOT",
             "com.android.automotive",
             "CarAppActivity",
+            "ProjectionForegroundService",
+            "FOREGROUND_SERVICE_CONNECTED_DEVICE",
+            "android.permission.WAKE_LOCK",
         ]
 
         for path in non_car_manifests:
@@ -46,6 +49,25 @@ class CarSkeletonContractTest(unittest.TestCase):
             "com.google.android.gms.car.application",
             manifest,
         )
+        self.assertIn("ProjectionForegroundService", manifest)
+        self.assertIn('android:foregroundServiceType="connectedDevice"', manifest)
+        self.assertIn("android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE", manifest)
+        self.assertIn("android.permission.WAKE_LOCK", manifest)
+
+    def test_projection_service_is_non_sticky_and_releases_its_wake_lock(self):
+        service = self.read(
+            "android/app/src/carProto/kotlin/com/cbstudio/telltale/"
+            "ProjectionForegroundService.kt"
+        )
+
+        self.assertIn("return START_NOT_STICKY", service)
+        self.assertIn("PowerManager.PARTIAL_WAKE_LOCK", service)
+        self.assertIn("wakeLock?.takeIf { it.isHeld }?.release()", service)
+        self.assertIn("ProjectionContinuityRuntime.markServiceStopped", service)
+        self.assertLess(
+            service.index("wakeLock?.takeIf { it.isHeld }?.release()"),
+            service.index("super.onDestroy()"),
+        )
 
     def test_aaos_manifest_has_no_projected_metadata(self):
         manifest = self.read(
@@ -57,6 +79,8 @@ class CarSkeletonContractTest(unittest.TestCase):
             "com.google.android.gms.car.application",
             manifest,
         )
+        self.assertNotIn("ProjectionForegroundService", manifest)
+        self.assertNotIn("FOREGROUND_SERVICE_CONNECTED_DEVICE", manifest)
 
     def test_car_core_is_only_linked_to_car_proto_in_flutter_app(self):
         gradle = self.read("android/app/build.gradle.kts")

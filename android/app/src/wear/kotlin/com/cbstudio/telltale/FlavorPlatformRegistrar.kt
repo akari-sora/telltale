@@ -1,5 +1,6 @@
 package com.cbstudio.telltale
 
+import android.content.Context
 import io.flutter.embedding.engine.FlutterEngine
 
 /**
@@ -11,4 +12,9 @@ import io.flutter.embedding.engine.FlutterEngine
  */
 internal object FlavorPlatformRegistrar {
     fun register(flutterEngine: FlutterEngine) = Unit
+    fun provideFlutterEngine(context: Context): FlutterEngine? = null
+    fun shouldDestroyEngineWithHost(): Boolean = true
+    fun onActivityResumed(activity: MainActivity) = Unit
+    fun onActivityPaused(activity: MainActivity) = Unit
+    fun onActivityDestroyed(activity: MainActivity) = Unit
 }

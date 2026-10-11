@@ -1,5 +1,7 @@
 package com.cbstudio.telltale
 
+import android.content.Context
+import com.cbstudio.telltale.car.CarProjectionSessionLeaseRuntime
 import com.cbstudio.telltale.car.diagnostics.CarDtcRuntime
 import com.cbstudio.telltale.car.telemetry.CarTelemetryRuntime
 import com.cbstudio.telltale.carbridge.CarDiagnosticsHostApiImpl
@@ -16,7 +18,10 @@ import io.flutter.embedding.engine.FlutterEngine
  * never references car code and no reflection is involved.
  */
 internal object FlavorPlatformRegistrar {
+    private val engineRegistration = IdentityRegistrationGuard()
+
     fun register(flutterEngine: FlutterEngine) {
+        if (!engineRegistration.admit(flutterEngine)) return
         CarTelemetryHostApi.setUp(
             flutterEngine.dartExecutor.binaryMessenger,
             CarTelemetryHostApiImpl(repository = CarTelemetryRuntime.repository),
@@ -25,5 +30,24 @@ internal object FlavorPlatformRegistrar {
             flutterEngine.dartExecutor.binaryMessenger,
             CarDiagnosticsHostApiImpl(repository = CarDtcRuntime.repository),
         )
+        ProjectionContinuityRuntime.registerEngine(flutterEngine)
+        CarProjectionSessionLeaseRuntime.installSink { snapshot ->
+            ProjectionContinuityRuntime.onProjectionLease(snapshot)
+        }
     }
+
+    fun provideFlutterEngine(context: Context): FlutterEngine? =
+        ProjectionContinuityRuntime.retainedEngine()
+
+    fun shouldDestroyEngineWithHost(): Boolean =
+        !ProjectionContinuityRuntime.shouldRetainEngine()
+
+    fun onActivityResumed(activity: MainActivity) =
+        ProjectionContinuityRuntime.onActivityResumed(activity)
+
+    fun onActivityPaused(activity: MainActivity) =
+        ProjectionContinuityRuntime.onActivityPaused(activity)
+
+    fun onActivityDestroyed(activity: MainActivity) =
+        ProjectionContinuityRuntime.onActivityDestroyed(activity)
 }

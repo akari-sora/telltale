@@ -84,7 +84,8 @@ enum Elm327ErrorCode {
     // goes unanswered surfaced as "this vehicle does not support that
     // PID", in the same tree that says elsewhere, correctly, that silence
     // is not a clean answer.
-    Elm327ErrorCode.noData => 'No reply arrived — it may be temporary silence, or the vehicle may not support this.',
+    Elm327ErrorCode.noData =>
+      'No reply arrived — it may be temporary silence, or the vehicle may not support this.',
     Elm327ErrorCode.busInitError => 'Bus initialisation failed.',
     Elm327ErrorCode.canError => 'CAN bus error.',
     Elm327ErrorCode.unableToConnect =>
@@ -395,7 +396,8 @@ String initNoteText(InitNote note) => switch (note) {
   InitNote.pidEchoMismatch =>
     'The reply echoes a different PID from the one that was asked for.',
   InitNote.timedOut => 'Timed out.',
-  InitNote.unexpected => 'This step failed with an unexpected error. The full error is kept in the transcript.',
+  InitNote.unexpected =>
+    'This step failed with an unexpected error. The full error is kept in the transcript.',
 };
 
 /// Requires the literal `OK` acknowledgement a state-changing AT command owes.
@@ -590,10 +592,12 @@ class Elm327Client {
     //
     // It is also the only step that proves a *vehicle* is there. Every AT
     // command answers happily with the ignition off; `0100` does not.
-    InitStep('0100',
-        isCritical: true,
-        validate: _requireSupportMask,
-        timeout: protocolSearchTimeout),
+    InitStep(
+      '0100',
+      isCritical: true,
+      validate: _requireSupportMask,
+      timeout: protocolSearchTimeout,
+    ),
     InitStep('ATDP'),
     InitStep('ATDPN'),
     // `ATSH 7E0` used to be sent here, unconditionally, and it is the reason a
@@ -1347,6 +1351,7 @@ class Elm327Client {
     Duration? timeout,
     ElmWriteAudit? writeAudit,
     DateTime? deadline,
+    Object? owner,
   }) {
     _throwIfInsideTransaction();
     _claimWriteAudit(writeAudit);
@@ -1361,6 +1366,7 @@ class Elm327Client {
             timeout ?? commandTimeout,
             writeAudit: writeAudit,
             deadline: deadline,
+            owner: owner,
           ),
         );
       } on Object catch (e, st) {
@@ -2038,6 +2044,7 @@ class Elm327Client {
     String command, {
     Duration? timeout,
     ElmWriteAudit? writeAudit,
+    Object? owner,
   }) {
     _throwIfInsideTransaction();
     _claimWriteAudit(writeAudit);
@@ -2066,6 +2073,7 @@ class Elm327Client {
             'ATSH $header',
             commandTimeout,
             writeAudit: writeAudit,
+            owner: owner,
           );
           // `?` is how an ELM327 refuses a header the current bus cannot take.
           // Proceeding past that sends the query on whatever header the adapter
@@ -2090,6 +2098,7 @@ class Elm327Client {
             timeout ?? commandTimeout,
             completesCommittedTransaction: committed,
             writeAudit: writeAudit,
+            owner: owner,
           ),
         );
       } on Object catch (e, st) {
@@ -2138,6 +2147,7 @@ class Elm327Client {
     String command, {
     Duration? timeout,
     ElmWriteAudit? writeAudit,
+    Object? owner,
   }) {
     if (addressing.shouldTransmit(header)) {
       return sendOnHeader(
@@ -2145,6 +2155,7 @@ class Elm327Client {
         command,
         timeout: timeout,
         writeAudit: writeAudit,
+        owner: owner,
       );
     }
 
@@ -2183,9 +2194,15 @@ class Elm327Client {
           command,
           timeout: timeout,
           writeAudit: writeAudit,
+          owner: owner,
         );
       }
-      return send(command, timeout: timeout, writeAudit: writeAudit);
+      return send(
+        command,
+        timeout: timeout,
+        writeAudit: writeAudit,
+        owner: owner,
+      );
     }
 
     final restore = addressing.restoreHeader;
@@ -2210,9 +2227,15 @@ class Elm327Client {
         command,
         timeout: timeout,
         writeAudit: writeAudit,
+        owner: owner,
       );
     }
-    return send(command, timeout: timeout, writeAudit: writeAudit);
+    return send(
+      command,
+      timeout: timeout,
+      writeAudit: writeAudit,
+      owner: owner,
+    );
   }
 
   /// Sends a request that is about the *vehicle* rather than one controller.
@@ -7094,14 +7117,11 @@ class Elm327Client {
         if (!answered && !restated) {
           kept.add(body);
         } else {
-          final pendingPayload = _reassembleIsoTp([body]) ??
+          final pendingPayload =
+              _reassembleIsoTp([body]) ??
               (body.length >= 4 ? body.sublist(1, 4) : body);
           pendingFrames.add(
-            ObdFrame(
-              pendingPayload,
-              sourceId: id,
-              service: service,
-            ),
+            ObdFrame(pendingPayload, sourceId: id, service: service),
           );
         }
       }

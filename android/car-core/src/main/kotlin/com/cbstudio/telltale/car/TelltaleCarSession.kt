@@ -16,6 +16,8 @@ class TelltaleCarSession(
     internal var runtimeProvider: ((TelltaleCarSession) -> CarSessionRuntime)? = null,
 ) : Session(), DefaultLifecycleObserver {
 
+    private var projectionLease: CarProjectionSessionLeaseRuntime.Token? = null
+
     lateinit var sessionRuntime: CarSessionRuntime
         internal set
 
@@ -24,6 +26,9 @@ class TelltaleCarSession(
     }
 
     override fun onCreateScreen(intent: Intent): Screen {
+        if (projectionLease == null) {
+            projectionLease = CarProjectionSessionLeaseRuntime.acquire()
+        }
         if (!::sessionRuntime.isInitialized) {
             sessionRuntime = runtimeProvider?.invoke(this) ?: CarSessionRuntime(carContext)
         }
@@ -49,5 +54,10 @@ class TelltaleCarSession(
         if (::sessionRuntime.isInitialized) {
             sessionRuntime.destroy()
         }
+        projectionLease?.let(CarProjectionSessionLeaseRuntime::release)
+        projectionLease = null
+        // A projected Session is routinely destroyed while the user switches
+        // to Maps or the Android Auto home screen. The process-scoped lease is
+        // retired only by the actual CarConnection NOT_CONNECTED signal.
     }
 }
