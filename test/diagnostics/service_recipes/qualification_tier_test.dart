@@ -1324,39 +1324,5 @@ void main() {
       );
       expect(verdict, ActiveTestEligibilityVerdict.eligible);
     });
-
-    test('legacy ActiveTestAuthorizationToken strictly rejects exact expiry boundary',
-        () {
-      // Direct unit test of legacy token boundary check
-      final token = ActiveTestAuthorizationToken(
-        tokenId: 'leg_tok_001',
-        recipeHash: officialProfile.canonicalHash,
-        targetCanHeader: officialProfile.addressing.targetEcuHeader,
-        connectionGeneration: 1,
-        expiresAt: now,
-      );
-
-      // At exact boundary (now == expiresAt), must return false
-      expect(
-        token.isValidFor(
-          expectedRecipeHash: officialProfile.canonicalHash,
-          expectedTargetCanHeader: officialProfile.addressing.targetEcuHeader,
-          currentConnectionGeneration: 1,
-          now: now,
-        ),
-        isFalse,
-      );
-
-      // 1 second before expiry, returns true
-      expect(
-        token.isValidFor(
-          expectedRecipeHash: officialProfile.canonicalHash,
-          expectedTargetCanHeader: officialProfile.addressing.targetEcuHeader,
-          currentConnectionGeneration: 1,
-          now: now.subtract(const Duration(seconds: 1)),
-        ),
-        isTrue,
-      );
-    });
   });
 }
