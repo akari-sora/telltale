@@ -24,9 +24,16 @@ Android Auto / AAOS preview readability and lifecycle work merged after `v1.0.17
 - Added Android Auto / AAOS contract, lifecycle, graphics, and issue #106
   regression coverage.
 
-This entry records merged source changes only. New release-CI, signed-artifact,
-reporter hardware, and store-rollout results are recorded separately after
-their respective checks complete.
+Local validation: 4,355 Flutter tests passed with 23 opt-in skips, and
+`flutter analyze` reported no issues. Maintainer-signed `field` APKs passed
+signature, ZIP integrity and alignment checks for all three ABIs. An isolated
+Android 16 phone emulator retained language, theme, selected PIDs and a local
+session when updated from signed `1.0.17` to `1.0.18`; the seven principal
+screens and controlled ELM/TCP disconnect/reconnect flow were exercised.
+See `docs/verification/device-verification.md` for the evidence boundary.
+Release CI, physical `1.0.18` validation, issue #106 reporter hardware and
+store rollout remain separate checks. Android Auto / AAOS remains an
+engineering preview; the production `field` APK has no car app service.
 
 ## 1.0.17 — 2026-10-07
 
