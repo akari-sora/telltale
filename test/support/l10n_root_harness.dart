@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -30,13 +31,20 @@ import 'package:torque_obd/ui/screens/connect/connect_screen.dart';
 /// Captures shared files and metadata for verification.
 class CapturingAppSharePlatform implements AppSharePlatform {
   final List<AppSharePlatformRequest> requests = [];
+  final StreamController<AppSharePlatformRequest> _requestEvents =
+      StreamController<AppSharePlatformRequest>.broadcast(sync: true);
   AppShareResult nextResult = AppShareResult.selected;
+
+  Future<AppSharePlatformRequest> get nextRequest => _requestEvents.stream.first;
 
   @override
   Future<AppShareResult> share(AppSharePlatformRequest request) async {
     requests.add(request);
+    _requestEvents.add(request);
     return nextResult;
   }
+
+  Future<void> dispose() => _requestEvents.close();
 }
 
 /// An AppShareCoordinator that is always ready in test harnesses.
@@ -146,6 +154,7 @@ class L10nRootHarness {
       }
     } catch (_) {}
     await Future<void>.delayed(const Duration(milliseconds: 50));
+    await sharePlatform.dispose();
     blePlatform.reset();
     UniversalBle.setInstance(UniversalBlePigeonChannel.instance);
     AlwaysReadyAppShareCoordinator.clockOffset = Duration.zero;

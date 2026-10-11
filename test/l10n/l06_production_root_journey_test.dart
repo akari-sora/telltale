@@ -429,6 +429,50 @@ void main() {
     testWidgets(
       '[C04] Export/Cancel/Reopen: real UI export CSV and JSON, byte-identical canonical contents, gate settles, reopen same session',
       (tester) async {
+        // The production export worker has a 15-second graceful-exit budget
+        // followed by a 5-second forced-exit budget. Subscribe to the actual
+        // platform handoff before each tap instead of racing that protocol
+        // with a fixed 15-second polling window under concurrent CI load.
+        const dispatchTimeout = Duration(seconds: 45);
+
+        Future<void> awaitDispatchAndGateSettlement(
+          Future<AppSharePlatformRequest> dispatch,
+          int expectedRequestCount,
+          String label,
+        ) async {
+          var dispatchCompleted = false;
+          Object? dispatchFailure;
+          StackTrace? dispatchStackTrace;
+          final trackedDispatch = dispatch.timeout(dispatchTimeout).then<void>(
+            (_) => dispatchCompleted = true,
+            onError: (Object error, StackTrace stackTrace) {
+              dispatchFailure = error;
+              dispatchStackTrace = stackTrace;
+              dispatchCompleted = true;
+            },
+          );
+          final observed = await harness.pumpUntil(
+            tester,
+            () => dispatchCompleted,
+            timeout: dispatchTimeout + const Duration(seconds: 1),
+          );
+          expect(observed, isTrue, reason: '$label platform dispatch was not observed');
+          await trackedDispatch;
+          if (dispatchFailure != null) {
+            Error.throwWithStackTrace(dispatchFailure!, dispatchStackTrace!);
+          }
+          final settled = await harness.pumpUntil(
+            tester,
+            () => harness.appRef.read(artifactOperationGateProvider).snapshot.isIdle,
+          );
+          expect(settled, isTrue, reason: '$label artifact gate did not settle');
+          expect(
+            harness.sharePlatform.requests.length,
+            equals(expectedRequestCount),
+            reason: '$label must produce exactly one additional dispatch',
+          );
+        }
+
         await harness.pumpApp(tester);
         await connectDemoViaUi(tester);
 
@@ -552,20 +596,11 @@ void main() {
           timeout: const Duration(seconds: 4),
         );
         expect(csvHitTestable, isTrue, reason: 'CSV button never hit testable');
+        final csvDispatch = harness.sharePlatform.nextRequest;
         await tester.tap(csvBtn);
         await tester.pump();
 
-        // Await CSV export share request captured and gate settled using runAsync for Isolate processing
-        final csvDeadline = DateTime.now().add(const Duration(seconds: 15));
-        while ((harness.sharePlatform.requests.length < initialRequests + 1 ||
-                !harness.appRef.read(artifactOperationGateProvider).snapshot.isIdle) &&
-            DateTime.now().isBefore(csvDeadline)) {
-          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-        await tester.pump(const Duration(milliseconds: 300));
-
-        expect(harness.sharePlatform.requests.length, equals(initialRequests + 1), reason: 'CSV export must produce exactly 1 dispatch');
+        await awaitDispatchAndGateSettlement(csvDispatch, initialRequests + 1, 'CSV export');
         final csvRequest = harness.sharePlatform.requests.last;
         expect(csvRequest.mimeType, contains('csv'));
         expect(File(csvRequest.path).existsSync(), isTrue);
@@ -595,20 +630,11 @@ void main() {
           timeout: const Duration(seconds: 4),
         );
         expect(jsonHitTestable, isTrue, reason: 'JSON button never hit testable');
+        final jsonDispatch = harness.sharePlatform.nextRequest;
         await tester.tap(jsonBtn);
         await tester.pump();
 
-        // Await JSON export share request captured and gate settled
-        final jsonDeadline = DateTime.now().add(const Duration(seconds: 15));
-        while ((harness.sharePlatform.requests.length < initialRequests + 2 ||
-                !harness.appRef.read(artifactOperationGateProvider).snapshot.isIdle) &&
-            DateTime.now().isBefore(jsonDeadline)) {
-          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-        await tester.pump(const Duration(milliseconds: 300));
-
-        expect(harness.sharePlatform.requests.length, equals(initialRequests + 2), reason: 'JSON export must produce exactly 1 additional dispatch (2 total)');
+        await awaitDispatchAndGateSettlement(jsonDispatch, initialRequests + 2, 'JSON export');
         final jsonRequest = harness.sharePlatform.requests.last;
         expect(jsonRequest.mimeType, contains('json'));
         expect(File(jsonRequest.path).existsSync(), isTrue);
@@ -663,19 +689,11 @@ void main() {
           timeout: const Duration(seconds: 4),
         );
         expect(csvHitTestableZh, isTrue, reason: 'Chinese CSV button never hit testable');
+        final csvDispatchZh = harness.sharePlatform.nextRequest;
         await tester.tap(csvBtnZh);
         await tester.pump();
 
-        final csvDeadlineZh = DateTime.now().add(const Duration(seconds: 15));
-        while ((harness.sharePlatform.requests.length < initialRequests + 3 ||
-                !harness.appRef.read(artifactOperationGateProvider).snapshot.isIdle) &&
-            DateTime.now().isBefore(csvDeadlineZh)) {
-          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-        await tester.pump(const Duration(milliseconds: 300));
-
-        expect(harness.sharePlatform.requests.length, equals(initialRequests + 3), reason: 'Chinese CSV export must produce exactly 1 additional dispatch (3 total)');
+        await awaitDispatchAndGateSettlement(csvDispatchZh, initialRequests + 3, 'Chinese CSV export');
         final csvRequestZh = harness.sharePlatform.requests.last;
         final csvBytesZh = File(csvRequestZh.path).readAsBytesSync();
         expect(csvBytesZh, equals(csvBytesEn), reason: 'Canonical CSV export must be byte-identical across locales');
@@ -704,19 +722,11 @@ void main() {
           timeout: const Duration(seconds: 4),
         );
         expect(jsonHitTestableZh, isTrue);
+        final jsonDispatchZh = harness.sharePlatform.nextRequest;
         await tester.tap(jsonBtnZh);
         await tester.pump();
 
-        final jsonDeadlineZh = DateTime.now().add(const Duration(seconds: 15));
-        while ((harness.sharePlatform.requests.length < initialRequests + 4 ||
-                !harness.appRef.read(artifactOperationGateProvider).snapshot.isIdle) &&
-            DateTime.now().isBefore(jsonDeadlineZh)) {
-          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-        await tester.pump(const Duration(milliseconds: 300));
-
-        expect(harness.sharePlatform.requests.length, equals(initialRequests + 4), reason: 'Chinese JSON export must produce exactly 1 additional dispatch (4 total)');
+        await awaitDispatchAndGateSettlement(jsonDispatchZh, initialRequests + 4, 'Chinese JSON export');
         final jsonRequestZh = harness.sharePlatform.requests.last;
         final jsonBytesZh = File(jsonRequestZh.path).readAsBytesSync();
         expect(jsonBytesZh, equals(jsonBytes), reason: 'Canonical JSON export must be byte-identical across locales');
