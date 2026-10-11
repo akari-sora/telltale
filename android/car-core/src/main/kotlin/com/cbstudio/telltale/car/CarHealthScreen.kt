@@ -81,6 +81,8 @@ class CarHealthScreen(
     internal data class MetricRow(
         val title: String,
         val text: String,
+        val icon: CarMetricIcon,
+        val warning: Boolean = false,
     )
 
     internal data class DisplayModel(
@@ -350,6 +352,8 @@ class CarHealthScreen(
         }
 
         val coolantBase = formatSignal(frame?.coolantC, "°C", "%.0f")
+        val coolantWarning = alertSnapshot?.coolant == CarAlertPhase.ACTIVE ||
+                alertSnapshot?.coolant == CarAlertPhase.UNKNOWN_AFTER_WARNING
         val coolantText = when {
             alertSnapshot?.coolant == CarAlertPhase.ACTIVE -> {
                 if (coolantBase != missingText && coolantBase != staleText) {
@@ -371,11 +375,31 @@ class CarHealthScreen(
         val voltageText = formatSignal(frame?.controlModuleVoltageV, "V", "%.1f")
 
         return listOf(
-            MetricRow(carContext.getString(R.string.car_health_status_row), healthText),
-            MetricRow(carContext.getString(R.string.car_health_mil_row), milText),
-            MetricRow(carContext.getString(R.string.car_health_dtc_row), dtcText),
-            MetricRow(carContext.getString(R.string.car_health_coolant_row), coolantText),
-            MetricRow(carContext.getString(R.string.car_health_voltage_row), voltageText),
+            MetricRow(
+                carContext.getString(R.string.car_health_status_row),
+                healthText,
+                CarMetricIcon.HEALTH,
+                warning = observedHealth == CarObservedHealth.ATTENTION,
+            ),
+            MetricRow(
+                carContext.getString(R.string.car_health_mil_row),
+                milText,
+                CarMetricIcon.MIL,
+                warning = milOn == true,
+            ),
+            MetricRow(
+                carContext.getString(R.string.car_health_dtc_row),
+                dtcText,
+                CarMetricIcon.DTC,
+                warning = dtcCount?.let { it > 0 } == true || dtcReport?.items?.isNotEmpty() == true,
+            ),
+            MetricRow(
+                carContext.getString(R.string.car_health_coolant_row),
+                coolantText,
+                CarMetricIcon.TEMPERATURE,
+                warning = coolantWarning,
+            ),
+            MetricRow(carContext.getString(R.string.car_health_voltage_row), voltageText, CarMetricIcon.VOLTAGE),
         )
     }
 
@@ -401,6 +425,7 @@ class CarHealthScreen(
                 Row.Builder()
                     .setTitle(row.title)
                     .addText(row.text)
+                    .setImage(row.icon.toCarIcon(carContext, row.warning), Row.IMAGE_TYPE_SMALL)
                     .build(),
             )
         }

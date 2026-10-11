@@ -1,7 +1,9 @@
 package com.cbstudio.telltale.car
 
 import androidx.car.app.model.Action
+import androidx.car.app.model.CarColor
 import androidx.car.app.model.PaneTemplate
+import androidx.car.app.model.Row
 import androidx.car.app.testing.ScreenController
 import androidx.car.app.testing.TestCarContext
 import androidx.lifecycle.Lifecycle
@@ -138,6 +140,19 @@ class CarPowertrainScreenTest {
         assertEquals("35 kPa", rows[3].texts[0].toString())
         assertEquals("14.1 V", rows[4].texts[0].toString())
         assertEquals("45 km/h", rows[5].texts[0].toString())
+        assertEquals(
+            listOf(
+                R.drawable.ic_car_metric_rpm,
+                R.drawable.ic_car_metric_temperature,
+                R.drawable.ic_car_metric_temperature,
+                R.drawable.ic_car_metric_pressure,
+                R.drawable.ic_car_metric_battery,
+                R.drawable.ic_car_metric_speed,
+            ),
+            rows.map { it.image?.icon?.resId },
+        )
+        assertTrue(rows.all { it.rowImageType == Row.IMAGE_TYPE_SMALL })
+        assertTrue(rows.all { it.onClickDelegate == null })
     }
 
     @Test
@@ -191,6 +206,7 @@ class CarPowertrainScreenTest {
         val coolantRow = template.pane.rows[1]
         assertEquals("Coolant", coolantRow.title?.toString())
         assertEquals("108 °C · High", coolantRow.texts[0].toString())
+        assertEquals(CarColor.RED, coolantRow.image?.tint)
     }
 
     @Test
@@ -242,6 +258,7 @@ class CarPowertrainScreenTest {
         val coolantRow = template.pane.rows[1]
         assertEquals("Coolant", coolantRow.title?.toString())
         assertEquals("108 °C", coolantRow.texts[0].toString())
+        assertEquals(CarColor.DEFAULT, coolantRow.image?.tint)
     }
 
     @Test
