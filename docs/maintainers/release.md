@@ -12,7 +12,30 @@
 
 ---
 
-## 0. GitHub community APK 與 Google Play 是兩條發布線
+## 0. GitLab maintainer release、GitHub community APK 與 Google Play 是三條發布線
+
+目前 `aa22396584/telltale` 的 GitLab Release 使用 maintainer/Play upload
+簽章血緣。私有簽章環境的 canonical checkout 是
+`/Users/iml1s/Documents/mine/apps/auto/torque`，其 App 根目錄是該 checkout
+本身；舊文件裡的 `torque/app/` 路徑已過期。該環境持有被忽略的
+`android/torque-release.jks` 與 `android/key.properties`，但兩者都不可提交、
+複製到公開 repo 或在輸出中揭露內容。
+
+GitLab maintainer release 的安全順序是：以公開 `telltale` `main` 的目標
+commit 作為唯一 source tree，從受控的 Torque signing environment 以絕對路徑
+引用既有 keystore，先驗證 maintainer certificate fingerprint，再完成 pinned
+Flutter gates、release build、安裝走查與下載後的 package/version/signature/hash
+readback，最後建立 GitLab tag/release 與校驗檔。不要以 Torque feature branch
+作為目前公開 source，也不要把 debug、rig、community-key 或
+`-PallowUnsignedRelease=true` 產物發布到這條線。GitLab CI 目前提供 gate jobs；
+它本身沒有 release publish script，因此 GitLab Release 建立與資產核對必須各自
+留下可讀的 API/UI readback。
+
+GitLab maintainer certificate 與 GitHub community certificate 是不同 lineage，
+不能互相更新已安裝的 APK。以下 GitHub workflow 說明只適用 community APK，不能
+拿來代替 maintainer release。
+
+## 0.1 GitHub community APK 與 Google Play 是兩條發布線
 
 公開 [`aa22396584/telltale`](https://gitlab.com/aa22396584/telltale) 的 tag 會觸發
 `.github/workflows/release.yml`，由 GitHub Actions 內的 **community key** 產生

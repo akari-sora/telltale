@@ -8,6 +8,25 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+## 1.0.18 — 2026-10-12
+
+Android Auto / AAOS readability and lifecycle work merged after `v1.0.17`:
+
+- Added consistent car metric icons and clearer Home, Health, and Powertrain
+  telemetry surfaces, with high coolant temperature emphasis and safer
+  glanceable layouts.
+- Added projection session ownership and foreground continuity handling across
+  connect, pause, resume, and disconnect transitions.
+- Fixed the issue #106 post-connect path to publish the handshake voltage,
+  restore PID capability census state, and retire or retry in-flight polling
+  work correctly across lifecycle interruption.
+- Added Android Auto / AAOS contract, lifecycle, graphics, and issue #106
+  regression coverage.
+
+This entry records merged source changes only. New release-CI, signed-artifact,
+reporter hardware, and store-rollout results are recorded separately after
+their respective checks complete.
+
 ## 1.0.17 — 2026-10-07
 
 Google Play production target `1.0.17` / versionCode 18. GitLab annotated
