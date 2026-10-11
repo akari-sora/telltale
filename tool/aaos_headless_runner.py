@@ -558,18 +558,22 @@ class AaosStateObserver:
         tolerance: float = 0.1,
         timeout: float = 5.0,
     ) -> bool:
-        """Verify the application observed the expected motion; VHAL echo is insufficient."""
+        """Verify both the exact VHAL sample and the application's motion state."""
+        expected_motion = "STATIONARY" if expected_speed == 0.0 else "MOVING"
+
+        def sample_matches() -> bool:
+            actual_speed = self.get_vhal_property_speed()
+            if actual_speed is None or abs(actual_speed - expected_speed) > tolerance:
+                return False
+            return self.observe_motion_state() == expected_motion
+
         start = time.time()
         while time.time() - start < timeout:
-            motion = self.observe_motion_state()
-            expected_motion = "STATIONARY" if expected_speed == 0.0 else "MOVING"
-            if motion == expected_motion:
+            if sample_matches():
                 return True
             time.sleep(0.5)
 
-        motion = self.observe_motion_state()
-        expected_motion = "STATIONARY" if expected_speed == 0.0 else "MOVING"
-        return motion == expected_motion
+        return sample_matches()
 
     def verify_dtc_accessible(self, timeout: float = 5.0) -> bool:
         """Verify visible DTC UI, not merely a stationary VHAL input."""
@@ -955,6 +959,23 @@ def run_live_execution(
             for idx, sc in enumerate(DEFAULT_SCENARIOS, start=1):
                 gear_name = GEAR_NAME_REVERSE_MAP[sc.gear]
                 print(f"\n[Scenario {idx}] {sc.name}: Gear={gear_name}, Speed={sc.speed_mps} m/s")
+
+                if sc.speed_mps < 0:
+                    reset_gear_cmd = build_gear_injection_cmd(GEAR_PARK)
+                    reset_speed_cmd = build_speed_injection_cmd(SPEED_STATIONARY)
+                    run_adb_shell(adb_prefix, reset_gear_cmd, check=True)
+                    run_adb_shell(adb_prefix, reset_speed_cmd, check=True)
+                    time.sleep(1)
+                    if not observer.verify_sample_received(SPEED_STATIONARY, timeout=3.0):
+                        raise RuntimeError(
+                            f"Scenario {idx} ({sc.name}) FAIL: stationary reset was not freshly verified before reverse"
+                        )
+                    if observer.observe_motion_state() != "STATIONARY":
+                        raise RuntimeError(
+                            f"Scenario {idx} ({sc.name}) FAIL: application did not report STATIONARY before reverse"
+                        )
+                    print("  ✓ Fresh stationary reset verified before reverse injection")
+
                 g_cmd = build_gear_injection_cmd(sc.gear)
                 s_cmd = build_speed_injection_cmd(sc.speed_mps)
 
@@ -971,10 +992,9 @@ def run_live_execution(
                 # 2. Verify sample reception
                 if not observer.verify_sample_received(sc.speed_mps, timeout=3.0):
                     motion = observer.observe_motion_state()
-                    if motion != sc.expected_motion:
-                        raise RuntimeError(
-                            f"Scenario {idx} ({sc.name}) FAIL: Speed injection {sc.speed_mps} m/s not received by application (observed: {motion}, expected: {sc.expected_motion})"
-                        )
+                    raise RuntimeError(
+                        f"Scenario {idx} ({sc.name}) FAIL: Speed injection {sc.speed_mps} m/s not freshly received by application (observed: {motion}, expected: {sc.expected_motion})"
+                    )
 
                 # 3. End-to-End State Observation Assertions
                 observed_motion = observer.observe_motion_state()

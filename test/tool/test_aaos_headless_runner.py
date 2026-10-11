@@ -437,6 +437,34 @@ class AaosHeadlessRunnerTest(unittest.TestCase):
                 self.assertTrue(observer.verify_dtc_blocked())
                 self.assertFalse(observer.verify_dtc_accessible())
 
+    def test_reverse_sample_rejects_previous_forward_moving_observation(self):
+        """A stale MOVING category cannot prove that the signed reverse sample arrived."""
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        with patch.object(observer, "get_vhal_property_speed", return_value=SPEED_CRUISING):
+            with patch.object(observer, "observe_motion_state", return_value="MOVING"):
+                self.assertFalse(
+                    observer.verify_sample_received(SPEED_REVERSE, timeout=0.0)
+                )
+
+    def test_reverse_sample_passes_after_verified_stationary_reset(self):
+        observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
+        with patch.object(
+            observer,
+            "get_vhal_property_speed",
+            side_effect=[SPEED_STATIONARY, SPEED_REVERSE],
+        ):
+            with patch.object(
+                observer,
+                "observe_motion_state",
+                side_effect=["STATIONARY", "MOVING"],
+            ):
+                self.assertTrue(
+                    observer.verify_sample_received(SPEED_STATIONARY, timeout=0.0)
+                )
+                self.assertTrue(
+                    observer.verify_sample_received(SPEED_REVERSE, timeout=0.0)
+                )
+
     def test_vhal_echo_without_app_observation_is_unknown(self):
         observer = AaosStateObserver(["adb", "-s", "emulator-5554"])
         with patch.object(observer, "get_vhal_property_speed", return_value=13.89):
@@ -548,6 +576,7 @@ class AaosHeadlessRunnerTest(unittest.TestCase):
         observer.observe_motion_state.side_effect = [
             "STATIONARY",
             "MOVING",
+            "STATIONARY",
             "MOVING",
         ]
         observer.verify_dtc_accessible.return_value = True
@@ -667,7 +696,7 @@ class AaosHeadlessRunnerTest(unittest.TestCase):
         observer = MagicMock(spec=AaosStateObserver)
         observer.verify_sample_received.return_value = True
         observer.observe_motion_state.side_effect = [
-            "STATIONARY", "MOVING", "MOVING", "STATIONARY"
+            "STATIONARY", "MOVING", "STATIONARY", "MOVING", "STATIONARY"
         ]
         observer.verify_dtc_accessible.return_value = True
         observer.verify_autopop_occurred.return_value = True
@@ -685,6 +714,40 @@ class AaosHeadlessRunnerTest(unittest.TestCase):
                 observer=observer,
             )
             self.assertEqual(ret, 0)
+
+    def test_live_execution_resets_and_verifies_stationary_before_reverse(self):
+        observer = MagicMock(spec=AaosStateObserver)
+        observer.verify_sample_received.return_value = True
+        observer.observe_motion_state.side_effect = [
+            "STATIONARY", "MOVING", "STATIONARY", "MOVING", "STATIONARY"
+        ]
+        observer.navigate_to_dtc_screen.return_value = True
+        observer.verify_autopop_occurred.return_value = True
+        observer.verify_dtc_blocked.return_value = True
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = self._create_fake_adb_run()
+            ret = run_live_execution(
+                avd_name="AAOS_Automotive_1080p",
+                serial="emulator-5554",
+                emulator_bin=None,
+                adb_bin=Path(sys.executable),
+                skip_launch=True,
+                boot_timeout=5,
+                observer=observer,
+            )
+
+        self.assertEqual(ret, 0)
+        self.assertEqual(
+            [call.args[0] for call in observer.verify_sample_received.call_args_list],
+            [
+                SPEED_STATIONARY,
+                SPEED_CRUISING,
+                SPEED_STATIONARY,
+                SPEED_REVERSE,
+                SPEED_STATIONARY,
+            ],
+        )
 
 
 if __name__ == "__main__":

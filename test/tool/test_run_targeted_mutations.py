@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import tool.ci.run_targeted_mutations as mutation_runner
 from tool.ci.run_targeted_mutations import (
     JUnitTestRunSummary,
     MutationResultStatus,
@@ -486,6 +487,54 @@ def test_dry_run_is_not_executed_and_never_reuses_junit(tmp_path: Path):
     assert result["restored_test_passed"] is False
     assert result["junit_summary"]["total_tests"] == 0
     assert not (tmp_path / "evidence" / "MUT-DRY" / "mutant-test.txt").exists()
+
+
+def test_live_run_does_not_reuse_stale_junit_from_other_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    target = tmp_path / "Guard.kt"
+    target.write_text("val guardActive = true\n", encoding="utf-8")
+    selected_results = tmp_path / "selected-results"
+    selected_results.mkdir()
+    stale_results = tmp_path / "stale-results"
+    stale_results.mkdir()
+    (stale_results / "TEST-stale.xml").write_text(
+        '<testsuite tests="1" failures="1"><testcase classname="GuardTest" name="fails">'
+        '<failure type="AssertionError">old failure</failure></testcase></testsuite>',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(mutation_runner, "DEFAULT_JUNIT_RESULTS_DIRS", [stale_results])
+
+    mutation = {
+        "id": "MUT-FRESH-JUNIT",
+        "name": "fresh junit only",
+        "description": "Never classify from another invocation's reports",
+        "file": "Guard.kt",
+        "target": "val guardActive = true",
+        "replacement": "val guardActive = false",
+        "expected_failing_classes": ["GuardTest"],
+    }
+    command_count = 0
+
+    def fake_cmd(cmd: List[str], cwd: Path = tmp_path):
+        nonlocal command_count
+        if "apply" in cmd and "--check" in cmd:
+            return 0, ""
+        command_count += 1
+        return (1, "BUILD FAILED") if command_count == 1 else (0, "BUILD SUCCESSFUL")
+
+    result = run_single_mutation(
+        mutation,
+        tmp_path,
+        tmp_path / "evidence",
+        junit_results_dir=selected_results,
+        run_cmd_fn=fake_cmd,
+    )
+
+    assert result["status"] == MutationResultStatus.INFRA_ERROR.value
+    assert result["mutant_killed"] is False
+    assert result["junit_summary"]["total_tests"] == 0
 
 
 def test_isolated_evidence_run_preserves_and_excludes_seeded_stale_logs(tmp_path: Path):

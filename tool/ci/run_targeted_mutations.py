@@ -253,23 +253,9 @@ def clean_test_results_dir(results_dir: Path) -> None:
 
 def parse_gradle_junit_reports(
     results_dir: Path,
-    fallback_to_defaults: bool = False,
 ) -> JUnitTestRunSummary:
-    """Parse all TEST-*.xml files produced by Gradle in results_dir or fallback candidate."""
-    dirs_to_check = [results_dir]
-    # If fallback is requested and the provided path doesn't have XMLs, check fallback paths
-    if fallback_to_defaults and (not results_dir.exists() or not list(results_dir.glob("TEST-*.xml"))):
-        for default_dir in DEFAULT_JUNIT_RESULTS_DIRS:
-            if default_dir != results_dir and default_dir.exists() and default_dir not in dirs_to_check:
-                dirs_to_check.append(default_dir)
-
-    xml_files: List[Path] = []
-    for d in dirs_to_check:
-        if d.exists():
-            found = list(d.glob("TEST-*.xml"))
-            if found:
-                xml_files = found
-                break
+    """Parse TEST-*.xml files from the selected invocation directory only."""
+    xml_files = list(results_dir.glob("TEST-*.xml")) if results_dir.exists() else []
 
     if not xml_files:
         return JUnitTestRunSummary(
@@ -578,7 +564,7 @@ def run_single_mutation(
                 f"{' '.join(test_cmd)}\nEXIT: {mut_code}\n{mut_log}",
             )
 
-            junit_summary = parse_gradle_junit_reports(res_dir, fallback_to_defaults=True)
+            junit_summary = parse_gradle_junit_reports(res_dir)
             status, reason = classify_mutation_outcome(
                 exit_code=mut_code,
                 build_log=mut_log,
