@@ -290,25 +290,15 @@ Future<Finder> revealInScrollable(
   return hitTestable;
 }
 
-/// Scrolls the connection wizard until its lazily built sliver contains
-/// [text]. Looking up the finder before scrolling is not sufficient: on a
-/// phone-sized viewport even the first transport card can be outside the
-/// initial sliver cache.
+/// Reveals [text] in the active page's lazy vertical viewport. This serves
+/// Connect, recording detail, and Settings journeys; the target must finish
+/// at an actual tap location.
 Future<Finder> revealText(WidgetTester tester, String text) async {
-  final finder = find.descendant(
-    of: find.byType(ConnectScreen),
-    matching: find.text(text),
-  );
-  final scrollable = find
-      .descendant(
-        of: find.byType(ConnectScreen),
-        matching: find.byWidgetPredicate(
-          (widget) =>
-              widget is Scrollable &&
-              widget.axisDirection == AxisDirection.down,
-        ),
-      )
-      .first;
+  final finder = find.text(text);
+  final scrollable = find.byWidgetPredicate(
+    (widget) =>
+        widget is Scrollable && widget.axisDirection == AxisDirection.down,
+  ).first;
   return revealInScrollable(tester, finder, scrollable: scrollable);
 }
 
