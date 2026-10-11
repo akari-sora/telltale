@@ -64,9 +64,11 @@ Future<void> _openHistory(WidgetTester tester) async {
   if (history.evaluate().isEmpty || history.hitTestable().evaluate().isEmpty) {
     final dashboard = find.byType(CustomScrollView);
     expect(dashboard, findsWidgets);
+    // Recording controls can leave the dashboard below its header. Reveal
+    // the history action by scrolling toward the start of the dashboard.
     await tester.scrollUntilVisible(
       history,
-      400,
+      -400,
       scrollable: find
           .descendant(of: dashboard.first, matching: find.byType(Scrollable))
           .first,
@@ -541,8 +543,11 @@ void main() {
           )
           .first,
     );
-    await tester.tap(find.byKey(const Key('locale_english')));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tapLocatedLocaleSetting(
+      tester,
+      const Key('locale_english'),
+      expectedLanguageCode: 'en',
+    );
 
     await _tapNav(tester, 'Dashboard');
     await _openHistory(tester);
@@ -590,8 +595,11 @@ void main() {
           )
           .first,
     );
-    await tester.tap(find.byKey(const Key('locale_german')));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tapLocatedLocaleSetting(
+      tester,
+      const Key('locale_german'),
+      expectedLanguageCode: 'de',
+    );
 
     await _tapNav(tester, 'Dashboard');
     await _openHistory(tester);

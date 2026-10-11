@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:torque_obd/core/share/app_share_platform_bridge.dart';
 import 'package:torque_obd/core/share/rig_app_share_platform.dart';
+import 'package:torque_obd/core/app_locales_platform.dart';
 import 'package:torque_obd/l10n/locale_resolution.dart';
 import 'package:torque_obd/main.dart' as app;
 import 'package:torque_obd/obd/session_evidence.dart';
@@ -21,6 +22,7 @@ import 'package:torque_obd/obd/transcript_store.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
 import 'package:torque_obd/state/app_share_coordinator.dart';
 import 'package:torque_obd/state/artifact_operation_gate.dart';
+import 'package:torque_obd/state/locale_settings.dart';
 import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/state/telemetry_recorder.dart';
 import 'package:torque_obd/state/telemetry_runtime.dart';
@@ -38,6 +40,15 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
   // Live device tests can retain the previous root between journeys. Dispose
   // its providers and poller before clearing this isolated rig's artifacts.
   await _disposeRigRoot(tester);
+  // Android 13+ keeps per-app language outside SharedPreferences. A prior
+  // journey's German override would otherwise win the shipped startup sync.
+  // The identity check above limits this reset to the isolated debug rig.
+  AppLocalesPlatform.live = true;
+  if ((await AppLocalesPlatform.get()).apiSupported) {
+    final localeReset = await AppLocalesPlatform.setOverrideTags(['zh-Hant']);
+    expect(localeReset?.apiSupported, isTrue);
+    expect(localeReset?.overrideTags, ['zh-Hant']);
+  }
   final prefs = await SharedPreferences.getInstance();
   await prefs.clear();
   // The rig asserts shipped Traditional Chinese copy. Without this the
@@ -53,7 +64,8 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
   expect(
     clearOutcome.succeeded,
     isTrue,
-    reason: 'rig start refused to clear last-session.log: ${clearOutcome.error}',
+    reason:
+        'rig start refused to clear last-session.log: ${clearOutcome.error}',
   );
   final telemetry = Directory(
     '${(await getApplicationDocumentsDirectory()).path}/telltale-telemetry',
@@ -85,22 +97,29 @@ Future<void> startRigAppPreservingState(WidgetTester tester) async {
   // receive the same foreground event as a newly launched Android activity.
   resumeApp(tester);
   unawaited(app.main());
-  final ready = await pumpUntil(
-    tester,
-    () => find.text('選擇連線方式').evaluate().isNotEmpty,
-    timeout: const Duration(seconds: 15),
-  );
+  var routeReset = false;
+  final ready = await pumpUntil(tester, () {
+    // testWidgets already unmounts the previous tree, but the shipped
+    // process-wide router retains its last route. Reset the newly mounted
+    // router after startup completes, when its public config is available.
+    if (!routeReset) {
+      for (final widget in tester.widgetList<MaterialApp>(
+        find.byType(MaterialApp),
+      )) {
+        final router = widget.routerConfig;
+        if (router is GoRouter) {
+          router.go(ConnectScreen.path);
+          routeReset = true;
+          return false;
+        }
+      }
+    }
+    return routeReset && find.byType(ConnectScreen).evaluate().isNotEmpty;
+  }, timeout: const Duration(seconds: 15));
   expect(ready, isTrue, reason: 'the connection screen did not become ready');
 }
 
 Future<void> _disposeRigRoot(WidgetTester tester) async {
-  // The shipped router lives for the process, so disposing only the widget
-  // tree leaves the previous journey's route in the next fresh provider root.
-  final navigators = find.byType(Navigator);
-  if (navigators.evaluate().isNotEmpty) {
-    GoRouter.maybeOf(tester.element(navigators.first))?.go(ConnectScreen.path);
-    await tester.pump();
-  }
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pump();
 }
@@ -217,6 +236,50 @@ Future<Finder> revealText(WidgetTester tester, String text) async {
   final hitTestable = finder.hitTestable();
   expect(hitTestable, findsOneWidget);
   return hitTestable;
+}
+
+/// Taps a locale row that the journey has already scrolled into the tree.
+///
+/// `scrollUntilVisible` stops as soon as a render object is inside the
+/// viewport, even when the persistent bottom navigation still covers its tap
+/// target. Reposition the row, prove the real hit target, then wait for both
+/// the selection, inherited locale, and persisted preference to agree.
+Future<void> tapLocatedLocaleSetting(
+  WidgetTester tester,
+  Key key, {
+  required String expectedLanguageCode,
+}) async {
+  final locale = find.byKey(key);
+  expect(locale, findsOneWidget, reason: 'locale $key was not located');
+  await Scrollable.ensureVisible(tester.element(locale), alignment: 0.35);
+  await tester.pump(const Duration(milliseconds: 100));
+
+  final target = locale.hitTestable();
+  expect(target, findsOneWidget, reason: 'locale $key was not hit-testable');
+  await tester.tap(target);
+
+  final updated = await pumpUntil(
+    tester,
+    () {
+      final matches = locale.evaluate();
+      if (matches.length != 1) return false;
+      final element = tester.element(locale);
+      final controller = ProviderScope.containerOf(
+        element,
+        listen: false,
+      ).read(localePreferenceProvider.notifier);
+      final tile = tester.widget<ListTile>(locale);
+      final expected = localePreferenceFromStored(expectedLanguageCode);
+      return tile.selected &&
+          Localizations.localeOf(element).languageCode ==
+              expectedLanguageCode &&
+          controller.committed == expected &&
+          !controller.needsReconcile;
+    },
+    timeout: const Duration(seconds: 10),
+    step: const Duration(milliseconds: 100),
+  );
+  expect(updated, isTrue, reason: 'locale $key did not finish updating');
 }
 
 bool hasNonZeroPidRate(WidgetTester tester) =>

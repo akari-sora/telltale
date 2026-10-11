@@ -78,11 +78,6 @@ Future<String> _dashboardDigest(
   IntegrationTestWidgetsFlutterBinding binding,
   String name,
 ) async {
-  try {
-    await binding.convertFlutterSurfaceToImage();
-  } on UnimplementedError {
-    // Android needs the surface conversion; other platforms do not.
-  }
   await tester.pump();
   final bytes = await binding.takeScreenshot(name);
   expect(bytes, isNotEmpty, reason: 'screenshot $name produced no bytes');
@@ -148,6 +143,9 @@ void main() {
     await Scrollable.ensureVisible(tester.element(chinese), alignment: 0.5);
     await tester.pump(const Duration(milliseconds: 50));
     expect(chinese.hitTestable(), findsOneWidget);
+    // Android surface conversion lasts until this test's SDK teardown.
+    // All three captures must reuse that one conversion.
+    await binding.convertFlutterSurfaceToImage();
     await _dashboardDigest(tester, binding, 'dashboard-zh-Hant');
     final chineseSwitch = await _switchDigest(tester, 'switch-zh-Hant');
 
@@ -158,8 +156,11 @@ void main() {
       400,
       scrollable: _settingsVerticalScrollable(),
     );
-    await tester.tap(find.byKey(const Key('locale_english')));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tapLocatedLocaleSetting(
+      tester,
+      const Key('locale_english'),
+      expectedLanguageCode: 'en',
+    );
 
     await _tapNav(tester, 'Dashboard');
     expect(
@@ -190,8 +191,11 @@ void main() {
       400,
       scrollable: _settingsVerticalScrollable(),
     );
-    await tester.tap(find.byKey(const Key('locale_german')));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tapLocatedLocaleSetting(
+      tester,
+      const Key('locale_german'),
+      expectedLanguageCode: 'de',
+    );
 
     await _tapNav(tester, 'Dashboard');
     expect(
@@ -206,8 +210,7 @@ void main() {
     expect(
       await pumpUntil(tester, () => german.evaluate().isNotEmpty),
       isTrue,
-      reason:
-          'Dashboard workspace switch did not show Instrumente after switching to German',
+      reason: 'Dashboard workspace switch did not show Instrumente after switching to German',
     );
     expect(_gaugesOnDashboard('Gauges'), findsNothing);
     expect(_gaugesOnDashboard('儀表'), findsNothing);

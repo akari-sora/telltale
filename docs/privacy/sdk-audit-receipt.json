@@ -165,7 +165,7 @@
     "lib/state/driving_interaction_safety.dart": "3762b683a4a7bcd4e959c61255c41254597cc953d223b046425ab2baf508bfa8",
     "lib/state/dtc_scan.dart": "ac13fb32baa891efa4fa956b30f08240be721bba3f5c4f64c547c702ccc6a4be",
     "lib/state/language_switch_guard.dart": "8d64668be1716beac1fdad710bcc6b80f213a5232f2177dee13e2cf9c716f550",
-    "lib/state/locale_settings.dart": "0516a2907443800f2d04e7bcd6fa5925f1c291655587ebc018de4c1f525096ef",
+    "lib/state/locale_settings.dart": "5c2f3ad89a3a285f9936adad5bd62ebe2fbf059d9200420fa557ab8248944b94",
     "lib/state/manual_command_refusal.dart": "0477b90c06c956fdb4eab42f652786976323fee007297378b4ba20a78fc471a7",
     "lib/state/obd_session.dart": "6a033f85e7ae1c9923cae52648577867b2927d856909d15bf23bef3fdf9431b2",
     "lib/state/pid_mutation_lock.dart": "e989b829d7a20a50a75dedc2ed78054497f22ad539628ae8755efeb5d279982a",

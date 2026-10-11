@@ -1,8 +1,9 @@
 /// Runs the existing isolated Demo and localized feature journeys in one
 /// device build. Use the rig flavor so field-app records remain untouched:
 ///
-/// fvm flutter test integration_test/phone_acceptance_test.dart -d DEVICE_ID \
-///   --flavor rig --dart-define=TELLTALE_TEST_RIG=true
+/// fvm flutter drive --driver integration_test/acceptance_driver.dart \
+///   --target integration_test/phone_acceptance_test.dart -d DEVICE_ID \
+///   --flavor rig --dart-define=TELLTALE_TEST_RIG=true --no-dds
 library;
 
 import 'demo_rig_test.dart' as demo;

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:torque_obd/core/app_locales_platform.dart';
 import 'package:torque_obd/l10n/app_locales_sync.dart';
 import 'package:torque_obd/l10n/locale_resolution.dart';
+import 'package:torque_obd/state/app_locales_synchronizer.dart';
 import 'package:torque_obd/state/locale_settings.dart';
 import 'package:torque_obd/state/pid_registry.dart';
 
@@ -319,6 +320,112 @@ void main() {
     // screen returns to that committed value, not System and not Chinese.
     expect(env.container.read(localePreferenceProvider), LocalePreference.english);
     expect(env.inner.getString(kLocalePreferenceKey), 'en');
+  });
+
+  test('disposing during the OS write settles false without a rollback',
+      () async {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    const channel = MethodChannel(kAppLocalesChannelName);
+    final setEntered = Completer<void>();
+    final setBarrier = Completer<Object?>();
+    var setCalls = 0;
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      if (call.method == kAppLocalesGetMethod) {
+        return <String, Object?>{
+          'apiSupported': true,
+          'sdkInt': 36,
+          'followsSystem': true,
+          'overrideTags': <String>[],
+          'configurationTags': <String>[],
+        };
+      }
+      setCalls += 1;
+      setEntered.complete();
+      return setBarrier.future;
+    });
+    addTearDown(() {
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+      AppLocalesPlatform.live = false;
+    });
+
+    AppLocalesPlatform.live = true;
+    final container = await containerWith({kLocalePreferenceKey: 'system'});
+    final controller = container.read(localePreferenceProvider.notifier);
+    final result = controller.set(LocalePreference.english);
+    await setEntered.future;
+
+    container.dispose();
+    setBarrier.complete(<String, Object?>{
+      'apiSupported': true,
+      'sdkInt': 36,
+      'followsSystem': false,
+      'overrideTags': <String>['en'],
+      'configurationTags': <String>['en'],
+    });
+
+    expect(await result, isFalse);
+    expect(setCalls, 1, reason: 'disposal must not start an OS rollback');
+  });
+
+  test('disposing settles an in-flight and queued set false', () async {
+    final writeEntered = Completer<void>();
+    final writeBarrier = Completer<bool>();
+    var writes = 0;
+    final inner = await _prefs({kLocalePreferenceKey: 'system'});
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(
+          _ScriptedPrefs(inner, () {
+            writes += 1;
+            if (!writeEntered.isCompleted) writeEntered.complete();
+            return writeBarrier.future;
+          }),
+        ),
+      ],
+    );
+    final controller = container.read(localePreferenceProvider.notifier);
+    final inFlight = controller.set(LocalePreference.english);
+    await writeEntered.future;
+    final queued = controller.set(LocalePreference.german);
+
+    container.dispose();
+    writeBarrier.complete(true);
+
+    expect(await inFlight, isFalse);
+    expect(await queued, isFalse);
+    expect(writes, 1, reason: 'the queued write must not start after disposal');
+  });
+
+  test('disposing during synchronize settles false without committing result',
+      () async {
+    final container = await containerWith({kLocalePreferenceKey: 'en'});
+    final controller = container.read(localePreferenceProvider.notifier);
+    final syncEntered = Completer<void>();
+    final syncBarrier = Completer<AppLocalesSyncResult?>();
+    final result = controller.synchronize((_) {
+      syncEntered.complete();
+      return syncBarrier.future;
+    });
+    await syncEntered.future;
+
+    container.dispose();
+    syncBarrier.complete(
+      const AppLocalesSyncResult(
+        plan: AppLocalesSyncPlan(
+          action: AppLocalesSyncAction.alreadyMigratedFollowOs,
+          storedIdToKeep: 'de',
+          writeStored: false,
+          writeOs: false,
+          markMigrated: false,
+        ),
+        disposition: LocaleSyncDisposition.applied,
+        storedIdCommitted: 'de',
+      ),
+    );
+
+    expect(await result, isFalse);
   });
 
   test('live persist writes LocaleManager so resume cannot clobber it', () async {

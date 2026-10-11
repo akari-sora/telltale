@@ -103,8 +103,11 @@ void main() {
           )
           .first,
     );
-    await tester.tap(find.byKey(const Key('locale_english')));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tapLocatedLocaleSetting(
+      tester,
+      const Key('locale_english'),
+      expectedLanguageCode: 'en',
+    );
 
     await _tapNav(tester, 'Fault codes');
     expect(
@@ -148,8 +151,11 @@ void main() {
           )
           .first,
     );
-    await tester.tap(find.byKey(const Key('locale_german')));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tapLocatedLocaleSetting(
+      tester,
+      const Key('locale_german'),
+      expectedLanguageCode: 'de',
+    );
 
     await _tapNav(tester, 'Fehlercodes');
     expect(
