@@ -7,8 +7,9 @@
 順序是有意義的：**第 1 步一定要在 build 之前**，第 5 節那道閘門一定要在上傳
 之前。中間的步驟可以查著做，那兩個不行。
 
-以下相對路徑與指令都以 Flutter App 根目錄為工作目錄：在私有 `torque` checkout
-先執行 `cd app`；公開 `telltale` checkout 的 repository 根目錄本身就是 App 根目錄。
+以下相對路徑與指令都以 Flutter App 根目錄為工作目錄：私有 `torque` checkout
+和公開 `telltale` checkout 的 repository 根目錄都是 App 根目錄，直接在 checkout
+根目錄執行。
 
 ---
 
@@ -44,7 +45,8 @@ universal `field` APK。這把金鑰不是 Play upload key；兩邊的 APK 不�
 
 GitHub APK 發布順序：
 
-1. 只在私有 `torque/app/` 修改，依 `CLAUDE.md` 的 fail-closed rsync recipe
+1. 舊私有同步流程曾使用 `torque/app/`；目前 App 根目錄是 `torque/`。依各
+   checkout 的有效 guidance 和 fail-closed rsync recipe
    單向同步到公開 repo；不得 force-push。
 2. 確認公開 `main` 的 exact-head CI 通過，而且 `pubspec.yaml` 的
    `versionName` 與 tag 主版號一致。

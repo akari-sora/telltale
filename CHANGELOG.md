@@ -10,9 +10,10 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## 1.0.18 — 2026-10-12
 
-Android Auto / AAOS readability and lifecycle work merged after `v1.0.17`:
+Android Auto / AAOS preview readability and lifecycle work merged after `v1.0.17`:
 
 - Added consistent car metric icons and clearer Home, Health, and Powertrain
+  preview
   telemetry surfaces, with high coolant temperature emphasis and safer
   glanceable layouts.
 - Added projection session ownership and foreground continuity handling across
