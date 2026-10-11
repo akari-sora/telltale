@@ -271,6 +271,7 @@ class PollingEngine {
     PriorityScheduler? scheduler,
     this.elapsedClock,
     DiagnosticLink? diagnosticLink,
+    this.pollingOwner,
   }) : formula = formulaEngine ?? FormulaEngine(),
        scheduler = scheduler ?? PriorityScheduler(),
        diagnosticLink = diagnosticLink ?? Elm327DiagnosticLink(client);
@@ -298,6 +299,7 @@ class PollingEngine {
   final FormulaEngine formula;
   final PriorityScheduler scheduler;
   final DemandRegistry demands = DemandRegistry();
+  final Object? pollingOwner;
 
   final _snapshots = StreamController<TelemetrySnapshot>.broadcast();
   final _capabilitySummaries = StreamController<ObdCapabilitySummary>.broadcast(
@@ -853,7 +855,9 @@ class PollingEngine {
     try {
       response = await diagnosticLink.send(
         DiagnosticRequest(
-          id: DiagnosticRequestId('census-${diagnosticLink.connectionGeneration}'),
+          id: DiagnosticRequestId(
+            'census-${diagnosticLink.connectionGeneration}',
+          ),
           pdu: ApplicationPdu(const [0x01, 0x00]),
           target: DiagnosticTarget.wholeVehicleObd,
           requiredCapabilities: const {
@@ -872,7 +876,8 @@ class PollingEngine {
     } on Object {
       return _responders;
     }
-    if (!response.isSuccess || !response.provenance.sourceAttributionAvailable) {
+    if (!response.isSuccess ||
+        !response.provenance.sourceAttributionAvailable) {
       return _responders;
     }
 
@@ -1046,7 +1051,11 @@ class PollingEngine {
         // the previous request left selected. A support mask attributed to the
         // wrong controller marks PIDs the vehicle has as unsupported, and the
         // gauges then stay grey with no explanation.
-        final response = await client.sendAddressed(kDefaultHeader, query);
+        final response = await client.sendAddressed(
+          kDefaultHeader,
+          query,
+          owner: pollingOwner,
+        );
         final raw = response.bytes;
         if (response.isSuccess &&
             raw.length == 6 &&
@@ -3884,6 +3893,7 @@ class PollingEngine {
       final response = await client.send(
         'ATRV',
         timeout: const Duration(seconds: 2),
+        owner: pollingOwner,
       );
       if (response.batteryVoltage == null) {
         _lastVoltageFailureAt = now;
@@ -4221,12 +4231,18 @@ class PollingEngine {
       // against a header that was selected for this batch.
       final expectedResponseId = batch.first.pid.expectedResponseId;
       response = expectedResponseId == null
-          ? await client.sendAddressed(header, command, writeAudit: pollAudit)
+          ? await client.sendAddressed(
+              header,
+              command,
+              writeAudit: pollAudit,
+              owner: pollingOwner,
+            )
           : await client.sendGlobal(
               command,
               header: header,
               writeAudit: pollAudit,
               timeout: client.commandTimeout,
+              owner: pollingOwner,
             );
       _noteMode01Packed(command);
       if (epoch != null && epoch != _epoch) return;

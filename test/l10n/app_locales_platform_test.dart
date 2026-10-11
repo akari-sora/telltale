@@ -92,10 +92,16 @@ void main() {
     expect(await AppLocalesPlatform.setOverrideTags(const ['ja']), isNull);
   });
 
-  test('MainActivity registers get/set on the app_locales channel', () {
-    final android = File(
+  test('application channels register get/set on the app_locales channel', () {
+    final activity = File(
       'android/app/src/main/kotlin/com/cbstudio/telltale/MainActivity.kt',
     ).readAsStringSync();
+    final android = File(
+      'android/app/src/main/kotlin/com/cbstudio/telltale/ApplicationPlatformChannels.kt',
+    ).readAsStringSync();
+    expect(activity, contains('ApplicationPlatformChannels.register('));
+    expect(activity, contains('context = applicationContext'));
+    expect(android, contains('val app = context.applicationContext'));
     expect(android, contains('APP_LOCALES_CHANNEL'));
     expect(android, contains('com.cbstudio.telltale/app_locales'));
     expect(android, contains('"getAppLocales"'));

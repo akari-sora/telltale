@@ -4,8 +4,9 @@
 /// else the runtime provider returns null without listening to anything,
 /// arming a timer, or creating the Pigeon client.
 ///
-/// Read-only by construction: it reads telemetry, session and DTC state and
-/// never calls a notifier mutation.
+/// Vehicle data remains read-only. The companion lifecycle runtime may grant
+/// or retire periodic polling authority, but it never exposes diagnostic or
+/// destructive OBD operations to the car host.
 library;
 
 import 'dart:io';
@@ -19,6 +20,7 @@ import '../state/dtc_scan.dart';
 import '../state/obd_session.dart';
 import '../state/telemetry_recorder.dart' show authoritativeTelemetryValue;
 import 'car_projection_coordinator.dart';
+import 'car_projection_session_runtime.dart';
 import 'car_telemetry_bridge.dart';
 import 'car_telemetry_projector.dart';
 
@@ -48,10 +50,7 @@ abstract final class CarProjectionReason {
 /// Decision returned by [isCarProjectionEligible].
 @immutable
 final class CarProjectionDecision {
-  const CarProjectionDecision({
-    required this.enabled,
-    required this.reason,
-  });
+  const CarProjectionDecision({required this.enabled, required this.reason});
 
   final bool enabled;
   final String reason;
@@ -130,10 +129,10 @@ final carTelemetryTransportProvider = Provider<CarTelemetryTransport>(
   (ref) => pigeonCarTelemetryTransport(),
 );
 
-final carProjectionRuntimeProvider = Provider<CarProjectionCoordinator?>((
-  ref,
-) {
+final carProjectionRuntimeProvider = Provider<CarProjectionCoordinator?>((ref) {
   if (!ref.watch(carProjectionEnabledProvider)) return null;
+
+  ref.watch(carProjectionSessionRuntimeProvider);
 
   final stopwatch = Stopwatch()..start();
   final coordinator = CarProjectionCoordinator(

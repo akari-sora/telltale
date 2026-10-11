@@ -1,14 +1,9 @@
 package com.cbstudio.telltale
 
-import android.app.LocaleManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
-import android.os.LocaleList
-import android.os.StatFs
-import android.os.SystemClock
 import android.util.Log
+import java.lang.ref.WeakReference
 import io.flutter.BuildConfig as FlutterBuildConfig
 import io.flutter.FlutterInjector
 import io.flutter.embedding.android.FlutterActivity
@@ -20,6 +15,30 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         applyRendererDecision()
         super.onCreate(savedInstanceState)
+    }
+
+    override fun provideFlutterEngine(context: android.content.Context): FlutterEngine? =
+        FlavorPlatformRegistrar.provideFlutterEngine(context)
+
+    override fun shouldDestroyEngineWithHost(): Boolean =
+        FlavorPlatformRegistrar.shouldDestroyEngineWithHost()
+
+    override fun onResume() {
+        super.onResume()
+        currentActivity = WeakReference(this)
+        FlavorPlatformRegistrar.onActivityResumed(this)
+    }
+
+    override fun onPause() {
+        FlavorPlatformRegistrar.onActivityPaused(this)
+        clearCurrentActivity(this)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        FlavorPlatformRegistrar.onActivityDestroyed(this)
+        clearCurrentActivity(this)
+        super.onDestroy()
     }
 
     /**
@@ -88,65 +107,13 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            PLATFORM_METADATA_CHANNEL,
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "getPlatformMetadata" -> result.success(platformMetadata())
-                else -> result.notImplemented()
-            }
-        }
-
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            APP_STORAGE_CAPACITY_CHANNEL,
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "getAvailableBytes" ->
-                    appCacheAvailableBytes(call.argument<String>("path"), result)
-                else -> result.notImplemented()
-            }
-        }
-
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            WIFI_ROUTE_CHANNEL,
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "bind" -> bindWifiRoute(call.argument<String>("host"), result)
-                "release" -> releaseWifiRoute(result)
-                else -> result.notImplemented()
-            }
-        }
-
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            FORM_FACTOR_CHANNEL,
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                // The platform's own answer, not an inference from window
-                // geometry: a narrow split-screen phone is still a phone.
-                "isWatch" -> result.success(
-                    packageManager.hasSystemFeature(
-                        android.content.pm.PackageManager.FEATURE_WATCH,
-                    ),
-                )
-                else -> result.notImplemented()
-            }
-        }
-
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            ELAPSED_REALTIME_CHANNEL,
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                // Includes deep sleep. Dart Stopwatch / uptimeMillis do not.
-                "elapsedRealtimeMs" -> result.success(SystemClock.elapsedRealtime())
-                else -> result.notImplemented()
-            }
-        }
+        ApplicationPlatformChannels.register(
+            flutterEngine = flutterEngine,
+            context = applicationContext,
+            renderer = if (rendererApplied == true) rendererDecision.mode.label else UNKNOWN,
+            rendererReason = rendererDecision.reason +
+                (if (rendererApplied == true) "" else " (not applied: engine initialised before this app decided)"),
+        )
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -159,16 +126,19 @@ class MainActivity : FlutterActivity() {
                     // the flag clears with the activity, so a crash cannot
                     // leave the screen pinned on.
                     val on = call.argument<Boolean>("on") == true
-                    if (on) {
-                        window.addFlags(
+                    val activeWindow = currentActivity?.get()?.window
+                    if (activeWindow == null) {
+                        result.error("activity_unavailable", "No resumed Activity window", null)
+                    } else if (on) {
+                        activeWindow.addFlags(
                             android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
                         )
                     } else {
-                        window.clearFlags(
+                        activeWindow.clearFlags(
                             android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
                         )
                     }
-                    result.success(null)
+                    if (activeWindow != null) result.success(null)
                 }
                 else -> result.notImplemented()
             }
@@ -181,18 +151,28 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "setBrightnessOverride" -> {
                     val brightness = call.argument<Double?>("brightness")
-                    val lp = window.attributes
+                    val activeWindow = currentActivity?.get()?.window
+                    if (activeWindow == null) {
+                        result.error("activity_unavailable", "No resumed Activity window", null)
+                        return@setMethodCallHandler
+                    }
+                    val lp = activeWindow.attributes
                     if (brightness == null) {
                         lp.screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
                     } else {
                         lp.screenBrightness = brightness.toFloat().coerceIn(0.0f, 1.0f)
                     }
-                    window.attributes = lp
+                    activeWindow.attributes = lp
                     result.success(null)
                 }
                 "setSystemBarsHidden" -> {
                     val hidden = call.argument<Boolean>("hidden") ?: false
-                    val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+                    val activeWindow = currentActivity?.get()?.window
+                    if (activeWindow == null) {
+                        result.error("activity_unavailable", "No resumed Activity window", null)
+                        return@setMethodCallHandler
+                    }
+                    val insetsController = androidx.core.view.WindowCompat.getInsetsController(activeWindow, activeWindow.decorView)
                     if (hidden) {
                         insetsController.systemBarsBehavior =
                             androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -206,328 +186,21 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            APP_LOCALES_CHANNEL,
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "getAppLocales" -> result.success(readAppLocales())
-                "setAppLocales" -> setAppLocales(_stringList(call.argument("tags")), result)
-                else -> result.notImplemented()
-            }
-        }
-
         // Flavor-provided, resolved at compile time. carProto registers the
         // one-way car telemetry bridge; field / rig / wear compile a no-op.
         // src/main must never name car types directly.
         FlavorPlatformRegistrar.register(flutterEngine)
     }
 
-    /**
-     * Binds this process to a connected Wi-Fi network, validated or not.
-     *
-     * An ELM327 soft AP never validates — it has no internet — so requiring
-     * NET_CAPABILITY_VALIDATED here would refuse the exact network this
-     * exists for. When Android 12+ dual-STA (Samsung Intelligent Wi-Fi) has
-     * two Wi-Fi networks up at once, the candidate whose link subnet actually
-     * contains the adapter's address is tried first — binding succeeding says
-     * nothing about the destination being reachable — then the unvalidated
-     * ones, since the validated one is the home network. Error messages are
-     * transcript detail, not screen text; the Dart side owns the user-facing
-     * sentence.
-     *
-     * This handler MUST stay synchronous on the platform thread: the Dart
-     * side compensates an abandoned (timed-out) bind by enqueuing a release
-     * on this same channel, and that compensation is sound only because
-     * channel messages execute here in arrival order. Offloading either call
-     * to another thread silently breaks the orphaned-binding guarantee. Both
-     * calls are short binder IPC, so staying synchronous is also correct for
-     * responsiveness.
-     */
-    private fun bindWifiRoute(host: String?, result: MethodChannel.Result) {
-        val manager = connectivityManagerOr(result) ?: return
-        // allNetworks is deprecated in favor of an async callback API; a
-        // synchronous snapshot is exactly what one bind-then-connect needs.
-        @Suppress("DEPRECATION")
-        val wifi = manager.allNetworks.mapNotNull { network ->
-            val capabilities = manager.getNetworkCapabilities(network)
-            if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) != true) {
-                return@mapNotNull null
-            }
-            // A network still connecting has no link addresses yet and cannot
-            // carry a socket; admitting it only manufactures spurious ties.
-            val link = manager.getLinkProperties(network)
-            if (link == null || link.linkAddresses.isEmpty()) {
-                return@mapNotNull null
-            }
-            network to capabilities
-        }
-        if (wifi.isEmpty()) {
-            result.error(
-                "no_wifi_network",
-                "ConnectivityManager reports no TRANSPORT_WIFI network",
-                null,
-            )
-            return
-        }
-        // The Dart side only forwards numeric literals, but this handler must
-        // stay synchronous, so it does not trust that contract with a blocking
-        // DNS lookup on the line: anything that is not shaped like a literal
-        // is dropped here too, and simply loses the reachability preference.
-        val target = host?.takeIf(::isNumericHost)?.let {
-            try {
-                java.net.InetAddress.getByName(it)
-            } catch (_: Exception) {
-                null
-            }
-        }
-        // ELM327 hosts are always on-link, so link subnets are the whole
-        // route story here; gateway routes are deliberately not consulted.
-        val keyed = wifi.map { (network, capabilities) ->
-            val key = Pair(
-                target != null && linkContains(manager, network, target),
-                // Negated so the adapter-like (never validated) sorts higher.
-                !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
-            )
-            network to key
-        }.sortedWith(
-            compareByDescending<Pair<android.net.Network, Pair<Boolean, Boolean>>> { it.second.first }
-                .thenByDescending { it.second.second },
-        )
-        // Binding succeeding proves nothing about the destination being
-        // reachable, and allNetworks' order carries no routing meaning — so a
-        // genuine tie at the top is a coin flip that, bound deterministically,
-        // would time out the same way on every retry with the adapter taking
-        // the blame. Refusing with a nameable reason is the honest outcome.
-        val topKey = keyed.first().second
-        val top = keyed.filter { it.second == topKey }
-        if (top.size > 1) {
-            result.error(
-                "ambiguous_wifi_network",
-                "${top.size} Wi-Fi networks are equally plausible routes " +
-                    "toward the adapter",
-                null,
-            )
-            return
-        }
-        // Only the unique top candidate is bound. Falling through to a
-        // lower-ranked network would bind one already known not to reach the
-        // adapter, hand back success, and spend the whole connect budget
-        // timing out with the adapter taking the blame — the same failure
-        // mode the tie refusal above exists to prevent.
-        val (topNetwork, _) = keyed.first()
-        if (!manager.bindProcessToNetwork(topNetwork)) {
-            result.error(
-                "bind_refused",
-                "bindProcessToNetwork returned false for the selected " +
-                    "Wi-Fi candidate",
-                null,
-            )
-            return
-        }
-        result.success(null)
-    }
-
-    /**
-     * IPv6 literals are colon-and-hex only (a v4-mapped tail adds dots);
-     * anything else must be dotted-quad. `foo:bar` would fall through
-     * InetAddress.getByName to a real DNS lookup, which this synchronous
-     * handler must never perform.
-     */
-    private fun isNumericHost(host: String): Boolean = when {
-        host.contains(':') -> host.all {
-            it.isDigit() || it in 'a'..'f' || it in 'A'..'F' || it == ':' || it == '.'
-        }
-        else -> host.matches(Regex("""\d{1,3}(\.\d{1,3}){3}"""))
-    }
-
-    /** Whether one of [network]'s link subnets contains [target]. */
-    private fun linkContains(
-        manager: ConnectivityManager,
-        network: android.net.Network,
-        target: java.net.InetAddress,
-    ): Boolean {
-        val link = manager.getLinkProperties(network) ?: return false
-        return link.linkAddresses.any { linkAddress ->
-            sameSubnet(linkAddress.address, target, linkAddress.prefixLength)
-        }
-    }
-
-    private fun sameSubnet(
-        a: java.net.InetAddress,
-        b: java.net.InetAddress,
-        prefixLength: Int,
-    ): Boolean {
-        val left = a.address
-        val right = b.address
-        if (left.size != right.size) return false
-        var bits = prefixLength
-        for (i in left.indices) {
-            if (bits <= 0) break
-            val mask = if (bits >= 8) 0xFF else (0xFF shl (8 - bits)) and 0xFF
-            if ((left[i].toInt() and mask) != (right[i].toInt() and mask)) return false
-            bits -= 8
-        }
-        return true
-    }
-
-    private fun releaseWifiRoute(result: MethodChannel.Result) {
-        val manager = connectivityManagerOr(result) ?: return
-        if (!manager.bindProcessToNetwork(null)) {
-            result.error(
-                "release_refused",
-                "bindProcessToNetwork(null) returned false",
-                null,
-            )
-            return
-        }
-        result.success(null)
-    }
-
-    private fun appCacheAvailableBytes(
-        path: String?,
-        result: MethodChannel.Result,
-    ) {
-        try {
-            val probePath = if (path.isNullOrEmpty()) cacheDir.path else path
-            val bytes = StatFs(probePath).availableBytes
-            if (bytes > 0L) {
-                result.success(bytes)
-            } else {
-                result.error("capacity_invalid", "Available bytes were not positive", null)
-            }
-        } catch (error: Exception) {
-            result.error("capacity_failed", error.message, null)
-        }
-    }
-
-    private fun connectivityManagerOr(
-        result: MethodChannel.Result,
-    ): ConnectivityManager? {
-        val manager = getSystemService(ConnectivityManager::class.java)
-        if (manager == null) {
-            result.error(
-                "no_connectivity_service",
-                "ConnectivityManager is unavailable",
-                null,
-            )
-        }
-        return manager
-    }
-
-    /**
-     * LocaleManager is the authority on API 33+. Configuration locales are
-     * reported separately and are never treated as the pre-override system
-     * list — after an override they *are* the override.
-     */
-    private fun readAppLocales(): Map<String, Any> {
-        val sdk = Build.VERSION.SDK_INT
-        val configurationTags = configurationLanguageTags()
-        if (!AppLocalePolicy.apiSupported(sdk)) {
-            return mapOf(
-                "apiSupported" to false,
-                "sdkInt" to sdk,
-                "followsSystem" to true,
-                "overrideTags" to emptyList<String>(),
-                "configurationTags" to configurationTags,
-            )
-        }
-        val app = localeManagerOrNull()?.applicationLocales ?: LocaleList.getEmptyLocaleList()
-        val overrideTags = languageTags(app)
-        val override = AppLocalePolicy.overrideFromLocaleListTags(overrideTags)
-        return mapOf(
-            "apiSupported" to true,
-            "sdkInt" to sdk,
-            "followsSystem" to override.followsSystem,
-            "overrideTags" to override.tags,
-            "configurationTags" to configurationTags,
-        )
-    }
-
-    private fun setAppLocales(tags: List<String>, result: MethodChannel.Result) {
-        val sdk = Build.VERSION.SDK_INT
-        if (!AppLocalePolicy.apiSupported(sdk)) {
-            result.error(
-                "below_api_33",
-                "LocaleManager applicationLocales requires API 33",
-                mapOf("sdkInt" to sdk),
-            )
-            return
-        }
-        val requested = tags
-        val override = AppLocalePolicy.overrideFromRequestedTags(requested)
-        if (override == null) {
-            result.error(
-                "unsupported_locale",
-                "not a shipped UI locale",
-                mapOf("tags" to requested),
-            )
-            return
-        }
-        val manager = localeManagerOrNull()
-        if (manager == null) {
-            result.error("no_locale_manager", "LocaleManager is unavailable", null)
-            return
-        }
-        val encoded = AppLocalePolicy.languageTagsForLocaleList(override)
-        manager.applicationLocales =
-            if (encoded.isEmpty()) LocaleList.getEmptyLocaleList()
-            else LocaleList.forLanguageTags(encoded)
-        result.success(readAppLocales())
-    }
-
-    private fun localeManagerOrNull(): LocaleManager? {
-        if (!AppLocalePolicy.apiSupported(Build.VERSION.SDK_INT)) return null
-        return getSystemService(LocaleManager::class.java)
-    }
-
-    private fun configurationLanguageTags(): List<String> {
-        val config = resources.configuration
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            languageTags(config.locales)
-        } else {
-            @Suppress("DEPRECATION")
-            listOfNotNull(config.locale?.toLanguageTag())
-        }
-    }
-
-    private fun languageTags(list: LocaleList): List<String> =
-        (0 until list.size()).mapNotNull { index -> list[index]?.toLanguageTag() }
-
-    private fun _stringList(raw: Any?): List<String> {
-        val items = raw as? List<*> ?: return emptyList()
-        return items.mapNotNull { item -> item as? String }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun platformMetadata(): Map<String, Any> {
-        val packageInfo = packageManager.getPackageInfo(packageName, 0)
-        val longVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            packageInfo.longVersionCode
-        } else {
-            packageInfo.versionCode.toLong()
-        }
-
-        return mapOf(
-            "applicationId" to packageName,
-            "appVersion" to (packageInfo.versionName ?: UNKNOWN),
-            "appBuild" to longVersionCode.toString(),
-            "platform" to "android",
-            "osVersion" to (Build.VERSION.RELEASE ?: UNKNOWN),
-            "manufacturer" to (Build.MANUFACTURER ?: UNKNOWN),
-            "model" to (Build.MODEL ?: UNKNOWN),
-            "sdkInt" to Build.VERSION.SDK_INT,
-            // The backend this process asked for and why. `unknown` when the
-            // decision was not the one applied, so an evidence file never says
-            // `skia-forced` about a process that was started some other way.
-            "renderer" to (if (rendererApplied == true) rendererDecision.mode.label else UNKNOWN),
-            "rendererReason" to rendererDecision.reason +
-                (if (rendererApplied == true) "" else " (not applied: engine initialised before this app decided)"),
-        )
-    }
-
     private companion object {
         const val TAG = "Telltale"
+
+        @Volatile
+        var currentActivity: WeakReference<MainActivity>? = null
+
+        fun clearCurrentActivity(activity: MainActivity) {
+            if (currentActivity?.get() === activity) currentActivity = null
+        }
 
         /**
          * Decided once per process. A recreated activity must not re-read the
@@ -559,14 +232,7 @@ class MainActivity : FlutterActivity() {
         @Volatile
         var rendererApplied: Boolean? = null
 
-        const val PLATFORM_METADATA_CHANNEL = "com.cbstudio.telltale/platform_metadata"
-        const val APP_STORAGE_CAPACITY_CHANNEL =
-            "com.cbstudio.telltale/app_storage_capacity"
-        const val WIFI_ROUTE_CHANNEL = "com.cbstudio.telltale/wifi_route"
         const val SCREEN_WAKE_CHANNEL = "com.cbstudio.telltale/screen_wake"
-        const val ELAPSED_REALTIME_CHANNEL = "com.cbstudio.telltale/elapsed_realtime"
-        const val FORM_FACTOR_CHANNEL = "com.cbstudio.telltale/form_factor"
-        const val APP_LOCALES_CHANNEL = "com.cbstudio.telltale/app_locales"
         const val HUD_DISPLAY_CHANNEL = "com.cbstudio.telltale/hud_display"
         const val UNKNOWN = "unknown"
     }

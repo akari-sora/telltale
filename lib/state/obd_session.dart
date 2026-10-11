@@ -409,10 +409,9 @@ class ObdSession extends Notifier<ObdConnectionState> {
       );
     });
 
-    // A vehicle session is foreground-only, and saying so explicitly is the
-    // fix for two problems at once: the app must stop putting traffic on a
-    // car's bus while the user is elsewhere, and it must not present values
-    // captured before the interruption as current when they come back.
+    // Phone UI, recording and diagnostic authority remain foreground-only.
+    // A separately armed Android Auto projection may retain only the periodic
+    // read poller while those user-facing and destructive paths stay closed.
     _lifecycle = AppLifecycleListener(
       onHide: _onAppPaused,
       onPause: _onAppPaused,
@@ -514,6 +513,111 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// Monotonic owner token for session-only experimental consent.
   int get connectionGeneration => _generation;
 
+  final Object _periodicPollingOwner = Object();
+  Object? _projectionValidationOwner;
+  Object? _resumeValidationOwner;
+  int? _projectionGeneration;
+  int? _projectionConnectionGeneration;
+
+  bool get hasArmedProjectionContinuity =>
+      _projectionGeneration != null &&
+      _projectionConnectionGeneration == _generation &&
+      state.isConnected;
+
+  bool get _vehiclePollingAuthorized =>
+      _foreground || hasArmedProjectionContinuity;
+
+  /// Accepts only a projection armed while this exact connected session is
+  /// visible. Native performs the matching Activity/CarConnection checks.
+  Future<bool> acceptProjectionContinuity({
+    required int projectionGeneration,
+    required int connectionGeneration,
+  }) {
+    final operation = _lifecycleChain.then(
+      (_) => _acceptProjectionContinuityNow(
+        projectionGeneration: projectionGeneration,
+        connectionGeneration: connectionGeneration,
+      ),
+    );
+    _lifecycleChain = operation.then<void>((_) {}, onError: (_) {});
+    return operation;
+  }
+
+  Future<bool> _acceptProjectionContinuityNow({
+    required int projectionGeneration,
+    required int connectionGeneration,
+  }) async {
+    if (!state.isConnected || connectionGeneration != _generation) {
+      return false;
+    }
+    _projectionGeneration = projectionGeneration;
+    _projectionConnectionGeneration = connectionGeneration;
+    if (_foreground) return true;
+
+    final client = _client;
+    final engine = _engine;
+    if (client == null || engine == null) {
+      _projectionGeneration = null;
+      _projectionConnectionGeneration = null;
+      _handleConnectionLost(connectionGeneration);
+      return false;
+    }
+    final validationOwner = Object();
+    _projectionValidationOwner = validationOwner;
+    client.markAlive();
+    try {
+      final probe = await client.send(
+        'ATRV',
+        timeout: const Duration(seconds: 3),
+        owner: validationOwner,
+      );
+      if (_projectionGeneration != projectionGeneration ||
+          _projectionConnectionGeneration != _generation) {
+        return false;
+      }
+      if (!probe.isSuccess) {
+        _projectionGeneration = null;
+        _projectionConnectionGeneration = null;
+        _handleConnectionLost(connectionGeneration);
+        return false;
+      }
+      _pausedByLifecycle = false;
+      engine.start();
+      if (!_telemetry.isClosed) _telemetry.add(engine.current);
+    } on Object {
+      if (_projectionGeneration != projectionGeneration ||
+          _projectionConnectionGeneration != connectionGeneration) {
+        return false;
+      }
+      _projectionGeneration = null;
+      _projectionConnectionGeneration = null;
+      _handleConnectionLost(connectionGeneration);
+      return false;
+    } finally {
+      if (identical(_projectionValidationOwner, validationOwner)) {
+        _projectionValidationOwner = null;
+      }
+    }
+    return true;
+  }
+
+  /// Closes hidden wire admission synchronously, then drains the poll loop.
+  Future<void> retireProjectionContinuity(int projectionGeneration) {
+    if (_projectionGeneration != projectionGeneration) {
+      return Future<void>.value();
+    }
+    _projectionGeneration = null;
+    _projectionConnectionGeneration = null;
+    _projectionValidationOwner = null;
+    if (_foreground) return Future<void>.value();
+    _client?.suspendLiveness();
+    final engine = _engine;
+    if (engine == null) return Future<void>.value();
+    _pausedByLifecycle = true;
+    _lifecycleChain = _lifecycleChain.then((_) => _pauseNow(engine));
+    return _lifecycleChain;
+  }
+
   void _onAppPaused() {
     // Android/iOS commonly emit hidden followed by paused. Desktop may emit
     // hidden without paused. One synchronous edge must cover both without
@@ -547,6 +651,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // will be delivered after it against a wall clock that moved on — so the
     // flag has to be set now, not by whatever the lifecycle chain gets round
     // to.
+    if (hasArmedProjectionContinuity) return;
     _client?.suspendLiveness();
     final engine = _engine;
     if (engine == null) return;
@@ -628,10 +733,13 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // adapter into a different car, or drove out of Bluetooth range while the
     // app was backgrounded, should not see the old vehicle's values resume.
     final generation = _generation;
+    final validationOwner = Object();
+    _resumeValidationOwner = validationOwner;
     try {
       final probe = await client.send(
         'ATRV',
         timeout: const Duration(seconds: 3),
+        owner: validationOwner,
       );
       if (_superseded(generation)) {
         _awaitingResumeValidation = false;
@@ -650,6 +758,10 @@ class ObdSession extends Notifier<ObdConnectionState> {
       _openForegroundAfterResumeValidation();
       _handleConnectionLost(generation);
       return;
+    } finally {
+      if (identical(_resumeValidationOwner, validationOwner)) {
+        _resumeValidationOwner = null;
+      }
     }
 
     if (_superseded(generation)) {
@@ -1415,8 +1527,13 @@ class ObdSession extends Notifier<ObdConnectionState> {
 
     _completeEvidence(client, outcome: 'connected');
 
-    final engine = PollingEngine(client, elapsedClock: elapsedCache);
-    engine.shouldContinue = () => _foreground && !_superseded(generation);
+    final engine = PollingEngine(
+      client,
+      elapsedClock: elapsedCache,
+      pollingOwner: _periodicPollingOwner,
+    );
+    engine.shouldContinue = () =>
+        _vehiclePollingAuthorized && !_superseded(generation);
     // The same question, asked where the bytes actually leave. `shouldContinue`
     // guards the loop's decisions; this guards the wire, which is the only
     // place that sees a queued Mode 04 arriving after the screen has gone.
@@ -1431,8 +1548,17 @@ class ObdSession extends Notifier<ObdConnectionState> {
       // Resume ATRV must run while the safety/foreground gate is still closed.
       // Only the unleased probe may talk in that window — leased Mode 04 and
       // similar work stay refused until validation opens the gate.
-      if (_awaitingResumeValidation) return owner == null;
-      if (!_foreground) return false;
+      if (_awaitingResumeValidation) {
+        return _resumeValidationOwner != null &&
+            identical(owner, _resumeValidationOwner);
+      }
+      if (!_foreground) {
+        return (hasArmedProjectionContinuity &&
+                identical(owner, _periodicPollingOwner)) ||
+            (_projectionValidationOwner != null &&
+                identical(owner, _projectionValidationOwner));
+      }
+      if (identical(owner, _periodicPollingOwner)) return true;
       return switch (owner) {
         null => true,
         int epoch => epoch == _pauseEpoch,
@@ -1484,7 +1610,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
             identical(_client, authorityClient) &&
             identical(_engine, authorityEngine) &&
             state.isConnected &&
-            _foreground &&
+            _vehiclePollingAuthorized &&
             !_pausedByLifecycle &&
             !_awaitingResumeValidation;
       },
@@ -1511,7 +1637,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // the phone down during it. Starting to poll from the background is both
     // rude and unsafe — an OS freeze mid-command splits a request from its
     // reply — so the session is left parked for the next resume to recover.
-    if (_foreground) {
+    if (_vehiclePollingAuthorized) {
       engine.start();
       if (!_telemetry.isClosed) _telemetry.add(engine.current);
     } else {
@@ -1705,7 +1831,10 @@ class ObdSession extends Notifier<ObdConnectionState> {
   }) async {
     final client = _client;
     final engine = _engine;
-    if (client == null || engine == null || !state.isConnected || !_foreground) {
+    if (client == null ||
+        engine == null ||
+        !state.isConnected ||
+        !_foreground) {
       throw const PowertrainProbeRefusedException(
         PowertrainProbeRefusal.notConnectedOrNotInForeground,
       );
@@ -1939,7 +2068,8 @@ class ObdSession extends Notifier<ObdConnectionState> {
           if (link == null) {
             throw const DiagnosticLinkException(
               kind: DiagnosticFailureKind.retiredOperation,
-              message: 'No active diagnostic link available for connected session.',
+              message:
+                  'No active diagnostic link available for connected session.',
             );
           }
 
@@ -1968,12 +2098,14 @@ class ObdSession extends Notifier<ObdConnectionState> {
             },
             outerDeadline: deadline,
             cancellation: cancellation,
-            correlationId: 'session-uds-${DateTime.now().microsecondsSinceEpoch}',
+            correlationId:
+                'session-uds-${DateTime.now().microsecondsSinceEpoch}',
           );
         },
       );
     } on DiagnosticLinkException catch (e) {
-      if (cancellation.isCancelled || e.kind == DiagnosticFailureKind.cancelled) {
+      if (cancellation.isCancelled ||
+          e.kind == DiagnosticFailureKind.cancelled) {
         return UdsTransactionCancelled(
           request: request,
           attempts: 0,
@@ -2339,6 +2471,10 @@ class ObdSession extends Notifier<ObdConnectionState> {
     _censusInFlight = null;
     _engine = null;
     _client = null;
+    _projectionGeneration = null;
+    _projectionConnectionGeneration = null;
+    _projectionValidationOwner = null;
+    _resumeValidationOwner = null;
 
     // A session ending must clear the display. Otherwise the last car's
     // readings sit on the gauges while the next connection is being made, and

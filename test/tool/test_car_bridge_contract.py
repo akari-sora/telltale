@@ -52,6 +52,12 @@ class CarBridgeContractTest(unittest.TestCase):
         self.assertIn("void publishTelemetryFrame(CarTelemetryMessage frame);", self.read("pigeons/car_telemetry.dart"))
         self.assertIn("void publishDtcReport(CarDtcReportMessage report);", self.read("pigeons/car_diagnostics.dart"))
 
+        lifecycle = _strip_dart_comments(self.read("pigeons/car_projection_session.dart"))
+        self.assertEqual(len(re.findall(r"@HostApi\s*\(", lifecycle)), 1)
+        self.assertEqual(len(re.findall(r"@FlutterApi\s*\(", lifecycle)), 1)
+        self.assertIn("armContinuity", lifecycle)
+        self.assertIn("acknowledgeRelease", lifecycle)
+
     def test_generated_code_has_no_kotlin_to_dart_api(self):
         pairs = [
             (
@@ -133,7 +139,10 @@ class CarBridgeContractTest(unittest.TestCase):
             for forbidden in ("carbridge", "com.cbstudio.telltale.car.", "CarTelemetry"):
                 self.assertNotIn(forbidden, source, msg=f"{forbidden} in {path}")
             imports = re.findall(r"(?m)^import (\S+)", source)
-            self.assertEqual(imports, ["io.flutter.embedding.engine.FlutterEngine"])
+            self.assertEqual(
+                imports,
+                ["android.content.Context", "io.flutter.embedding.engine.FlutterEngine"],
+            )
 
     def test_non_car_source_sets_contain_no_car_code(self):
         for flavor in NON_CAR_FLAVORS + ("main",):
@@ -224,13 +233,7 @@ class CarBridgeContractTest(unittest.TestCase):
             ROOT / "android/car-core/src/main",
             ROOT / "android/app/src/carProto",
         ]
-        forbidden = (
-            "WakeLock",
-            "startForeground",
-            "FOREGROUND_SERVICE",
-            "FlutterEngineCache",
-            "CarUxRestrictions",
-        )
+        forbidden = ("FlutterEngineCache", "CarUxRestrictions")
         for root in roots:
             for path in root.rglob("*"):
                 if not path.is_file() or path.suffix not in {".kt", ".dart", ".xml"}:
@@ -239,6 +242,22 @@ class CarBridgeContractTest(unittest.TestCase):
                 text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
                 for token in forbidden:
                     self.assertNotIn(token, text, msg=f"{token} in {path.relative_to(ROOT)}")
+
+        allowed_runtime = {
+            "android/app/src/carProto/AndroidManifest.xml",
+            "android/app/src/carProto/kotlin/com/cbstudio/telltale/ProjectionContinuityRuntime.kt",
+            "android/app/src/carProto/kotlin/com/cbstudio/telltale/ProjectionForegroundService.kt",
+        }
+        for token in ("WakeLock", "startForeground", "FOREGROUND_SERVICE"):
+            hits = {
+                str(path.relative_to(ROOT))
+                for root in roots
+                for path in root.rglob("*")
+                if path.is_file()
+                and path.suffix in {".kt", ".dart", ".xml"}
+                and token in re.sub(r"<!--.*?-->", "", _strip_dart_comments(path.read_text(encoding="utf-8")), flags=re.S)
+            }
+            self.assertTrue(hits <= allowed_runtime, msg=f"{token} leaked to {sorted(hits)}")
 
 
 if __name__ == "__main__":

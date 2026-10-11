@@ -3,8 +3,17 @@
 
     <!-- AA-05 Android Auto vehicle hardware speed permission -->
     <uses-permission android:name="com.google.android.gms.permission.CAR_SPEED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application>
+        <service
+            android:name=".ProjectionForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
         <!--
           AA-00 / AA-01 prototype only.
           Never move this to src/main until category eligibility is accepted.
