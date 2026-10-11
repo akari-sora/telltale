@@ -119,15 +119,30 @@ void main() {
   test(
     'native sources preserve same-volume and macOS completion contracts',
     () {
-      final android = File(
+      final activity = File(
         'android/app/src/main/kotlin/com/cbstudio/telltale/MainActivity.kt',
+      ).readAsStringSync();
+      final android = File(
+        'android/app/src/main/kotlin/com/cbstudio/telltale/ApplicationPlatformChannels.kt',
       ).readAsStringSync();
       final ios = File('ios/Runner/AppDelegate.swift').readAsStringSync();
       final macos = File('macos/Runner/MainFlutterWindow.swift')
           .readAsStringSync();
 
-      expect(android, contains('StatFs(probePath)'));
-      expect(android, contains('call.argument<String>("path")'));
+      expect(activity, contains('ApplicationPlatformChannels.register('));
+      expect(activity, contains('context = applicationContext'));
+      expect(android, contains('val app = context.applicationContext'));
+      expect(
+        android,
+        contains('appCacheAvailableBytes(app, call.argument("path"), result)'),
+      );
+      expect(
+        android,
+        contains(
+          'StatFs(if (path.isNullOrEmpty()) context.cacheDir.path else path).availableBytes',
+        ),
+      );
+      expect(android, contains('if (bytes > 0L) result.success(bytes)'));
       expect(android, contains('APP_STORAGE_CAPACITY_CHANNEL'));
       expect(ios, contains('cachesDirectory'));
       expect(ios, contains('args["path"]'));
@@ -156,9 +171,8 @@ void main() {
         ),
       );
 
-      final windows = File(
-        'windows/runner/flutter_window.cpp',
-      ).readAsStringSync();
+      final windows = File('windows/runner/flutter_window.cpp')
+          .readAsStringSync();
       final linux = File('linux/runner/my_application.cc').readAsStringSync();
       expect(windows, contains('com.cbstudio.telltale/app_storage_capacity'));
       expect(windows, contains('GetDiskFreeSpaceExW'));
