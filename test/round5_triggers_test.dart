@@ -8906,7 +8906,6 @@ void main() {
       expect(await client.connect(), isTrue);
 
       var epoch = 0;
-      client.mayTransmit = (owner) => owner == null || owner == epoch;
       final engine = PollingEngine(client)..lifecycleEpoch = () => epoch;
       transport.slowCommands['0100'] = const Duration(milliseconds: 180);
       final censusWritesBefore =
@@ -8932,13 +8931,7 @@ void main() {
 
       await expectLater(
         clear,
-        throwsA(
-          isA<DtcReadException>().having(
-            (error) => error.kind,
-            'kind',
-            DtcReadFailure.disconnected,
-          ),
-        ),
+        throwsA(isA<OperationRetiredException>()),
       );
       await census;
       expect(transport.commandLog, isNot(contains('04')),

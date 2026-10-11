@@ -736,6 +736,14 @@ class PollingEngine {
     );
   }
 
+  void _requireClearStillOwnedBeforeWrite(int? captured) {
+    if (captured == null) return;
+    if (lifecycleEpoch?.call() == captured) return;
+    throw const OperationRetiredException(
+      'The clear was retired before it reached the vehicle.',
+    );
+  }
+
   /// Controllers that answered the vehicle-wide capability probe.
   ///
   /// Attribution establishes *who answered*. It never established *who should
@@ -2528,9 +2536,9 @@ class PollingEngine {
     // background/resume during the wait must not authorize a clear that was
     // started under the previous epoch.
     final owner = lifecycleEpoch?.call();
-    _requireStillOwned(owner);
+    _requireClearStillOwnedBeforeWrite(owner);
     await _joinInFlightResponderCensus(null);
-    _requireStillOwned(owner);
+    _requireClearStillOwnedBeforeWrite(owner);
     // Set for the same reason the read sets it, and it was missing here: the
     // clear's own reply goes through the same ambiguity, and without this a
     // bare `7E8` acknowledging the clear would be an open question instead of

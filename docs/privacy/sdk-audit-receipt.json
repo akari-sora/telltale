@@ -128,7 +128,7 @@
     "lib/obd/pid/pid_library.dart": "e004082a31b65cc9c9060eea95d53ec7f2a43de5e219e4097fe833eca6b3defa",
     "lib/obd/pid/priority_scheduler.dart": "cd2f88453579deebd510f0c18e5894d9afb8619587b3dc2b6b7ba83656553cc0",
     "lib/obd/pid/priority_tier.dart": "733ef7782b4bd980927540ca30800fa18f94e2194717ea22b13e6f6054d32cc0",
-    "lib/obd/polling_engine.dart": "26bb800ed01ebed11ef91fe3f2b88906c602daf0e287830035e68b7d9f442cbd",
+    "lib/obd/polling_engine.dart": "d1e1df6cccb762037b50490b81df8e30998f22d5352ed3e21564d2552ff8e874",
     "lib/obd/powertrain_battery/powertrain_battery_catalog.dart": "d37b1ed553b51464b42ce86fdd1ee4ab19736790f125b05fcab5a3b4007e97e3",
     "lib/obd/powertrain_battery/powertrain_battery_probe.dart": "5c1e97d4a9a7912dbd38c37fcc079b17139b867d1cae9b5c049ca34e6c7f9a49",
     "lib/obd/powertrain_battery/powertrain_battery_profile.dart": "6311fae57bdbe7f76e732d55f8858f507acf836a4a1613e8739ede81c74957fe",
