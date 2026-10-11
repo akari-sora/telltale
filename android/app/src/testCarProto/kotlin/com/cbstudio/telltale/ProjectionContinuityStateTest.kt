@@ -6,16 +6,17 @@ import org.junit.Test
 
 class ProjectionContinuityStateTest {
     @Test
-    fun `start requires resumed current projection with an existing engine`() {
+    fun `paused projection can start with exact lease and registered engine`() {
         val state = ProjectionContinuityState()
         state.onProjectionLease(active = true, generation = 7)
 
-        assertFalse(state.canStart(7, 11, false, true, true, true))
-        assertFalse(state.canStart(6, 11, true, true, true, true))
-        assertFalse(state.canStart(7, 0, true, true, true, true))
-        assertFalse(state.canStart(7, 11, true, true, false, true))
-        assertFalse(state.canStart(7, 11, true, true, true, false))
-        assertTrue(state.canStart(7, 11, true, true, true, true))
+        assertTrue(state.canStart(7, 11, hasEngine = true, projectionConnected = true))
+        assertFalse(state.canStart(6, 11, hasEngine = true, projectionConnected = true))
+        assertFalse(state.canStart(7, 0, hasEngine = true, projectionConnected = true))
+        assertFalse(state.canStart(7, 11, hasEngine = false, projectionConnected = true))
+        assertFalse(state.canStart(7, 11, hasEngine = true, projectionConnected = false))
+        state.onProjectionLease(active = false, generation = 7)
+        assertFalse(state.canStart(7, 11, hasEngine = true, projectionConnected = true))
     }
 
     @Test

@@ -126,7 +126,13 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
         );
       }
       await _host.acknowledgeRelease(lease.generation);
-      if (!_disposed && revision == _leaseRevision) await _tryArm();
+      if (!_disposed && revision == _leaseRevision) {
+        // The first lease for a generation can arrive after Activity pause.
+        // A service loss from an already-armed lease stays fail-closed until
+        // foreground, while a released lease followed by a newer generation
+        // can perform the same projection-attested handoff again.
+        await _tryArm(allowWhilePaused: previous?.armed != true);
+      }
       return;
     }
     if (lease.armed) {
@@ -162,13 +168,15 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
     }
   }
 
-  Future<void> _tryArm() async {
+  Future<void> _tryArm({bool allowWhilePaused = false}) async {
     if (_disposed || _arming) return;
     final lease = _lease;
     if (lease == null || !lease.active || lease.armed) return;
     final state = ref.read(obdSessionProvider);
     final session = ref.read(obdSessionProvider.notifier);
-    if (!state.isConnected || !session.isForeground) return;
+    if (!state.isConnected || (!session.isForeground && !allowWhilePaused)) {
+      return;
+    }
     _arming = true;
     try {
       final revision = _leaseRevision;

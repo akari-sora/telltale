@@ -61,22 +61,24 @@ class CarPowertrainScreenTest {
     private fun live(value: Double) = CarSignalInput(CarSignalStatus.LIVE, value)
 
     private fun frameInput(
+        sequence: Long = 1,
         rpm: Double = 1800.0,
         coolant: Double = 90.0,
+        coolantSignal: CarSignalInput? = null,
         iat: Double = 25.0,
         map: Double = 35.0,
         voltage: Double = 14.1,
         speed: Double = 45.0,
     ) = CarTelemetryFrameInput(
         schemaVersion = 1,
-        sequence = 1,
+        sequence = sequence,
         connectionEpoch = 1,
         lifecycleEpoch = 0,
         producedAtMonotonicUs = 1_000,
         connectionPhase = CarConnectionPhase.CONNECTED,
         speedKmh = live(speed),
         rpm = live(rpm),
-        coolantC = live(coolant),
+        coolantC = coolantSignal ?: live(coolant),
         intakeAirC = live(iat),
         controlModuleVoltageV = live(voltage),
         mapKpa = live(map),
@@ -207,6 +209,27 @@ class CarPowertrainScreenTest {
         assertEquals("Coolant", coolantRow.title?.toString())
         assertEquals("108 °C · High", coolantRow.texts[0].toString())
         assertEquals(CarColor.RED, coolantRow.image?.tint)
+
+        repo.submit(
+            frameInput(
+                sequence = 2,
+                coolantSignal = CarSignalInput(CarSignalStatus.STALE, null),
+            ),
+        )
+        alertRepo.updateSnapshot(
+            CarAlertSnapshot(
+                level = CarAlertLevel.UNKNOWN,
+                coolant = CarAlertPhase.UNKNOWN_AFTER_WARNING,
+                connectionEpoch = 1L,
+            ),
+        )
+        runCurrent()
+
+        @Suppress("DEPRECATION")
+        val unknownTemplate = screen.onGetTemplate() as PaneTemplate
+        val unknownCoolantRow = unknownTemplate.pane.rows[1]
+        assertEquals("Stale", unknownCoolantRow.texts[0].toString())
+        assertEquals(CarColor.RED, unknownCoolantRow.image?.tint)
     }
 
     @Test

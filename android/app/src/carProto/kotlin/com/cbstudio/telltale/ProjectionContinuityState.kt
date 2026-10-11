@@ -31,16 +31,12 @@ internal class ProjectionContinuityState {
     fun canStart(
         requestedProjectionGeneration: Long,
         requestedConnectionGeneration: Long,
-        activityResumed: Boolean,
-        hasActivity: Boolean,
         hasEngine: Boolean,
         projectionConnected: Boolean,
     ): Boolean =
         projectionActive &&
             projectionGeneration == requestedProjectionGeneration &&
             requestedConnectionGeneration > 0 &&
-            activityResumed &&
-            hasActivity &&
             hasEngine &&
             projectionConnected
 

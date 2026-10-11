@@ -489,6 +489,9 @@ class CarHealthScreenTest {
         // MIL and DTC count display telemetry frame values, ignoring Epoch 2 DTC report
         assertEquals("Off", rows[1].texts[0].toString())
         assertEquals("0 codes", rows[2].texts[0].toString())
+        assertEquals(CarColor.DEFAULT, rows[0].image?.tint)
+        assertEquals(CarColor.DEFAULT, rows[1].image?.tint)
+        assertEquals(CarColor.DEFAULT, rows[2].image?.tint)
     }
 
     @Test

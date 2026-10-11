@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:torque_obd/car/car_projection_runtime.dart';
 import 'package:torque_obd/car/car_projection_session_runtime.dart';
 import 'package:torque_obd/car/generated/car_projection_session.g.dart';
+import 'package:torque_obd/car/generated/car_telemetry.g.dart';
 import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/state/pid_registry.dart';
 
@@ -33,6 +35,14 @@ CarProjectionLeaseMessage _lease({
   armed: armed,
   connectionGeneration: connectionGeneration,
 );
+
+bool _hasLiveCoreValues(CarTelemetryMessage frame) =>
+    frame.speedKmh.status == CarSignalStatusMessage.live &&
+    frame.speedKmh.value != null &&
+    frame.rpm.status == CarSignalStatusMessage.live &&
+    frame.rpm.value != null &&
+    frame.coolantC.status == CarSignalStatusMessage.live &&
+    frame.coolantC.value != null;
 
 Future<void> _eventually(
   bool Function() condition, {
@@ -219,6 +229,108 @@ void main() {
         reason: 'HOME reconciliation must not discard native confirmation',
       );
       expect(session.isForeground, isFalse);
+    },
+  );
+
+  test(
+    'late and reconnected leases restore paused polling and bridge frames',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final bridged = <CarTelemetryMessage>[];
+      late CarProjectionLeaseMessage armed;
+      final host = _NativeProjectionHost(messenger);
+      host.currentLease = () async {
+        if (host.currentLeaseCalls == 1) {
+          throw PlatformException(code: 'not-ready');
+        }
+        return armed;
+      };
+      host.armContinuity = (projectionGeneration, requestedConnection) async {
+        expect(projectionGeneration, armed.generation);
+        expect(requestedConnection, armed.connectionGeneration);
+        return armed;
+      };
+      host.install();
+      addTearDown(host.uninstall);
+
+      final container = ProviderContainer(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          carProjectionEnabledProvider.overrideWithValue(true),
+          carTelemetryTransportProvider.overrideWithValue(
+            (frame) async => bridged.add(frame),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final projection = container.listen(
+        carProjectionRuntimeProvider,
+        (_, _) {},
+      );
+      addTearDown(projection.close);
+      expect(projection.read(), isNotNull);
+      await _eventually(() => host.currentLeaseCalls == 1);
+
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await session.connectDemo(), isTrue);
+      final connectionGeneration = session.connectionGeneration;
+      await _eventually(
+        () => bridged.any(_hasLiveCoreValues),
+        reason: 'the connected fixture must publish a live bridge frame',
+      );
+
+      _background(binding);
+      await _eventually(
+        () => !session.engine!.isRunning,
+        reason: 'the phone lifecycle must drain polling before the late lease',
+      );
+
+      armed = _lease(
+        active: true,
+        generation: 11,
+        armed: true,
+        connectionGeneration: connectionGeneration,
+      );
+      await host.sendLease(_lease(active: true, generation: 11, armed: false));
+
+      await _eventually(
+        () =>
+            session.hasArmedProjectionContinuity &&
+            session.engine!.isRunning &&
+            bridged.last.connectionEpoch == connectionGeneration &&
+            _hasLiveCoreValues(bridged.last),
+        reason: 'the projection-attested lease must resume hidden polling',
+      );
+      expect(session.isForeground, isFalse);
+      expect(host.armContinuityCalls, 1);
+      expect(session.connectionGeneration, connectionGeneration);
+
+      await host.sendLease(_lease(active: false, generation: 11, armed: false));
+      await _eventually(
+        () =>
+            host.acknowledgedGenerations.contains(11) &&
+            !session.engine!.isRunning,
+        reason: 'disconnect must retire and drain the first lease',
+      );
+
+      armed = _lease(
+        active: true,
+        generation: 12,
+        armed: true,
+        connectionGeneration: connectionGeneration,
+      );
+      await host.sendLease(_lease(active: true, generation: 12, armed: false));
+      await _eventually(
+        () =>
+            host.armContinuityCalls == 2 &&
+            session.hasArmedProjectionContinuity &&
+            session.engine!.isRunning &&
+            _hasLiveCoreValues(bridged.last),
+        reason: 'a newer reconnected projection must reacquire while paused',
+      );
+      expect(session.isForeground, isFalse);
+      expect(session.connectionGeneration, connectionGeneration);
     },
   );
 
