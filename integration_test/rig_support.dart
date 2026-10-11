@@ -63,6 +63,12 @@ Future<void> startCleanRigApp(WidgetTester tester) async {
   if (await capturedShares.exists()) {
     await capturedShares.delete(recursive: true);
   }
+  // A handed-off Share lease survives install -r for 15 minutes. Clear its
+  // staging cache only for a clean isolated rig; recovery launches retain it.
+  final shareStaging = Directory(
+    '${(await getApplicationCacheDirectory()).path}/telltale-app-shares',
+  );
+  if (await shareStaging.exists()) await shareStaging.delete(recursive: true);
 
   await startRigAppPreservingState(tester);
 }
