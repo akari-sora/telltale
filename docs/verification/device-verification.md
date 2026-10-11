@@ -1,7 +1,8 @@
 # What was verified on hardware, and what that is worth
 
-The Android device used below is a Samsung `SM-S9280` on Android 16. Earlier
-rounds were manual screen walks; the 2026-08-23 BLE run used Flutter's
+The historical Android device below is a Samsung `SM-S9280` on Android 16.
+The 1.0.18 physical walk used a Samsung `SM-N960F` on Android 10 (API 29).
+Earlier rounds were manual screen walks; the 2026-08-23 BLE run used Flutter's
 integration-test driver on the same physical phone so a locked screen could not
 turn UI automation into a false negative.
 
@@ -70,12 +71,59 @@ the artifact, not that they walked it, which is what this file is for. A
 weaker claim that is true beats a stronger one nobody can check, and the price
 of keeping it is one sentence in the release notes saying which claim it is.
 
+## 2026-10-12 — 1.0.18 signed release walk on physical Note9
+
+Device walk attested: 1.0.18
+
+A physical Samsung `SM-N960F` on Android 10 / API 29 walked the maintainer-signed
+arm64 `field` build from source
+`93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85`. The APK installed on the phone was
+read back and matched the staged release byte for byte: package
+`com.cbstudio.telltale`, version `1.0.18`, versionCode `192`, SHA-256
+`1d0f23f816cd9c176fc54a5c4c6d3d4779cd0d099f36a42681a628e9134eb4da`,
+certificate SHA-256
+`362133c004bee5e4f458f77d4a5d199948a3c5cdb9f0868be27d6f5d9109a579`.
+Installed-APK ZIP integrity also passed.
+
+The phone initially had no Telltale field app. A genuine, same-certificate
+`1.0.17` / versionCode `182` baseline was installed and seeded with synthetic
+Demo data. A normal `adb install -r` update to `1.0.18` retained the original
+installation time, Light theme, Minimal gauge style, system-default language,
+six enabled PIDs, and a 624 KB Demo transcript. Cross-version custom-PID
+retention was not exercised: the incomplete 1.0.17 editor draft was abandoned
+without saving. On 1.0.18, custom-PID creation, editing with visible readback,
+and deletion with confirmed absence all passed.
+
+Connection/Demo, dashboard with rendered trend charts, Performance/timing,
+faults with synthetic freeze-frame data, PID management, PID editor, and Settings
+were walked in both Light and Dark themes. Captures include trend curves and axes in
+both themes, plus stationary software-fixture recording. Moving Demo correctly
+refused parked-only recording actions.
+
+A task-owned software ELM fixture reached the physical phone through a
+device-scoped ADB reverse. Initial connection, explicit UI disconnect,
+saved-adapter direct reconnect, and final disconnect passed. The screen showed
+12.6 V, 800 rpm, and 0.0 km/h; fixture evidence included two handshakes,
+`ATSP0` twice, `ATRV` 13 times, and live `010C` / `010D` traffic. This is
+localhost software TCP evidence, not Bluetooth or a vehicle observation.
+
+The app-scoped 580-line stability scan found zero fatal exceptions, Flutter
+errors, render overflows, out-of-memory errors, or ANRs. The external
+`device-note9-physical-v18` task bundle retains the sanitized acceptance report
+and 43 original 1080 × 2220 screenshots. After the walk, the UI disconnected,
+the task reverse and fixture were removed, the task-created field app was
+uninstalled, and the launcher resumed, restoring the initial package-absent
+state. No pre-existing S24 installation was changed. Android Auto / AAOS is
+covered separately by the DHU record below; this phone walk does not establish
+Google approval, Play update compatibility, or the issue #106 reporter's
+original Bluetooth adapter and vehicle.
+
 ## 2026-10-12 — 1.0.18 exact-source signed emulator acceptance
 
 This is the current release acceptance record for source
 `93c4708861ac9f4c1c1c9d4ae983dbfa44bafc85` (tree
-`102f4b146fe94cb332b48255f199fad1abc63839`). It is an emulator record; no
-physical-device attestation is added.
+`102f4b146fe94cb332b48255f199fad1abc63839`). This entry records emulator
+acceptance; the distinct physical-device walk and attestation are above.
 
 ### Exact signed field acceptance
 

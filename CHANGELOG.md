@@ -53,8 +53,18 @@ Fault Codes stayed put with moving and unknown speed and opened for the
 stationary control; no toast text is claimed because none was persistently
 captured. See `docs/verification/device-verification.md` for the evidence boundary.
 
-Release CI, physical-device update compatibility, issue #106 reporter hardware,
-and store rollout remain separate checks. These emulator receipts do not prove
+The exact signed field ARM64 build also passed a physical Samsung Note9
+(Android 10 / API 29) walk. A same-certificate 1.0.17 → 1.0.18 update retained
+the installation time, theme, gauge style, language selection, six enabled PIDs,
+and a 624 KB Demo transcript. Both themes, rendered trend curves and axes,
+custom-PID create/edit/delete, fault freeze frames, timing, settings, and
+controlled software TCP connect/disconnect/saved-adapter reconnect passed.
+Cross-version custom-PID retention was not exercised. Installed-APK readback
+matched the accepted SHA-256 above, and the app-scoped stability scan found no
+crash, Flutter error, overflow, out-of-memory error, or ANR.
+
+Release CI, issue #106 reporter hardware, Play update compatibility, and store
+rollout remain separate checks. These software-fixture receipts do not prove
 Bluetooth, a real vehicle, or Google approval. Android Auto / AAOS remains an
 engineering preview; the production `field` APK has no car app service.
 

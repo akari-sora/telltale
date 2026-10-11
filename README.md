@@ -8,8 +8,8 @@
 
 > **Install / downtime notes:** prefer
 > **[Google Play](https://play.google.com/store/apps/details?id=com.cbstudio.telltale)**;
-> community APK **[v1.0.15 on GitLab](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.15)**, or
-> **[Codeberg Releases](https://codeberg.org/ImL1s/telltale/releases)**;
+> **[maintainer-signed APKs on GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**.
+> **[Older Codeberg releases](https://codeberg.org/ImL1s/telltale/releases)** use a separate channel;
 > [Obtainium](https://github.com/ImranR98/Obtainium) →
 > `https://gitlab.com/aa22396584/telltale/-/releases` or
 > `https://codeberg.org/ImL1s/telltale/releases`.
@@ -51,24 +51,29 @@ compatibility claim.
 **Paid on Google Play, with the same app features.** The Play edition does not
 unlock extra telemetry or diagnostic features. It is the convenient choice for
 Play-managed installation and updates, and purchasing it supports ongoing
-development and maintenance. The community-signed APK below and builds from
+development and maintenance. The maintainer-signed APKs below and builds from
 source remain free to use.
 
-**Community-signed APK** (same features as Play; release binaries are not stored
-in the source tree):
+**GitLab maintainer-signed APKs** (release binaries are not stored in the source
+tree):
 
-1. **[GitLab aa22396584 v1.0.14](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.14)**
-2. **[Codeberg v1.0.14](https://codeberg.org/ImL1s/telltale/releases/tag/v1.0.14)**
-3. **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**
+**[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**
 
-Open the release and select its `.apk` asset. [Obtainium](https://github.com/ImranR98/Obtainium)
-can track updates from `https://gitlab.com/aa22396584/telltale/-/releases` or
-`https://codeberg.org/ImL1s/telltale/releases`.
+Open the release and select a `field` APK for the normal phone app, with the ABI
+matching your device. The separate `carproto` APK is an Android Auto/AAOS
+engineering preview; the `field` APK has no car app service.
+[Obtainium](https://github.com/ImranR98/Obtainium) can track updates from
+`https://gitlab.com/aa22396584/telltale/-/releases`.
 
-Community APKs use a **different signing key** from Google Play. They cannot
-update, or be updated by, the Play build. Switching between them requires
-uninstalling Telltale; export anything you need first because uninstalling
-removes local app data.
+GitLab uses the maintainer signing lineage described in the
+[release procedure](docs/maintainers/release.md). Android permits an in-place
+update only when the installed and replacement APK signatures are compatible.
+The signed GitLab 1.0.17 → 1.0.18 update was exercised without uninstalling;
+this does not establish Google Play update compatibility, since Play can use a
+different app-signing certificate. GitHub community builds and
+[older Codeberg releases](https://codeberg.org/ImL1s/telltale/releases) are
+separate release channels. Keep your installed app and data when a signature
+check refuses an update; export the data before any deliberate uninstall.
 
 ## What it supports
 
