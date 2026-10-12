@@ -26,7 +26,7 @@ class ProjectionForegroundService : Service() {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ID,
-                    "OBD adapter connection",
+                    getString(R.string.projection_notification_channel_name),
                     NotificationManager.IMPORTANCE_LOW,
                 ),
             )
@@ -97,12 +97,12 @@ class ProjectionForegroundService : Service() {
     private fun notification(liveTelemetry: Boolean) =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(applicationInfo.icon)
-            .setContentTitle("Telltale OBD adapter connected")
+            .setContentTitle(getString(R.string.projection_notification_title))
             .setContentText(
                 if (liveTelemetry) {
-                    "Live vehicle telemetry is continuing for Android Auto"
+                    getString(R.string.projection_notification_live_body)
                 } else {
-                    "Waiting for Android Auto"
+                    getString(R.string.projection_notification_waiting_body)
                 },
             )
             .setOngoing(true)

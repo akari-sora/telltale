@@ -1,0 +1,1 @@
+Phone and Android Auto now share one Telltale app and OBD connection. Improved cold car launch, remembered-adapter reconnection, and background continuity. Read-only automotive diagnostics; use a supported OBD adapter.

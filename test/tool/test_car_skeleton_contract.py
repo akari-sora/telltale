@@ -1,5 +1,6 @@
 from pathlib import Path
 import unittest
+import xml.etree.ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -75,6 +76,43 @@ class CarSkeletonContractTest(unittest.TestCase):
             on_destroy.index("ProjectionContinuityRuntime.markServiceStopped"),
             on_destroy.index("super.onDestroy()"),
         )
+
+    def test_projection_service_notification_copy_is_localized(self):
+        service = self.read(
+            "android/app/src/carProto/kotlin/com/cbstudio/telltale/"
+            "ProjectionForegroundService.kt"
+        )
+        expected = {
+            "projection_notification_channel_name",
+            "projection_notification_title",
+            "projection_notification_live_body",
+            "projection_notification_waiting_body",
+        }
+
+        for resource in expected:
+            self.assertIn(f"R.string.{resource}", service)
+
+        for hardcoded in (
+            '"OBD adapter connection"',
+            '"Telltale OBD adapter connected"',
+            '"Live vehicle telemetry is continuing for Android Auto"',
+            '"Waiting for Android Auto"',
+        ):
+            self.assertNotIn(hardcoded, service)
+
+        for values_dir in ("values", "values-zh-rTW"):
+            path = (
+                ROOT
+                / "android/app/src/carProto/res"
+                / values_dir
+                / "strings.xml"
+            )
+            strings = {
+                node.attrib["name"]: node.text
+                for node in ET.parse(path).getroot().findall("string")
+            }
+            self.assertEqual(expected, strings.keys())
+            self.assertTrue(all(value and value.strip() for value in strings.values()))
 
     def test_projection_service_claim_and_retirement_are_generation_scoped(self):
         service = self.read(

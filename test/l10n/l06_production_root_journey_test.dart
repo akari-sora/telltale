@@ -1009,6 +1009,14 @@ void main() {
           findsOneWidget,
         );
 
+        // The guard feedback has served its assertion. Remove it before
+        // exercising the dashboard control so the Scaffold overlay cannot
+        // intercept the stop-button tap on a busy test runner.
+        ScaffoldMessenger.of(
+          tester.element(find.byType(SettingsScreen)),
+        ).removeCurrentSnackBar();
+        await tester.pump();
+
         // Navigate back to Dashboard to stop recording
         final dashNav = find.byIcon(Icons.speed_outlined);
         await tester.tap(dashNav);
@@ -1021,10 +1029,11 @@ void main() {
         await Scrollable.ensureVisible(tester.element(stopBtn));
         await tester.pump(const Duration(milliseconds: 100));
         await tester.tap(stopBtn);
-        await harness.pumpUntil(
+        final completed = await harness.pumpUntil(
           tester,
           () => harness.appRef.read(telemetryRecorderProgressProvider).state.phase == TelemetryRecorderPhase.completed,
         );
+        expect(completed, isTrue, reason: 'Recorder did not settle to completed');
         await tester.runAsync(harness.appRef.read(telemetryRecorderControllerProvider).drainFinalization);
         await tester.pump(const Duration(milliseconds: 100));
 
