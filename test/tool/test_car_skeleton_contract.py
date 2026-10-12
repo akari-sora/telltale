@@ -44,6 +44,8 @@ class CarSkeletonContractTest(unittest.TestCase):
         for flavor in ("field", "carProto"):
             manifest = self.read(f"android/app/src/{flavor}/AndroidManifest.xml")
             self.assertIn('android:name=".ProjectedTelltaleApplication"', manifest)
+            self.assertIn('xmlns:tools="http://schemas.android.com/tools"', manifest)
+            self.assertIn('tools:replace="android:name"', manifest)
             self.assertIn("com.google.android.gms.car.application", manifest)
             self.assertIn("ProjectionForegroundService", manifest)
             self.assertIn('android:foregroundServiceType="connectedDevice"', manifest)
