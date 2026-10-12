@@ -1,5 +1,5 @@
 # All gates on the Grok on-demand project Runner (no SaaS for full-gate*).
-# Localhost Flutter+NDK image only exists on that host (pull_policy=if-not-present).
+# Pull the verified public Flutter image by immutable digest on the selected host.
 stages: [gate]
 
 default:
@@ -8,14 +8,14 @@ default:
 variables:
   PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
   GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false -Djava.net.preferIPv4Stack=true"
-  ANDROID_HOME: "/opt/android-sdk-linux"
-  ANDROID_SDK_ROOT: "/opt/android-sdk-linux"
+  ANDROID_HOME: "/opt/android"
+  ANDROID_SDK_ROOT: "/opt/android"
 
 .gate-common:
   stage: gate
   timeout: 1h
   tags: [grok-box, ondemand, telltale]
-  image: localhost/telltale-ci-flutter:3.47.0
+  image: docker.io/plugfox/flutter@sha256:9cc3fb4d2c742c21d8bb6ab16eef657810b27ac78429920c6cd644dc8e158e22
   cache:
     key: pub-3.47.0
     paths: [.pub-cache/]
