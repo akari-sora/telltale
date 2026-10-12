@@ -8,11 +8,15 @@ import org.junit.Test
 
 class ProjectionContinuityStateTest {
     @Test
-    fun `headless active projection retains cold start engine`() {
+    fun `projection signal does not duplicate car service engine ownership`() {
         val state = ProjectionContinuityState()
 
         state.onProjectionLease(active = true, generation = 1)
-        assertTrue(state.shouldRetainEngine)
+        assertTrue(state.projectionActive)
+        assertFalse(
+            "CarAppService bootstrap owns the engine while projection is active",
+            state.shouldRetainEngine,
+        )
 
         state.onProjectionLease(active = false, generation = 1)
         assertFalse(state.shouldRetainEngine)

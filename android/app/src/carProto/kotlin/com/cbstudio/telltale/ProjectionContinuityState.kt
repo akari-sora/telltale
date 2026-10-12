@@ -155,7 +155,12 @@ internal class ProjectionContinuityState {
         get() = producerConnectionGeneration != null || pendingProducerConnectionGeneration != null
 
     val shouldRetainEngine: Boolean
-        get() = projectionActive || hasProducerOrPending || releaseAwaitingAck != null
+        // The CarAppService bootstrap owns the engine while projection is
+        // active. This state only extends that lifetime for producer startup
+        // and the bounded release handshake; duplicating the service owner
+        // here would retain a stale engine if the service dies before its
+        // final inactive lease is delivered.
+        get() = hasProducerOrPending || releaseAwaitingAck != null
 
     val shouldHoldWakeLock: Boolean
         get() = armed ||
