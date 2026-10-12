@@ -7,6 +7,16 @@ import androidx.car.app.validation.HostValidator
 
 class TelltaleCarAppService : CarAppService() {
 
+    override fun onCreate() {
+        super.onCreate()
+        (application as? CarProcessBootstrap)?.ensureCarRuntimeStarted()
+    }
+
+    override fun onDestroy() {
+        (application as? CarProcessBootstrap)?.releaseCarRuntimeIfIdle()
+        super.onDestroy()
+    }
+
     override fun createHostValidator(): HostValidator {
         val debuggable =
             (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0

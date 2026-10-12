@@ -1,11 +1,8 @@
 package com.cbstudio.telltale
 
-import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import java.lang.ref.WeakReference
 import io.flutter.BuildConfig as FlutterBuildConfig
-import io.flutter.FlutterInjector
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterShellArgs
@@ -72,28 +69,7 @@ class MainActivity : FlutterActivity() {
      * flags through them, and ours go last so the denylist still wins.
      */
     private fun applyRendererDecision() {
-        val decision = rendererDecision
-        val loader = FlutterInjector.instance().flutterLoader()
-        val initialised = loader.initialized()
-        val applied = RendererPolicy.recordApplied(rendererApplied, initialised)
-        if (initialised) {
-            // Either this app applied the decision in an earlier activity of
-            // this process (a warm relaunch), and it still stands; or
-            // something else started the engine first, in which case the
-            // decision was never applied and the metadata says so rather
-            // than claiming a backend nobody asked for.
-            rendererApplied = applied
-            Log.i(
-                TAG,
-                if (applied) "renderer: ${decision.mode.label} (${decision.reason}), applied earlier in this process"
-                else "renderer: ${decision.mode.label} not applied, engine initialised before MainActivity (${decision.reason})",
-            )
-            return
-        }
-        loader.startInitialization(applicationContext)
-        loader.ensureInitializationComplete(applicationContext, toolingShellArgs() + decision.shellArgs)
-        rendererApplied = applied
-        Log.i(TAG, "renderer: ${decision.mode.label} (${decision.reason})")
+        RendererProcessRuntime.initialize(applicationContext, toolingShellArgs())
     }
 
     /**
@@ -106,13 +82,17 @@ class MainActivity : FlutterActivity() {
         if (FlutterBuildConfig.RELEASE) emptyArray() else FlutterShellArgs.fromIntent(intent).toArray()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
+        // A car-service cold start creates and auto-registers this engine
+        // before an Activity exists. Do not register plugins a second time
+        // when the phone UI later attaches to that exact process engine.
+        if (!FlavorPlatformRegistrar.ownsProcessEngine(flutterEngine)) {
+            super.configureFlutterEngine(flutterEngine)
+        }
         ApplicationPlatformChannels.register(
             flutterEngine = flutterEngine,
             context = applicationContext,
-            renderer = if (rendererApplied == true) rendererDecision.mode.label else UNKNOWN,
-            rendererReason = rendererDecision.reason +
-                (if (rendererApplied == true) "" else " (not applied: engine initialised before this app decided)"),
+            renderer = RendererProcessRuntime.label(),
+            rendererReason = RendererProcessRuntime.reason(),
         )
 
         MethodChannel(
@@ -186,15 +166,13 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // Flavor-provided, resolved at compile time. carProto registers the
-        // one-way car telemetry bridge; field / rig / wear compile a no-op.
+        // Flavor-provided, resolved at compile time. field and carProto
+        // register the one-way car telemetry bridge; rig / wear compile a no-op.
         // src/main must never name car types directly.
         FlavorPlatformRegistrar.register(flutterEngine)
     }
 
     private companion object {
-        const val TAG = "Telltale"
-
         @Volatile
         var currentActivity: WeakReference<MainActivity>? = null
 
@@ -202,38 +180,7 @@ class MainActivity : FlutterActivity() {
             if (currentActivity?.get() === activity) currentActivity = null
         }
 
-        /**
-         * Decided once per process. A recreated activity must not re-read the
-         * properties and relabel a process that is already rendering on one
-         * backend; and below the engine's own API gate nothing is read at all,
-         * because the engine picks Skia there without being asked.
-         */
-        val rendererDecision: RendererDecision by lazy {
-            val sdk = Build.VERSION.SDK_INT
-            if (sdk < RendererPolicy.MIN_API_FOR_IMPELLER) {
-                RendererPolicy.decide(sdk, null, null)
-            } else {
-                // One deadline for both reads, so the budget is per process
-                // and not per property. What it bounds, and what it does not,
-                // is on [DeviceProperties.read].
-                val deadline = System.nanoTime() + DeviceProperties.DEFAULT_BUDGET_NANOS
-                val board = DeviceProperties.read(RendererPolicy.BOARD_PLATFORM, deadline)
-                val vulkan = DeviceProperties.read(RendererPolicy.VULKAN_HARDWARE, deadline)
-                // Which path answered is worth one line each: whether
-                // reflection survives the hidden-API policy on a given
-                // Android release is only ever known from a run in the app.
-                Log.i(TAG, "property ${RendererPolicy.BOARD_PLATFORM} via ${board.via}")
-                Log.i(TAG, "property ${RendererPolicy.VULKAN_HARDWARE} via ${vulkan.via}")
-                RendererPolicy.decide(sdk, board.value, vulkan.value)
-            }
-        }
-
-        /** Null until [applyRendererDecision] has run in this process. */
-        @Volatile
-        var rendererApplied: Boolean? = null
-
         const val SCREEN_WAKE_CHANNEL = "com.cbstudio.telltale/screen_wake"
         const val HUD_DISPLAY_CHANNEL = "com.cbstudio.telltale/hud_display"
-        const val UNKNOWN = "unknown"
     }
 }

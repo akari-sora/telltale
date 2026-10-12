@@ -70,6 +70,10 @@ class CarHardwareContractTest(unittest.TestCase):
         self.assertIn("com.google.android.gms.permission.CAR_SPEED", car_proto)
         self.assertNotIn("android.car.permission.CAR_SPEED", car_proto)
 
+        field = self.read("android/app/src/field/AndroidManifest.xml")
+        self.assertIn("com.google.android.gms.permission.CAR_SPEED", field)
+        self.assertNotIn("android.car.permission.CAR_SPEED", field)
+
         automotive = self.read("android/automotive/src/main/AndroidManifest.xml")
         self.assertIn("android.car.permission.CAR_SPEED", automotive)
         self.assertIn("android.car.permission.READ_CAR_DISPLAY_UNITS", automotive)

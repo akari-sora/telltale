@@ -83,9 +83,9 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
-        // AA-02: only the projected Android Auto prototype hosts the one-way
-        // car telemetry producer. Evaluated from platform and flavor identity,
-        // failing open to keep car screen alive if platform metadata timed out.
+        // AA-02: the unified field app and carProto compatibility flavor host
+        // the one-way car telemetry producer. Evaluate both platform and flavor
+        // identity, failing open if platform metadata timed out.
         carProjectionEnabledProvider.overrideWithValue(
           carProjection.enabled,
         ),

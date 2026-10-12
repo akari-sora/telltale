@@ -1,6 +1,6 @@
 # AA-00 — Android for Cars Eligibility Spike
 
-Status: PROVISIONAL / NOT APPROVED FOR PRODUCTION DISTRIBUTION
+Status: INTEGRATED PHONE APP FOR TESTING / GOOGLE PRODUCTION CATEGORY REVIEW PENDING
 
 ## Scope
 
@@ -9,8 +9,10 @@ Telltale is evaluating a read-only vehicle-monitoring experience for:
 - Android Auto projected apps
 - Android Automotive OS templated apps
 
-The production mobile package must remain unaffected until category
-eligibility is confirmed.
+From 1.0.19, the normal `field` phone app includes Android Auto in the same
+`com.cbstudio.telltale` installation. This supersedes the earlier prototype-only
+isolation decision at the user's explicit request. The integration decision does
+not establish Google Play automotive category approval or physical car acceptance.
 
 ## Provisional category
 
@@ -27,18 +29,19 @@ accepted IoT use case.
 
 ## Isolation contract
 
-The following production variants MUST NOT include Android for Cars metadata:
+The following variants MUST NOT include projected Android Auto components:
 
-- field
 - rig
 - wear
 
-Only:
+Projected Android Auto is included in:
 
-- carProto
-- :automotive prototype
+- field (normal phone app)
+- carProto (legacy development/testing identity)
 
-may depend on `:car-core` while AA-00 is unresolved.
+The standalone `:automotive` artifact remains an AAOS form-factor build. All
+three car-capable variants may depend on `:car-core`; AAOS-only permissions must
+not leak into either projected phone variant.
 
 ## Forbidden prototype claims
 
@@ -58,13 +61,13 @@ It MUST NOT expose:
 
 | Target | Artifact | applicationId | Purpose |
 | :--- | :--- | :--- | :--- |
+| Integrated Phone + Auto | `app-field-release.aab` / field APKs | `com.cbstudio.telltale` | Normal app with phone and projected car screens sharing one connection |
 | Projected Prototype | `app-carProto-debug.apk` | `com.cbstudio.telltale.carproto` | Android Auto phone projection test vehicle |
 | AAOS Prototype | `automotive-debug.apk` | `com.cbstudio.telltale.carproto.aaos` | Standalone Android Automotive OS test vehicle |
-| Production ID | Release artifacts | Deferred until eligibility decision | Subject to Google Play single-listing vs separate-listing review |
 
 ## Promotion criteria
 
-Production Android Auto/AAOS support may not be enabled until all of:
+Google Play production promotion for automotive distribution requires all of:
 
 1. Android for Cars category eligibility has been validated.
 2. Google Play review strategy is documented.
@@ -73,4 +76,8 @@ Production Android Auto/AAOS support may not be enabled until all of:
 5. AA-02 telemetry bridge is read-only and versioned.
 6. DHU / AAOS emulator acceptance gates pass.
 
-Until then, `carProto` remains non-production.
+Engineering integration and internal testing can proceed before that review.
+Real-head-unit installation uses a trusted Play testing source; the Android Auto
+"unknown sources" option does not permit Car App Library apps. A DHU acceptance
+record states the actual phone, APK, installation source, and simulated host.
+It does not imply a physical vehicle/head-unit compatibility result.

@@ -9,7 +9,7 @@ class CarSkeletonContractTest(unittest.TestCase):
     def read(self, relative: str) -> str:
         return (ROOT / relative).read_text(encoding="utf-8")
 
-    def test_production_and_variant_manifests_have_no_car_metadata(self):
+    def test_non_projection_manifests_have_no_car_metadata(self):
         non_car_manifests = [
             "android/app/src/main/AndroidManifest.xml",
             "android/app/src/rig/AndroidManifest.xml",
@@ -40,19 +40,15 @@ class CarSkeletonContractTest(unittest.TestCase):
                     msg=f"Forbidden car token {token!r} found in {path}",
                 )
 
-    def test_android_auto_metadata_is_isolated_to_car_proto(self):
-        manifest = self.read(
-            "android/app/src/carProto/AndroidManifest.xml"
-        )
-
-        self.assertIn(
-            "com.google.android.gms.car.application",
-            manifest,
-        )
-        self.assertIn("ProjectionForegroundService", manifest)
-        self.assertIn('android:foregroundServiceType="connectedDevice"', manifest)
-        self.assertIn("android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE", manifest)
-        self.assertIn("android.permission.WAKE_LOCK", manifest)
+    def test_android_auto_metadata_is_in_field_and_car_proto(self):
+        for flavor in ("field", "carProto"):
+            manifest = self.read(f"android/app/src/{flavor}/AndroidManifest.xml")
+            self.assertIn('android:name=".ProjectedTelltaleApplication"', manifest)
+            self.assertIn("com.google.android.gms.car.application", manifest)
+            self.assertIn("ProjectionForegroundService", manifest)
+            self.assertIn('android:foregroundServiceType="connectedDevice"', manifest)
+            self.assertIn("android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE", manifest)
+            self.assertIn("android.permission.WAKE_LOCK", manifest)
 
     def test_projection_service_is_non_sticky_and_releases_its_wake_lock(self):
         service = self.read(
@@ -120,8 +116,9 @@ class CarSkeletonContractTest(unittest.TestCase):
         )
 
         self.assertIn("state.canClaimProducer(", claim_producer)
-        self.assertIn("activityResumed = activityResumed", claim_producer)
-        self.assertIn("hasEngine = engine != null", claim_producer)
+        self.assertIn("producerStartAuthorized = activityResumed ||", claim_producer)
+        self.assertIn("(carServiceActive && state.projectionActive)", claim_producer)
+        self.assertIn("hasEngine = engineOwner.current() != null", claim_producer)
         self.assertEqual(claim_producer.count("startForegroundService("), 1)
         self.assertLess(
             claim_producer.index("state.beginProducerClaim(connectionGeneration)"),
@@ -134,6 +131,41 @@ class CarSkeletonContractTest(unittest.TestCase):
             "ProjectionForegroundService.stopProducer(connectionGeneration)",
             runtime,
         )
+
+    def test_car_service_bootstraps_projected_process_before_session(self):
+        service = self.read(
+            "android/car-core/src/main/kotlin/com/cbstudio/telltale/car/"
+            "TelltaleCarAppService.kt"
+        )
+        application = self.read(
+            "android/app/src/carProto/kotlin/com/cbstudio/telltale/"
+            "ProjectedTelltaleApplication.kt"
+        )
+        runtime = self.read(
+            "android/app/src/carProto/kotlin/com/cbstudio/telltale/"
+            "ProjectionContinuityRuntime.kt"
+        )
+
+        self.assertIn("(application as? CarProcessBootstrap)?.ensureCarRuntimeStarted()", service)
+        self.assertIn("(application as? CarProcessBootstrap)?.releaseCarRuntimeIfIdle()", service)
+        self.assertIn("class ProjectedTelltaleApplication", application)
+        self.assertIn("ProjectionContinuityRuntime.onCarServiceStarted(this)", application)
+        self.assertIn("FlutterEngine(context.applicationContext)", runtime)
+        self.assertIn("executeDartEntrypoint", runtime)
+        self.assertIn("fun retainedEngine(): FlutterEngine? = engineOwner.current()", runtime)
+        self.assertIn("fun ownsEngine(candidate: FlutterEngine)", runtime)
+
+        main_activity = self.read(
+            "android/app/src/main/kotlin/com/cbstudio/telltale/MainActivity.kt"
+        )
+        self.assertIn("if (!FlavorPlatformRegistrar.ownsProcessEngine(flutterEngine))", main_activity)
+
+        for flavor in ("rig", "wear"):
+            registrar = self.read(
+                f"android/app/src/{flavor}/kotlin/com/cbstudio/telltale/"
+                "FlavorPlatformRegistrar.kt"
+            )
+            self.assertNotIn("ProjectedTelltaleApplication", registrar)
 
     def test_aaos_manifest_has_no_projected_metadata(self):
         manifest = self.read(
@@ -148,28 +180,23 @@ class CarSkeletonContractTest(unittest.TestCase):
         self.assertNotIn("ProjectionForegroundService", manifest)
         self.assertNotIn("FOREGROUND_SERVICE_CONNECTED_DEVICE", manifest)
 
-    def test_car_core_is_only_linked_to_car_proto_in_flutter_app(self):
+    def test_car_core_is_linked_to_both_projection_flavors(self):
         gradle = self.read("android/app/build.gradle.kts")
 
-        self.assertIn(
-            'add("carProtoImplementation", project(":car-core"))',
-            gradle,
-        )
-        self.assertIn(
-            'add(\n        "carProtoImplementation",\n        "androidx.car.app:app-projected:1.8.0-rc01",\n    )',
-            gradle,
-        )
+        self.assertIn('listOf("field", "carProto").forEach { flavor ->', gradle)
+        self.assertIn('add("${flavor}Implementation", project(":car-core"))', gradle)
+        self.assertIn('"androidx.car.app:app-projected:1.8.0-rc01"', gradle)
+        self.assertIn('sourceSets.getByName("field").java.srcDir("src/carProto/kotlin")', gradle)
+        self.assertIn('sourceSets.getByName("field").res.srcDir("src/carProto/res")', gradle)
 
-        # Ensure :car-core and androidx.car.app are not linked into non-car scopes
+        # Ensure :car-core and androidx.car.app are not linked into non-projection scopes.
         forbidden_scopes = [
             'implementation(project(":car-core"))',
             'api(project(":car-core"))',
-            'fieldImplementation(project(":car-core"))',
             'rigImplementation(project(":car-core"))',
             'wearImplementation(project(":car-core"))',
             'releaseImplementation(project(":car-core"))',
             'implementation("androidx.car.app',
-            'fieldImplementation("androidx.car.app',
             'rigImplementation("androidx.car.app',
             'wearImplementation("androidx.car.app',
         ]
@@ -233,6 +260,19 @@ class CarSkeletonContractTest(unittest.TestCase):
             auto_gradle,
             "AAOS prototype MUST NOT reuse the projected carProto applicationId",
         )
+
+    def test_unsigned_release_override_never_falls_back_to_debug_signing(self):
+        gradle = self.read("android/app/build.gradle.kts")
+        release_block = gradle[
+            gradle.index("buildTypes {"):
+            gradle.index("// Release artifacts must be release-signed")
+        ]
+
+        self.assertIn('signingConfig = signingConfigs.getByName("release")', release_block)
+        self.assertIn("signingConfig = null", release_block)
+        self.assertNotIn('signingConfigs.getByName("debug")', release_block)
+        self.assertIn("allowUnsignedRelease", gradle)
+        self.assertIn("if (requested.isNotEmpty() && !optedOut)", gradle)
 
 
 if __name__ == "__main__":

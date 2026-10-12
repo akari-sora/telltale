@@ -7,6 +7,28 @@
 
 ---
 
+## 2026-10-12 integration decision (supersedes the field fallback below)
+
+The normal `field` artifact now includes phone and Android Auto functionality
+under `com.cbstudio.telltale`. A user installs one app and shares the same OBD
+connection, settings, and diagnostic reports between phone and projected screens.
+The former emergency phone-only `fieldRelease` topology described below is a
+historical decision and no longer describes 1.0.19 builds. `rig` and `wear` still
+exclude projected-car services; the standalone AAOS artifact remains separate.
+
+The first distribution target is Google Play internal testing. Before creating
+or promoting a Play release, read back consumed bundle codes and the actual Play
+app-signing certificate, then compare them with the installed test phone. A
+signer mismatch cannot be repaired by `adb install -r`; preserve data and resolve
+the migration explicitly. Internal App Sharing uses a separate signing key and
+is not interchangeable with the internal test track.
+
+Automotive category acceptance remains pending. Integration, internal testing,
+and the user's selected DHU simulation do not establish Google production
+approval or actual vehicle/head-unit compatibility. All CI and signed builds
+must run on the selected Ryzen 9700X, with exact-source acceptance and ephemeral
+signing inputs; the normal public APK/AAB uses one package identity.
+
 ## 1. Context & Problem Statement
 
 Prior to Phase AA-07, `docs/android-auto/aa-00-eligibility.md` established an isolation contract:

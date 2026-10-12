@@ -6,7 +6,7 @@ import io.flutter.embedding.engine.FlutterEngine
 /**
  * rig flavor: registers nothing.
  *
- * MainActivity calls this hook in every flavor; only carProto supplies a body
+ * MainActivity calls this hook in every flavor; projected flavors supply a body
  * (the one-way car telemetry bridge). Keeping a same-named no-op here means
  * src/main never references car code and no reflection is needed.
  */
@@ -14,6 +14,8 @@ internal object FlavorPlatformRegistrar {
     fun register(flutterEngine: FlutterEngine) = Unit
     fun provideFlutterEngine(context: Context): FlutterEngine? = null
     fun shouldDestroyEngineWithHost(): Boolean = true
+
+    fun ownsProcessEngine(candidate: FlutterEngine): Boolean = false
     fun onActivityResumed(activity: MainActivity) = Unit
     fun onActivityPaused(activity: MainActivity) = Unit
     fun onActivityDestroyed(activity: MainActivity) = Unit

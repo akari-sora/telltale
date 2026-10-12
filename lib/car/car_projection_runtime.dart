@@ -1,7 +1,7 @@
 /// Riverpod wiring for the AA-02 car telemetry projection.
 ///
-/// Active only in the projected Android Auto prototype (carProto). Everywhere
-/// else the runtime provider returns null without listening to anything,
+/// Active in the unified field app and the carProto compatibility flavor.
+/// Everywhere else the runtime provider returns null without listening to anything,
 /// arming a timer, or creating the Pigeon client.
 ///
 /// Vehicle data remains read-only. The companion lifecycle runtime may grant
@@ -24,23 +24,23 @@ import 'car_projection_session_runtime.dart';
 import 'car_telemetry_bridge.dart';
 import 'car_telemetry_projector.dart';
 
-/// applicationId of the projected Android Auto prototype flavor.
+/// applicationId of the projected Android Auto compatibility flavor.
 const String androidCarProtoApplicationId = 'com.cbstudio.telltale.carproto';
 
 /// Reasons emitted by [isCarProjectionEligible].
 abstract final class CarProjectionReason {
-  /// Android host, `carProto` flavor, and confirmed carProto applicationId.
+  /// Android host with a supported flavor and its matching applicationId.
   static const String identityVerified = 'identity_verified';
 
-  /// Android host and `carProto` flavor, but platform metadata was unavailable
+  /// Android host with a supported flavor, but platform metadata was unavailable
   /// (e.g. timeout / fallback). Fail open for projection so car screen works.
   static const String metadataUnavailable = 'metadata_unavailable';
 
-  /// Android host and `carProto` flavor, but platform metadata reports a
-  /// conflicting applicationId (e.g. field, rig, or AAOS).
+  /// Android host with a supported flavor, but platform metadata reports a
+  /// conflicting applicationId.
   static const String identityConflict = 'identity_conflict';
 
-  /// Process flavor is not `carProto` (e.g. field, rig, wear).
+  /// Process flavor is not projected (e.g. rig or wear).
   static const String flavorIneligible = 'flavor_ineligible';
 
   /// Platform is not Android (e.g. iOS, Web, desktop).
@@ -73,14 +73,17 @@ final class CarProjectionDecision {
 /// Evaluates whether this process hosts the car projection producer.
 ///
 /// Arbitration rule:
-/// `isAndroid && appFlavor == 'carProto' && (metadata.applicationId == 'com.cbstudio.telltale.carproto' || metadata.applicationId == unknownPlatformMetadata)`
+/// Android projection is enabled only for a matching flavor/application pair:
+/// `field` + `com.cbstudio.telltale`, or `carProto` +
+/// `com.cbstudio.telltale.carproto`. Unknown metadata fails open for these two
+/// flavors so a metadata timeout cannot blank the car screen.
 ///
 /// Returns a [CarProjectionDecision] containing `enabled` and `reason`:
 /// - [CarProjectionReason.nonAndroid]: platform is not Android.
-/// - [CarProjectionReason.flavorIneligible]: flavor is not `'carProto'`.
-/// - [CarProjectionReason.identityVerified]: Android + `carProto` + verified applicationId.
-/// - [CarProjectionReason.metadataUnavailable]: Android + `carProto` + metadata timed out / unknown.
-/// - [CarProjectionReason.identityConflict]: Android + `carProto` + conflicting applicationId.
+/// - [CarProjectionReason.flavorIneligible]: flavor is neither `field` nor `carProto`.
+/// - [CarProjectionReason.identityVerified]: Android + supported flavor + matching applicationId.
+/// - [CarProjectionReason.metadataUnavailable]: Android + supported flavor + metadata timed out / unknown.
+/// - [CarProjectionReason.identityConflict]: Android + supported flavor + conflicting applicationId.
 CarProjectionDecision isCarProjectionEligible(
   PlatformMetadata metadata, {
   bool? isAndroid,
@@ -95,14 +98,19 @@ CarProjectionDecision isCarProjectionEligible(
   }
 
   final effectiveFlavor = flavor ?? appFlavor;
-  if (effectiveFlavor != 'carProto') {
+  final expectedApplicationId = switch (effectiveFlavor) {
+    'field' => androidFieldApplicationId,
+    'carProto' => androidCarProtoApplicationId,
+    _ => null,
+  };
+  if (expectedApplicationId == null) {
     return const CarProjectionDecision(
       enabled: false,
       reason: CarProjectionReason.flavorIneligible,
     );
   }
 
-  if (metadata.applicationId == androidCarProtoApplicationId) {
+  if (metadata.applicationId == expectedApplicationId) {
     return const CarProjectionDecision(
       enabled: true,
       reason: CarProjectionReason.identityVerified,

@@ -8,6 +8,22 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+## 1.0.19 — 2026-10-12
+
+- Integrated Android Auto into the normal phone app (`com.cbstudio.telltale`).
+  Phone and projected screens now share one installation, settings, and OBD
+  connection; a separate car prototype package is no longer required.
+- Reused the existing read-only car telemetry, foreground continuity, reconnect,
+  and parked diagnostic flows in the normal field variant. Rig and Wear builds
+  retain their separate form-factor contracts.
+- Added field identity, native projection, and merged-manifest regression gates.
+- Added an exact-source, maintainer-signed AAB/APK build on the Ryzen 9700X,
+  bound to a successful protected-main full-gate job.
+
+Google Play internal testing and device acceptance are recorded separately from
+production automotive category approval. The final release records the actual
+accepted artifact and simulated head-unit scope.
+
 ## 1.0.18 — 2026-10-12
 
 Android Auto / AAOS preview readability and lifecycle work merged after `v1.0.17`:

@@ -22,7 +22,7 @@ import com.cbstudio.telltale.carbridge.generated.CarFreezeReadingMessage
 import com.cbstudio.telltale.carbridge.generated.CarFreezeSignalKindMessage
 
 /**
- * The carProto-only receiving end of the one-way diagnostics bridge.
+ * The receiving end of the one-way diagnostics bridge shared by projected flavors.
  */
 class CarDiagnosticsHostApiImpl(
     private val repository: CarDtcRepository,

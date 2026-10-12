@@ -9,15 +9,13 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <application>
+    <application android:name=".ProjectedTelltaleApplication">
         <service
             android:name=".ProjectionForegroundService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
-        <!--
-          AA-00 / AA-01 prototype only.
-          Never move this to src/main until category eligibility is accepted.
-        -->
+        <!-- Developer-compatibility package; field declares the same projected
+             metadata under the production applicationId. -->
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />

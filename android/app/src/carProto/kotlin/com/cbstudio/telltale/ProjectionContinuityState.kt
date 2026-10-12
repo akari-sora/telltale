@@ -30,11 +30,11 @@ internal class ProjectionContinuityState {
 
     fun canClaimProducer(
         requestedConnectionGeneration: Long,
-        activityResumed: Boolean,
+        producerStartAuthorized: Boolean,
         hasEngine: Boolean,
     ): Boolean =
         requestedConnectionGeneration > 0 &&
-            activityResumed &&
+            producerStartAuthorized &&
             hasEngine &&
             producerConnectionGeneration != requestedConnectionGeneration &&
             pendingProducerConnectionGeneration != requestedConnectionGeneration
@@ -155,7 +155,7 @@ internal class ProjectionContinuityState {
         get() = producerConnectionGeneration != null || pendingProducerConnectionGeneration != null
 
     val shouldRetainEngine: Boolean
-        get() = hasProducerOrPending || releaseAwaitingAck != null
+        get() = projectionActive || hasProducerOrPending || releaseAwaitingAck != null
 
     val shouldHoldWakeLock: Boolean
         get() = armed ||

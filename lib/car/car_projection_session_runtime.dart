@@ -4,7 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../state/obd_session.dart';
 import '../obd/transport/obd_transport.dart';
+import '../state/settings.dart';
 import 'generated/car_projection_session.g.dart';
+
+typedef CarProjectionReconnect = Future<bool> Function(LastAdapter adapter);
+
+final carProjectionReconnectProvider = Provider<CarProjectionReconnect>(
+  (ref) => ref.read(obdSessionProvider.notifier).reconnectRememberedAdapter,
+);
 
 final class CarProjectionLeaseOrder {
   int _releasedGeneration = -1;
@@ -57,6 +64,7 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
   int? _claimedProducerGeneration;
   int? _producerClaimAttemptGeneration;
   int _retiredProducerGeneration = -1;
+  int _lastReconnectAttemptGeneration = -1;
   final CarProjectionLeaseOrder _leaseOrder = CarProjectionLeaseOrder();
   Future<void> _reducer = Future<void>.value();
   late final StreamSubscription<bool> _foregroundSubscription;
@@ -120,6 +128,8 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
     if (_disposed) return;
     final previous = _lease;
     _lease = lease;
+    await _tryReconnectRememberedAdapter(lease);
+    if (_disposed || revision != _leaseRevision) return;
     await _reconcileProducer();
     if (_disposed) return;
     if (lease.armed && lease.generation > _highestArmAttemptGeneration) {
@@ -276,9 +286,11 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
       _claimedProducerGeneration = generation;
       return;
     }
-    // Only a visible, user-connected phone may create the transport service.
-    // A hidden car callback may attach to a confirmed owner, never create one.
-    if (!session.isForeground ||
+    // A visible phone may create the producer. A cold projected session may
+    // also recreate the adapter that the user explicitly selected earlier;
+    // native accepts that path only while its car service and projection
+    // connection are both active.
+    if ((!session.isForeground && _lease?.active != true) ||
         _producerClaimAttemptGeneration == generation) {
       return;
     }
@@ -290,6 +302,21 @@ final class CarProjectionSessionRuntime extends CarProjectionSessionFlutterApi {
       // A rejected foreground claim stays inert until a later visible resume.
       // Remember its generation so disconnect/dispose can cancel a pending start.
     }
+  }
+
+  Future<void> _tryReconnectRememberedAdapter(
+    CarProjectionLeaseMessage lease,
+  ) async {
+    if (!lease.active || lease.generation <= _lastReconnectAttemptGeneration) {
+      return;
+    }
+    final state = ref.read(obdSessionProvider);
+    if (state.isConnected || state.isBusy) return;
+    _lastReconnectAttemptGeneration = lease.generation;
+    final adapter = ref.read(lastAdapterProvider);
+    if (adapter == null || adapter.kind == TransportKind.demo) return;
+
+    await ref.read(carProjectionReconnectProvider)(adapter);
   }
 
   void dispose() {

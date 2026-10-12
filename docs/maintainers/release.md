@@ -13,6 +13,29 @@
 
 ---
 
+## 1.0.19 起的手機／Android Auto 整合發佈
+
+正常 `field` App 在同一個 `com.cbstudio.telltale` 內提供手機與 Android Auto，
+不再要求使用者另外安裝 `carproto`。`carProto` 僅保留開發相容性；AAOS 為獨立
+form factor。CI 的 manifest gate 改為驗證 field 必須含投影元件、rig／wear 不得
+混入投影元件，以及 projected App 不得混入 AAOS 專用權限。
+
+所有 CI 與簽章建置都在 Ryzen 9700X。先驗證 protected main 的 exact-source
+full-gate。發布前以 API 對 protected main 設定 `TELLTALE_RELEASE_CANDIDATE=true`，
+同一份 full-gate job 會在所有測試後建置真正未簽章的 AAB 與三個 ABI APK。維護者
+透過已驗證身分的 GitLab API 讀取該 job，下載並校驗成品，再於 9700X 私有 SSH 環境執行
+`tool/ci/build_signed_release.py`。簽章 JSON 只由 stdin 傳入，暫存金鑰於作業後刪除，
+不得交給共用 Runner、提交原始碼或公開 artifact。回條須區分 GitLab 建置與
+SSH 簽章，逐一驗證來源、簽章、套件、版本、Android Auto 元件與校驗碼。
+
+Google Play 車機驗收先使用 internal test track，安裝來源與 signer 都須讀回。
+Internal App Sharing 會另外重簽章；它不等於 internal test track，也不能當作
+既有安裝可保留資料更新的證據。不同簽章的舊 QA App 應先備份資料，遷移資料清除
+須取得明確授權。以 S24 配合官方 DHU 模擬車機驗收時，記錄實際手機、下載成品、
+背景與重連結果，並註明實體車機／車輛未實測。完成驗收與 issue 回覆後才建立新
+GitLab release，最後重新下載公開資產校驗。Google 車用 production 類別核准
+仍是另一個待審程序。
+
 ## 0. GitLab maintainer release、GitHub community APK 與 Google Play 是三條發布線
 
 目前 `aa22396584/telltale` 的 GitLab Release 使用 maintainer/Play upload

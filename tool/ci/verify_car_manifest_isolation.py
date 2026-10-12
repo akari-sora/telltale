@@ -8,10 +8,11 @@ Verifies:
     MUST contain category.IOT
     MUST contain com.google.android.gms.car.application
 
-  AA01-09 field (production) merged manifest:
-    MUST NOT contain CarAppService
-    MUST NOT contain category.IOT
-    MUST NOT contain com.google.android.gms.car.application
+  Unified field debug/release and carProto merged manifests:
+    MUST contain CarAppService, category.IOT, projected metadata and cold-start Application
+
+  rig / wear merged manifests:
+    MUST NOT contain projected or AAOS car components
 
   AA01-10 automotive merged manifest:
     MUST contain CarAppService
@@ -56,6 +57,18 @@ def ensure_manifests():
         "android/automotive/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml",
         "android/automotive/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml",
     ]
+    candidates_rig = [
+        "build/app/intermediates/merged_manifest/rigDebug/processRigDebugMainManifest/AndroidManifest.xml",
+        "build/app/intermediates/merged_manifests/rigDebug/processRigDebugManifest/AndroidManifest.xml",
+        "android/app/build/intermediates/merged_manifest/rigDebug/processRigDebugMainManifest/AndroidManifest.xml",
+        "android/app/build/intermediates/merged_manifests/rigDebug/processRigDebugManifest/AndroidManifest.xml",
+    ]
+    candidates_wear = [
+        "build/app/intermediates/merged_manifest/wearDebug/processWearDebugMainManifest/AndroidManifest.xml",
+        "build/app/intermediates/merged_manifests/wearDebug/processWearDebugManifest/AndroidManifest.xml",
+        "android/app/build/intermediates/merged_manifest/wearDebug/processWearDebugMainManifest/AndroidManifest.xml",
+        "android/app/build/intermediates/merged_manifests/wearDebug/processWearDebugManifest/AndroidManifest.xml",
+    ]
 
     candidates_field_release = [
         "build/app/intermediates/merged_manifest/fieldRelease/processFieldReleaseMainManifest/AndroidManifest.xml",
@@ -68,8 +81,10 @@ def ensure_manifests():
     p_field = find_manifest(candidates_field)
     p_auto = find_manifest(candidates_auto)
     p_field_release = find_manifest(candidates_field_release)
+    p_rig = find_manifest(candidates_rig)
+    p_wear = find_manifest(candidates_wear)
 
-    if not (p_car and p_field and p_auto and p_field_release):
+    if not (p_car and p_field and p_auto and p_field_release and p_rig and p_wear):
         print("[INFO] One or more merged manifests missing; invoking Gradle to generate them...")
         cmd = [
             "./android/gradlew",
@@ -78,6 +93,8 @@ def ensure_manifests():
             ":app:processFieldDebugMainManifest",
             ":app:processFieldReleaseMainManifest",
             ":app:processCarProtoDebugMainManifest",
+            ":app:processRigDebugMainManifest",
+            ":app:processWearDebugMainManifest",
             ":automotive:processDebugMainManifest",
         ]
         res = subprocess.run(cmd, cwd=str(ROOT))
@@ -89,6 +106,8 @@ def ensure_manifests():
         p_field = find_manifest(candidates_field)
         p_auto = find_manifest(candidates_auto)
         p_field_release = find_manifest(candidates_field_release)
+        p_rig = find_manifest(candidates_rig)
+        p_wear = find_manifest(candidates_wear)
 
     if not p_car:
         raise FileNotFoundError(f"carProto merged manifest not found in: {candidates_car}")
@@ -98,8 +117,12 @@ def ensure_manifests():
         raise FileNotFoundError(f"automotive merged manifest not found in: {candidates_auto}")
     if not p_field_release:
         raise FileNotFoundError(f"fieldRelease merged manifest not found in: {candidates_field_release}")
+    if not p_rig:
+        raise FileNotFoundError(f"rig merged manifest not found in: {candidates_rig}")
+    if not p_wear:
+        raise FileNotFoundError(f"wear merged manifest not found in: {candidates_wear}")
 
-    return p_car, p_field, p_auto, p_field_release
+    return p_car, p_field, p_auto, p_field_release, p_rig, p_wear
 
 
 def extract_manifest_tokens(path: Path) -> set[str]:
@@ -153,7 +176,7 @@ def verify_manifest(name: str, path: Path, must_contain: list[str], must_not_con
 
 def main():
     print("=== Verifying Car Merged Manifest Isolation ===")
-    p_car, p_field, p_auto, p_field_release = ensure_manifests()
+    p_car, p_field, p_auto, p_field_release, p_rig, p_wear = ensure_manifests()
 
     all_errors = []
 
@@ -170,6 +193,7 @@ def main():
                 "category.IOT",
                 "com.google.android.gms.car.application",
                 "com.google.android.gms.permission.CAR_SPEED",
+                "ProjectedTelltaleApplication",
             ],
             must_not_contain=[
                 "com.android.automotive",
@@ -180,46 +204,42 @@ def main():
         )
     )
 
-    # AA01-09 / AA05-06 fieldDebug merged manifest:
-    # MUST NOT contain CarAppService, category.IOT, com.google.android.gms.car.application,
-    # or any automotive/car permissions
-    all_errors.extend(
-        verify_manifest(
-            name="AA01-09 / AA05-06 fieldDebug (production)",
-            path=p_field,
-            must_contain=[],
-            must_not_contain=[
-                "CarAppService",
-                "category.IOT",
-                "com.google.android.gms.car.application",
-                "com.android.automotive",
-                "CarAppActivity",
-                "com.google.android.gms.permission.CAR_SPEED",
-                "android.car.permission.CAR_SPEED",
-                "android.car.permission.READ_CAR_DISPLAY_UNITS",
-            ],
+    projected_required = [
+        "CarAppService",
+        "category.IOT",
+        "com.google.android.gms.car.application",
+        "com.google.android.gms.permission.CAR_SPEED",
+        "ProjectedTelltaleApplication",
+    ]
+    projected_forbidden = [
+        "com.android.automotive",
+        "CarAppActivity",
+        "android.car.permission.CAR_SPEED",
+        "android.car.permission.READ_CAR_DISPLAY_UNITS",
+    ]
+    for name, path in (
+        ("unified fieldDebug", p_field),
+        ("unified fieldRelease", p_field_release),
+    ):
+        all_errors.extend(
+            verify_manifest(
+                name=name,
+                path=path,
+                must_contain=projected_required,
+                must_not_contain=projected_forbidden,
+            )
         )
-    )
 
-    # AA01-R05 / AA05-06 fieldRelease merged manifest (mandatory gate):
-    # MUST NOT contain any car components or car permissions
-    all_errors.extend(
-        verify_manifest(
-            name="AA01-R05 / AA05-06 fieldRelease (production)",
-            path=p_field_release,
-            must_contain=[],
-            must_not_contain=[
-                "CarAppService",
-                "category.IOT",
-                "com.google.android.gms.car.application",
-                "com.android.automotive",
-                "CarAppActivity",
-                "com.google.android.gms.permission.CAR_SPEED",
-                "android.car.permission.CAR_SPEED",
-                "android.car.permission.READ_CAR_DISPLAY_UNITS",
-            ],
+    non_projection_forbidden = projected_required + projected_forbidden
+    for name, path in (("rigDebug", p_rig), ("wearDebug", p_wear)):
+        all_errors.extend(
+            verify_manifest(
+                name=name,
+                path=path,
+                must_contain=[],
+                must_not_contain=non_projection_forbidden,
+            )
         )
-    )
 
     # AA01-10 / AA05-05 automotive merged manifest:
     # MUST contain CarAppService, com.android.automotive, CarAppActivity

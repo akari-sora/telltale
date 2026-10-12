@@ -59,9 +59,13 @@ tree):
 
 **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**
 
-Open the release and select a `field` APK for the normal phone app, with the ABI
-matching your device. The separate `carproto` APK is an Android Auto/AAOS
-engineering preview; the `field` APK has no car app service.
+From 1.0.19, the normal `field` app includes Android Auto projection in the same
+`com.cbstudio.telltale` package. Phone and car screens share the connection and
+settings; installing a separate `carproto` app is no longer necessary. Select
+the APK matching your device's ABI. Vehicle installation acceptance uses Google
+Play internal testing; a manually installed GitLab APK does not establish a
+trusted Android Auto installation source. Google's automotive category review
+for production distribution remains pending.
 [Obtainium](https://github.com/ImranR98/Obtainium) can track updates from
 `https://gitlab.com/aa22396584/telltale/-/releases`.
 

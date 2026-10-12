@@ -14,6 +14,7 @@ import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/obd/transport/demo_transport.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
 import 'package:torque_obd/state/pid_registry.dart';
+import 'package:torque_obd/state/settings.dart';
 
 const _currentLeaseChannel =
     'dev.flutter.pigeon.torque_obd.CarProjectionSessionHostApi.currentLease';
@@ -235,11 +236,18 @@ final class _NativeProjectionHost {
   }
 }
 
-Future<ProviderContainer> _container() async {
-  SharedPreferences.setMockInitialValues({});
-  final preferences = await SharedPreferences.getInstance();
+Future<ProviderContainer> _container({
+  Map<String, Object> preferences = const {},
+  CarProjectionReconnect? reconnect,
+}) async {
+  SharedPreferences.setMockInitialValues(preferences);
+  final prefs = await SharedPreferences.getInstance();
   return ProviderContainer(
-    overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      if (reconnect != null)
+        carProjectionReconnectProvider.overrideWithValue(reconnect),
+    ],
   );
 }
 
@@ -294,6 +302,155 @@ void main() {
     await _eventually(() => host.retiredProducers.contains(generation));
     expect(host.retiredProducers, [generation]);
   });
+
+  test(
+    'cold active projection reconnects remembered adapter once per generation',
+    () async {
+      _background(binding);
+      final reconnects = <LastAdapter>[];
+      const remembered = LastAdapter(
+        id: '192.168.0.10',
+        name: 'Wi-Fi 192.168.0.10',
+        kind: TransportKind.wifi,
+        port: 35000,
+      );
+      late ProviderContainer container;
+      container = await _container(
+        preferences: {'last_adapter_v1': remembered.encode()},
+        reconnect: (adapter) async {
+          reconnects.add(adapter);
+          return _connectFixture(container.read(obdSessionProvider.notifier));
+        },
+      );
+      var active = _lease(active: true, generation: 70, armed: false);
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => active)
+        ..armContinuity = ((projection, connection) async {
+          active = _lease(
+            active: true,
+            generation: projection,
+            armed: true,
+            connectionGeneration: connection,
+          );
+          return active;
+        });
+      host.install();
+      addTearDown(host.uninstall);
+      addTearDown(container.dispose);
+
+      expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+      await _eventually(() => reconnects.length == 1);
+      expect(reconnects.single.encode(), remembered.encode());
+      await _eventually(() => host.claimedProducers.length == 1);
+      await _eventually(() => host.armContinuityCalls == 1);
+      await _eventually(
+        () => container
+            .read(obdSessionProvider.notifier)
+            .hasArmedProjectionContinuity,
+      );
+
+      await host.sendLease(active);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(reconnects, hasLength(1));
+    },
+  );
+
+  test('lease loss during cold reconnect cannot claim a producer', () async {
+    _background(binding);
+    const remembered = LastAdapter(
+      id: '192.168.0.10',
+      name: 'Wi-Fi 192.168.0.10',
+      kind: TransportKind.wifi,
+      port: 35000,
+    );
+    final reconnectStarted = Completer<void>();
+    final finishReconnect = Completer<void>();
+    late ProviderContainer container;
+    container = await _container(
+      preferences: {'last_adapter_v1': remembered.encode()},
+      reconnect: (_) async {
+        reconnectStarted.complete();
+        await finishReconnect.future;
+        return _connectFixture(container.read(obdSessionProvider.notifier));
+      },
+    );
+    final active = _lease(active: true, generation: 71, armed: false);
+    final inactive = _lease(active: false, generation: 71, armed: false);
+    final host = _NativeProjectionHost(messenger)
+      ..currentLease = (() async => active)
+      ..armContinuity = ((_, _) async => active);
+    host.install();
+    addTearDown(host.uninstall);
+    addTearDown(container.dispose);
+
+    expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+    await reconnectStarted.future;
+    await host.sendLease(inactive);
+    finishReconnect.complete();
+    await _eventually(() => host.acknowledgedGenerations.contains(71));
+
+    final session = container.read(obdSessionProvider.notifier);
+    expect(container.read(obdSessionProvider).isConnected, isTrue);
+    expect(session.isForeground, isFalse);
+    expect(session.engine!.isRunning, isFalse);
+    expect(host.claimedProducers, isEmpty);
+    expect(host.armContinuityCalls, 0);
+  });
+
+  test(
+    'a reconnect provider exception fails closed without poisoning the reducer',
+    () async {
+      _background(binding);
+      const remembered = LastAdapter(
+        id: '192.168.0.10',
+        name: 'Wi-Fi 192.168.0.10',
+        kind: TransportKind.wifi,
+        port: 35000,
+      );
+      late ProviderContainer container;
+      var reconnectCalls = 0;
+      container = await _container(
+        preferences: {'last_adapter_v1': remembered.encode()},
+        reconnect: (_) async {
+          reconnectCalls++;
+          await _connectFixture(container.read(obdSessionProvider.notifier));
+          throw StateError('unexpected reconnect provider failure');
+        },
+      );
+      var active = _lease(active: true, generation: 72, armed: false);
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => active)
+        ..armContinuity = ((projection, connection) async {
+          active = _lease(
+            active: true,
+            generation: projection,
+            armed: true,
+            connectionGeneration: connection,
+          );
+          return active;
+        });
+      host.install();
+      addTearDown(host.uninstall);
+      addTearDown(container.dispose);
+
+      expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+      await _eventually(() => reconnectCalls == 1);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(host.claimedProducers, isEmpty);
+      expect(host.armContinuityCalls, 0);
+
+      active = _lease(active: true, generation: 73, armed: false);
+      await host.sendLease(active);
+      await _eventually(() => host.claimedProducers.length == 1);
+      await _eventually(() => host.armContinuityCalls == 1);
+      await _eventually(
+        () => container
+            .read(obdSessionProvider.notifier)
+            .hasArmedProjectionContinuity,
+      );
+      expect(reconnectCalls, 1);
+    },
+  );
 
   test('a connection completing hidden never claims a producer', () async {
     final container = await _container();
@@ -407,7 +564,7 @@ void main() {
   });
 
   test(
-    'lost producer closes hidden polling without a background restart',
+    'active projection may reclaim producer but cannot poll before native arms',
     () async {
       final container = await _container();
       final session = container.read(obdSessionProvider.notifier);
@@ -435,8 +592,9 @@ void main() {
             !session.hasArmedProjectionContinuity && !session.engine!.isRunning,
       );
       expect(session.hasArmedProjectionContinuity, isFalse);
-      expect(host.claimedProducers, isEmpty);
+      expect(host.claimedProducers, [session.connectionGeneration]);
       expect(host.armContinuityCalls, 0);
+      expect(session.engine!.isRunning, isFalse);
     },
   );
 

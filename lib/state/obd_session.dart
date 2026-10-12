@@ -1108,6 +1108,26 @@ class ObdSession extends Notifier<ObdConnectionState> {
   Future<bool> connectBle(BleAdapterHandle device) =>
       _connect(BleTransport(device), TransportKind.bluetoothLe);
 
+  /// Recreates a transport that the user selected and persisted on the phone.
+  /// Used by the visible reconnect shortcut and by a live projected Android
+  /// Auto generation after a cold process start. Demo is never eligible.
+  Future<bool> reconnectRememberedAdapter(LastAdapter adapter) =>
+      switch (adapter.kind) {
+        TransportKind.bluetoothClassic => connectClassic(
+          DiscoveredDevice(
+            id: adapter.id,
+            name: adapter.name,
+            kind: TransportKind.bluetoothClassic,
+            isPaired: true,
+          ),
+        ),
+        TransportKind.wifi => connectWifi(host: adapter.id, port: adapter.port),
+        TransportKind.bluetoothLe => connectBle(
+          BleAdapterHandle(id: adapter.id, name: adapter.name),
+        ),
+        TransportKind.demo => Future<bool>.value(false),
+      };
+
   /// Guards against overlapping connect attempts.
   ///
   /// Set synchronously, before the first `await`. Two quick taps on a device
@@ -1950,8 +1970,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
         !state.isConnected) {
       throw const DiagnosticLinkException(
         kind: DiagnosticFailureKind.retiredOperation,
-        message:
-            'No active diagnostic link ownership authority for connected session.',
+        message: 'No active diagnostic link ownership authority for connected session.',
       );
     }
     return authority.runOneShot<T>(
@@ -1989,8 +2008,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
         _awaitingResumeValidation) {
       throw const DiagnosticLinkException(
         kind: DiagnosticFailureKind.retiredOperation,
-        message:
-            'No active diagnostic link ownership authority for connected session.',
+        message: 'No active diagnostic link ownership authority for connected session.',
       );
     }
 

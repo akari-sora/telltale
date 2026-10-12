@@ -10,6 +10,7 @@ import com.cbstudio.telltale.carbridge.generated.session.CarProjectionLeaseMessa
 import com.cbstudio.telltale.carbridge.generated.session.CarProjectionSessionFlutterApi
 import com.cbstudio.telltale.carbridge.generated.session.CarProjectionSessionHostApi
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.dart.DartExecutor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,19 +21,51 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mainHandler = Handler(Looper.getMainLooper())
     private var applicationContext: Context? = null
-    private var engine: FlutterEngine? = null
+    private val engineOwner = ProjectionEngineOwner<FlutterEngine>()
     private var activity: WeakReference<MainActivity>? = null
     private var activityResumed = false
+    private var carServiceActive = false
     private val state = ProjectionContinuityState()
     private var releaseWatchdogGeneration: Long? = null
     private var releaseWatchdog: Runnable? = null
 
     @Synchronized
     fun registerEngine(next: FlutterEngine) {
-        if (engine === next) return
-        engine = next
+        if (!engineOwner.adopt(next)) return
         CarProjectionSessionHostApi.setUp(next.dartExecutor.binaryMessenger, this)
         publishLocked()
+    }
+
+    @Synchronized
+    fun onCarServiceStarted(context: Context) {
+        applicationContext = context.applicationContext
+        carServiceActive = true
+        CarProjectionSessionLeaseRuntime.installProjectionConnectionGuard(context.applicationContext)
+        if (engineOwner.current() != null) return
+
+        RendererProcessRuntime.initialize(context.applicationContext, emptyArray())
+        val created = FlutterEngine(context.applicationContext)
+        try {
+            ApplicationPlatformChannels.register(
+                flutterEngine = created,
+                context = context.applicationContext,
+                renderer = RendererProcessRuntime.label(),
+                rendererReason = RendererProcessRuntime.reason(),
+            )
+            FlavorPlatformRegistrar.register(created)
+            check(engineOwner.current() === created) { "Projected engine was not registered" }
+            created.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())
+        } catch (error: Throwable) {
+            engineOwner.clearIf(created)
+            created.destroy()
+            throw error
+        }
+    }
+
+    @Synchronized
+    fun onCarServiceStopped() {
+        carServiceActive = false
+        releaseEngineIfUnownedLocked()
     }
 
     @Synchronized
@@ -54,7 +87,7 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
         if (activity?.get() === candidate) {
             activityResumed = false
             activity = null
-            if (!state.shouldRetainEngine) engine = null
+            if (!shouldRetainEngineLocked()) engineOwner.current()?.let(engineOwner::clearIf)
         }
     }
 
@@ -87,8 +120,9 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
         val context = applicationContext
         if (context == null || !state.canClaimProducer(
                 requestedConnectionGeneration = connectionGeneration,
-                activityResumed = activityResumed,
-                hasEngine = engine != null,
+                producerStartAuthorized = activityResumed ||
+                    (carServiceActive && state.projectionActive),
+                hasEngine = engineOwner.current() != null,
             )
         ) return messageLocked()
 
@@ -120,7 +154,7 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
         if (!state.canArm(
                 requestedProjectionGeneration = projectionGeneration,
                 requestedConnectionGeneration = connectionGeneration,
-                hasEngine = engine != null,
+                hasEngine = engineOwner.current() != null,
                 projectionConnected = CarProjectionSessionLeaseRuntime.isProjectionConnected(),
             )
         ) return messageLocked()
@@ -157,7 +191,7 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
     @Synchronized
     fun markServiceProducerConfirmed(connectionGeneration: Long): Boolean {
         val priorReleaseGeneration = state.releaseAwaitingAck
-        if (!state.confirmProducer(connectionGeneration, engine != null)) return false
+        if (!state.confirmProducer(connectionGeneration, engineOwner.current() != null)) return false
         if (priorReleaseGeneration != null && state.releaseAwaitingAck == null) {
             cancelReleaseWatchdogLocked()
         }
@@ -204,17 +238,22 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
     }
 
     private fun releaseEngineIfUnownedLocked() {
-        if (activity?.get() != null || state.shouldRetainEngine) return
-        val retiredEngine = engine
-        engine = null
+        if (activity?.get() != null || shouldRetainEngineLocked()) return
+        val retiredEngine = engineOwner.current() ?: return
+        if (!engineOwner.clearIf(retiredEngine)) return
         mainHandler.post { retiredEngine?.destroy() }
     }
 
     @Synchronized
-    fun retainedEngine(): FlutterEngine? = engine.takeIf { shouldRetainEngine() }
+    fun retainedEngine(): FlutterEngine? = engineOwner.current()
 
     @Synchronized
-    fun shouldRetainEngine(): Boolean = state.shouldRetainEngine
+    fun ownsEngine(candidate: FlutterEngine): Boolean = engineOwner.current() === candidate
+
+    @Synchronized
+    fun shouldRetainEngine(): Boolean = shouldRetainEngineLocked()
+
+    private fun shouldRetainEngineLocked(): Boolean = carServiceActive || state.shouldRetainEngine
 
     @Synchronized
     private fun messageLocked() = CarProjectionLeaseMessage(
@@ -226,7 +265,7 @@ internal object ProjectionContinuityRuntime : CarProjectionSessionHostApi {
     )
 
     private fun publishLocked() {
-        val messenger = engine?.dartExecutor?.binaryMessenger ?: return
+        val messenger = engineOwner.current()?.dartExecutor?.binaryMessenger ?: return
         val message = messageLocked()
         scope.launch { runCatching { CarProjectionSessionFlutterApi(messenger).onLeaseChanged(message) } }
     }
