@@ -9,11 +9,13 @@
         <!--
           AA-00 PROVISIONAL CATEGORY ONLY.
 
-          androidx.car.app.category.IOT is used only by the isolated
-          carProto / automotive prototype artifacts while Play eligibility
-          for a read-only vehicle-monitoring experience is being validated.
+          androidx.car.app.category.IOT is used by the unified field app plus
+          the carProto / automotive compatibility artifacts for the read-only
+          vehicle-monitoring experience.
 
-          This module MUST NOT be a dependency of field/rig/wear.
+          This module is shared by the unified field app and the isolated
+          carProto compatibility flavor. It MUST NOT be a dependency of
+          rig/wear.
         -->
         <service
             android:name="com.cbstudio.telltale.car.TelltaleCarAppService"

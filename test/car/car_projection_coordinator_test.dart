@@ -121,62 +121,62 @@ void main() {
     });
 
     test('AA02-19 an edge during an in-flight call goes out right after it', () {
-      fakeAsync((async) {
-        final sent = <CarTelemetryMessage>[];
-        final gates = <Completer<void>>[];
-        var current = _projection();
-        final coordinator = CarProjectionCoordinator(
-          project: () => current,
-          transport: (m) {
-            sent.add(m);
-            final gate = Completer<void>();
-            gates.add(gate);
-            return gate.future;
-          },
-        );
-        coordinator.start();
-        async.flushMicrotasks();
-        current = _projection(phase: ConnectionPhase.failed);
-        coordinator.onInputChanged();
-        async.flushMicrotasks();
-        expect(sent, hasLength(1), reason: 'single-flight');
+        fakeAsync((async) {
+          final sent = <CarTelemetryMessage>[];
+          final gates = <Completer<void>>[];
+          var current = _projection();
+          final coordinator = CarProjectionCoordinator(
+            project: () => current,
+            transport: (m) {
+              sent.add(m);
+              final gate = Completer<void>();
+              gates.add(gate);
+              return gate.future;
+            },
+          );
+          coordinator.start();
+          async.flushMicrotasks();
+          current = _projection(phase: ConnectionPhase.failed);
+          coordinator.onInputChanged();
+          async.flushMicrotasks();
+          expect(sent, hasLength(1), reason: 'single-flight');
 
-        gates.removeAt(0).complete();
-        async.flushMicrotasks();
-        expect(sent, hasLength(2));
-        expect(sent.last.connectionPhase, CarConnectionPhaseMessage.failed);
-        gates.removeAt(0).complete();
-        coordinator.dispose();
-      });
+          gates.removeAt(0).complete();
+          async.flushMicrotasks();
+          expect(sent, hasLength(2));
+          expect(sent.last.connectionPhase, CarConnectionPhaseMessage.failed);
+          gates.removeAt(0).complete();
+          coordinator.dispose();
+        });
     });
 
     test('AA02-21 a missing host stops the tick and all further projection', () {
-      fakeAsync((async) {
-        var projections = 0;
-        var calls = 0;
-        final coordinator = CarProjectionCoordinator(
-          project: () {
-            projections++;
-            return _projection();
-          },
-          transport: (m) async {
-            calls++;
-            throw MissingPluginException('none');
-          },
-          log: (_) {},
-        );
-        coordinator.start();
-        async.flushMicrotasks();
-        expect(coordinator.bridge.disabled, isTrue);
-        expect(coordinator.isTicking, isFalse);
-        expect(coordinator.isStopped, isTrue);
+        fakeAsync((async) {
+          var projections = 0;
+          var calls = 0;
+          final coordinator = CarProjectionCoordinator(
+            project: () {
+              projections++;
+              return _projection();
+            },
+            transport: (m) async {
+              calls++;
+              throw MissingPluginException('none');
+            },
+            log: (_) {},
+          );
+          coordinator.start();
+          async.flushMicrotasks();
+          expect(coordinator.bridge.disabled, isTrue);
+          expect(coordinator.isTicking, isFalse);
+          expect(coordinator.isStopped, isTrue);
 
-        async.elapse(const Duration(seconds: 10));
-        coordinator.onInputChanged();
-        async.flushMicrotasks();
-        expect(calls, 1);
-        expect(projections, 1);
-      });
+          async.elapse(const Duration(seconds: 10));
+          coordinator.onInputChanged();
+          async.flushMicrotasks();
+          expect(calls, 1);
+          expect(projections, 1);
+        });
     });
 
     test('dispose cancels the tick', () {
@@ -196,124 +196,151 @@ void main() {
   });
 
   group('runtime gating (AA02-05 / AA02-06)', () {
-    test('arbitration gate matrix returns decision object and enforces rules', () {
-      PlatformMetadata meta(String id) => PlatformMetadata(
-        applicationId: id,
-        appVersion: 'v',
-        appBuild: '1',
-        platform: 'android',
-        osVersion: '16',
-        manufacturer: 'm',
-        model: 'm',
-        sdkInt: '36',
-      );
-      expect(androidCarProtoApplicationId, 'com.cbstudio.telltale.carproto');
+    test(
+      'arbitration gate matrix returns decision object and enforces rules',
+      () {
+        PlatformMetadata meta(String id) => PlatformMetadata(
+          applicationId: id,
+          appVersion: 'v',
+          appBuild: '1',
+          platform: 'android',
+          osVersion: '16',
+          manufacturer: 'm',
+          model: 'm',
+          sdkInt: '36',
+        );
+        expect(androidCarProtoApplicationId, 'com.cbstudio.telltale.carproto');
 
-      // 1. identity_verified: Android + carProto + exact applicationId
-      final verified = isCarProjectionEligible(
-        meta(androidCarProtoApplicationId),
-        isAndroid: true,
-        flavor: 'carProto',
-      );
-      expect(verified.enabled, isTrue);
-      expect(verified.reason, CarProjectionReason.identityVerified);
-      expect(
-        verified,
-        const CarProjectionDecision(
-          enabled: true,
-          reason: 'identity_verified',
-        ),
-      );
+        // 1. identity_verified: both projected flavors require their own exact id.
+        for (final pair in [
+          ('field', androidFieldApplicationId),
+          ('carProto', androidCarProtoApplicationId),
+        ]) {
+          final verified = isCarProjectionEligible(
+            meta(pair.$2),
+            isAndroid: true,
+            flavor: pair.$1,
+          );
+          expect(verified.enabled, isTrue, reason: pair.$1);
+          expect(
+            verified.reason,
+            CarProjectionReason.identityVerified,
+            reason: pair.$1,
+          );
+          expect(
+            verified,
+            const CarProjectionDecision(
+              enabled: true,
+              reason: 'identity_verified',
+            ),
+          );
+        }
 
-      // 2. metadata_unavailable: Android + carProto + timeout/fallback unknown
-      final fallback = isCarProjectionEligible(
-        meta(unknownPlatformMetadata),
-        isAndroid: true,
-        flavor: 'carProto',
-      );
-      expect(fallback.enabled, isTrue);
-      expect(fallback.reason, CarProjectionReason.metadataUnavailable);
-      expect(
-        fallback,
-        const CarProjectionDecision(
-          enabled: true,
-          reason: 'metadata_unavailable',
-        ),
-      );
+        // 2. metadata_unavailable: both projected flavors keep the car screen alive.
+        for (final flavor in ['field', 'carProto']) {
+          final fallback = isCarProjectionEligible(
+            meta(unknownPlatformMetadata),
+            isAndroid: true,
+            flavor: flavor,
+          );
+          expect(fallback.enabled, isTrue, reason: flavor);
+          expect(fallback.reason, CarProjectionReason.metadataUnavailable);
+        }
 
-      // 3. identity_conflict: Android + carProto + conflicting applicationIds
-      for (final id in [
-        androidFieldApplicationId,
-        androidRigApplicationId,
-        'com.cbstudio.telltale.carproto.aaos',
-        'com.cbstudio.telltale.carproto.debug',
-        'com.example.conflicting',
-      ]) {
-        final conflict = isCarProjectionEligible(
-          meta(id),
-          isAndroid: true,
+        // 3. identity_conflict: cross-flavor and unrelated ids fail closed.
+        for (final pair in [
+          ('field', androidCarProtoApplicationId),
+          ('field', androidRigApplicationId),
+          ('carProto', androidFieldApplicationId),
+          ('carProto', 'com.cbstudio.telltale.carproto.aaos'),
+          ('carProto', 'com.example.conflicting'),
+        ]) {
+          final conflict = isCarProjectionEligible(
+            meta(pair.$2),
+            isAndroid: true,
+            flavor: pair.$1,
+          );
+          expect(conflict.enabled, isFalse, reason: '$pair');
+          expect(
+            conflict.reason,
+            CarProjectionReason.identityConflict,
+            reason: '$pair',
+          );
+        }
+
+        // 4. flavor_ineligible: rig/wear and unknown flavors never project.
+        for (final flavor in ['rig', 'wear', '', 'other']) {
+          final ineligible = isCarProjectionEligible(
+            meta(androidCarProtoApplicationId),
+            isAndroid: true,
+            flavor: flavor,
+          );
+          expect(ineligible.enabled, isFalse, reason: 'flavor: $flavor');
+          expect(
+            ineligible.reason,
+            CarProjectionReason.flavorIneligible,
+            reason: 'flavor: $flavor',
+          );
+
+          // Even with unknown metadata, ineligible flavor fails closed.
+          final unknownWithWrongFlavor = isCarProjectionEligible(
+            meta(unknownPlatformMetadata),
+            isAndroid: true,
+            flavor: flavor,
+          );
+          expect(
+            unknownWithWrongFlavor.enabled,
+            isFalse,
+            reason: 'flavor: $flavor',
+          );
+          expect(
+            unknownWithWrongFlavor.reason,
+            CarProjectionReason.flavorIneligible,
+            reason: 'flavor: $flavor',
+          );
+        }
+
+        // 5. non_android: non-Android platform always fails closed
+        for (final flavor in ['carProto', 'field', 'rig', null]) {
+          final nonAndroid = isCarProjectionEligible(
+            meta(androidCarProtoApplicationId),
+            isAndroid: false,
+            flavor: flavor,
+          );
+          expect(nonAndroid.enabled, isFalse);
+          expect(nonAndroid.reason, CarProjectionReason.nonAndroid);
+        }
+
+        // Real host running this test is not Android.
+        final hostDecision = isCarProjectionEligible(
+          meta(androidCarProtoApplicationId),
           flavor: 'carProto',
         );
-        expect(conflict.enabled, isFalse, reason: id);
-        expect(conflict.reason, CarProjectionReason.identityConflict, reason: id);
-      }
+        expect(hostDecision.enabled, isFalse);
+        expect(hostDecision.reason, CarProjectionReason.nonAndroid);
 
-      // 4. flavor_ineligible: Android + non-carProto flavors
-      for (final flavor in ['field', 'rig', 'wear', '', 'other', null]) {
-        final ineligible = isCarProjectionEligible(
-          meta(androidCarProtoApplicationId),
-          isAndroid: true,
-          flavor: flavor,
+        // 6. Decision object equality, hashCode, and toString
+        const d1 = CarProjectionDecision(
+          enabled: true,
+          reason: 'identity_verified',
         );
-        expect(ineligible.enabled, isFalse, reason: 'flavor: $flavor');
+        const d2 = CarProjectionDecision(
+          enabled: true,
+          reason: 'identity_verified',
+        );
+        const d3 = CarProjectionDecision(
+          enabled: false,
+          reason: 'flavor_ineligible',
+        );
+        expect(d1, equals(d2));
+        expect(d1.hashCode, equals(d2.hashCode));
+        expect(d1, isNot(equals(d3)));
         expect(
-          ineligible.reason,
-          CarProjectionReason.flavorIneligible,
-          reason: 'flavor: $flavor',
+          d1.toString(),
+          'CarProjectionDecision(enabled: true, reason: identity_verified)',
         );
-
-        // Even with unknown metadata, ineligible flavor fails closed.
-        final unknownWithWrongFlavor = isCarProjectionEligible(
-          meta(unknownPlatformMetadata),
-          isAndroid: true,
-          flavor: flavor,
-        );
-        expect(unknownWithWrongFlavor.enabled, isFalse, reason: 'flavor: $flavor');
-        expect(
-          unknownWithWrongFlavor.reason,
-          CarProjectionReason.flavorIneligible,
-          reason: 'flavor: $flavor',
-        );
-      }
-
-      // 5. non_android: non-Android platform always fails closed
-      for (final flavor in ['carProto', 'field', null]) {
-        final nonAndroid = isCarProjectionEligible(
-          meta(androidCarProtoApplicationId),
-          isAndroid: false,
-          flavor: flavor,
-        );
-        expect(nonAndroid.enabled, isFalse);
-        expect(nonAndroid.reason, CarProjectionReason.nonAndroid);
-      }
-
-      // Real host running this test is not Android.
-      final hostDecision = isCarProjectionEligible(
-        meta(androidCarProtoApplicationId),
-        flavor: 'carProto',
-      );
-      expect(hostDecision.enabled, isFalse);
-      expect(hostDecision.reason, CarProjectionReason.nonAndroid);
-
-      // 6. Decision object equality, hashCode, and toString
-      const d1 = CarProjectionDecision(enabled: true, reason: 'identity_verified');
-      const d2 = CarProjectionDecision(enabled: true, reason: 'identity_verified');
-      const d3 = CarProjectionDecision(enabled: false, reason: 'flavor_ineligible');
-      expect(d1, equals(d2));
-      expect(d1.hashCode, equals(d2.hashCode));
-      expect(d1, isNot(equals(d3)));
-      expect(d1.toString(), 'CarProjectionDecision(enabled: true, reason: identity_verified)');
-    });
+      },
+    );
 
     test('disabled: no coordinator, no transport, no listeners', () async {
       SharedPreferences.setMockInitialValues({});
@@ -341,67 +368,67 @@ void main() {
     });
 
     test('enabled: a demo connection reaches the host as live v1 frames', () async {
-      TestWidgetsFlutterBinding.ensureInitialized();
-      SharedPreferences.setMockInitialValues({});
-      final prefs = await SharedPreferences.getInstance();
-      final sent = <CarTelemetryMessage>[];
-      final container = ProviderContainer(
-        overrides: [
-          sharedPreferencesProvider.overrideWithValue(prefs),
-          carProjectionEnabledProvider.overrideWithValue(true),
-          carTelemetryTransportProvider.overrideWithValue(
-            (m) async => sent.add(m),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
+        TestWidgetsFlutterBinding.ensureInitialized();
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final sent = <CarTelemetryMessage>[];
+        final container = ProviderContainer(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            carProjectionEnabledProvider.overrideWithValue(true),
+            carTelemetryTransportProvider.overrideWithValue(
+              (m) async => sent.add(m),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      // Held the way TorqueApp holds it: a live subscription. A bare read
-      // leaves the provider paused, and its telemetry listener with it.
-      final subscription = container.listen(
-        carProjectionRuntimeProvider,
-        (_, _) {},
-      );
-      addTearDown(subscription.close);
-      expect(subscription.read(), isNotNull);
-      await pumpEventQueue();
-      expect(sent, isNotEmpty, reason: 'first activation');
-      expect(sent.first.schemaVersion, 1);
+        // Held the way TorqueApp holds it: a live subscription. A bare read
+        // leaves the provider paused, and its telemetry listener with it.
+        final subscription = container.listen(
+          carProjectionRuntimeProvider,
+          (_, _) {},
+        );
+        addTearDown(subscription.close);
+        expect(subscription.read(), isNotNull);
+        await pumpEventQueue();
+        expect(sent, isNotEmpty, reason: 'first activation');
+        expect(sent.first.schemaVersion, 1);
       expect(sent.first.connectionPhase, CarConnectionPhaseMessage.disconnected);
-      expect(sent.first.diagnosticsAvailable, isFalse);
+        expect(sent.first.diagnosticsAvailable, isFalse);
 
-      final session = container.read(obdSessionProvider.notifier);
-      expect(await session.connectDemo(), isTrue);
-      final deadline = DateTime.now().add(const Duration(seconds: 10));
-      while (DateTime.now().isBefore(deadline) &&
-          !sent.any(
-            (m) =>
-                m.connectionPhase == CarConnectionPhaseMessage.connected &&
-                m.speedKmh.status == CarSignalStatusMessage.live,
-          )) {
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      }
-      final live = sent.lastWhere(
-        (m) => m.connectionPhase == CarConnectionPhaseMessage.connected,
-      );
-      expect(live.speedKmh.status, CarSignalStatusMessage.live);
-      expect(live.speedKmh.value, isNotNull);
-      expect(live.connectionEpoch, session.generation);
+        final session = container.read(obdSessionProvider.notifier);
+        expect(await session.connectDemo(), isTrue);
+        final deadline = DateTime.now().add(const Duration(seconds: 10));
+        while (DateTime.now().isBefore(deadline) &&
+            !sent.any(
+              (m) =>
+                  m.connectionPhase == CarConnectionPhaseMessage.connected &&
+                  m.speedKmh.status == CarSignalStatusMessage.live,
+            )) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+        final live = sent.lastWhere(
+          (m) => m.connectionPhase == CarConnectionPhaseMessage.connected,
+        );
+        expect(live.speedKmh.status, CarSignalStatusMessage.live);
+        expect(live.speedKmh.value, isNotNull);
+        expect(live.connectionEpoch, session.generation);
 
-      // Sequences strictly increase across the whole run.
-      final sequences = sent.map((m) => m.sequence).toList();
-      for (var i = 1; i < sequences.length; i++) {
-        expect(sequences[i], greaterThan(sequences[i - 1]));
-      }
+        // Sequences strictly increase across the whole run.
+        final sequences = sent.map((m) => m.sequence).toList();
+        for (var i = 1; i < sequences.length; i++) {
+          expect(sequences[i], greaterThan(sequences[i - 1]));
+        }
 
-      await session.disconnect();
-      await pumpEventQueue();
-      expect(
-        sent.last.connectionPhase,
-        isNot(CarConnectionPhaseMessage.connected),
-        reason: 'disconnect is an edge and goes out immediately',
-      );
-      expect(sent.last.speedKmh.status, isNot(CarSignalStatusMessage.live));
+        await session.disconnect();
+        await pumpEventQueue();
+        expect(
+          sent.last.connectionPhase,
+          isNot(CarConnectionPhaseMessage.connected),
+          reason: 'disconnect is an edge and goes out immediately',
+        );
+        expect(sent.last.speedKmh.status, isNot(CarSignalStatusMessage.live));
     });
   });
 }

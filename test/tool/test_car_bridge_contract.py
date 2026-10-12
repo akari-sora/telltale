@@ -1,7 +1,7 @@
 """AA-02 static architecture gate for the one-way car telemetry bridge.
 
-Complements the behavioural tests (test/car/**, :car-core and
-:app:testCarProtoDebugUnitTest) with source-level invariants that a refactor
+Complements the behavioural tests (test/car/**, :car-core and the projected
+flavor unit lanes) with source-level invariants that a refactor
 could otherwise break silently.
 """
 
@@ -19,7 +19,7 @@ GENERATED_KOTLIN = (
     "generated/CarTelemetry.g.kt"
 )
 MAIN_ACTIVITY = "android/app/src/main/kotlin/com/cbstudio/telltale/MainActivity.kt"
-NON_CAR_FLAVORS = ("field", "rig", "wear")
+NON_CAR_FLAVORS = ("rig", "wear")
 
 
 def _strip_dart_comments(source: str) -> str:
@@ -122,12 +122,20 @@ class CarBridgeContractTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, source, msg=forbidden)
 
-    def test_every_flavor_has_a_registrar_and_non_car_ones_are_inert(self):
+    def test_projected_flavors_share_registrar_and_non_car_ones_are_inert(self):
         car = self.read(
             "android/app/src/carProto/kotlin/com/cbstudio/telltale/"
             "FlavorPlatformRegistrar.kt"
         )
         self.assertIn("CarTelemetryHostApi.setUp(", car)
+        gradle = self.read("android/app/build.gradle.kts")
+        self.assertIn(
+            'sourceSets.getByName("field").java.srcDir("src/carProto/kotlin")',
+            gradle,
+        )
+        self.assertFalse(
+            (ROOT / "android/app/src/field/kotlin/com/cbstudio/telltale/FlavorPlatformRegistrar.kt").exists()
+        )
         for flavor in NON_CAR_FLAVORS:
             path = (
                 f"android/app/src/{flavor}/kotlin/com/cbstudio/telltale/"
@@ -156,11 +164,12 @@ class CarBridgeContractTest(unittest.TestCase):
                         msg=f"{forbidden} in {path.relative_to(ROOT)}",
                     )
 
-    def test_car_core_is_still_car_proto_only(self):
+    def test_car_core_is_only_in_projected_flavors(self):
         gradle = self.read("android/app/build.gradle.kts")
         deps = re.findall(r'project\(":car-core"\)', gradle)
         self.assertEqual(len(deps), 1)
-        self.assertIn('add("carProtoImplementation", project(":car-core"))', gradle)
+        self.assertIn('listOf("field", "carProto").forEach { flavor ->', gradle)
+        self.assertIn('add("${flavor}Implementation", project(":car-core"))', gradle)
 
     def test_obd_never_imports_car(self):
         for path in (ROOT / "lib/obd").rglob("*.dart"):
@@ -218,12 +227,15 @@ class CarBridgeContractTest(unittest.TestCase):
             "'com.cbstudio.telltale.carproto';",
             runtime,
         )
+        self.assertIn("'field' => androidFieldApplicationId", runtime)
+        self.assertIn("'carProto' => androidCarProtoApplicationId", runtime)
         self.assertIn("final carProjectionEnabledProvider = Provider<bool>((ref) => false);", runtime)
 
     def test_drift_gate_and_car_unit_lanes_are_in_full_gate(self):
         gate = self.read("tool/ci/full_gate.sh")
         self.assertIn("run_step car-pigeon-codegen bash tool/ci/verify_car_pigeon_codegen.sh", gate)
         self.assertIn(":car-core:testDebugUnitTest", gate)
+        self.assertIn(":app:testFieldDebugUnitTest", gate)
         self.assertIn(":app:testCarProtoDebugUnitTest", gate)
         self.assertLess(gate.index("run_step pub-get"), gate.index("car-pigeon-codegen"))
 

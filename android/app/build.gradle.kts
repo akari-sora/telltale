@@ -87,10 +87,9 @@ if (gateCRigDebugMode) {
 //
 // `android/key.properties` is gitignored, as are `*.jks` and `*.keystore`, so
 // the credentials never enter this repository. When the file is absent the
-// build still works — it falls back to the debug key — but it says so loudly
-// rather than producing an artifact that looks shippable and is not. An APK
-// signed with the debug key cannot be updated by a Play-signed one later, so
-// discovering this after publishing is expensive.
+// an explicitly opted-in release build remains truly unsigned for private
+// signing. It never falls back to the debug key, because that APK could not be
+// updated by a Play-signed artifact later.
 val keystoreProperties = Properties().apply {
     if (!gateCRigDebugMode) {
         val file = rootProject.file("key.properties")
@@ -172,23 +171,31 @@ android {
         }
     }
 
+    // The Play field artifact is the unified phone + projected Android Auto
+    // application. Reuse the proven projection runtime sources rather than
+    // copying bridge/generated code into a second flavor. carProto keeps its
+    // separate package as a developer-compatibility lane.
+    sourceSets.getByName("field").java.srcDir("src/carProto/kotlin")
+    sourceSets.getByName("field").res.srcDir("src/carProto/res")
+    sourceSets.getByName("testField").java.srcDir("src/testCarProto/kotlin")
+    sourceSets.getByName("testField").resources.srcDir("src/testCarProto/resources")
+
     buildTypes {
         release {
             if (hasReleaseKeystore) {
                 signingConfig = signingConfigs.getByName("release")
             } else {
-                // Debug-signed, and refused below. A warning is not a gate,
-                // and the warning this replaced produced a debug-signed AAB
-                // that looks shippable, can never be a valid update for a
-                // production signing lineage, and is indistinguishable from
-                // the real thing once it leaves the machine that built it.
-                signingConfig = signingConfigs.getByName("debug")
+                // The explicit allowUnsignedRelease lane emits truly unsigned
+                // release candidates for signing on the private 9700X host.
+                // Never fall back to the debug key: that would create an APK
+                // which installs but cannot join the production lineage.
+                signingConfig = null
             }
         }
     }
 }
 
-// Release artifacts must not be debug-signed.
+// Release artifacts must be release-signed or explicitly unsigned.
 //
 // This blocks *every* release packaging path, including flavor-qualified tasks
 // such as `assembleFieldRelease` and `bundleFieldRelease`. An earlier version
@@ -200,8 +207,8 @@ android {
 //
 //     flutter run --release --flavor field -PallowUnsignedRelease=true
 //
-// The point is that building something debug-signed has to be a choice
-// somebody made, not a default they did not notice.
+// The override produces a true unsigned candidate. Private signing must happen
+// before distribution.
 if (!hasReleaseKeystore) {
     // Matched by shape rather than by an enumerated list of four names, which
     // was brittle: any release packaging task whose leaf name happened not to
@@ -232,9 +239,7 @@ if (!hasReleaseKeystore) {
                     "   Refusing to build " + requested.joinToString(", ") + ".\n" +
                     "\n" +
                     "   android/key.properties is missing, so this artifact\n" +
-                    "   would be signed with the DEBUG key. It would install\n" +
-                    "   and run, and it could never be a valid update for the\n" +
-                    "   production signing lineage.\n" +
+                    "   cannot be signed for the production lineage.\n" +
                     "\n" +
                     "   Create android/key.properties with storeFile,\n" +
                     "   storePassword, keyAlias and keyPassword.\n" +
@@ -261,15 +266,21 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.3.0")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.2.0")
 
-    add("carProtoImplementation", project(":car-core"))
-    add(
-        "carProtoImplementation",
-        "androidx.car.app:app-projected:1.8.0-rc01",
-    )
-    // AA-02 HostApi adapter test (src/testCarProto) drives the car-core
-    // repository on virtual time. carProto-only, like everything car.
+    listOf("field", "carProto").forEach { flavor ->
+        add("${flavor}Implementation", project(":car-core"))
+        add(
+            "${flavor}Implementation",
+            "androidx.car.app:app-projected:1.8.0-rc01",
+        )
+    }
+    // AA-02 HostApi adapter tests (shared from src/testCarProto) drive the
+    // car-core repository on virtual time for both projected flavors.
     add(
         "testCarProtoImplementation",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+    )
+    add(
+        "testFieldImplementation",
         "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
     )
 }

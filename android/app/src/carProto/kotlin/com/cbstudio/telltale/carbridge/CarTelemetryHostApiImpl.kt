@@ -12,7 +12,7 @@ import com.cbstudio.telltale.carbridge.generated.CarTelemetryHostApi
 import com.cbstudio.telltale.carbridge.generated.CarTelemetryMessage
 
 /**
- * The carProto-only receiving end of the one-way telemetry bridge.
+ * The receiving end of the one-way telemetry bridge shared by projected flavors.
  *
  * It decodes the Pigeon message into car-core's transport-neutral input and
  * hands it to the repository, which owns all validation. It never answers the

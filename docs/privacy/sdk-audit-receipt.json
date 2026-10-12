@@ -28,15 +28,15 @@
   "scope_and_limitations": "Formal gate audit is bounded to 240 source file digests, pubspec.lock SHA-256 match, and 7 prohibited SDK pattern regex scans executed by tool/workshop/validate_privacy_contract.py. Unverified pub-deps string claims are excluded from gate acceptance evidence.",
   "audited_sources_count": 240,
   "audited_sources": {
-    "android/app/build.gradle.kts": "c0c944fad88f490a359f039794f237919f5dd5bf7547b8f764c802f26c7d9aab",
+    "android/app/build.gradle.kts": "692faa168fb250cb81e7b90ce25a173084c774b0647daee57a5b2b02a99560c5",
     "lib/app.dart": "85b3eb8ac69bec4800f673f83f88b4a561f2f275dac5ec57c56f4b960cb765a1",
     "lib/car/car_diagnostics_runtime.dart": "a53ea37dabb3e5e47905edd59b079e7fb7e6024cd8ff2d3792270b2ff8670bd0",
     "lib/car/car_dtc_bridge.dart": "ed4ec359b08f8ae12822718d75274cbdf6ec7ee8a4dcace95307d0504d4d8a38",
     "lib/car/car_dtc_projector.dart": "d7b0148c2ef7f1f7e9dd9dcbeeeb900f5684412c96c44a6de06e27759dc3d123",
     "lib/car/car_dtc_report.dart": "55f62625a1dde24cd813f7e03b9e85158a0bfd6a62f22b1e82e9ff415f5c69ae",
     "lib/car/car_projection_coordinator.dart": "10107361849add33d3295d8baf5c8545ab60c8de0f781a85cf21d641b5e8b717",
-    "lib/car/car_projection_runtime.dart": "0a61b1f2b8a2d1dc20e667ea879935c4d3d6dcf149bd535bd1e4f3e9030296af",
-    "lib/car/car_projection_session_runtime.dart": "f5df88614e91053a2ef43ebd122b8d0186be7b3c911216d668ce1f301a97ddf9",
+    "lib/car/car_projection_runtime.dart": "75c165669b075becff1e9915a158e09bf5f6d59358632365c22c17a86bf25d8c",
+    "lib/car/car_projection_session_runtime.dart": "92bca4f03f03672ea7d8eda2604f6225b04e30fd161e2084b68c3a0fe857c051",
     "lib/car/car_telemetry_bridge.dart": "789fa9b4638cdad7c998ea1805683d8a80bfbf4750c32f1b1b60340ff3cab76b",
     "lib/car/car_telemetry_frame.dart": "6b20e8526c1854db2a301ee103d28a97dcc7642c9ce2f64e4f16fb0a1ff4f9e3",
     "lib/car/car_telemetry_projector.dart": "53292186db327dbd27e29c1165badee21eaf24875fb29a8fc7c8a95720a6c2bd",
@@ -107,7 +107,7 @@
     "lib/l10n/generated/app_localizations_zh.dart": "a461646251a2cb138bfceebd294da1929f3c8aec15c00f79bfc19ab0eee90bf1",
     "lib/l10n/locale_resolution.dart": "4ab985492b623e3da1d22fedeadf72f9ab47250fdf3ce10957ac0a6f553f2396",
     "lib/l10n/startup_copy.dart": "8e00a881b1a8fac04a0b69bd257ca30ff13b7522fcabc58b0f06e51abbca9ad3",
-    "lib/main.dart": "d2b6058e3ad08443d6170b78b4207119763a441aec707d0198c02f17006cb08c",
+    "lib/main.dart": "60db54ef4bf1aa6fca88dbc0d47eeb08fb27c13f5895d6d54c702eadbe5bc6ad",
     "lib/obd/adapter_identity.dart": "d5a95514fa102fff79962fecb0bbb6e37442e9c948a2ce3087840646d6b8eee6",
     "lib/obd/addressing.dart": "534ee0748b756e911e9f8da4fca3fdeee6c814a75b122a549c389f0b7a2ab5ee",
     "lib/obd/dtc/dtc.dart": "439fdcce8db003b7b896b7374303d6481af6c6b38bae8c0e2d3b7b1e365e515f",
@@ -169,7 +169,7 @@
     "lib/state/language_switch_guard.dart": "8d64668be1716beac1fdad710bcc6b80f213a5232f2177dee13e2cf9c716f550",
     "lib/state/locale_settings.dart": "5c2f3ad89a3a285f9936adad5bd62ebe2fbf059d9200420fa557ab8248944b94",
     "lib/state/manual_command_refusal.dart": "0477b90c06c956fdb4eab42f652786976323fee007297378b4ba20a78fc471a7",
-    "lib/state/obd_session.dart": "19bd8efcd411b142fc0b068fd8d331c4205be5a3d851524c587d85c5cb6c22da",
+    "lib/state/obd_session.dart": "a4020cbf15ccdcf070f9d21bedc9092ddbc6b761d05a5b04d889be85af38d17d",
     "lib/state/pid_mutation_lock.dart": "e989b829d7a20a50a75dedc2ed78054497f22ad539628ae8755efeb5d279982a",
     "lib/state/pid_registry.dart": "e20fca791be536ec1b2b9b05c34c5a11288e18d5b93ac1832e39db9d72d64b4c",
     "lib/state/powertrain_battery_experiments.dart": "8db68f31264a41b0c6a55579955ff1789930ea8c7f0c7d4b7a12e8a2eb4d4cac",
@@ -267,7 +267,7 @@
     "lib/ui/widgets/telemetry/telemetry_status_copy.dart": "7d1b7898638cab522859f047103e27c0c098fe72539cffb69b5ed8e74fd92e34",
     "lib/ui/widgets/transcript_export.dart": "892ae443512db9278b4462f9c438a3b14a21b139ef99d960bd428a7fc8ae3bdb",
     "pubspec.lock": "8cb7876cb7f2d393a9a65e56d365382cf0075922e8b76c0eed12390749910240",
-    "pubspec.yaml": "ec69767b5907af8231863a6aba567b81d7894e548b15f95608e4cb28daa200e4"
+    "pubspec.yaml": "54b1c2adddbaefda5e8fda829c457c2ef186738668f75f3c2459f7fb25ed84a6"
   },
   "summary": "Verified zero third-party telemetry, tracking, advertising, analytics, or crash reporting dependencies across pubspec.yaml, pubspec.lock, lib, and build.gradle.kts."
 }

@@ -11,11 +11,12 @@ import com.cbstudio.telltale.carbridge.generated.CarTelemetryHostApi
 import io.flutter.embedding.engine.FlutterEngine
 
 /**
- * carProto flavor hook called from MainActivity.configureFlutterEngine.
+ * Projected Android Auto hook called from MainActivity.configureFlutterEngine.
  *
  * Registers the receiving end of the one-way Dart -> Kotlin telemetry and diagnostics bridge.
- * field / rig / wear provide a no-op object with the same name, so src/main
- * never references car code and no reflection is involved.
+ * field reuses this source directory; rig / wear provide a no-op object with
+ * the same name, so src/main never references car code and no reflection is
+ * involved.
  */
 internal object FlavorPlatformRegistrar {
     private val engineRegistration = IdentityRegistrationGuard()
@@ -41,6 +42,9 @@ internal object FlavorPlatformRegistrar {
 
     fun shouldDestroyEngineWithHost(): Boolean =
         !ProjectionContinuityRuntime.shouldRetainEngine()
+
+    fun ownsProcessEngine(candidate: FlutterEngine): Boolean =
+        ProjectionContinuityRuntime.ownsEngine(candidate)
 
     fun onActivityResumed(activity: MainActivity) =
         ProjectionContinuityRuntime.onActivityResumed(activity)

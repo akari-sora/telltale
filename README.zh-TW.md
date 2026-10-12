@@ -53,9 +53,11 @@ OBD2 故障診斷。它的設計原則是誠實呈現不確定性，不把格式
 
 **[GitLab Releases](https://gitlab.com/aa22396584/telltale/-/releases)**
 
-打開該版本，選擇適用一般手機 App、且 ABI 與裝置相符的 `field` APK。另一個
-`carproto` APK 是 Android Auto／AAOS 工程預覽版；`field` APK 不含車載 App
-service。[Obtainium](https://github.com/ImranR98/Obtainium) 可從
+從 1.0.19 起，一般手機 `field` App 也包含 Android Auto 投影，兩個畫面共用
+`com.cbstudio.telltale` 的設定與連線，不需要另裝 `carproto`。選擇與裝置 ABI 相符
+的 APK。Android Auto 的車機安裝驗收使用 Google Play 內部測試；GitLab APK
+的手動安裝不等於受信任的車機安裝來源。Google 車用類別的正式上架審核仍待完成。
+[Obtainium](https://github.com/ImranR98/Obtainium) 可從
 `https://gitlab.com/aa22396584/telltale/-/releases` 追蹤更新。
 
 GitLab 使用[發行程序](docs/maintainers/release.md)所述的維護者簽章沿革。Android

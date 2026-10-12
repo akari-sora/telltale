@@ -28,11 +28,15 @@ run_step python-tools python3 -m unittest discover -s test/tool -p 'test_*.py'
 run_step python-aa08-pytest python3 -m pytest -q test/tool/test_challenger_empirical_r3.py test/tool/test_run_targeted_mutations.py
 run_step python-mode08 python3 -m unittest discover -s tool/obd_test_rig -p 'test_mode08_replay_reference.py'
 run_step car-core-unit ./android/gradlew -p android :car-core:testDebugUnitTest
+run_step car-field-unit ./android/gradlew -p android :app:testFieldDebugUnitTest
 run_step car-proto-unit ./android/gradlew -p android :app:testCarProtoDebugUnitTest
+run_step car-field-projected-build ./android/gradlew -p android :app:assembleFieldDebug
 run_step car-projected-build ./android/gradlew -p android :app:assembleCarProtoDebug
 run_step car-aaos-build ./android/gradlew -p android :automotive:assembleDebug
 run_step car-field-manifest ./android/gradlew -p android :app:processFieldDebugMainManifest
 run_step car-field-release-manifest ./android/gradlew -p android :app:processFieldReleaseMainManifest
+run_step car-rig-manifest ./android/gradlew -p android :app:processRigDebugMainManifest
+run_step car-wear-manifest ./android/gradlew -p android :app:processWearDebugMainManifest
 run_step car-manifest-isolation python3 tool/ci/verify_car_manifest_isolation.py
 run_step foldable-quality flutter test test/ui/foldable_quality_gate_test.dart --reporter expanded
 run_step flutter-tests flutter test --reporter expanded
@@ -45,4 +49,9 @@ run_step l10n-required python3 tool/ci/run_l10n_required.py --flutter flutter --
 # abiFilters and conflicts with the Gradle splits.abi configuration.
 run_step apk-build flutter build apk --verbose --debug --flavor field --split-per-abi
 sha256sum build/app/outputs/flutter-apk/*.apk > ci-artifacts/apks.sha256
+# Release preparation remains secret-free and in the same accepted CI job.
+# An API request on protected main explicitly opts into the extra AAB/APK build.
+if [ "${TELLTALE_RELEASE_CANDIDATE:-false}" = true ]; then
+  run_step release-candidate python3 tool/ci/build_release_candidate.py
+fi
 printf '\nAll gate commands and required replay passed. This is NOT Android device acceptance.\n'

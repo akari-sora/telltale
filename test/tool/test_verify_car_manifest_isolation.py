@@ -37,13 +37,17 @@ class VerifyCarManifestIsolationTest(unittest.TestCase):
             )
             self.assertEqual(errors, [])
 
-    def test_field_production_contract_fixture(self):
+    def test_unified_field_contract_fixture(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             manifest = Path(tmpdir) / "AndroidManifest.xml"
             manifest.write_text(
                 """<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:name="io.flutter.app.FlutterApplication">
-        <activity android:name=".MainActivity"/>
+    <uses-permission android:name="com.google.android.gms.permission.CAR_SPEED"/>
+    <application android:name="com.cbstudio.telltale.ProjectedTelltaleApplication">
+        <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/desc"/>
+        <service android:name="androidx.car.app.CarAppService">
+            <intent-filter><category android:name="androidx.car.app.category.IOT"/></intent-filter>
+        </service>
     </application>
 </manifest>""",
                 encoding="utf-8",
@@ -51,11 +55,14 @@ class VerifyCarManifestIsolationTest(unittest.TestCase):
             errors = verify_manifest(
                 name="field test",
                 path=manifest,
-                must_contain=[],
-                must_not_contain=[
+                must_contain=[
                     "CarAppService",
                     "category.IOT",
                     "com.google.android.gms.car.application",
+                    "com.google.android.gms.permission.CAR_SPEED",
+                    "ProjectedTelltaleApplication",
+                ],
+                must_not_contain=[
                     "com.android.automotive",
                     "CarAppActivity",
                 ],
@@ -133,7 +140,7 @@ class VerifyCarManifestIsolationTest(unittest.TestCase):
             )
             self.assertEqual(errors, [])
 
-    def test_field_release_contract_fixture(self):
+    def test_rig_and_wear_contract_fixture(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             manifest = Path(tmpdir) / "AndroidManifest.xml"
             manifest.write_text(
@@ -145,7 +152,7 @@ class VerifyCarManifestIsolationTest(unittest.TestCase):
                 encoding="utf-8",
             )
             errors = verify_manifest(
-                name="fieldRelease test",
+                name="rig/wear test",
                 path=manifest,
                 must_contain=[],
                 must_not_contain=[
@@ -154,6 +161,7 @@ class VerifyCarManifestIsolationTest(unittest.TestCase):
                     "com.google.android.gms.car.application",
                     "com.android.automotive",
                     "CarAppActivity",
+                    "ProjectedTelltaleApplication",
                 ],
             )
             self.assertEqual(errors, [])

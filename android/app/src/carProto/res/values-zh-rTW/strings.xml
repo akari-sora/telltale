@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projection_notification_channel_name">OBD 轉接器連線</string>
+    <string name="projection_notification_title">Telltale 已連線至 OBD 轉接器</string>
+    <string name="projection_notification_live_body">Android Auto 正在持續接收即時車輛遙測</string>
+    <string name="projection_notification_waiting_body">正在等待 Android Auto</string>
+</resources>

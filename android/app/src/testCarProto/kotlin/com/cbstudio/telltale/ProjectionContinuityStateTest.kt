@@ -8,13 +8,28 @@ import org.junit.Test
 
 class ProjectionContinuityStateTest {
     @Test
+    fun `projection signal does not duplicate car service engine ownership`() {
+        val state = ProjectionContinuityState()
+
+        state.onProjectionLease(active = true, generation = 1)
+        assertTrue(state.projectionActive)
+        assertFalse(
+            "CarAppService bootstrap owns the engine while projection is active",
+            state.shouldRetainEngine,
+        )
+
+        state.onProjectionLease(active = false, generation = 1)
+        assertFalse(state.shouldRetainEngine)
+    }
+
+    @Test
     fun `producer claim requires a foreground activity and registered engine`() {
         val state = ProjectionContinuityState()
 
-        assertFalse(state.canClaimProducer(11, activityResumed = false, hasEngine = true))
-        assertFalse(state.canClaimProducer(11, activityResumed = true, hasEngine = false))
-        assertFalse(state.canClaimProducer(0, activityResumed = true, hasEngine = true))
-        assertTrue(state.canClaimProducer(11, activityResumed = true, hasEngine = true))
+        assertFalse(state.canClaimProducer(11, producerStartAuthorized = false, hasEngine = true))
+        assertFalse(state.canClaimProducer(11, producerStartAuthorized = true, hasEngine = false))
+        assertFalse(state.canClaimProducer(0, producerStartAuthorized = true, hasEngine = true))
+        assertTrue(state.canClaimProducer(11, producerStartAuthorized = true, hasEngine = true))
     }
 
     @Test
