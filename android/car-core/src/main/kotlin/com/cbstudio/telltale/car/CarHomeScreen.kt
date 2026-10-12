@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
  *
  * Implements:
  * - Dynamic row limit adaptation via [ConstraintManager.CONTENT_LIMIT_TYPE_PANE] (4 to 6 rows).
- * - Prioritized metric presentation: Speed (km/h), RPM, Coolant (°C), Voltage (V), Boost, Engine Load.
+ * - Prioritized metric presentation: Speed, RPM, Coolant, Voltage, MAP, Engine Load.
  * - Multi-source speed arbitration (AA-05): OBD-first with host CarInfo fallback (display/raw).
  * - In-template alert presentation for coolant temperature (AA-05).
  * - Missing & stale data contracts: missing/unavailable shows `--`, quiet/stale shows `Stale`.
@@ -328,8 +328,8 @@ class CarHomeScreen(
         }
 
         val voltageText = formatSignal(frame?.controlModuleVoltageV, "V", "%.1f")
-        val boostText = missingText
-        val loadText = missingText
+        val mapText = formatSignal(frame?.mapKpa, "kPa", "%.0f")
+        val loadText = formatSignal(frame?.engineLoadPct, "%", "%.0f")
 
         return listOf(
             MetricRow(carContext.getString(R.string.car_home_speed_title), speedText, CarMetricIcon.SPEED),
@@ -341,7 +341,7 @@ class CarHomeScreen(
                 warning = coolantWarning,
             ),
             MetricRow(carContext.getString(R.string.car_home_voltage_title), voltageText, CarMetricIcon.VOLTAGE),
-            MetricRow(carContext.getString(R.string.car_home_boost_title), boostText, CarMetricIcon.PRESSURE),
+            MetricRow(carContext.getString(R.string.car_powertrain_map_title), mapText, CarMetricIcon.PRESSURE),
             MetricRow(carContext.getString(R.string.car_home_load_title), loadText, CarMetricIcon.LOAD),
         )
     }

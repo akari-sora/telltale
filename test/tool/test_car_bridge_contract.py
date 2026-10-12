@@ -82,14 +82,34 @@ class CarBridgeContractTest(unittest.TestCase):
             self.assertIn(f"interface {host_api}", kotlin)
 
     # AA02-04
-    def test_schema_version_is_one_on_both_ends(self):
+    def test_schema_version_is_two_on_both_ends(self):
         dart = self.read("lib/car/car_telemetry_frame.dart")
-        self.assertIn("const int carTelemetrySchemaVersion = 1;", dart)
+        self.assertIn("const int carTelemetrySchemaVersion = 2;", dart)
         kotlin = self.read(
             "android/car-core/src/main/kotlin/com/cbstudio/telltale/car/"
             "telemetry/CarTelemetryFrame.kt"
         )
-        self.assertIn("const val SCHEMA_VERSION: Long = 1", kotlin)
+        self.assertIn("const val SCHEMA_VERSION: Long = 2", kotlin)
+
+    def test_schema_two_carries_engine_load_with_a_bounded_native_envelope(self):
+        pigeon = self.read(PIGEON_INPUT)
+        self.assertIn("CarSignalDoubleMessage engineLoadPct;", pigeon)
+        projector = self.read("lib/car/car_telemetry_projector.dart")
+        self.assertIn("PidLibrary.engineLoad; // 0104", projector)
+        self.assertIn("PidLibrary.controlModuleVoltage; // 0142", projector)
+        kotlin = self.read(
+            "android/car-core/src/main/kotlin/com/cbstudio/telltale/car/"
+            "telemetry/CarTelemetryFrame.kt"
+        )
+        self.assertIn("val ENGINE_LOAD_PCT_ENVELOPE = 0.0..100.0", kotlin)
+        home = self.read(
+            "android/car-core/src/main/kotlin/com/cbstudio/telltale/car/CarHomeScreen.kt"
+        )
+        self.assertIn('formatSignal(frame?.engineLoadPct, "%", "%.0f")', home)
+        self.assertIn('formatSignal(frame?.mapKpa, "kPa", "%.0f")', home)
+        self.assertIn("R.string.car_powertrain_map_title", home)
+        self.assertNotIn("val boostText = missingText", home)
+        self.assertNotIn("R.string.car_home_boost_title", home)
 
     # AA02-07
     def test_generated_kotlin_exists_only_in_car_proto(self):

@@ -1,6 +1,6 @@
 package com.cbstudio.telltale.car.telemetry
 
-/** Mirror of the phone app's connection phase, as carried by schema v1. */
+/** Mirror of the phone app's connection phase, as carried by schema v2. */
 enum class CarConnectionPhase {
     DISCONNECTED,
     CONNECTING,
@@ -37,10 +37,11 @@ data class CarTelemetryFrameInput(
     val diagnosticsAvailable: Boolean,
     val milOn: Boolean?,
     val dtcCount: Long?,
+    val engineLoadPct: CarSignalInput = CarSignalInput(CarSignalStatus.UNAVAILABLE, null),
 )
 
 /**
- * A validated schema-v1 frame. Every signal has passed the transport envelope
+ * A validated schema-v2 frame. Every signal has passed the transport envelope
  * and obeys the live-iff-numeric invariant of [CarSignalValue].
  *
  * `producedAtMonotonicUs` is producer-side time. It is evidence for ordering
@@ -62,10 +63,11 @@ data class CarTelemetryFrame(
     val diagnosticsAvailable: Boolean,
     val milOn: Boolean?,
     val dtcCount: Long?,
+    val engineLoadPct: CarSignalValue = CarSignalValue.UNAVAILABLE,
 ) {
     companion object {
         /** The only schema version this host understands. */
-        const val SCHEMA_VERSION: Long = 1
+        const val SCHEMA_VERSION: Long = 2
 
         // Transport-corruption envelopes. Deliberately wider than any healthy
         // vehicle: they reject garbage, not unusual-but-real readings (e.g. reverse speed).
@@ -75,6 +77,7 @@ data class CarTelemetryFrame(
         val INTAKE_AIR_C_ENVELOPE = -80.0..300.0
         val CONTROL_MODULE_VOLTAGE_V_ENVELOPE = 0.0..60.0
         val MAP_KPA_ENVELOPE = 0.0..500.0
+        val ENGINE_LOAD_PCT_ENVELOPE = 0.0..100.0
         val DTC_COUNT_RANGE = 0L..65_535L
     }
 }

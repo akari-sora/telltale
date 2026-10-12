@@ -52,6 +52,7 @@ internal fun CarTelemetryMessage.toFrameInput(): CarTelemetryFrameInput =
         diagnosticsAvailable = diagnosticsAvailable,
         milOn = milOn,
         dtcCount = dtcCount,
+        engineLoadPct = engineLoadPct.toCar(),
     )
 
 private fun CarConnectionPhaseMessage.toCar(): CarConnectionPhase =

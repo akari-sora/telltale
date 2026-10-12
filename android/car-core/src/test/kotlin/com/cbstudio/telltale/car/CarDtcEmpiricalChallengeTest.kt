@@ -86,7 +86,7 @@ class CarDtcEmpiricalChallengeTest {
         speed: Double = 0.0,
         phase: CarConnectionPhase = CarConnectionPhase.CONNECTED,
     ) = CarTelemetryFrameInput(
-        schemaVersion = 1,
+        schemaVersion = 2,
         sequence = sequence,
         connectionEpoch = epoch,
         lifecycleEpoch = 0,

@@ -26,7 +26,7 @@ enum class CarTelemetrySubmitResult {
  * here back to the producer.
  *
  * Contract (AA-02):
- * - schemaVersion != 1 → [CarTelemetryState.Incompatible]; no numbers.
+ * - schemaVersion != 2 → [CarTelemetryState.Incompatible]; no numbers.
  * - A malformed header, an older connection epoch, a non-increasing sequence
  *   within one connection epoch, or a lifecycle epoch going backwards within
  *   one connection epoch is dropped and does not change state.
@@ -192,6 +192,8 @@ class CarTelemetryRepository(
                 // Unknown MIL stays unknown; it is never turned into "off".
                 milOn = if (diagnostics) input.milOn else null,
                 dtcCount = dtcCount,
+                engineLoadPct =
+                    input.engineLoadPct.sanitize(CarTelemetryFrame.ENGINE_LOAD_PCT_ENVELOPE),
             )
         }
 

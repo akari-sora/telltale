@@ -22,11 +22,11 @@ import org.junit.Test
  * AA-02 cross-language wire contract, Kotlin half.
  *
  * Feeds the exact bytes the production Dart client sends
- * (resources/carbridge/car_telemetry_v1_frame.hex, pinned by
+ * (resources/carbridge/car_telemetry_v2_frame.hex, pinned by
  * test/car/car_telemetry_wire_contract_test.dart) into the real generated
  * Pigeon handler registered exactly as FlavorPlatformRegistrar registers it,
  * and pins the reply bytes the Dart side is tested against
- * (resources/carbridge/car_telemetry_v1_reply.hex).
+ * (resources/carbridge/car_telemetry_v2_reply.hex).
  *
  * The existing adapter test builds CarTelemetryMessage objects directly, so
  * it cannot see a codec, field-order or enum-ordinal disagreement between
@@ -116,7 +116,7 @@ class CarTelemetryWireContractTest {
         val state = repo.state.value
         assertTrue("expected Current, was $state", state is CarTelemetryState.Current)
         val frame = (state as CarTelemetryState.Current).frame
-        assertEquals(1L, frame.schemaVersion)
+        assertEquals(2L, frame.schemaVersion)
         // Above 2^32: survives only if both codecs carry 64-bit integers.
         assertEquals(5_000_000_000L, frame.sequence)
         assertEquals(7L, frame.connectionEpoch)
@@ -132,6 +132,8 @@ class CarTelemetryWireContractTest {
         assertEquals(CarSignalValue.UNAVAILABLE, frame.controlModuleVoltageV)
         assertEquals(CarSignalStatus.LIVE, frame.mapKpa.status)
         assertEquals(35.25, frame.mapKpa.value!!, 0.0)
+        assertEquals(CarSignalStatus.LIVE, frame.engineLoadPct.status)
+        assertEquals(67.5, frame.engineLoadPct.value!!, 0.0)
         assertTrue(frame.diagnosticsAvailable)
         assertEquals(true, frame.milOn)
         assertEquals(3L, frame.dtcCount)
@@ -189,7 +191,7 @@ class CarTelemetryWireContractTest {
     private companion object {
         const val CHANNEL =
             "dev.flutter.pigeon.torque_obd.CarTelemetryHostApi.publishTelemetryFrame"
-        const val FRAME_FIXTURE = "car_telemetry_v1_frame.hex"
-        const val REPLY_FIXTURE = "car_telemetry_v1_reply.hex"
+        const val FRAME_FIXTURE = "car_telemetry_v2_frame.hex"
+        const val REPLY_FIXTURE = "car_telemetry_v2_reply.hex"
     }
 }

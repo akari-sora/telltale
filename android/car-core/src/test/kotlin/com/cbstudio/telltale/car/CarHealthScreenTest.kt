@@ -96,7 +96,7 @@ class CarHealthScreenTest {
         milOn: Boolean? = false,
         dtcCount: Long? = 0,
     ) = CarTelemetryFrameInput(
-        schemaVersion = 1,
+        schemaVersion = 2,
         sequence = sequence,
         connectionEpoch = epoch,
         lifecycleEpoch = 0,

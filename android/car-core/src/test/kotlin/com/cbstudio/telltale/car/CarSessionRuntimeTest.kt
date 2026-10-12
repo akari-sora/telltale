@@ -535,7 +535,7 @@ class CarSessionRuntimeTest {
         epoch: Long = 1,
         speed: Double = 0.0,
     ) = CarTelemetryFrameInput(
-        schemaVersion = 1,
+        schemaVersion = 2,
         sequence = sequence,
         connectionEpoch = epoch,
         lifecycleEpoch = 0,

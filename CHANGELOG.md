@@ -17,6 +17,13 @@ Dates are the date the build was made, not the date it reached anyone.
   and parked diagnostic flows in the normal field variant. Rig and Wear builds
   retain their separate form-factor contracts.
 - Added field identity, native projection, and merged-manifest regression gates.
+- Prevented the Android Auto service's cold startup from waiting indefinitely
+  for phone-only orientation setup before starting the shared app runtime.
+- Android Auto now requests its telemetry independently of the phone dashboard
+  and displays actual engine load and manifold pressure. ECU module voltage
+  remains distinct from the adapter's supply voltage.
+- Prevented an active car projection from automatically reconnecting after the
+  user explicitly disconnects on the phone.
 - Added an exact-source, maintainer-signed AAB/APK build on the Ryzen 9700X,
   bound to a successful protected-main full-gate job.
 

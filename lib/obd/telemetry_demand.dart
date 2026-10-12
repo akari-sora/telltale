@@ -1,9 +1,9 @@
 /// Shared acquisition demand: several owners can want the same wire request.
 ///
-/// Dashboard gauges, a recording session, a trip logger and an alert can all
-/// ask for `7E0:010C` at once. The adapter still has one command slot. This
-/// registry unions those leases by wire identity (header + mode+PID) and
-/// drops a request only when the last owner releases it.
+/// Dashboard gauges, Android Auto, a recording session, a trip logger and an
+/// alert can all ask for `7E0:010C` at once. The adapter still has one command
+/// slot. This registry unions those leases by wire identity (header + mode+PID)
+/// and drops a request only when the last owner releases it.
 ///
 /// Decoded-channel identity stays beside the wire key: two formulas on the
 /// same PID are one request and two channels. The same PID on two headers is
@@ -14,7 +14,7 @@ library;
 import 'pid/priority_tier.dart';
 
 /// Who is asking for a channel to be acquired.
-enum DemandOwner { dashboard, recording, trip, alert }
+enum DemandOwner { dashboard, recording, trip, alert, projection }
 
 /// One owner's lease on one decoded channel.
 class TelemetryDemand {

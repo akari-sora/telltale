@@ -70,7 +70,7 @@ class CarPowertrainScreenTest {
         voltage: Double = 14.1,
         speed: Double = 45.0,
     ) = CarTelemetryFrameInput(
-        schemaVersion = 1,
+        schemaVersion = 2,
         sequence = sequence,
         connectionEpoch = 1,
         lifecycleEpoch = 0,
@@ -238,7 +238,7 @@ class CarPowertrainScreenTest {
         // Current vehicle is Epoch 2
         repo.submit(
             CarTelemetryFrameInput(
-                schemaVersion = 1,
+                schemaVersion = 2,
                 sequence = 1,
                 connectionEpoch = 2,
                 lifecycleEpoch = 0,
@@ -290,7 +290,7 @@ class CarPowertrainScreenTest {
         val repo = createRepository()
         repo.submit(
             CarTelemetryFrameInput(
-                schemaVersion = 1,
+                schemaVersion = 2,
                 sequence = 1,
                 connectionEpoch = 1,
                 lifecycleEpoch = 0,
@@ -337,7 +337,7 @@ class CarPowertrainScreenTest {
         currentTime = 4_001L
         repo.submit(
             CarTelemetryFrameInput(
-                schemaVersion = 1,
+                schemaVersion = 2,
                 sequence = 2,
                 connectionEpoch = 1,
                 lifecycleEpoch = 0,
@@ -367,7 +367,7 @@ class CarPowertrainScreenTest {
         val repo = createRepository()
         repo.submit(
             CarTelemetryFrameInput(
-                schemaVersion = 1,
+                schemaVersion = 2,
                 sequence = 1,
                 connectionEpoch = 1,
                 lifecycleEpoch = 0,

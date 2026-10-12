@@ -42,7 +42,7 @@ class CarDtcMotionGateAdversarialStressTest {
         speedKmh: CarSignalInput = live(0.0),
         phase: CarConnectionPhase = CarConnectionPhase.CONNECTED,
     ) = CarTelemetryFrameInput(
-        schemaVersion = 1,
+        schemaVersion = 2,
         sequence = ++seq,
         connectionEpoch = 1,
         lifecycleEpoch = 0,

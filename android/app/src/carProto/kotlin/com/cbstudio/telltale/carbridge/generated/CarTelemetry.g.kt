@@ -267,7 +267,7 @@ data class CarSignalDoubleMessage (
 }
 
 /**
- * Schema version 1 of the projected telemetry frame.
+ * Schema version 2 of the projected telemetry frame.
  *
  * Generated class from Pigeon that represents data sent in messages.
  */
@@ -290,7 +290,8 @@ data class CarTelemetryMessage (
   val mapKpa: CarSignalDoubleMessage,
   val diagnosticsAvailable: Boolean,
   val milOn: Boolean? = null,
-  val dtcCount: Long? = null
+  val dtcCount: Long? = null,
+  val engineLoadPct: CarSignalDoubleMessage
 )
  {
   companion object {
@@ -310,7 +311,8 @@ data class CarTelemetryMessage (
       val diagnosticsAvailable = pigeonVar_list[12] as Boolean
       val milOn = pigeonVar_list[13] as Boolean?
       val dtcCount = pigeonVar_list[14] as Long?
-      return CarTelemetryMessage(schemaVersion, sequence, connectionEpoch, lifecycleEpoch, producedAtMonotonicUs, connectionPhase, speedKmh, rpm, coolantC, intakeAirC, controlModuleVoltageV, mapKpa, diagnosticsAvailable, milOn, dtcCount)
+      val engineLoadPct = pigeonVar_list[15] as CarSignalDoubleMessage
+      return CarTelemetryMessage(schemaVersion, sequence, connectionEpoch, lifecycleEpoch, producedAtMonotonicUs, connectionPhase, speedKmh, rpm, coolantC, intakeAirC, controlModuleVoltageV, mapKpa, diagnosticsAvailable, milOn, dtcCount, engineLoadPct)
     }
   }
   fun toList(): List<Any?> {
@@ -330,6 +332,7 @@ data class CarTelemetryMessage (
       diagnosticsAvailable,
       milOn,
       dtcCount,
+      engineLoadPct,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -340,7 +343,7 @@ data class CarTelemetryMessage (
       return true
     }
     val other = other as CarTelemetryMessage
-    return CarTelemetryPigeonUtils.deepEquals(this.schemaVersion, other.schemaVersion) && CarTelemetryPigeonUtils.deepEquals(this.sequence, other.sequence) && CarTelemetryPigeonUtils.deepEquals(this.connectionEpoch, other.connectionEpoch) && CarTelemetryPigeonUtils.deepEquals(this.lifecycleEpoch, other.lifecycleEpoch) && CarTelemetryPigeonUtils.deepEquals(this.producedAtMonotonicUs, other.producedAtMonotonicUs) && CarTelemetryPigeonUtils.deepEquals(this.connectionPhase, other.connectionPhase) && CarTelemetryPigeonUtils.deepEquals(this.speedKmh, other.speedKmh) && CarTelemetryPigeonUtils.deepEquals(this.rpm, other.rpm) && CarTelemetryPigeonUtils.deepEquals(this.coolantC, other.coolantC) && CarTelemetryPigeonUtils.deepEquals(this.intakeAirC, other.intakeAirC) && CarTelemetryPigeonUtils.deepEquals(this.controlModuleVoltageV, other.controlModuleVoltageV) && CarTelemetryPigeonUtils.deepEquals(this.mapKpa, other.mapKpa) && CarTelemetryPigeonUtils.deepEquals(this.diagnosticsAvailable, other.diagnosticsAvailable) && CarTelemetryPigeonUtils.deepEquals(this.milOn, other.milOn) && CarTelemetryPigeonUtils.deepEquals(this.dtcCount, other.dtcCount)
+    return CarTelemetryPigeonUtils.deepEquals(this.schemaVersion, other.schemaVersion) && CarTelemetryPigeonUtils.deepEquals(this.sequence, other.sequence) && CarTelemetryPigeonUtils.deepEquals(this.connectionEpoch, other.connectionEpoch) && CarTelemetryPigeonUtils.deepEquals(this.lifecycleEpoch, other.lifecycleEpoch) && CarTelemetryPigeonUtils.deepEquals(this.producedAtMonotonicUs, other.producedAtMonotonicUs) && CarTelemetryPigeonUtils.deepEquals(this.connectionPhase, other.connectionPhase) && CarTelemetryPigeonUtils.deepEquals(this.speedKmh, other.speedKmh) && CarTelemetryPigeonUtils.deepEquals(this.rpm, other.rpm) && CarTelemetryPigeonUtils.deepEquals(this.coolantC, other.coolantC) && CarTelemetryPigeonUtils.deepEquals(this.intakeAirC, other.intakeAirC) && CarTelemetryPigeonUtils.deepEquals(this.controlModuleVoltageV, other.controlModuleVoltageV) && CarTelemetryPigeonUtils.deepEquals(this.mapKpa, other.mapKpa) && CarTelemetryPigeonUtils.deepEquals(this.diagnosticsAvailable, other.diagnosticsAvailable) && CarTelemetryPigeonUtils.deepEquals(this.milOn, other.milOn) && CarTelemetryPigeonUtils.deepEquals(this.dtcCount, other.dtcCount) && CarTelemetryPigeonUtils.deepEquals(this.engineLoadPct, other.engineLoadPct)
   }
 
   override fun hashCode(): Int {
@@ -360,10 +363,11 @@ data class CarTelemetryMessage (
     result = 31 * result + CarTelemetryPigeonUtils.deepHash(this.diagnosticsAvailable)
     result = 31 * result + CarTelemetryPigeonUtils.deepHash(this.milOn)
     result = 31 * result + CarTelemetryPigeonUtils.deepHash(this.dtcCount)
+    result = 31 * result + CarTelemetryPigeonUtils.deepHash(this.engineLoadPct)
     return result
   }
   override fun toString(): String {
-    return "CarTelemetryMessage(schemaVersion=$schemaVersion, sequence=$sequence, connectionEpoch=$connectionEpoch, lifecycleEpoch=$lifecycleEpoch, producedAtMonotonicUs=$producedAtMonotonicUs, connectionPhase=$connectionPhase, speedKmh=$speedKmh, rpm=$rpm, coolantC=$coolantC, intakeAirC=$intakeAirC, controlModuleVoltageV=$controlModuleVoltageV, mapKpa=$mapKpa, diagnosticsAvailable=$diagnosticsAvailable, milOn=$milOn, dtcCount=$dtcCount)"
+    return "CarTelemetryMessage(schemaVersion=$schemaVersion, sequence=$sequence, connectionEpoch=$connectionEpoch, lifecycleEpoch=$lifecycleEpoch, producedAtMonotonicUs=$producedAtMonotonicUs, connectionPhase=$connectionPhase, speedKmh=$speedKmh, rpm=$rpm, coolantC=$coolantC, intakeAirC=$intakeAirC, controlModuleVoltageV=$controlModuleVoltageV, mapKpa=$mapKpa, diagnosticsAvailable=$diagnosticsAvailable, milOn=$milOn, dtcCount=$dtcCount, engineLoadPct=$engineLoadPct)"
   }
 }
 private open class CarTelemetryPigeonCodec : StandardMessageCodec() {

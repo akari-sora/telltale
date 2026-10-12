@@ -1,4 +1,4 @@
-/// AA-02 car telemetry projection model (schema v1).
+/// AA-02 car telemetry projection model (schema v2).
 ///
 /// A read-only, versioned view of the phone's telemetry, built for the
 /// one-way Dart -> Kotlin car bridge. Nothing here can reach back into the OBD
@@ -11,7 +11,7 @@ import '../state/obd_session.dart' show ConnectionPhase;
 
 /// The only schema this producer emits. The Kotlin repository rejects any
 /// other version as Incompatible.
-const int carTelemetrySchemaVersion = 1;
+const int carTelemetrySchemaVersion = 2;
 
 /// Why a projected signal does or does not carry a number.
 enum CarSignalStatus { live, stale, unsupported, unavailable }
@@ -105,6 +105,7 @@ final class CarTelemetryProjection {
     required this.controlModuleVoltageV,
     required this.mapKpa,
     required this.diagnostics,
+    this.engineLoadPct = CarSignal.unavailable,
   });
 
   final ConnectionPhase connectionPhase;
@@ -126,6 +127,7 @@ final class CarTelemetryProjection {
   final CarSignal intakeAirC;
   final CarSignal controlModuleVoltageV;
   final CarSignal mapKpa;
+  final CarSignal engineLoadPct;
 
   final CarDiagnosticsSummary diagnostics;
 
@@ -136,6 +138,7 @@ final class CarTelemetryProjection {
     intakeAirC,
     controlModuleVoltageV,
     mapKpa,
+    engineLoadPct,
   ];
 
   /// Whether going from [previous] to this frame must bypass the normal

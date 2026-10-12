@@ -16,7 +16,7 @@ class CarTelemetryRepositoryTest {
     private fun live(value: Double) = CarSignalInput(CarSignalStatus.LIVE, value)
 
     private fun input(
-        schemaVersion: Long = 1,
+        schemaVersion: Long = 2,
         sequence: Long = 1,
         connectionEpoch: Long = 1,
         lifecycleEpoch: Long = 0,
@@ -28,6 +28,7 @@ class CarTelemetryRepositoryTest {
         intakeAirC: CarSignalInput = live(25.0),
         controlModuleVoltageV: CarSignalInput = live(14.1),
         mapKpa: CarSignalInput = live(35.0),
+        engineLoadPct: CarSignalInput = live(50.0),
         diagnosticsAvailable: Boolean = false,
         milOn: Boolean? = null,
         dtcCount: Long? = null,
@@ -44,6 +45,7 @@ class CarTelemetryRepositoryTest {
         intakeAirC = intakeAirC,
         controlModuleVoltageV = controlModuleVoltageV,
         mapKpa = mapKpa,
+        engineLoadPct = engineLoadPct,
         diagnosticsAvailable = diagnosticsAvailable,
         milOn = milOn,
         dtcCount = dtcCount,
@@ -63,7 +65,7 @@ class CarTelemetryRepositoryTest {
 
     // AA02-22
     @Test
-    fun startsAwaitingAndAcceptsV1FrameIntoCurrent() = runTest {
+    fun startsAwaitingAndAcceptsV2FrameIntoCurrent() = runTest {
         val repo = repository()
         assertEquals(CarTelemetryState.Awaiting, repo.state.value)
 
@@ -72,13 +74,14 @@ class CarTelemetryRepositoryTest {
 
         val state = repo.state.value as CarTelemetryState.Current
         assertEquals(500L, state.receivedAtElapsedMs)
-        assertEquals(1L, state.frame.schemaVersion)
+        assertEquals(2L, state.frame.schemaVersion)
         assertEquals(CarConnectionPhase.CONNECTED, state.frame.connectionPhase)
         assertEquals(CarSignalStatus.LIVE, state.frame.speedKmh.status)
         assertEquals(42.0, state.frame.speedKmh.value!!, 0.0)
         assertEquals(1800.0, state.frame.rpm.value!!, 0.0)
         assertEquals(14.1, state.frame.controlModuleVoltageV.value!!, 0.0)
         assertEquals(35.0, state.frame.mapKpa.value!!, 0.0)
+        assertEquals(50.0, state.frame.engineLoadPct.value!!, 0.0)
     }
 
     // AA02-23
@@ -89,18 +92,18 @@ class CarTelemetryRepositoryTest {
 
         assertEquals(
             CarTelemetrySubmitResult.INCOMPATIBLE_SCHEMA,
-            repo.submit(input(schemaVersion = 2, sequence = 2)),
+            repo.submit(input(schemaVersion = 3, sequence = 2)),
         )
         val state = repo.state.value
-        assertEquals(CarTelemetryState.Incompatible(2), state)
+        assertEquals(CarTelemetryState.Incompatible(3), state)
 
         // Incompatible cancels the stale timer: it must not decay into Stale
         // (which would suggest the bridge simply went quiet).
         advanceTimeBy(10_000)
         runCurrent()
-        assertEquals(CarTelemetryState.Incompatible(2), repo.state.value)
+        assertEquals(CarTelemetryState.Incompatible(3), repo.state.value)
 
-        // The next valid v1 frame recovers.
+        // The next valid v2 frame recovers.
         assertEquals(CarTelemetrySubmitResult.ACCEPTED, repo.submit(input(sequence = 3)))
         assertTrue(repo.state.value is CarTelemetryState.Current)
     }
@@ -209,6 +212,7 @@ class CarTelemetryRepositoryTest {
                 intakeAirC = live(-80.1),
                 controlModuleVoltageV = live(60.0),
                 mapKpa = CarSignalInput(CarSignalStatus.LIVE, null),
+                engineLoadPct = live(100.1),
             ),
         )
         val frame = repo.currentFrame()
@@ -217,9 +221,24 @@ class CarTelemetryRepositoryTest {
         assertEquals(CarSignalValue.UNAVAILABLE, frame.coolantC)
         assertEquals(CarSignalValue.UNAVAILABLE, frame.intakeAirC)
         assertEquals(CarSignalValue.UNAVAILABLE, frame.mapKpa)
+        assertEquals(CarSignalValue.UNAVAILABLE, frame.engineLoadPct)
         // Envelope bounds are inclusive; a valid signal survives next to bad ones.
         assertEquals(CarSignalStatus.LIVE, frame.controlModuleVoltageV.status)
         assertEquals(60.0, frame.controlModuleVoltageV.value!!, 0.0)
+    }
+
+    @Test
+    fun engineLoadRequiresAFinitePercentageInsideInclusiveBounds() = runTest {
+        val repo = repository()
+        var sequence = 1L
+        for (bad in listOf(Double.NaN, Double.NEGATIVE_INFINITY, -0.1, 100.1)) {
+            repo.submit(input(sequence = sequence++, engineLoadPct = live(bad)))
+            assertEquals(CarSignalValue.UNAVAILABLE, repo.currentFrame().engineLoadPct)
+        }
+        repo.submit(input(sequence = sequence++, engineLoadPct = live(0.0)))
+        assertEquals(0.0, repo.currentFrame().engineLoadPct.value!!, 0.0)
+        repo.submit(input(sequence = sequence, engineLoadPct = live(100.0)))
+        assertEquals(100.0, repo.currentFrame().engineLoadPct.value!!, 0.0)
     }
 
     // AA02-15 (host side of the two-sided invariant)
@@ -243,6 +262,7 @@ class CarTelemetryRepositoryTest {
         for (signal in listOf(
             frame.speedKmh, frame.rpm, frame.coolantC, frame.intakeAirC,
             frame.controlModuleVoltageV, frame.mapKpa,
+            frame.engineLoadPct,
         )) {
             assertEquals(signal.status == CarSignalStatus.LIVE, signal.value != null)
         }

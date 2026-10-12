@@ -112,7 +112,7 @@ final class CarTelemetryBridge {
   }
 }
 
-/// Encodes a frame into the generated schema-v1 message.
+/// Encodes a frame into the generated schema-v2 message.
 ///
 /// The live-iff-numeric invariant is re-asserted here as the last line before
 /// the wire: a non-live signal never transports a number.
@@ -134,6 +134,7 @@ CarTelemetryMessage encodeCarTelemetryFrame(CarTelemetryFrame frame) {
     diagnosticsAvailable: p.diagnostics.available,
     milOn: p.diagnostics.available ? p.diagnostics.milOn : null,
     dtcCount: p.diagnostics.available ? p.diagnostics.dtcCount : null,
+    engineLoadPct: _signal(p.engineLoadPct),
   );
 }
 

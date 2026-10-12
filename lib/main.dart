@@ -2,7 +2,6 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,6 +12,7 @@ import 'core/field_evidence/platform_metadata.dart';
 import 'core/form_factor.dart';
 import 'core/licenses/powertrain_battery_licenses.dart';
 import 'core/share/rig_app_share_platform.dart';
+import 'core/startup_system_chrome.dart';
 import 'obd/session_evidence.dart';
 import 'state/app_runtime.dart';
 import 'state/app_share_coordinator.dart';
@@ -66,17 +66,7 @@ Future<void> main() async {
   // Windows/Linux/macOS windowing — skip so a missing plugin never becomes a
   // launch-time surprise on those hosts.
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: Colors.transparent,
-      ),
-    );
+    await configureStartupSystemChrome();
   }
 
   runApp(

@@ -70,7 +70,7 @@ class CarHomeScreenTest {
     private fun unavailable() = CarSignalInput(CarSignalStatus.UNAVAILABLE, null)
 
     private fun frameInput(
-        schemaVersion: Long = 1,
+        schemaVersion: Long = 2,
         sequence: Long = 1,
         connectionEpoch: Long = 1,
         lifecycleEpoch: Long = 0,
@@ -82,6 +82,7 @@ class CarHomeScreenTest {
         intakeAirC: CarSignalInput = live(25.0),
         controlModuleVoltageV: CarSignalInput = live(14.1),
         mapKpa: CarSignalInput = live(35.0),
+        engineLoadPct: CarSignalInput = live(67.5),
         diagnosticsAvailable: Boolean = false,
         milOn: Boolean? = null,
         dtcCount: Long? = null,
@@ -98,6 +99,7 @@ class CarHomeScreenTest {
         intakeAirC = intakeAirC,
         controlModuleVoltageV = controlModuleVoltageV,
         mapKpa = mapKpa,
+        engineLoadPct = engineLoadPct,
         diagnosticsAvailable = diagnosticsAvailable,
         milOn = milOn,
         dtcCount = dtcCount,
@@ -147,7 +149,7 @@ class CarHomeScreenTest {
         val rowTitles = template.pane.rows.map { it.title?.toString() }
 
         assertEquals(
-            listOf("Speed", "RPM", "Coolant", "Module Voltage", "Boost", "Engine Load"),
+            listOf("Speed", "RPM", "Coolant", "Module Voltage", "MAP", "Engine Load"),
             rowTitles,
         )
     }
@@ -187,7 +189,7 @@ class CarHomeScreenTest {
         val rowTitles = template.pane.rows.map { it.title?.toString() }
 
         assertEquals(5, template.pane.rows.size)
-        assertEquals(listOf("Speed", "RPM", "Coolant", "Module Voltage", "Boost"), rowTitles)
+        assertEquals(listOf("Speed", "RPM", "Coolant", "Module Voltage", "MAP"), rowTitles)
     }
 
     @Test
@@ -281,6 +283,8 @@ class CarHomeScreenTest {
                 rpm = live(1800.0),
                 coolantC = live(89.7),
                 controlModuleVoltageV = live(14.12),
+                mapKpa = live(85.0),
+                engineLoadPct = live(67.5),
             ),
         )
 
@@ -300,9 +304,8 @@ class CarHomeScreenTest {
         assertEquals("1800 RPM", rows[1].texts[0].toString())
         assertEquals("90 °C", rows[2].texts[0].toString())
         assertEquals("14.1 V", rows[3].texts[0].toString())
-        // Boost & Load are missing in schema v1
-        assertEquals("--", rows[4].texts[0].toString())
-        assertEquals("--", rows[5].texts[0].toString())
+        assertEquals("85 kPa", rows[4].texts[0].toString())
+        assertEquals("68 %", rows[5].texts[0].toString())
         assertEquals(
             listOf(
                 R.drawable.ic_car_metric_speed,
@@ -385,18 +388,13 @@ class CarHomeScreenTest {
         val template = screen.onGetTemplate() as PaneTemplate
         val rows = template.pane.rows
 
-        // Rows 0..3 (Speed, RPM, Coolant, Module Voltage) were received in frameInput and are now stale
-        for (i in 0..3) {
+        // Received signals are stale after the repository deadline.
+        for (i in 0..5) {
             val text = rows[i].texts[0].toString()
             assertEquals("Stale repository state must display Stale for observed signal", "Stale", text)
             assertNotEquals("Must never display fictitious 0", "0", text)
         }
 
-        // Rows 4..5 (Boost, Engine Load) never existed in schema-v1, must remain missing (--)
-        assertEquals("--", rows[4].texts[0].toString())
-        assertEquals("--", rows[5].texts[0].toString())
-        assertNotEquals("0", rows[4].texts[0].toString())
-        assertNotEquals("0", rows[5].texts[0].toString())
     }
 
     @Test
@@ -428,9 +426,73 @@ class CarHomeScreenTest {
     }
 
     @Test
-    fun homeScreen_boostAndLoadDisplayMissingAndNeverZero() = runTest {
+    fun homeScreen_engineLoadPreservesEveryDisplayStatus() = runTest {
         val repo = createRepository()
-        repo.submit(frameInput())
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        fun loadText(): String {
+            @Suppress("DEPRECATION")
+            val template = screen.onGetTemplate() as PaneTemplate
+            return template.pane.rows[5].texts[0].toString()
+        }
+
+        repo.submit(frameInput(sequence = 1, engineLoadPct = live(72.5)))
+        assertEquals("73 %", loadText())
+        repo.submit(frameInput(sequence = 2, engineLoadPct = stale()))
+        assertEquals("Stale", loadText())
+        repo.submit(
+            frameInput(
+                sequence = 3,
+                engineLoadPct = CarSignalInput(CarSignalStatus.UNSUPPORTED, null),
+            ),
+        )
+        assertEquals("--", loadText())
+        repo.submit(frameInput(sequence = 4, engineLoadPct = unavailable()))
+        assertEquals("--", loadText())
+    }
+
+    @Test
+    fun homeScreen_mapPreservesEveryDisplayStatus() = runTest {
+        val repo = createRepository()
+        val screen = CarHomeScreen(
+            carContext = carContext,
+            repository = repo,
+            contentLimitProvider = { 6 },
+        )
+        val controller = ScreenController(screen)
+        controller.moveToState(Lifecycle.State.RESUMED)
+
+        fun mapText(): String {
+            @Suppress("DEPRECATION")
+            val template = screen.onGetTemplate() as PaneTemplate
+            return template.pane.rows[4].texts[0].toString()
+        }
+
+        repo.submit(frameInput(sequence = 1, mapKpa = live(85.0)))
+        assertEquals("85 kPa", mapText())
+        repo.submit(frameInput(sequence = 2, mapKpa = stale()))
+        assertEquals("Stale", mapText())
+        repo.submit(
+            frameInput(
+                sequence = 3,
+                mapKpa = CarSignalInput(CarSignalStatus.UNSUPPORTED, null),
+            ),
+        )
+        assertEquals("--", mapText())
+        repo.submit(frameInput(sequence = 4, mapKpa = unavailable()))
+        assertEquals("--", mapText())
+    }
+
+    @Test
+    fun homeScreen_unavailableMapAndLoadDisplayMissingAndNeverZero() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput(mapKpa = unavailable(), engineLoadPct = unavailable()))
 
         val screen = CarHomeScreen(
             carContext = carContext,
@@ -444,7 +506,7 @@ class CarHomeScreenTest {
         val template = screen.onGetTemplate() as PaneTemplate
         val rows = template.pane.rows
 
-        // Boost and Load
+        // Explicitly unavailable MAP and Load.
         assertEquals("--", rows[4].texts[0].toString())
         assertEquals("--", rows[5].texts[0].toString())
         assertNotEquals("0", rows[4].texts[0].toString())
@@ -607,13 +669,14 @@ class CarHomeScreenTest {
                 rpm = live(-0.0),
                 coolantC = live(-0.0),
                 controlModuleVoltageV = live(-0.0),
+                engineLoadPct = live(-0.0),
             ),
         )
 
         val screen = CarHomeScreen(
             carContext = carContext,
             repository = repo,
-            contentLimitProvider = { 4 },
+            contentLimitProvider = { 6 },
         )
         val controller = ScreenController(screen)
         controller.moveToState(Lifecycle.State.RESUMED)
@@ -626,8 +689,10 @@ class CarHomeScreenTest {
         assertEquals("0 RPM", rows[1].texts[0].toString())
         assertEquals("0 °C", rows[2].texts[0].toString())
         assertEquals("0.0 V", rows[3].texts[0].toString())
+        assertEquals("0 %", rows[5].texts[0].toString())
         assertNotEquals("-0 km/h", rows[0].texts[0].toString())
         assertNotEquals("-0.0 V", rows[3].texts[0].toString())
+        assertNotEquals("-0 %", rows[5].texts[0].toString())
     }
 
     @Test
@@ -928,7 +993,7 @@ class CarHomeScreenTest {
         val controller = ScreenController(screen)
         controller.moveToState(Lifecycle.State.RESUMED)
 
-        val expectedTitles = listOf("Speed", "RPM", "Coolant", "Module Voltage", "Boost", "Engine Load")
+        val expectedTitles = listOf("Speed", "RPM", "Coolant", "Module Voltage", "MAP", "Engine Load")
         val expectedIcons = listOf(
             R.drawable.ic_car_metric_speed,
             R.drawable.ic_car_metric_rpm,

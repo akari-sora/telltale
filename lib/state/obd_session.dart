@@ -29,12 +29,14 @@ import '../obd/dtc/dtc.dart';
 import '../obd/elapsed_clock.dart';
 import '../obd/elm327_client.dart';
 import '../obd/pid/pid.dart';
+import '../obd/pid/pid_library.dart';
 import '../obd/freeze_frame.dart';
 import '../obd/polling_engine.dart';
 import '../obd/powertrain_battery/powertrain_battery_catalog.dart';
 import '../obd/powertrain_battery/powertrain_battery_probe.dart';
 import '../obd/session_boundary.dart';
 import '../obd/session_evidence.dart';
+import '../obd/telemetry_demand.dart';
 import '../obd/transcript_store.dart';
 import '../obd/telemetry.dart';
 import '../obd/transcript.dart';
@@ -518,6 +520,76 @@ class ObdSession extends Notifier<ObdConnectionState> {
   Object? _resumeValidationOwner;
   int? _projectionGeneration;
   int? _projectionConnectionGeneration;
+  int? _projectionDemandGeneration;
+  final List<String> _projectionDemandLeaseIds = [];
+  int _userDisconnectEpoch = 0;
+
+  static const _projectionPids = <Pid>[
+    PidLibrary.vehicleSpeed,
+    PidLibrary.engineRpm,
+    PidLibrary.coolantTemp,
+    PidLibrary.intakeAirTemp,
+    PidLibrary.controlModuleVoltage,
+    PidLibrary.manifoldPressure,
+    PidLibrary.engineLoad,
+  ];
+
+  int get userDisconnectEpoch => _userDisconnectEpoch;
+
+  /// Keeps Android Auto's fixed telemetry contract on the wire independently
+  /// of the phone dashboard layout. The polling engine still unions identical
+  /// requests, so a gauge and projection never create duplicate adapter work.
+  bool acquireProjectionTelemetryDemand(int projectionGeneration) {
+    final engine = _engine;
+    if (!state.isConnected || engine == null) return false;
+    if (_projectionDemandGeneration == projectionGeneration &&
+        _projectionDemandLeaseIds.length == _projectionPids.length) {
+      return true;
+    }
+
+    _releaseProjectionTelemetryDemand();
+    final acquired = <String>[];
+    try {
+      for (final pid in _projectionPids) {
+        final leaseId = 'projection:$projectionGeneration:${pid.id}';
+        engine.hold(
+          TelemetryDemand(
+            owner: DemandOwner.projection,
+            leaseId: leaseId,
+            header: pid.header,
+            modeAndPid: pid.modeAndPid,
+            requestedPeriod: pid.priority.targetInterval,
+            priority: pid.priority,
+            definitionId: pid.id,
+          ),
+          pid,
+        );
+        acquired.add(leaseId);
+      }
+    } on Object {
+      for (final leaseId in acquired) {
+        engine.releaseHold(leaseId);
+      }
+      rethrow;
+    }
+    _projectionDemandGeneration = projectionGeneration;
+    _projectionDemandLeaseIds.addAll(acquired);
+    return true;
+  }
+
+  void releaseProjectionTelemetryDemand(int projectionGeneration) {
+    if (_projectionDemandGeneration != projectionGeneration) return;
+    _releaseProjectionTelemetryDemand();
+  }
+
+  void _releaseProjectionTelemetryDemand() {
+    final engine = _engine;
+    for (final leaseId in _projectionDemandLeaseIds) {
+      engine?.releaseHold(leaseId);
+    }
+    _projectionDemandLeaseIds.clear();
+    _projectionDemandGeneration = null;
+  }
 
   bool get hasArmedProjectionContinuity =>
       _projectionGeneration != null &&
@@ -603,6 +675,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
 
   /// Closes hidden wire admission synchronously, then drains the poll loop.
   Future<void> retireProjectionContinuity(int projectionGeneration) {
+    releaseProjectionTelemetryDemand(projectionGeneration);
     if (_projectionGeneration != projectionGeneration) {
       return Future<void>.value();
     }
@@ -1970,7 +2043,8 @@ class ObdSession extends Notifier<ObdConnectionState> {
         !state.isConnected) {
       throw const DiagnosticLinkException(
         kind: DiagnosticFailureKind.retiredOperation,
-        message: 'No active diagnostic link ownership authority for connected session.',
+        message:
+            'No active diagnostic link ownership authority for connected session.',
       );
     }
     return authority.runOneShot<T>(
@@ -2008,7 +2082,8 @@ class ObdSession extends Notifier<ObdConnectionState> {
         _awaitingResumeValidation) {
       throw const DiagnosticLinkException(
         kind: DiagnosticFailureKind.retiredOperation,
-        message: 'No active diagnostic link ownership authority for connected session.',
+        message:
+            'No active diagnostic link ownership authority for connected session.',
       );
     }
 
@@ -2285,6 +2360,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // just abandoned cannot finish and publish itself as live.
     _client?.transcript.recordNote('Connection event: the user disconnected');
     _publishSessionBoundary(ObdSessionBoundaryReason.userDisconnect);
+    _userDisconnectEpoch++;
     _generation++;
     await _teardown();
     await ref
@@ -2487,6 +2563,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
     _linkOwnership?.dispose();
     _linkOwnership = null;
     _censusInFlight = null;
+    _releaseProjectionTelemetryDemand();
     _engine = null;
     _client = null;
     _projectionGeneration = null;
