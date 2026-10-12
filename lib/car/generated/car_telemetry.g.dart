@@ -166,7 +166,7 @@ class CarSignalDoubleMessage {
   }
 }
 
-/// Schema version 1 of the projected telemetry frame.
+/// Schema version 2 of the projected telemetry frame.
 class CarTelemetryMessage {
   CarTelemetryMessage({
     required this.schemaVersion,
@@ -184,6 +184,7 @@ class CarTelemetryMessage {
     required this.diagnosticsAvailable,
     this.milOn,
     this.dtcCount,
+    required this.engineLoadPct,
   });
 
   int schemaVersion;
@@ -218,6 +219,8 @@ class CarTelemetryMessage {
 
   int? dtcCount;
 
+  CarSignalDoubleMessage engineLoadPct;
+
   List<Object?> _toList() {
     return <Object?>[
       schemaVersion,
@@ -235,6 +238,7 @@ class CarTelemetryMessage {
       diagnosticsAvailable,
       milOn,
       dtcCount,
+      engineLoadPct,
     ];
   }
 
@@ -259,6 +263,7 @@ class CarTelemetryMessage {
       diagnosticsAvailable: result[12]! as bool,
       milOn: result[13] as bool?,
       dtcCount: result[14] as int?,
+      engineLoadPct: result[15]! as CarSignalDoubleMessage,
     );
   }
 
@@ -271,7 +276,7 @@ class CarTelemetryMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(schemaVersion, other.schemaVersion) && _deepEquals(sequence, other.sequence) && _deepEquals(connectionEpoch, other.connectionEpoch) && _deepEquals(lifecycleEpoch, other.lifecycleEpoch) && _deepEquals(producedAtMonotonicUs, other.producedAtMonotonicUs) && _deepEquals(connectionPhase, other.connectionPhase) && _deepEquals(speedKmh, other.speedKmh) && _deepEquals(rpm, other.rpm) && _deepEquals(coolantC, other.coolantC) && _deepEquals(intakeAirC, other.intakeAirC) && _deepEquals(controlModuleVoltageV, other.controlModuleVoltageV) && _deepEquals(mapKpa, other.mapKpa) && _deepEquals(diagnosticsAvailable, other.diagnosticsAvailable) && _deepEquals(milOn, other.milOn) && _deepEquals(dtcCount, other.dtcCount);
+    return _deepEquals(schemaVersion, other.schemaVersion) && _deepEquals(sequence, other.sequence) && _deepEquals(connectionEpoch, other.connectionEpoch) && _deepEquals(lifecycleEpoch, other.lifecycleEpoch) && _deepEquals(producedAtMonotonicUs, other.producedAtMonotonicUs) && _deepEquals(connectionPhase, other.connectionPhase) && _deepEquals(speedKmh, other.speedKmh) && _deepEquals(rpm, other.rpm) && _deepEquals(coolantC, other.coolantC) && _deepEquals(intakeAirC, other.intakeAirC) && _deepEquals(controlModuleVoltageV, other.controlModuleVoltageV) && _deepEquals(mapKpa, other.mapKpa) && _deepEquals(diagnosticsAvailable, other.diagnosticsAvailable) && _deepEquals(milOn, other.milOn) && _deepEquals(dtcCount, other.dtcCount) && _deepEquals(engineLoadPct, other.engineLoadPct);
   }
 
   @override
@@ -280,7 +285,7 @@ class CarTelemetryMessage {
 
   @override
   String toString() {
-    return 'CarTelemetryMessage(schemaVersion: $schemaVersion, sequence: $sequence, connectionEpoch: $connectionEpoch, lifecycleEpoch: $lifecycleEpoch, producedAtMonotonicUs: $producedAtMonotonicUs, connectionPhase: $connectionPhase, speedKmh: $speedKmh, rpm: $rpm, coolantC: $coolantC, intakeAirC: $intakeAirC, controlModuleVoltageV: $controlModuleVoltageV, mapKpa: $mapKpa, diagnosticsAvailable: $diagnosticsAvailable, milOn: $milOn, dtcCount: $dtcCount)';
+    return 'CarTelemetryMessage(schemaVersion: $schemaVersion, sequence: $sequence, connectionEpoch: $connectionEpoch, lifecycleEpoch: $lifecycleEpoch, producedAtMonotonicUs: $producedAtMonotonicUs, connectionPhase: $connectionPhase, speedKmh: $speedKmh, rpm: $rpm, coolantC: $coolantC, intakeAirC: $intakeAirC, controlModuleVoltageV: $controlModuleVoltageV, mapKpa: $mapKpa, diagnosticsAvailable: $diagnosticsAvailable, milOn: $milOn, dtcCount: $dtcCount, engineLoadPct: $engineLoadPct)';
   }
 }
 

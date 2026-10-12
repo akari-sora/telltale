@@ -53,7 +53,7 @@ class CarAlertCoordinatorTest {
         coolantC: CarSignalInput,
         epoch: Long = 1L,
     ) = CarTelemetryFrameInput(
-        schemaVersion = 1,
+        schemaVersion = 2,
         sequence = sequenceCounter++,
         connectionEpoch = epoch,
         lifecycleEpoch = 0,

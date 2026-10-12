@@ -12,6 +12,7 @@ Verifies:
   AA05-35: lib/obd/ changes against origin/main stay within the authorized OBD port.
 """
 
+import hashlib
 from pathlib import Path
 import re
 import subprocess
@@ -25,6 +26,13 @@ AUTHORIZED_OBD_PORT_FILES = frozenset(
         "lib/obd/powertrain_battery/powertrain_battery_catalog.dart",
     }
 )
+AUTHORIZED_OBD_EXACT_FILES = {
+    # Unified phone/Android Auto telemetry demand. This authorization is
+    # content-bound so later changes to the shared OBD primitive require a new
+    # contract review instead of inheriting a permanent path exception.
+    "lib/obd/telemetry_demand.dart":
+        "41f3f4571919e93238c4528b7625a1ada903b2f83a30e4b6feb86c24087e47ac",
+}
 
 
 class CarHardwareContractTest(unittest.TestCase):
@@ -120,13 +128,38 @@ class CarHardwareContractTest(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 0, f"git diff failed: {res.stderr}")
         changed_files = {line for line in res.stdout.splitlines() if line}
-        unexpected_files = changed_files - AUTHORIZED_OBD_PORT_FILES
+        exact_files = changed_files & AUTHORIZED_OBD_EXACT_FILES.keys()
+        exact_mismatches = {}
+        for relative in sorted(exact_files):
+            blob = subprocess.run(
+                ["git", "show", f"HEAD:{relative}"],
+                cwd=str(ROOT),
+                capture_output=True,
+            )
+            self.assertEqual(
+                blob.returncode,
+                0,
+                f"git show failed for {relative}: {blob.stderr.decode(errors='replace')}",
+            )
+            actual_digest = hashlib.sha256(blob.stdout).hexdigest()
+            expected_digest = AUTHORIZED_OBD_EXACT_FILES[relative]
+            if actual_digest != expected_digest:
+                exact_mismatches[relative] = {
+                    "expected": expected_digest,
+                    "actual": actual_digest,
+                }
+
+        unexpected_files = changed_files - AUTHORIZED_OBD_PORT_FILES - AUTHORIZED_OBD_EXACT_FILES.keys()
         self.assertFalse(
             unexpected_files,
             msg=(
                 "lib/obd/ contains drift outside the authorized OBD port: "
                 f"{sorted(unexpected_files)}"
             ),
+        )
+        self.assertFalse(
+            exact_mismatches,
+            msg=f"content-bound OBD authorization mismatch: {exact_mismatches}",
         )
 
 

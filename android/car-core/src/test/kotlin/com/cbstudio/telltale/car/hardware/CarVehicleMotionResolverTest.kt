@@ -21,7 +21,7 @@ class CarVehicleMotionResolverTest {
     private fun liveFrame(speedKmh: Double): CarTelemetryFrame {
         val sig = CarSignalValue.sanitize(CarSignalStatus.LIVE, speedKmh, CarTelemetryFrame.SPEED_KMH_ENVELOPE)
         return CarTelemetryFrame(
-            schemaVersion = 1,
+            schemaVersion = 2,
             sequence = 1,
             connectionEpoch = 1,
             lifecycleEpoch = 0,

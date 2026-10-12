@@ -65,13 +65,18 @@ void main() {
   const fresh = Duration(seconds: 9, milliseconds: 900);
 
   group('signal sources (AA02-09..11)', () {
-    test('schema v1 reads exactly the six agreed PIDs', () {
+    test('schema v2 reads exactly the seven agreed PIDs', () {
       expect(CarTelemetrySignalSources.speedKmh.modeAndPid, '010D');
       expect(CarTelemetrySignalSources.rpm.modeAndPid, '010C');
       expect(CarTelemetrySignalSources.coolantC.modeAndPid, '0105');
       expect(CarTelemetrySignalSources.intakeAirC.modeAndPid, '010F');
-      expect(CarTelemetrySignalSources.controlModuleVoltageV.modeAndPid, '0142');
+      expect(
+        CarTelemetrySignalSources.controlModuleVoltageV.modeAndPid,
+        '0142',
+      );
       expect(CarTelemetrySignalSources.mapKpa.modeAndPid, '010B');
+      expect(CarTelemetrySignalSources.engineLoadPct.modeAndPid, '0104');
+      expect(CarTelemetrySignalSources.engineLoadPct.units, '%');
       // km/h source, not the mph display variant sharing 010D.
       expect(CarTelemetrySignalSources.speedKmh.units, 'km/h');
     });
@@ -86,7 +91,7 @@ void main() {
       expect(_signal(s, PidLibrary.engineRpm), CarSignal.live(2150.5));
     });
 
-    test('AA02-11 coolant / IAT / 0142 / MAP project live into their fields', () {
+    test('AA02-11 coolant / IAT / 0142 / MAP / load project live', () {
       final p = _project(
         telemetry: _snapshot(
           readings: {
@@ -94,6 +99,7 @@ void main() {
             PidLibrary.intakeAirTemp: (-12, fresh),
             PidLibrary.controlModuleVoltage: (14.2, fresh),
             PidLibrary.manifoldPressure: (34, fresh),
+            PidLibrary.engineLoad: (67.5, fresh),
           },
         ),
       );
@@ -101,6 +107,7 @@ void main() {
       expect(p.intakeAirC, CarSignal.live(-12));
       expect(p.controlModuleVoltageV, CarSignal.live(14.2));
       expect(p.mapKpa, CarSignal.live(34));
+      expect(p.engineLoadPct, CarSignal.live(67.5));
       // Fields are not cross-wired: absent PIDs stay unavailable.
       expect(p.speedKmh, CarSignal.unavailable);
       expect(p.rpm, CarSignal.unavailable);
@@ -110,6 +117,36 @@ void main() {
       const s = TelemetrySnapshot(batteryVoltage: 12.6);
       expect(
         _signal(s, PidLibrary.controlModuleVoltage),
+        CarSignal.unavailable,
+      );
+    });
+
+    test('engine load carries live, stale, unsupported, and unavailable', () {
+      expect(
+        _signal(
+          _snapshot(readings: {PidLibrary.engineLoad: (63, fresh)}),
+          PidLibrary.engineLoad,
+        ),
+        CarSignal.live(63),
+      );
+      expect(
+        _signal(
+          _snapshot(
+            readings: {PidLibrary.engineLoad: (63, const Duration(seconds: 1))},
+          ),
+          PidLibrary.engineLoad,
+        ),
+        CarSignal.stale,
+      );
+      expect(
+        _signal(
+          _snapshot(faults: {PidLibrary.engineLoad: PidFault.unsupported}),
+          PidLibrary.engineLoad,
+        ),
+        CarSignal.unsupported,
+      );
+      expect(
+        _signal(_snapshot(), PidLibrary.engineLoad),
         CarSignal.unavailable,
       );
     });
@@ -195,7 +232,11 @@ void main() {
     });
 
     test('a non-finite reading is unavailable, never live', () {
-      for (final bad in [double.nan, double.infinity, double.negativeInfinity]) {
+      for (final bad in [
+        double.nan,
+        double.infinity,
+        double.negativeInfinity,
+      ]) {
         final s = _snapshot(readings: {PidLibrary.vehicleSpeed: (bad, fresh)});
         expect(_signal(s, PidLibrary.vehicleSpeed), CarSignal.unavailable);
       }

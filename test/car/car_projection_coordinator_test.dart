@@ -367,7 +367,7 @@ void main() {
       expect(container.exists(obdSessionProvider), isFalse);
     });
 
-    test('enabled: a demo connection reaches the host as live v1 frames', () async {
+    test('enabled: a demo connection reaches the host as live v2 frames', () async {
         TestWidgetsFlutterBinding.ensureInitialized();
         SharedPreferences.setMockInitialValues({});
         final prefs = await SharedPreferences.getInstance();
@@ -393,7 +393,7 @@ void main() {
         expect(subscription.read(), isNotNull);
         await pumpEventQueue();
         expect(sent, isNotEmpty, reason: 'first activation');
-        expect(sent.first.schemaVersion, 1);
+        expect(sent.first.schemaVersion, 2);
       expect(sent.first.connectionPhase, CarConnectionPhaseMessage.disconnected);
         expect(sent.first.diagnosticsAvailable, isFalse);
 

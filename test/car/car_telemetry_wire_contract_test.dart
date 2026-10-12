@@ -10,11 +10,11 @@
 // unit-test resources (android/app/src/testCarProto/resources/carbridge/) so
 // Gradle tracks them as test inputs and re-runs the Kotlin half on any edit:
 //
-// - car_telemetry_v1_frame.hex — what the production Dart client sends for
-//   one fixed schema-v1 frame. Asserted here; decoded by the real generated
+// - car_telemetry_v2_frame.hex — what the production Dart client sends for
+//   one fixed schema-v2 frame. Asserted here; decoded by the real generated
 //   Kotlin handler in
 //   android/app/src/testCarProto/.../CarTelemetryWireContractTest.kt.
-// - car_telemetry_v1_reply.hex — what that Kotlin handler replies. Asserted
+// - car_telemetry_v2_reply.hex — what that Kotlin handler replies. Asserted
 //   there; fed back to the real Dart client here.
 //
 // Regenerate the frame (only after an intentional schema / Pigeon change):
@@ -36,8 +36,8 @@ import 'package:torque_obd/state/obd_session.dart' show ConnectionPhase;
 const _channel =
     'dev.flutter.pigeon.torque_obd.CarTelemetryHostApi.publishTelemetryFrame';
 const _fixtures = 'android/app/src/testCarProto/resources/carbridge';
-const _frameFixture = '$_fixtures/car_telemetry_v1_frame.hex';
-const _replyFixture = '$_fixtures/car_telemetry_v1_reply.hex';
+const _frameFixture = '$_fixtures/car_telemetry_v2_frame.hex';
+const _replyFixture = '$_fixtures/car_telemetry_v2_reply.hex';
 
 /// The one frame both languages agree on. Every field is distinct and every
 /// signal status appears, so a swapped field or enum ordinal cannot pass.
@@ -57,6 +57,7 @@ CarTelemetryFrame goldenFrame() => CarTelemetryFrame(
     intakeAirC: CarSignal.unsupported,
     controlModuleVoltageV: CarSignal.unavailable,
     mapKpa: CarSignal.live(35.25),
+    engineLoadPct: CarSignal.live(67.5),
     diagnostics: const CarDiagnosticsSummary.scanned(dtcCount: 3, milOn: true),
   ),
 );
@@ -82,7 +83,7 @@ void main() {
 
   tearDown(() => messenger.setMockMessageHandler(_channel, null));
 
-  test('the production client puts exactly the pinned v1 bytes on the '
+  test('the production client puts exactly the pinned v2 bytes on the '
       'channel', () async {
     ByteData? sent;
     messenger.setMockMessageHandler(_channel, (data) async {
@@ -115,7 +116,7 @@ void main() {
         codec.decodeMessage(_bytes(File(_frameFixture).readAsStringSync()))!
             as List<Object?>;
     final m = args.single! as CarTelemetryMessage;
-    expect(m.schemaVersion, 1);
+    expect(m.schemaVersion, 2);
     expect(m.sequence, 5000000000);
     expect(m.connectionEpoch, 7);
     expect(m.lifecycleEpoch, 2);
@@ -131,6 +132,8 @@ void main() {
     expect(m.controlModuleVoltageV.status, CarSignalStatusMessage.unavailable);
     expect(m.controlModuleVoltageV.value, isNull);
     expect(m.mapKpa.value, 35.25);
+    expect(m.engineLoadPct.status, CarSignalStatusMessage.live);
+    expect(m.engineLoadPct.value, 67.5);
     expect(m.diagnosticsAvailable, isTrue);
     expect(m.milOn, isTrue);
     expect(m.dtcCount, 3);

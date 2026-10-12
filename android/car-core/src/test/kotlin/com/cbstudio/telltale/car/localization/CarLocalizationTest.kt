@@ -233,7 +233,7 @@ class CarLocalizationTest {
         )
         telemRepo.submit(
             CarTelemetryFrameInput(
-                schemaVersion = 1,
+                schemaVersion = 2,
                 sequence = 1,
                 connectionEpoch = 1,
                 lifecycleEpoch = 0,
@@ -322,7 +322,7 @@ class CarLocalizationTest {
         )
         telemRepo.submit(
             CarTelemetryFrameInput(
-                schemaVersion = 1,
+                schemaVersion = 2,
                 sequence = 1,
                 connectionEpoch = 1,
                 lifecycleEpoch = 0,
@@ -386,7 +386,7 @@ class CarLocalizationTest {
         )
         telemRepo.submit(
             CarTelemetryFrameInput(
-                schemaVersion = 1,
+                schemaVersion = 2,
                 sequence = 1,
                 connectionEpoch = 1,
                 lifecycleEpoch = 0,
@@ -448,7 +448,7 @@ class CarLocalizationTest {
 
         telemRepo.submit(
             CarTelemetryFrameInput(
-                schemaVersion = 1,
+                schemaVersion = 2,
                 sequence = 1,
                 connectionEpoch = 1,
                 lifecycleEpoch = 0,

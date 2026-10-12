@@ -11,6 +11,7 @@ CarTelemetryProjection _projection({
   int epoch = 1,
   ConnectionPhase phase = ConnectionPhase.connected,
   double speed = 10,
+  CarSignal engineLoadPct = CarSignal.unavailable,
   CarDiagnosticsSummary diagnostics = CarDiagnosticsSummary.unavailable,
 }) => CarTelemetryProjection(
   connectionPhase: phase,
@@ -23,6 +24,7 @@ CarTelemetryProjection _projection({
   intakeAirC: CarSignal.unavailable,
   controlModuleVoltageV: CarSignal.live(13.9),
   mapKpa: CarSignal.live(40),
+  engineLoadPct: engineLoadPct,
   diagnostics: diagnostics,
 );
 
@@ -46,13 +48,13 @@ final class _GatedTransport {
 }
 
 void main() {
-  group('encoding (schema v1)', () {
-    test('AA02-04 every frame is schemaVersion 1 with a stamped sequence', () {
+  group('encoding (schema v2)', () {
+    test('AA02-04 every frame is schemaVersion 2 with a stamped sequence', () {
       final message = encodeCarTelemetryFrame(
         CarTelemetryFrame(sequence: 7, projection: _projection(epoch: 3)),
       );
-      expect(message.schemaVersion, 1);
-      expect(carTelemetrySchemaVersion, 1);
+      expect(message.schemaVersion, 2);
+      expect(carTelemetrySchemaVersion, 2);
       expect(message.sequence, 7);
       expect(message.connectionEpoch, 3);
       expect(message.lifecycleEpoch, 0);
@@ -62,6 +64,26 @@ void main() {
       expect(message.speedKmh.value, 10);
       expect(message.controlModuleVoltageV.value, 13.9);
       expect(message.mapKpa.value, 40);
+      expect(message.engineLoadPct.status, CarSignalStatusMessage.unavailable);
+      expect(message.engineLoadPct.value, isNull);
+    });
+
+    test('engine load status and value cross the wire exactly', () {
+      for (final signal in <CarSignal>[
+        CarSignal.live(72.5),
+        CarSignal.stale,
+        CarSignal.unsupported,
+        CarSignal.unavailable,
+      ]) {
+        final message = encodeCarTelemetryFrame(
+          CarTelemetryFrame(
+            sequence: 1,
+            projection: _projection(engineLoadPct: signal),
+          ),
+        );
+        expect(message.engineLoadPct.status.name, signal.status.name);
+        expect(message.engineLoadPct.value, signal.value);
+      }
     });
 
     test('AA02-15 non-live signals transport no number', () {
@@ -88,26 +110,29 @@ void main() {
       expect(seen, hasLength(CarConnectionPhaseMessage.values.length));
     });
 
-    test('diagnostics: unavailable sends nulls; scanned keeps exact values', () {
-      final none = encodeCarTelemetryFrame(
-        CarTelemetryFrame(sequence: 1, projection: _projection()),
-      );
-      expect(none.diagnosticsAvailable, isFalse);
-      expect(none.dtcCount, isNull);
-      expect(none.milOn, isNull);
+    test(
+      'diagnostics: unavailable sends nulls; scanned keeps exact values',
+      () {
+        final none = encodeCarTelemetryFrame(
+          CarTelemetryFrame(sequence: 1, projection: _projection()),
+        );
+        expect(none.diagnosticsAvailable, isFalse);
+        expect(none.dtcCount, isNull);
+        expect(none.milOn, isNull);
 
-      final scanned = encodeCarTelemetryFrame(
-        CarTelemetryFrame(
-          sequence: 1,
-          projection: _projection(
-            diagnostics: const CarDiagnosticsSummary.scanned(dtcCount: 3),
+        final scanned = encodeCarTelemetryFrame(
+          CarTelemetryFrame(
+            sequence: 1,
+            projection: _projection(
+              diagnostics: const CarDiagnosticsSummary.scanned(dtcCount: 3),
+            ),
           ),
-        ),
-      );
-      expect(scanned.diagnosticsAvailable, isTrue);
-      expect(scanned.dtcCount, 3);
-      expect(scanned.milOn, isNull);
-    });
+        );
+        expect(scanned.diagnosticsAvailable, isTrue);
+        expect(scanned.dtcCount, 3);
+        expect(scanned.milOn, isNull);
+      },
+    );
 
     test('a live signal cannot be built from a non-finite number', () {
       expect(CarSignal.live(double.nan), CarSignal.unavailable);
@@ -256,7 +281,7 @@ void main() {
 
       expect(bridge.disabled, isFalse);
       expect(received, hasLength(1));
-      expect(received.single.schemaVersion, 1);
+      expect(received.single.schemaVersion, 2);
       expect(received.single.sequence, 1);
       expect(received.single.connectionEpoch, 9);
       expect(received.single.speedKmh.value, 77);

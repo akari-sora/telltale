@@ -31,6 +31,7 @@ import 'package:torque_obd/state/language_switch_guard.dart';
 import 'package:torque_obd/state/locale_settings.dart';
 import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/state/telemetry_recorder.dart';
+import 'package:torque_obd/state/telemetry_runtime.dart';
 import 'package:torque_obd/telemetry/session/telemetry_recorder.dart';
 import 'package:torque_obd/ui/screens/connect/connect_screen.dart';
 import 'package:torque_obd/ui/screens/connect/transport_kind_copy.dart';
@@ -113,6 +114,102 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byType(DashboardScreen), findsOneWidget);
+  }
+
+  String recorderDiagnostics(String checkpoint) {
+    final progress = harness.appRef.read(telemetryRecorderProgressProvider);
+    final safety = harness.appRef
+        .read(liveTelemetryStartEnvironmentProvider)
+        .snapshot(checkpoint);
+    return 'phase=${progress.state.phase}, '
+        'sessionId=${progress.sessionId}, '
+        'valueCount=${progress.state.valueCount}, '
+        'connected=${safety.connected}, '
+        'foreground=${safety.foreground}, '
+        'speedKnown=${safety.speedKnown}, '
+        'speedKmh=${safety.speedKmh}';
+  }
+
+  Future<void> startRecordingViaUi(
+    WidgetTester tester, {
+    required String scenario,
+  }) async {
+    final initialSpeedElapsed = harness.appRef
+        .read(telemetryProvider)
+        .value
+        ?.readings[PidLibrary.vehicleSpeed.id]
+        ?.receivedElapsed;
+    final freshStoppedOffer = await harness.pumpUntil(
+      tester,
+      () {
+        final button = find.byKey(const ValueKey('telemetry-start'));
+        if (button.evaluate().isEmpty ||
+            tester.widget<FilledButton>(button).onPressed == null) {
+          return false;
+        }
+        final speed = harness.appRef
+            .read(telemetryProvider)
+            .value
+            ?.readings[PidLibrary.vehicleSpeed.id];
+        final safety = harness.appRef
+            .read(liveTelemetryStartEnvironmentProvider)
+            .snapshot('$scenario.preflight');
+        return speed != null &&
+            speed.value <= 5 &&
+            (initialSpeedElapsed == null ||
+                speed.receivedElapsed > initialSpeedElapsed) &&
+            safety.speedKnown &&
+            safety.speedKmh <= 5;
+      },
+      timeout: const Duration(seconds: 10),
+    );
+    expect(
+      freshStoppedOffer,
+      isTrue,
+      reason:
+          '$scenario recorder did not receive a fresh stopped-speed offer: '
+          '${recorderDiagnostics('$scenario.offerTimeout')}',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('telemetry-start')));
+    await tester.pump();
+
+    final enteredStart = await harness.pumpUntil(
+      tester,
+      () {
+        final phase = harness.appRef
+            .read(telemetryRecorderProgressProvider)
+            .state
+            .phase;
+        return phase == TelemetryRecorderPhase.preparing ||
+            phase == TelemetryRecorderPhase.recording;
+      },
+    );
+    expect(
+      enteredStart,
+      isTrue,
+      reason:
+          '$scenario recorder never entered preparing/recording: '
+          '${recorderDiagnostics('$scenario.startTimeout')}',
+    );
+
+    final recording = await harness.pumpUntil(
+      tester,
+      () =>
+          harness
+              .appRef
+              .read(telemetryRecorderProgressProvider)
+              .state
+              .phase ==
+          TelemetryRecorderPhase.recording,
+    );
+    expect(
+      recording,
+      isTrue,
+      reason:
+          '$scenario recorder did not accept recording: '
+          '${recorderDiagnostics('$scenario.recordingTimeout')}',
+    );
   }
 
   group('Batch 1L-C1a: Production Root Journey Acceptance', () {
@@ -314,21 +411,7 @@ void main() {
         await connectDemoViaUi(tester);
         expect(find.byType(DashboardScreen), findsOneWidget);
 
-        // Wait until recorder button is enabled (stopped speed confirmed, active PIDs present)
-        final canStart = await harness.pumpUntil(
-          tester,
-          () {
-            final btn = find.byKey(const ValueKey('telemetry-start'));
-            if (btn.evaluate().isEmpty) return false;
-            return tester.widget<FilledButton>(btn).onPressed != null;
-          },
-          timeout: const Duration(seconds: 10),
-        );
-        expect(canStart, isTrue, reason: 'Recorder button never enabled');
-
-        final startRecordBtn = find.byKey(const ValueKey('telemetry-start'));
-        await tester.tap(startRecordBtn);
-        await tester.pump(const Duration(milliseconds: 100));
+        await startRecordingViaUi(tester, scenario: 'C03');
 
         // Wait for at least one telemetry value recorded
         final hasValues = await harness.pumpUntil(
@@ -479,32 +562,43 @@ void main() {
         await harness.pumpApp(tester);
         await connectDemoViaUi(tester);
 
-        // Wait until recorder button is enabled
-        final canStart = await harness.pumpUntil(
-          tester,
-          () {
-            final btn = find.byKey(const ValueKey('telemetry-start'));
-            if (btn.evaluate().isEmpty) return false;
-            return tester.widget<FilledButton>(btn).onPressed != null;
-          },
-          timeout: const Duration(seconds: 10),
-        );
-        expect(canStart, isTrue, reason: 'Recorder button never enabled');
-
-        await tester.tap(find.byKey(const ValueKey('telemetry-start')));
-        await harness.pumpUntil(
+        await startRecordingViaUi(tester, scenario: 'C04');
+        final hasValues = await harness.pumpUntil(
           tester,
           () => harness.appRef.read(telemetryRecorderProgressProvider).state.valueCount > 0,
         );
-        final targetSessionId = harness.appRef.read(telemetryRecorderProgressProvider).sessionId!;
+        expect(
+          hasValues,
+          isTrue,
+          reason:
+              'C04 recorder did not collect values: '
+              '${recorderDiagnostics('C04.valuesTimeout')}',
+        );
+        final targetSessionId = harness.appRef
+            .read(telemetryRecorderProgressProvider)
+            .sessionId;
+        expect(
+          targetSessionId,
+          isNotNull,
+          reason:
+              'C04 recorder did not publish a session ID: '
+              '${recorderDiagnostics('C04.sessionIdMissing')}',
+        );
 
         final stopBtn = find.byKey(const ValueKey('telemetry-stop'));
         await Scrollable.ensureVisible(tester.element(stopBtn));
         await tester.pump(const Duration(milliseconds: 100));
         await tester.tap(stopBtn);
-        await harness.pumpUntil(
+        final completed = await harness.pumpUntil(
           tester,
           () => harness.appRef.read(telemetryRecorderProgressProvider).state.phase == TelemetryRecorderPhase.completed,
+        );
+        expect(
+          completed,
+          isTrue,
+          reason:
+              'C04 recorder did not settle to completed: '
+              '${recorderDiagnostics('C04.completeTimeout')}',
         );
         await tester.runAsync(harness.appRef.read(telemetryRecorderControllerProvider).drainFinalization);
         await tester.pump(const Duration(milliseconds: 100));
@@ -545,11 +639,15 @@ void main() {
         await Scrollable.ensureVisible(tester.element(sessionTile));
         await tester.pump(const Duration(milliseconds: 100));
         await tester.tap(sessionTile);
-        await harness.pumpUntil(
+        final detailOpened = await harness.pumpUntil(
           tester,
           () => find.byType(TelemetrySessionDetailScreen).evaluate().isNotEmpty,
         );
-        expect(find.byType(TelemetrySessionDetailScreen), findsOneWidget);
+        expect(
+          detailOpened,
+          isTrue,
+          reason: 'C04 session detail did not open',
+        );
 
         // Wait for replay body to be displayed
         final replayLoaded = await harness.pumpUntil(
@@ -575,11 +673,15 @@ void main() {
 
         // 1. Cancel flow: tap Export, sheet opens, cancel/dismiss, verify 0 dispatches and gate stays idle
         await tester.tap(exportBtn);
-        await harness.pumpUntil(
+        final cancelSheetOpened = await harness.pumpUntil(
           tester,
           () => find.byType(TelemetryExportSheet).evaluate().isNotEmpty,
         );
-        expect(find.byType(TelemetryExportSheet), findsOneWidget);
+        expect(
+          cancelSheetOpened,
+          isTrue,
+          reason: 'C04 cancel export sheet did not open',
+        );
         Navigator.of(tester.element(find.byType(TelemetryExportSheet))).pop();
         await tester.pumpAndSettle();
         expect(find.byType(TelemetryExportSheet), findsNothing);
@@ -588,9 +690,14 @@ void main() {
 
         // 2. CSV Export flow: tap Export again
         await tester.tap(exportBtn);
-        await harness.pumpUntil(
+        final csvSheetOpened = await harness.pumpUntil(
           tester,
           () => find.byType(TelemetryExportSheet).evaluate().isNotEmpty,
+        );
+        expect(
+          csvSheetOpened,
+          isTrue,
+          reason: 'C04 CSV export sheet did not open',
         );
         final csvBtn = find.text(en.telemetryExportCsv);
         final csvHitTestable = await harness.pumpUntil(
@@ -655,10 +762,15 @@ void main() {
         expect(firstEvent.containsKey('elapsedUs'), isTrue);
 
         // Ensure previous export sheet is completely dismissed
-        await harness.pumpUntil(
+        final jsonSheetDismissed = await harness.pumpUntil(
           tester,
           () => find.byType(TelemetryExportSheet).evaluate().isEmpty,
           timeout: const Duration(seconds: 4),
+        );
+        expect(
+          jsonSheetDismissed,
+          isTrue,
+          reason: 'C04 JSON export sheet did not dismiss',
         );
 
         // Advance virtual share clock past lease retention (15 min) so completed staging cache purges
@@ -741,11 +853,15 @@ void main() {
         // 5. Pop back to Sessions list and reopen
         final navigator = Navigator.of(tester.element(find.byType(TelemetrySessionDetailScreen)));
         navigator.pop();
-        await harness.pumpUntil(
+        final sessionsListOpened = await harness.pumpUntil(
           tester,
           () => find.byType(TelemetrySessionsScreen).evaluate().isNotEmpty,
         );
-        expect(find.byType(TelemetrySessionsScreen), findsOneWidget);
+        expect(
+          sessionsListOpened,
+          isTrue,
+          reason: 'C04 sessions list did not reopen',
+        );
 
         // Reopen same session
         final reopenTile = find.byKey(ValueKey('telemetry-session-tile-$targetSessionId'));
@@ -758,11 +874,15 @@ void main() {
           ).first,
         );
         await tester.tap(reopenTile);
-        await harness.pumpUntil(
+        final detailReopenedAfterTap = await harness.pumpUntil(
           tester,
           () => find.byType(TelemetrySessionDetailScreen).evaluate().isNotEmpty,
         );
-        expect(find.byType(TelemetrySessionDetailScreen), findsOneWidget);
+        expect(
+          detailReopenedAfterTap,
+          isTrue,
+          reason: 'C04 session detail did not reopen',
+        );
         final detailReopened = tester.widget<TelemetrySessionDetailScreen>(find.byType(TelemetrySessionDetailScreen));
         expect(detailReopened.sessionId, equals(targetSessionId));
         expect(harness.appRef.read(artifactOperationGateProvider).snapshot.isIdle, isTrue);
@@ -940,21 +1060,22 @@ void main() {
         await connectDemoViaUi(tester);
         expect(find.byType(DashboardScreen), findsOneWidget);
 
-        final canStart = await harness.pumpUntil(
-          tester,
-          () {
-            final btn = find.byKey(const ValueKey('telemetry-start'));
-            if (btn.evaluate().isEmpty) return false;
-            return tester.widget<FilledButton>(btn).onPressed != null;
-          },
-          timeout: const Duration(seconds: 10),
-        );
-        expect(canStart, isTrue, reason: 'Recorder button never enabled');
+        await startRecordingViaUi(tester, scenario: 'C07');
 
-        await tester.tap(find.byKey(const ValueKey('telemetry-start')));
-        await harness.pumpUntil(
+        final hasValues = await harness.pumpUntil(
           tester,
-          () => harness.appRef.read(telemetryRecorderProgressProvider).state.phase == TelemetryRecorderPhase.recording,
+          () => harness.appRef
+              .read(telemetryRecorderProgressProvider)
+              .state
+              .valueCount > 0,
+          timeout: const Duration(seconds: 8),
+        );
+        expect(
+          hasValues,
+          isTrue,
+          reason:
+              'C07 recording did not collect telemetry: '
+              '${recorderDiagnostics('C07.valuesTimeout')}',
         );
 
         // Verify language switch is strictly and automatically blocked during recording (no manual invalidation)
@@ -1021,20 +1142,56 @@ void main() {
         final dashNav = find.byIcon(Icons.speed_outlined);
         await tester.tap(dashNav);
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 200));
-        expect(find.byType(DashboardScreen), findsOneWidget);
+        final dashboardReady = await harness.pumpUntil(
+          tester,
+          () => find.byType(DashboardScreen).evaluate().length == 1,
+          timeout: const Duration(seconds: 2),
+        );
+        expect(dashboardReady, isTrue, reason: 'C07 dashboard did not open');
 
         // Stop recording
         final stopBtn = find.byKey(const ValueKey('telemetry-stop'));
+        expect(stopBtn, findsOneWidget);
         await Scrollable.ensureVisible(tester.element(stopBtn));
-        await tester.pump(const Duration(milliseconds: 100));
-        await tester.tap(stopBtn);
+        await tester.pump();
+        final stopReady = await harness.pumpUntil(
+          tester,
+          () => stopBtn.hitTestable().evaluate().length == 1,
+          timeout: const Duration(seconds: 2),
+        );
+        expect(stopReady, isTrue, reason: 'C07 stop button is not reachable');
+        final visibleStopBtn = stopBtn.hitTestable();
+        expect(visibleStopBtn, findsOneWidget);
+        await tester.tap(visibleStopBtn);
+        await tester.pump();
+        expect(
+          harness.appRef.read(telemetryRecorderProgressProvider).state.phase,
+          isIn([
+            TelemetryRecorderPhase.finalizing,
+            TelemetryRecorderPhase.completed,
+          ]),
+          reason:
+              'C07 stop tap did not enter finalization: '
+              '${recorderDiagnostics('C07.stopDispatch')}',
+        );
         final completed = await harness.pumpUntil(
           tester,
           () => harness.appRef.read(telemetryRecorderProgressProvider).state.phase == TelemetryRecorderPhase.completed,
         );
-        expect(completed, isTrue, reason: 'Recorder did not settle to completed');
-        await tester.runAsync(harness.appRef.read(telemetryRecorderControllerProvider).drainFinalization);
+        expect(
+          completed,
+          isTrue,
+          reason:
+              'C07 recorder did not settle to completed: '
+              '${recorderDiagnostics('C07.stopTimeout')}',
+        );
+        // Finalization started in the test's fake async zone. Pump its I/O
+        // continuations to completion before draining the settled future.
+        await tester.runAsync(
+          harness.appRef
+              .read(telemetryRecorderControllerProvider)
+              .drainFinalization,
+        );
         await tester.pump(const Duration(milliseconds: 100));
 
         // Verify automatically unblocked after recording completes (NO manual invalidation!)

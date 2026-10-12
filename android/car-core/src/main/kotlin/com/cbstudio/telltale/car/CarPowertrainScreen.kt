@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 /**
  * Driver-distraction-safe powertrain overview screen (AA-04B, AA-05).
  *
- * Displays actual available powertrain metrics from schema-v1:
+ * Displays actual available powertrain metrics from schema-v2:
  * RPM, Coolant, Intake Air (IAT), Manifold Absolute Pressure (MAP), Module Voltage, Speed.
  * Read-only, 1Hz throttled invalidation, dynamic host content limit compliance,
  * with speed arbitration fallback and coolant in-template alerts.

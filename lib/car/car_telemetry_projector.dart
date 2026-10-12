@@ -11,7 +11,7 @@ import '../state/dtc_scan.dart';
 import '../state/obd_session.dart' show ConnectionPhase;
 import 'car_telemetry_frame.dart';
 
-/// The six schema-v1 signals and the existing PID each one reads.
+/// The seven schema-v2 signals and the existing PID each one reads.
 ///
 /// Boost is deliberately absent: deriving MAP - baro here would copy a domain
 /// formula into the car layer. Adapter supply voltage is absent too; PID 0142
@@ -24,6 +24,7 @@ abstract final class CarTelemetrySignalSources {
   static const Pid controlModuleVoltageV =
       PidLibrary.controlModuleVoltage; // 0142
   static const Pid mapKpa = PidLibrary.manifoldPressure; // 010B
+  static const Pid engineLoadPct = PidLibrary.engineLoad; // 0104
 }
 
 /// Projects one PID.
@@ -98,6 +99,7 @@ CarTelemetryProjection projectCarTelemetry({
       CarTelemetrySignalSources.controlModuleVoltageV,
     ),
     mapKpa: signal(CarTelemetrySignalSources.mapKpa),
+    engineLoadPct: signal(CarTelemetrySignalSources.engineLoadPct),
     diagnostics: projectCarDiagnostics(dtc),
   );
 }

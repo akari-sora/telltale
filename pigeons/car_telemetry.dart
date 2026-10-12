@@ -21,8 +21,7 @@ import 'package:pigeon/pigeon.dart';
     dartOptions: DartOptions(),
     dartPackageName: 'torque_obd',
     // One literal: Pigeon's annotation reader does not join adjacent strings.
-    kotlinOut:
-        'android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarTelemetry.g.kt',
+    kotlinOut: 'android/app/src/carProto/kotlin/com/cbstudio/telltale/carbridge/generated/CarTelemetry.g.kt',
     kotlinOptions: KotlinOptions(
       package: 'com.cbstudio.telltale.carbridge.generated',
     ),
@@ -49,7 +48,7 @@ class CarSignalDoubleMessage {
   double? value;
 }
 
-/// Schema version 1 of the projected telemetry frame.
+/// Schema version 2 of the projected telemetry frame.
 class CarTelemetryMessage {
   CarTelemetryMessage({
     required this.schemaVersion,
@@ -67,6 +66,7 @@ class CarTelemetryMessage {
     required this.diagnosticsAvailable,
     this.milOn,
     this.dtcCount,
+    required this.engineLoadPct,
   });
 
   int schemaVersion;
@@ -91,6 +91,8 @@ class CarTelemetryMessage {
   bool diagnosticsAvailable;
   bool? milOn;
   int? dtcCount;
+
+  CarSignalDoubleMessage engineLoadPct;
 }
 
 @HostApi()

@@ -24,7 +24,7 @@ class CarTelemetryHostApiImplTest {
         CarSignalDoubleMessage(status = status, value = value)
 
     private fun message(
-        schemaVersion: Long = 1,
+        schemaVersion: Long = 2,
         sequence: Long = 1,
         connectionEpoch: Long = 3,
         phase: CarConnectionPhaseMessage = CarConnectionPhaseMessage.CONNECTED,
@@ -41,6 +41,7 @@ class CarTelemetryHostApiImplTest {
         intakeAirC = signal(CarSignalStatusMessage.UNAVAILABLE),
         controlModuleVoltageV = signal(CarSignalStatusMessage.LIVE, 13.8),
         mapKpa = signal(CarSignalStatusMessage.LIVE, 101.0),
+        engineLoadPct = signal(CarSignalStatusMessage.LIVE, 67.5),
         diagnosticsAvailable = true,
         milOn = null,
         dtcCount = 2,
@@ -62,7 +63,7 @@ class CarTelemetryHostApiImplTest {
         val state = repo.state.value
         assertTrue("expected Current, was $state", state is CarTelemetryState.Current)
         val frame = (state as CarTelemetryState.Current).frame
-        assertEquals(1L, frame.schemaVersion)
+        assertEquals(2L, frame.schemaVersion)
         assertEquals(1L, frame.sequence)
         assertEquals(3L, frame.connectionEpoch)
         assertEquals(2L, frame.lifecycleEpoch)
@@ -75,6 +76,7 @@ class CarTelemetryHostApiImplTest {
         assertEquals(CarSignalValue.UNAVAILABLE, frame.intakeAirC)
         assertEquals(13.8, frame.controlModuleVoltageV.value!!, 0.0)
         assertEquals(101.0, frame.mapKpa.value!!, 0.0)
+        assertEquals(67.5, frame.engineLoadPct.value!!, 0.0)
         assertTrue(frame.diagnosticsAvailable)
         assertNull(frame.milOn)
         assertEquals(2L, frame.dtcCount)
@@ -104,8 +106,8 @@ class CarTelemetryHostApiImplTest {
     @Test
     fun schemaMismatchReachesRepositoryAsIncompatible() = runTest {
         val repo = repository()
-        CarTelemetryHostApiImpl(repo).publishTelemetryFrame(message(schemaVersion = 2))
-        assertEquals(CarTelemetryState.Incompatible(2), repo.state.value)
+        CarTelemetryHostApiImpl(repo).publishTelemetryFrame(message(schemaVersion = 3))
+        assertEquals(CarTelemetryState.Incompatible(3), repo.state.value)
     }
 
     // AA02-28 through the adapter: a new engine registration is a new producer.

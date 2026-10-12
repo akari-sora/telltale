@@ -10,6 +10,8 @@ import 'package:torque_obd/car/car_projection_runtime.dart';
 import 'package:torque_obd/car/car_projection_session_runtime.dart';
 import 'package:torque_obd/car/generated/car_projection_session.g.dart';
 import 'package:torque_obd/car/generated/car_telemetry.g.dart';
+import 'package:torque_obd/obd/pid/pid_library.dart';
+import 'package:torque_obd/obd/telemetry_demand.dart';
 import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/obd/transport/demo_transport.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
@@ -259,6 +261,22 @@ Future<bool> _connectFixture(ObdSession session, {Duration? responseLatency}) =>
       TransportKind.wifi,
     );
 
+const _projectedModeAndPids = <String>{
+  '010D',
+  '010C',
+  '0105',
+  '010F',
+  '0142',
+  '010B',
+  '0104',
+};
+
+Iterable<TelemetryDemand> _projectionDemands(ObdSession session) => session
+    .engine!
+    .demands
+    .leases
+    .where((demand) => demand.owner == DemandOwner.projection);
+
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
   final messenger =
@@ -302,6 +320,257 @@ void main() {
     await _eventually(() => host.retiredProducers.contains(generation));
     expect(host.retiredProducers, [generation]);
   });
+
+  test(
+    'active projection acquires its complete telemetry set with an empty dashboard',
+    () async {
+      final container = await _container(
+        preferences: {'active_pid_ids_v1': <String>[]},
+      );
+      addTearDown(container.dispose);
+      final session = container.read(obdSessionProvider.notifier);
+      expect(container.read(activePidsProvider), isEmpty);
+      expect(await _connectFixture(session), isTrue);
+      final armed = _lease(
+        active: true,
+        generation: 60,
+        armed: true,
+        connectionGeneration: session.connectionGeneration,
+      );
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => armed)
+        ..armContinuity = ((_, _) async => armed);
+      host.install();
+      addTearDown(host.uninstall);
+
+      expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+      await _eventually(() => _projectionDemands(session).length == 7);
+
+      expect(
+        _projectionDemands(session).map((demand) => demand.modeAndPid).toSet(),
+        _projectedModeAndPids,
+      );
+    },
+  );
+
+  test(
+    'projection demand unions with a custom phone dashboard without duplicate wire requests',
+    () async {
+      final container = await _container(
+        preferences: {
+          'active_pid_ids_v1': <String>[
+            PidLibrary.throttlePosition.id,
+            PidLibrary.vehicleSpeed.id,
+          ],
+        },
+      );
+      addTearDown(container.dispose);
+      final session = container.read(obdSessionProvider.notifier);
+      expect(container.read(activePidsProvider), [
+        PidLibrary.throttlePosition,
+        PidLibrary.vehicleSpeed,
+      ]);
+      expect(await _connectFixture(session), isTrue);
+      final armed = _lease(
+        active: true,
+        generation: 61,
+        armed: true,
+        connectionGeneration: session.connectionGeneration,
+      );
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => armed)
+        ..armContinuity = ((_, _) async => armed);
+      host.install();
+      addTearDown(host.uninstall);
+
+      expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+      await _eventually(() => _projectionDemands(session).length == 7);
+
+      expect(
+        _projectionDemands(session).map((demand) => demand.modeAndPid).toSet(),
+        _projectedModeAndPids,
+      );
+      expect(
+        session.engine!.demands.uniqueWireRequests().where(
+          (demand) => demand.modeAndPid == PidLibrary.vehicleSpeed.modeAndPid,
+        ),
+        hasLength(1),
+      );
+      expect(
+        session.engine!.demands.leases.where(
+          (demand) =>
+              demand.modeAndPid == PidLibrary.vehicleSpeed.modeAndPid &&
+              demand.owner == DemandOwner.dashboard,
+        ),
+        hasLength(1),
+      );
+      expect(
+        session.engine!.demands.leases.where(
+          (demand) =>
+              demand.modeAndPid == PidLibrary.vehicleSpeed.modeAndPid &&
+              demand.owner == DemandOwner.projection,
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'projection release and runtime disposal drop every projection hold',
+    () async {
+      final container = await _container(
+        preferences: {'active_pid_ids_v1': <String>[]},
+      );
+      addTearDown(container.dispose);
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await _connectFixture(session), isTrue);
+      var current = _lease(
+        active: true,
+        generation: 62,
+        armed: true,
+        connectionGeneration: session.connectionGeneration,
+      );
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => current)
+        ..armContinuity = ((_, _) async => current);
+      host.install();
+      addTearDown(host.uninstall);
+      final runtime = container.read(carProjectionSessionRuntimeProvider)!;
+      await _eventually(() => _projectionDemands(session).length == 7);
+
+      current = _lease(active: false, generation: 62, armed: false);
+      await host.sendLease(current);
+      await _eventually(() => _projectionDemands(session).isEmpty);
+
+      current = _lease(
+        active: true,
+        generation: 63,
+        armed: true,
+        connectionGeneration: session.connectionGeneration,
+      );
+      await host.sendLease(current);
+      await _eventually(() => _projectionDemands(session).length == 7);
+      runtime.dispose();
+      await _eventually(() => _projectionDemands(session).isEmpty);
+    },
+  );
+
+  test(
+    'session disposal drops projection holds from its detached engine',
+    () async {
+      final container = await _container(
+        preferences: {'active_pid_ids_v1': <String>[]},
+      );
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await _connectFixture(session), isTrue);
+      final engine = session.engine!;
+      expect(session.acquireProjectionTelemetryDemand(65), isTrue);
+      expect(
+        engine.demands.leases.where(
+          (demand) => demand.owner == DemandOwner.projection,
+        ),
+        hasLength(7),
+      );
+
+      container.dispose();
+
+      expect(
+        engine.demands.leases.where(
+          (demand) => demand.owner == DemandOwner.projection,
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'runtime invalidation releases projection holds while the session stays alive',
+    () async {
+      final container = await _container(
+        preferences: {'active_pid_ids_v1': <String>[]},
+      );
+      addTearDown(container.dispose);
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await _connectFixture(session), isTrue);
+      final current = _lease(
+        active: true,
+        generation: 66,
+        armed: true,
+        connectionGeneration: session.connectionGeneration,
+      );
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => current)
+        ..armContinuity = ((_, _) async => current);
+      host.install();
+      addTearDown(host.uninstall);
+      expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+      await _eventually(() => _projectionDemands(session).length == 7);
+
+      expect(
+        () => container.invalidate(carProjectionSessionRuntimeProvider),
+        returnsNormally,
+      );
+
+      await _eventually(() => _projectionDemands(session).isEmpty);
+      expect(container.read(obdSessionProvider.notifier), same(session));
+      expect(container.read(obdSessionProvider).isConnected, isTrue);
+    },
+  );
+
+  test(
+    'explicit disconnect releases projection and suppresses same-lease auto reconnect',
+    () async {
+      const remembered = LastAdapter(
+        id: '192.168.0.10',
+        name: 'Wi-Fi 192.168.0.10',
+        kind: TransportKind.wifi,
+        port: 35000,
+      );
+      var reconnects = 0;
+      final container = await _container(
+        preferences: {
+          'active_pid_ids_v1': <String>[],
+          'last_adapter_v1': remembered.encode(),
+        },
+        reconnect: (_) async {
+          reconnects++;
+          return false;
+        },
+      );
+      addTearDown(container.dispose);
+      final session = container.read(obdSessionProvider.notifier);
+      expect(await _connectFixture(session), isTrue);
+      var current = _lease(
+        active: true,
+        generation: 64,
+        armed: true,
+        connectionGeneration: session.connectionGeneration,
+      );
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => current)
+        ..armContinuity = ((_, _) async => current);
+      host.install();
+      addTearDown(host.uninstall);
+      expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+      await _eventually(() => _projectionDemands(session).length == 7);
+      final disconnectedEngine = session.engine!;
+      final connectionGeneration = session.connectionGeneration;
+
+      await session.disconnect();
+      await _eventually(
+        () => disconnectedEngine.demands.leases.every(
+          (demand) => demand.owner != DemandOwner.projection,
+        ),
+      );
+      await _eventually(
+        () => host.retiredProducers.contains(connectionGeneration),
+      );
+      current = _lease(active: true, generation: 64, armed: false);
+      await host.sendLease(current);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(reconnects, 0);
+    },
+  );
 
   test(
     'cold active projection reconnects remembered adapter once per generation',

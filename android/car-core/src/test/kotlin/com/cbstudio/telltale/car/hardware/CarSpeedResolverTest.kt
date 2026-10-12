@@ -23,7 +23,7 @@ class CarSpeedResolverTest {
     private fun liveFrame(speedKmh: Double): CarTelemetryFrame {
         val sig = CarSignalValue.sanitize(CarSignalStatus.LIVE, speedKmh, CarTelemetryFrame.SPEED_KMH_ENVELOPE)
         return CarTelemetryFrame(
-            schemaVersion = 1,
+            schemaVersion = 2,
             sequence = 1,
             connectionEpoch = 1,
             lifecycleEpoch = 0,
@@ -44,7 +44,7 @@ class CarSpeedResolverTest {
     private fun staleOrUnavailableFrame(status: CarSignalStatus): CarTelemetryFrame {
         val sig = CarSignalValue.sanitize(status, null, CarTelemetryFrame.SPEED_KMH_ENVELOPE)
         return CarTelemetryFrame(
-            schemaVersion = 1,
+            schemaVersion = 2,
             sequence = 1,
             connectionEpoch = 1,
             lifecycleEpoch = 0,
