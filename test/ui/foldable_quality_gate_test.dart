@@ -439,7 +439,11 @@ Future<void> _pumpGateApp(
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
-        obdSessionProvider.overrideWith(() => _GateConnectedSession(connected: true)),
+        obdSessionProvider.overrideWith(
+          () => _GateConnectedSession(
+            connected: initialLocation != ConnectScreen.path,
+          ),
+        ),
         activePidsProvider.overrideWith(() => _GateFixedActivePids(_gatePids)),
         vehicleProfileProvider.overrideWith(() => _GateFixedProfile()),
         telemetryProvider.overrideWith(

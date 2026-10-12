@@ -17,7 +17,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_router/go_router.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,9 +26,6 @@ import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/state/telemetry_recorder.dart';
 import 'package:torque_obd/state/telemetry_sessions.dart';
 import 'package:torque_obd/telemetry/session/telemetry_recorder.dart';
-import 'package:torque_obd/ui/screens/connect/connect_screen.dart';
-import 'package:torque_obd/ui/screens/dashboard/dashboard_screen.dart';
-
 import 'rig_support.dart';
 import 'package:torque_obd/l10n/locale_resolution.dart';
 
@@ -74,10 +70,6 @@ void main() {
         reason: 'macOS connectDemo did not reach connected',
       );
       expect(await connected, isTrue);
-      final connectScreen = find.byType(ConnectScreen);
-      expect(connectScreen, findsOneWidget);
-      GoRouter.of(tester.element(connectScreen)).go(DashboardScreen.path);
-      await tester.pump();
       await requireDashboard(tester);
       await requireLivePolling(tester);
       debugPrint('MACOS_FIELD_SHARE phase=live-polling');
