@@ -104,7 +104,7 @@ class CarSessionRuntime(
         dtcRepository.reset(clearSnapshot = false)
     }
 
-    fun destroy() {
+    fun destroy(clearDtcSnapshot: Boolean = true) {
         stop()
         ++currentRegistrationToken
         internalScope?.cancel()
@@ -112,7 +112,7 @@ class CarSessionRuntime(
 
         alertCoordinator.destroy()
         hostSpeedRepository.reset()
-        dtcRepository.reset(clearSnapshot = true)
+        dtcRepository.reset(clearSnapshot = clearDtcSnapshot)
     }
 
     private fun getScope(): CoroutineScope {

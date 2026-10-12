@@ -7,6 +7,20 @@ import androidx.car.app.testing.TestCarContext
 import androidx.car.app.validation.HostValidator
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
+import com.cbstudio.telltale.car.diagnostics.CarDtcReport
+import com.cbstudio.telltale.car.diagnostics.CarDtcScanPhase
+import com.cbstudio.telltale.car.diagnostics.CarDtcState
+import com.cbstudio.telltale.car.diagnostics.CarDtcVerdict
+import com.cbstudio.telltale.car.diagnostics.DefaultCarDtcRepository
+import com.cbstudio.telltale.car.hardware.CarHardwareSpeedGateway
+import com.cbstudio.telltale.car.hardware.CarHostSpeedSample
+import com.cbstudio.telltale.car.telemetry.CarConnectionPhase
+import com.cbstudio.telltale.car.telemetry.CarSignalInput
+import com.cbstudio.telltale.car.telemetry.CarSignalStatus
+import com.cbstudio.telltale.car.telemetry.CarTelemetryFrameInput
+import com.cbstudio.telltale.car.telemetry.CarTelemetryRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -17,9 +31,8 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import com.cbstudio.telltale.car.hardware.CarHardwareSpeedGateway
-import com.cbstudio.telltale.car.hardware.CarHostSpeedSample
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class TelltaleCarAppServiceTest {
@@ -110,6 +123,56 @@ class TelltaleCarAppServiceTest {
     }
 
     @Test
+    fun session_recreationReplaysSameEpochDtcWhileEpochAndProducerChangesInvalidateIt() = runTest {
+        val dtcRepository = DefaultCarDtcRepository()
+        val telemetryRepository = CarTelemetryRepository(
+            scope = backgroundScope,
+            elapsedRealtimeMs = { 1_000L },
+            dtcRepository = dtcRepository,
+        )
+        val originalReport = dtcReport(sequence = 1, epoch = 7)
+        telemetryRepository.submit(telemetryFrame(sequence = 1, epoch = 7))
+        dtcRepository.submit(originalReport)
+
+        fun newSession(): TelltaleCarSession = TelltaleCarSession { session ->
+            CarSessionRuntime(
+                carContext = session.carContext,
+                telemetryRepository = telemetryRepository,
+                dtcRepository = dtcRepository,
+                hostSpeedGateway = NoOpCarHardwareSpeedGateway,
+                coroutineScope = backgroundScope,
+            )
+        }
+
+        val firstSession = newSession()
+        val firstController = SessionController(firstSession, carContext, Intent())
+        firstController.moveToState(Lifecycle.State.STARTED)
+        assertTrue(dtcRepository.state.value is CarDtcState.Current)
+
+        firstController.moveToState(Lifecycle.State.DESTROYED)
+        assertEquals(CarDtcState.Awaiting, dtcRepository.state.value)
+        assertEquals(originalReport, dtcRepository.latestValidReport)
+
+        val replacementSession = newSession()
+        val replacementController = SessionController(replacementSession, carContext, Intent())
+        replacementController.moveToState(Lifecycle.State.STARTED)
+        val replayed = dtcRepository.state.value
+        assertTrue("Expected cached report to replay in replacement session, was $replayed", replayed is CarDtcState.Current)
+        assertEquals(originalReport, (replayed as CarDtcState.Current).report)
+
+        replacementController.moveToState(Lifecycle.State.DESTROYED)
+        telemetryRepository.submit(telemetryFrame(sequence = 1, epoch = 8))
+        assertEquals(CarDtcState.Awaiting, dtcRepository.state.value)
+        assertEquals(null, dtcRepository.latestValidReport)
+
+        dtcRepository.submit(dtcReport(sequence = 1, epoch = 8))
+        assertTrue(dtcRepository.state.value is CarDtcState.Current)
+        telemetryRepository.onProducerAttached()
+        assertEquals(CarDtcState.Awaiting, dtcRepository.state.value)
+        assertEquals(null, dtcRepository.latestValidReport)
+    }
+
+    @Test
     fun createHostValidator_whenDebuggable_returnsAllowAll() {
         val service = Robolectric.buildService(TelltaleCarAppService::class.java).create().get()
         service.applicationInfo.flags = service.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
@@ -127,5 +190,42 @@ class TelltaleCarAppServiceTest {
         assertNotNull(validator)
         // Ensure it is not the allow-all validator when non-debuggable
         assertTrue(validator != HostValidator.ALLOW_ALL_HOSTS_VALIDATOR)
+    }
+
+    private fun dtcReport(sequence: Long, epoch: Long) = CarDtcReport(
+        schemaVersion = CarDtcReport.SCHEMA_VERSION,
+        reportSequence = sequence,
+        connectionEpoch = epoch,
+        phase = CarDtcScanPhase.IDLE,
+        verdict = CarDtcVerdict.COMPLETE_CLEAN,
+        coverageComplete = true,
+        milOn = false,
+        totalCodes = 0,
+        freezeFrameReadIncomplete = false,
+        items = emptyList(),
+        freezeFrames = emptyList(),
+    )
+
+    private fun telemetryFrame(sequence: Long, epoch: Long) = CarTelemetryFrameInput(
+        schemaVersion = 1,
+        sequence = sequence,
+        connectionEpoch = epoch,
+        lifecycleEpoch = 0,
+        producedAtMonotonicUs = 1_000,
+        connectionPhase = CarConnectionPhase.CONNECTED,
+        speedKmh = CarSignalInput(CarSignalStatus.LIVE, 0.0),
+        rpm = CarSignalInput(CarSignalStatus.LIVE, 800.0),
+        coolantC = CarSignalInput(CarSignalStatus.LIVE, 90.0),
+        intakeAirC = CarSignalInput(CarSignalStatus.LIVE, 25.0),
+        controlModuleVoltageV = CarSignalInput(CarSignalStatus.LIVE, 14.0),
+        mapKpa = CarSignalInput(CarSignalStatus.LIVE, 35.0),
+        diagnosticsAvailable = true,
+        milOn = false,
+        dtcCount = 0,
+    )
+
+    private object NoOpCarHardwareSpeedGateway : CarHardwareSpeedGateway {
+        override fun startListening(onSpeedAvailable: (CarHostSpeedSample) -> Unit) = Unit
+        override fun stopListening() = Unit
     }
 }

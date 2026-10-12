@@ -52,7 +52,7 @@ class TelltaleCarSession(
 
     override fun onDestroy(owner: LifecycleOwner) {
         if (::sessionRuntime.isInitialized) {
-            sessionRuntime.destroy()
+            sessionRuntime.destroy(clearDtcSnapshot = false)
         }
         projectionLease?.let(CarProjectionSessionLeaseRuntime::release)
         projectionLease = null
