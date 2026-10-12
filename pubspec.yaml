@@ -4,7 +4,7 @@ publish_to: 'none'
 homepage: https://gitlab.com/aa22396584/telltale
 repository: https://gitlab.com/aa22396584/telltale
 issue_tracker: https://gitlab.com/aa22396584/telltale/-/issues
-version: 1.0.19+201
+version: 1.0.19+202
 
 environment:
   sdk: ^3.13.0

@@ -79,6 +79,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   List<DiscoveredDevice> _devices = const [];
   bool _scanning = false;
   BleScanIssue? _scanIssue;
+  bool _dashboardNavigationScheduled = false;
 
   /// Remembered between launches.
   ///
@@ -109,6 +110,29 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     _portController = TextEditingController(
       text: '${prefs.getInt(_kWifiPortKey) ?? WifiTransport.defaultPort}',
     );
+    ref.listenManual(
+      obdSessionProvider,
+      (_, next) => _openDashboardWhenConnected(next),
+      fireImmediately: true,
+    );
+  }
+
+  /// Opens the live view when another app surface established the session.
+  ///
+  /// Android Auto can connect before the phone activity exists. In that order
+  /// there is no phone-side `connect*()` future for [_connect] to await, so the
+  /// wizard must also react to the shared session state. Navigation is deferred
+  /// until after the frame because the immediate listener runs during
+  /// [initState]. The final state check prevents a brief connected state from
+  /// opening a stale dashboard after the link has already gone away.
+  void _openDashboardWhenConnected(ObdConnectionState connection) {
+    if (!connection.isConnected || _dashboardNavigationScheduled) return;
+    _dashboardNavigationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _dashboardNavigationScheduled = false;
+      if (!mounted || !ref.read(obdSessionProvider).isConnected) return;
+      GoRouter.maybeOf(context)?.go(DashboardScreen.path);
+    });
   }
 
   /// Records which adapter was chosen, so the next launch can offer it first.
@@ -308,8 +332,9 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   String? _resolveWifiError(AppLocalizations l10n) {
     return switch (_wifiValidationError) {
       _WifiValidationError.hostRequired => l10n.connectWifiHostRequired,
-      _WifiValidationError.portRequired =>
-        l10n.connectWifiPortRequired(WifiTransport.defaultPort),
+      _WifiValidationError.portRequired => l10n.connectWifiPortRequired(
+        WifiTransport.defaultPort,
+      ),
       _WifiValidationError.portInvalid => l10n.connectWifiPortInvalid(
         _wifiInvalidPortText ?? '',
         _kMinPort,
@@ -426,10 +451,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: AdaptiveLayoutScope(
-          layout: localLayout,
-          child: body,
-        ),
+        child: AdaptiveLayoutScope(layout: localLayout, child: body),
       ),
     );
   }
@@ -691,7 +713,11 @@ class _Header extends StatelessWidget {
                         colors: [palette.accent, palette.accentSoft],
                       ),
                     ),
-                    child: Icon(Icons.speed, color: palette.background, size: 24),
+                    child: Icon(
+                      Icons.speed,
+                      color: palette.background,
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: Spacing.md),
                   ConstrainedBox(
