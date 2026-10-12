@@ -38,7 +38,11 @@ GitLab release，最後重新下載公開資產校驗。Google 車用 production
 
 ## 0. GitLab maintainer release、GitHub community APK 與 Google Play 是三條發布線
 
-目前 `aa22396584/telltale` 的 GitLab Release 使用 maintainer/Play upload
+以下 Torque checkout 重建步驟保留作為 **1.0.18 以前的歷史流程**。
+1.0.19 起依上節，在 9700X CI 建立未簽章候選檔，再於私有 SSH 環境簽署下載的
+同一組檔案；不再依此節重建。既有簽章血緣與禁止公開憑證的規則仍適用。
+
+`aa22396584/telltale` 的 GitLab Release 使用 maintainer/Play upload
 簽章血緣。私有簽章環境的 canonical checkout 是
 `/Users/iml1s/Documents/mine/apps/auto/torque`，其 App 根目錄是該 checkout
 本身；舊文件裡的 `torque/app/` 路徑已過期。該環境持有被忽略的
