@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import re
 from pathlib import Path
 import sys
 import unittest
@@ -112,6 +113,13 @@ class SignedReleaseBindingTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             MODULE.clean_environment({"PATH": "/tmp"})
 
+    def test_pinned_release_version_matches_pubspec(self):
+        pubspec = (ROOT / "pubspec.yaml").read_text(encoding="utf-8")
+        match = re.search(r"^version:\s*(\S+)\+(\d+)\s*$", pubspec, re.M)
+        self.assertIsNotNone(match)
+        self.assertEqual(MODULE.VERSION, match.group(1))
+        self.assertEqual(MODULE.VERSION_CODE, int(match.group(2)))
+
     def test_aab_manifest_requires_exact_android_auto_contract(self):
         MODULE.validate_aab_manifest(
             aab_manifest(), MODULE.VERSION, MODULE.VERSION_CODE
@@ -120,7 +128,8 @@ class SignedReleaseBindingTest(unittest.TestCase):
             aab_manifest(category="androidx.car.app.category.POI"),
             aab_manifest(resource="@xml/wrong"),
             aab_manifest().replace(
-                'android:versionCode="200"', 'android:versionCode="201"'
+                f'android:versionCode="{MODULE.VERSION_CODE}"',
+                f'android:versionCode="{MODULE.VERSION_CODE + 1}"',
             ),
         ]:
             with self.subTest(xml=xml), self.assertRaises(RuntimeError):
