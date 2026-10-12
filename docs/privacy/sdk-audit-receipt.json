@@ -200,7 +200,7 @@
     "lib/ui/adaptive/app_breakpoints.dart": "33c44a236af7e761f1fa1301477534a5b7fa3d8313168e5331396479d8859018",
     "lib/ui/adaptive/display_feature_layout.dart": "6453bfb56e7c49613bf6026395ac14dfe6143040d61a511007c7583bd3df37de",
     "lib/ui/screens/connect/connect_layout.dart": "c8ef8e4703ba550f15047b99e4daa6e2391439dc4600b2c889c1f3b8e9356998",
-    "lib/ui/screens/connect/connect_screen.dart": "96f44aca729de6c17c195a2061b85113e64e59d0ea88582880f8a8521559db3b",
+    "lib/ui/screens/connect/connect_screen.dart": "3630f13150900d2c52ec982b4c8343c33cda4a5e03bd0abe1a2fb78706f26a3c",
     "lib/ui/screens/connect/connection_failure_copy.dart": "b5da1b1930940f14ec5e9f24ec6d8d32aab6bd5133ae430ecdc1bf251897610e",
     "lib/ui/screens/connect/connection_layer_copy.dart": "3edc7e10e658607a3a9a0d53868dadbd32af3a34172d6cf4af769f651cb1b45a",
     "lib/ui/screens/connect/connection_layers_panel.dart": "2df1e13a3887d03cb5df20bd5d62cfcd0f01f7b1eb9795693895f3882ceae82c",
@@ -268,7 +268,7 @@
     "lib/ui/widgets/telemetry/telemetry_status_copy.dart": "7d1b7898638cab522859f047103e27c0c098fe72539cffb69b5ed8e74fd92e34",
     "lib/ui/widgets/transcript_export.dart": "892ae443512db9278b4462f9c438a3b14a21b139ef99d960bd428a7fc8ae3bdb",
     "pubspec.lock": "8cb7876cb7f2d393a9a65e56d365382cf0075922e8b76c0eed12390749910240",
-    "pubspec.yaml": "2c484fed17abb3845f71979560023e17c8a90463853f611c4c87735a0bc5111f"
+    "pubspec.yaml": "f52d22ad655ff622c06bdf4ba13396d8a044420456d1ad4b89584bc9970b024e"
   },
   "summary": "Verified zero third-party telemetry, tracking, advertising, analytics, or crash reporting dependencies across pubspec.yaml, pubspec.lock, lib, and build.gradle.kts."
 }
