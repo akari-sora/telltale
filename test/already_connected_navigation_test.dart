@@ -60,6 +60,7 @@ Future<
     _ControllableSession session,
     GoRouter router,
     int Function() dashboardBuilds,
+    int Function() dashboardRedirects,
   })
 >
 _pumpApp(WidgetTester tester, {required ObdConnectionState initial}) async {
@@ -67,6 +68,7 @@ _pumpApp(WidgetTester tester, {required ObdConnectionState initial}) async {
   final prefs = await SharedPreferences.getInstance();
   late _ControllableSession session;
   var dashboardBuilds = 0;
+  var dashboardRedirects = 0;
   final router = GoRouter(
     routes: [
       GoRoute(
@@ -75,6 +77,10 @@ _pumpApp(WidgetTester tester, {required ObdConnectionState initial}) async {
       ),
       GoRoute(
         path: DashboardScreen.path,
+        redirect: (_, _) {
+          dashboardRedirects += 1;
+          return null;
+        },
         builder: (_, _) {
           dashboardBuilds += 1;
           return const Scaffold(body: Text('dashboard reached'));
@@ -103,6 +109,7 @@ _pumpApp(WidgetTester tester, {required ObdConnectionState initial}) async {
     session: session,
     router: router,
     dashboardBuilds: () => dashboardBuilds,
+    dashboardRedirects: () => dashboardRedirects,
   );
 }
 
@@ -162,6 +169,7 @@ void main() {
 
       expect(find.text('dashboard reached'), findsOneWidget);
       expect(harness.dashboardBuilds(), 1);
+      expect(harness.dashboardRedirects(), 1);
     },
   );
 
