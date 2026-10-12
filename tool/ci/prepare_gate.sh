@@ -58,6 +58,9 @@ systemProp.java.net.preferIPv4Stack=true
 systemProp.java.net.preferIPv4Addresses=true
 org.gradle.jvmargs=-Xmx1536m -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true
 EOF
+# The wrapper zip is checked against distributionSha256Sum before it is used.
+python3 tool/ci/seed_gradle_distribution.py \
+  android/gradle/wrapper/gradle-wrapper.properties "$NONROOT_HOME/.gradle" || true
 chown -R "$NONROOT:$NONROOT" "$NONROOT_HOME/.gradle"
 
 python3 tool/ci/resolve_ci_network.py || true
