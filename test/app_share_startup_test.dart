@@ -121,6 +121,95 @@ void main() {
     expect(await coordinator.initialize(), AppShareInitializationOutcome.ready);
   });
 
+  test(
+    'permit revoked while the staging root resolves is retryable, not blocked',
+    () async {
+      final directory = Directory.systemTemp.createTempSync('share-startup');
+      addTearDown(() => directory.deleteSync(recursive: true));
+      final root = Completer<Directory>();
+      final policy = _Policy();
+      final gate = ArtifactOperationGate();
+      final platform = _Platform();
+      final coordinator = _coordinator(
+        directory: directory,
+        gate: gate,
+        policy: policy,
+        platform: platform,
+        rootDirectory: () => root.future,
+      );
+
+      // freeze() has already succeeded; the phone then leaves the foreground
+      // before the platform cache directory lookup returns.
+      final initialization = coordinator.initialize();
+      policy.revoked = true;
+      root.complete(directory);
+
+      expect(await initialization, AppShareInitializationOutcome.policyDenied);
+      expect(gate.snapshot.isIdle, isTrue);
+      expect(platform.calls, 0);
+
+      policy.revoked = false;
+      expect(
+        await coordinator.initialize(),
+        AppShareInitializationOutcome.ready,
+      );
+      expect(gate.snapshot.isIdle, isTrue);
+      expect(
+        (await coordinator.share(_request())).result,
+        AppShareResult.selected,
+      );
+      expect(platform.calls, 1);
+    },
+  );
+
+  test(
+    'permit revoked mid-reconstruction is retryable and cleanup resumes',
+    () async {
+      final directory = Directory.systemTemp.createTempSync('share-startup');
+      addTearDown(() => directory.deleteSync(recursive: true));
+      const id = '0123456789abcdef0123456789abcdef';
+      final record = ShareLeaseRecord.allocated(
+        id: id,
+        sourceKind: ShareSourceKind.pidCsv,
+        createdAtUtc: DateTime.utc(2026),
+      );
+      await ShareLeaseLedger(directory).install(record);
+      final source = File('${directory.path}/${record.sourceFileName}');
+      final ledger = File('${directory.path}/${record.ledgerFileName}');
+      await source.writeAsString('incomplete');
+      final policy = _Policy();
+      // Revoke at the first checkpoint after the source delete returned and
+      // before the ledger delete: a partial cleanup prefix.
+      policy.onValidate = () {
+        if (!source.existsSync() && ledger.existsSync()) policy.revoked = true;
+      };
+      final gate = ArtifactOperationGate();
+      final coordinator = _coordinator(
+        directory: directory,
+        gate: gate,
+        policy: policy,
+      );
+
+      expect(
+        await coordinator.initialize(),
+        AppShareInitializationOutcome.policyDenied,
+      );
+      expect(source.existsSync(), isFalse);
+      expect(ledger.existsSync(), isTrue);
+      expect(gate.snapshot.isIdle, isTrue);
+
+      policy
+        ..onValidate = null
+        ..revoked = false;
+      expect(
+        await coordinator.initialize(),
+        AppShareInitializationOutcome.ready,
+      );
+      expect(directory.listSync(), isEmpty);
+      expect(gate.snapshot.isIdle, isTrue);
+    },
+  );
+
   test('artifact busy startup is explicit and retryable', () async {
     final directory = Directory.systemTemp.createTempSync('share-startup');
     addTearDown(() => directory.deleteSync(recursive: true));
@@ -192,6 +281,13 @@ class _Policy implements AppSharePolicy {
 
   bool allowed;
 
+  /// Mirrors a foreground, connection or safety epoch edge after freeze: the
+  /// frozen permit stays invalid until a later freeze.
+  bool revoked = false;
+
+  /// Runs before each validation so a test can revoke at a file boundary.
+  void Function()? onValidate;
+
   @override
   SharePreparationPermit? freeze() => allowed
       ? const SharePreparationPermit(
@@ -204,6 +300,10 @@ class _Policy implements AppSharePolicy {
       : null;
 
   @override
-  SharePermitValidation validate(SharePreparationPermit permit) =>
-      const SharePermitValidation.valid();
+  SharePermitValidation validate(SharePreparationPermit permit) {
+    onValidate?.call();
+    return revoked
+        ? const SharePermitValidation.invalid(SharePermitCause.foreground)
+        : const SharePermitValidation.valid();
+  }
 }
