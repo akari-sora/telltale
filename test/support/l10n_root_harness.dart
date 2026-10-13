@@ -133,22 +133,21 @@ class L10nRootHarness {
   ///
   /// [pumpUntil] advances the demo timer faster than Start's file I/O.
   /// A dwell longer than the initial 3s idle makes that race fail unless
-  /// [holdConnectedDemoAtIdle] is holding the drive at 0 km/h.
+  /// [holdDemoAtIdle] is holding the drive at 0 km/h.
   Duration recordingPrepareDwell = Duration.zero;
 
   void advanceShareClock([Duration duration = const Duration(minutes: 20)]) =>
       AlwaysReadyAppShareCoordinator.advanceClock(duration);
 
-  /// Holds the connected demo car at 0 km/h for the rest of this session.
+  /// Installs an idle simulator before the UI calls [connectDemo].
   ///
-  /// A new [DemoTransport] is created on every connect, so the flag does not
-  /// survive a disconnect. Call this again after the next demo connect.
-  void holdConnectedDemoAtIdle() {
-    final transport = appRef.read(obdSessionProvider.notifier).client?.transport;
-    if (transport is! DemoTransport) {
-      throw StateError('connected transport is not DemoTransport');
-    }
-    transport.holdDriveAtIdle = true;
+  /// [connectDemo] builds a new transport on every attempt, and the drive
+  /// timer starts inside [DemoTransport.connect]. Setting a flag afterwards
+  /// cannot stop that timer, so this has to run first. The substitute answers
+  /// every PID and never starts the timer, so the car stays at 0 km/h.
+  void holdDemoAtIdle() {
+    appRef.read(obdSessionProvider.notifier).demoTransportFactory =
+        (latency) => _IdleDemoTransport(responseLatency: latency);
   }
 
   Future<void> initialize({
@@ -342,6 +341,20 @@ class L10nRootHarness {
       bytes = byteData.buffer.asUint8List();
     });
     return bytes;
+  }
+}
+
+/// Simulator that answers every PID and never starts the drive timer.
+///
+/// [DemoTransport.disconnect] only cancels a timer when one exists, so a
+/// connect that never armed `_tick` still disconnects cleanly.
+final class _IdleDemoTransport extends DemoTransport {
+  _IdleDemoTransport({super.responseLatency});
+
+  @override
+  Future<void> connect() async {
+    if (isConnected) return;
+    setConnected(true);
   }
 }
 

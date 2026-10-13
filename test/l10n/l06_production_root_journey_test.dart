@@ -107,6 +107,11 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
+    // Start rechecks speed across real file I/O. The demo timer is this
+    // tester's fake clock, so install the idle simulator before connect.
+    // No case in this file needs a moving sample. Every demo connect in
+    // this file, including C02's second connect, goes through here.
+    harness.holdDemoAtIdle();
     await tester.tap(start, warnIfMissed: false);
     await tester.pump();
 
@@ -116,10 +121,6 @@ void main() {
       timeout: const Duration(seconds: 10),
     );
     expect(connected, isTrue, reason: 'Demo session did not reach connected phase');
-    // Start rechecks speed across real file I/O. The demo timer is this
-    // tester's fake clock, so leave the car at 0 km/h for the rest of the
-    // connection. No case in this file needs a moving sample.
-    harness.holdConnectedDemoAtIdle();
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
