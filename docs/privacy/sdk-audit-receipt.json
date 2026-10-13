@@ -162,7 +162,7 @@
     "lib/obd/vehicle_catalog/us_vehicle_profile.dart": "73d7adb4cad2fc96677f5ca5341c290c07c051afc43dcddf254b8e1b38c8b0c8",
     "lib/state/app_locales_synchronizer.dart": "6007071bb04c718d9507a946aafe3af91fde964b1c245e72eb34e0947a916c32",
     "lib/state/app_runtime.dart": "2067b24fa2d96159c22cfa52fdf24bfe51ee8807c7a3ec0fe02aed52d80453a0",
-    "lib/state/app_share_coordinator.dart": "f0f4c17c87135e37f350126c9627cc881cfaa867941ed370fc52a33c8ed2152f",
+    "lib/state/app_share_coordinator.dart": "321c815a9ca4c5cf29ba29d2f351e26d5287b38c7bc7f4266c62284386e6452f",
     "lib/state/app_share_entry_controller.dart": "6628d33fb84b9ce825cfb82839bf881e86bb315fef21a7d63968fcb8d0138f30",
     "lib/state/artifact_operation_gate.dart": "e739a31af31169972bddcc2b5432669cfb2c1a4c105075c683d067ae3df5de52",
     "lib/state/driving_interaction_safety.dart": "3762b683a4a7bcd4e959c61255c41254597cc953d223b046425ab2baf508bfa8",

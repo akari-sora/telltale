@@ -224,6 +224,15 @@ class AppShareCoordinator {
       artifactGate.release(artifact.token!);
       _busy = false;
       return _startupOutcome!;
+    } on _SharePermitException {
+      // A permit is only checked synchronously after an awaited file
+      // operation has returned, so no I/O is in flight and staging holds a
+      // prefix of cleanup that reconstruction resolves again, as Share does
+      // for the same revocation. Losing foreground, connection or safety
+      // authority mid-startup is retryable, like a denied freeze.
+      artifactGate.release(artifact.token!);
+      _busy = false;
+      return AppShareInitializationOutcome.policyDenied;
     } on Object {
       // Cleanup may already have crossed a durable boundary. Only a fresh
       // process may reconstruct after an indeterminate startup operation.
