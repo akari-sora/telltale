@@ -14,8 +14,11 @@ directly, keeping the deepest static diagnostic path at four templates.
 Failed/nonpositive Grid constraint queries fall back to the original numerical
 Pane with Health access.
 New branch verification is tracked in [AA-10](../aa-10-grid-dashboard.md) and is
-**PENDING**, with projected DHU acceptance **NOT_RUN** because the installed
-phone image provides only an Android Auto stub. Prior AA-09 Pane captures and
+**PARTIAL**: local native/Flutter regressions, protected car gates and three
+debug builds passed; AAOS lint remains **FAIL_FATAL** with one error reproduced
+on the unchanged baseline. Owned AAOS host checks and feature CI execution are
+incomplete. Projected DHU acceptance is **NOT_RUN** because the installed phone
+image provides only an Android Auto stub. Prior AA-09 Pane captures and
 PASS records below remain historical evidence; they do not establish acceptance
 of the new Grid images, navigation or layout. Category fit remains
 **`CATEGORY_FIT_UNRESOLVED`**.
