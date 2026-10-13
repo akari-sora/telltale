@@ -149,7 +149,7 @@
     "lib/obd/transcript_store.dart": "acd37aaf1f0fa9566019478690a7785b7320b9ab2f00a0b9d85838098444c20b",
     "lib/obd/transport/ble_transport.dart": "48785811ea65563bfb16889b6c8a1274ad3ce5147a902e05d47c1eddffc86faa",
     "lib/obd/transport/classic_transport.dart": "7c5b08d36e336db18a05508bbea08348355ced5720f70d9f1ea755fe0db76d77",
-    "lib/obd/transport/demo_transport.dart": "e26b62920e2a7456a6f129d334dd865c24ddc9c1bdc704fabd1705095dd09ff7",
+    "lib/obd/transport/demo_transport.dart": "601fe7feca3f0a49d21536fabc8a5ef1aca588ff9e590ec74b75e320ec47217b",
     "lib/obd/transport/obd_transport.dart": "4035953438e0f86ed3bc20972ea612a49710812b4d6e50ec3ae46c5248707630",
     "lib/obd/transport/serial_transport.dart": "0500a0c0021fc9fbf5eb06f20c1c6f485fe6a52752ac8539a080163060b177ce",
     "lib/obd/transport/wifi_transport.dart": "b4e28f7e906e16b3bf24d075c932009da183f4be01f6a554942d5bf0a0fbd898",

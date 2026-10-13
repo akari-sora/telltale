@@ -17,6 +17,7 @@ import 'package:torque_obd/core/app_locales_platform.dart';
 import 'package:torque_obd/core/share/app_share_platform_bridge.dart';
 import 'package:torque_obd/l10n/app_locales_sync.dart';
 import 'package:torque_obd/l10n/locale_resolution.dart';
+import 'package:torque_obd/obd/transport/demo_transport.dart';
 import 'package:torque_obd/state/app_runtime.dart';
 import 'package:torque_obd/state/app_share_coordinator.dart';
 import 'package:torque_obd/state/artifact_operation_gate.dart';
@@ -25,6 +26,7 @@ import 'package:torque_obd/state/pid_registry.dart';
 import 'package:torque_obd/state/telemetry_recorder.dart';
 import 'package:torque_obd/state/telemetry_runtime.dart';
 import 'package:torque_obd/state/telemetry_sessions.dart';
+import 'package:torque_obd/telemetry/session/telemetry_session.dart';
 import 'package:torque_obd/telemetry/session/telemetry_session_store.dart';
 import 'package:torque_obd/ui/screens/connect/connect_screen.dart';
 
@@ -127,8 +129,27 @@ class L10nRootHarness {
   List<String> currentOsTags = ['en'];
   Future<Directory> Function()? shareRootDirectoryOverride;
 
+  /// Fake-time pause inserted at the start of recording prepare.
+  ///
+  /// [pumpUntil] advances the demo timer faster than Start's file I/O.
+  /// A dwell longer than the initial 3s idle makes that race fail unless
+  /// [holdConnectedDemoAtIdle] is holding the drive at 0 km/h.
+  Duration recordingPrepareDwell = Duration.zero;
+
   void advanceShareClock([Duration duration = const Duration(minutes: 20)]) =>
       AlwaysReadyAppShareCoordinator.advanceClock(duration);
+
+  /// Holds the connected demo car at 0 km/h for the rest of this session.
+  ///
+  /// A new [DemoTransport] is created on every connect, so the flag does not
+  /// survive a disconnect. Call this again after the next demo connect.
+  void holdConnectedDemoAtIdle() {
+    final transport = appRef.read(obdSessionProvider.notifier).client?.transport;
+    if (transport is! DemoTransport) {
+      throw StateError('connected transport is not DemoTransport');
+    }
+    transport.holdDriveAtIdle = true;
+  }
 
   Future<void> initialize({
     Map<String, Object>? initialPrefs,
@@ -218,9 +239,17 @@ class L10nRootHarness {
       ProviderScope(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
-          telemetryRecorderRuntimeProvider.overrideWith(
-            (ref) => ref.watch(productionTelemetryRecorderRuntimeProvider),
-          ),
+          telemetryRecorderRuntimeProvider.overrideWith((ref) {
+            final runtime = ref.watch(productionTelemetryRecorderRuntimeProvider);
+            final dwell = recordingPrepareDwell;
+            if (dwell <= Duration.zero) return runtime;
+            return TelemetryRecorderRuntime(
+              environment: runtime.environment,
+              storage: _RecordingPrepareDwellStorage(runtime.storage, dwell),
+              utcNow: runtime.utcNow,
+              elapsedUs: runtime.elapsedUs,
+            );
+          }),
           appSharePolicyProvider.overrideWith(
             (ref) => ref.watch(productionAppSharePolicyProvider),
           ),
@@ -314,4 +343,35 @@ class L10nRootHarness {
     });
     return bytes;
   }
+}
+
+/// Pauses once, on the tester clock, before the real prepare I/O.
+///
+/// The pause is a [Future.delayed] in the widget test's fake-async zone, so
+/// each [WidgetTester.pump] both burns the pause and ticks the demo drive.
+final class _RecordingPrepareDwellStorage implements TelemetryRecorderStorage {
+  _RecordingPrepareDwellStorage(this.inner, this.pause);
+
+  final TelemetryRecorderStorage inner;
+  final Duration pause;
+
+  @override
+  Future<void> prepareDirectory({void Function(String checkpoint)? checkpoint}) async {
+    if (pause > Duration.zero) {
+      await Future<void>.delayed(pause);
+    }
+    await inner.prepareDirectory(checkpoint: checkpoint);
+  }
+
+  @override
+  Future<TelemetryStorageQuota> scanQuota({void Function(String checkpoint)? checkpoint}) =>
+      inner.scanQuota(checkpoint: checkpoint);
+
+  @override
+  Future<TelemetryStagingWriter> createExclusive(
+    TelemetrySessionHeader Function(String sessionId) headerForId, {
+    required TelemetryStorageQuota quota,
+    void Function(String checkpoint)? checkpoint,
+  }) =>
+      inner.createExclusive(headerForId, quota: quota, checkpoint: checkpoint);
 }

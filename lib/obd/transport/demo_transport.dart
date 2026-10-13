@@ -17,6 +17,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import 'obd_transport.dart';
 
 /// Phases of the simulated drive cycle.
@@ -31,6 +33,15 @@ class DemoTransport extends BaseObdTransport {
   /// Modelled adapter turnaround. Without it the UI would report an absurd
   /// PIDs/sec and the gauges would have no motion to smooth.
   final Duration responseLatency;
+
+  /// While true, ticks leave the car idling at 0 km/h.
+  ///
+  /// The scripted cycle leaves idle after a few seconds of this object's
+  /// timer. Widget tests advance that timer with fake time while Start still
+  /// waits on real file I/O, so the simulator is already moving when Start
+  /// rechecks speed. Production never sets this.
+  @visibleForTesting
+  bool holdDriveAtIdle = false;
 
   Timer? _tick;
 
@@ -100,6 +111,13 @@ class DemoTransport extends BaseObdTransport {
   // ------------------------------------------------------- drive model ----
 
   void _advance(double dt) {
+    if (holdDriveAtIdle) {
+      _phase = DrivePhase.idling;
+      _phaseElapsed = 0;
+      _speedKmh = 0;
+      _throttlePct = 0;
+      return;
+    }
     _runtimeSec += dt;
     _phaseElapsed += dt;
     if (_phaseElapsed >= _phaseDuration) _nextPhase();
