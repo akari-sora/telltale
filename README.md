@@ -62,12 +62,21 @@ tree):
 From 1.0.19, the normal `field` app includes Android Auto projection in the same
 `com.cbstudio.telltale` package. Phone and car screens share the connection and
 settings; installing a separate `carproto` app is no longer necessary. Select
-the APK matching your device's ABI. Vehicle installation acceptance uses Google
-Play internal testing; a manually installed GitLab APK does not establish a
-trusted Android Auto installation source. Google's automotive category review
-for production distribution remains pending.
+the APK matching your device's ABI. Having the Android Auto component in the APK
+does not guarantee that Android Auto will list the app on your phone.
 [Obtainium](https://github.com/ImranR98/Obtainium) can track updates from
 `https://gitlab.com/aa22396584/telltale/-/releases`.
+
+**Installed, but missing from the Android Auto launcher?** Enabling Android
+Auto's unknown-sources option alone does not guarantee a fix. On a Note9 with
+Android Auto 17.8.663874-release, the official GitLab 1.0.19 arm64-v8a APK became
+visible after updating in place with the same signed APK through third-party
+KingInstaller 2.3's classic / Google installer method. This installation method
+was tested on that combination; it has not been retested with 1.0.20 on Note9. See the
+[free APK Android Auto installation guide](docs/android-auto/free-apk-installation.md)
+for steps, permission cleanup, and signature precautions. Launcher visibility
+does not verify a DHU, physical head unit, or OBD connection, and Google's
+automotive category review remains unresolved.
 
 GitLab uses the maintainer signing lineage described in the
 [release procedure](docs/maintainers/release.md). Android permits an in-place
@@ -216,6 +225,7 @@ and identified commercial test layers.
 | Document | Purpose |
 | --- | --- |
 | [Documentation index](docs/README.md) | All user, evidence, and maintainer documents |
+| [Free APK Android Auto installation](docs/android-auto/free-apk-installation.md) | Missing-launcher FAQ, tested installation method, and limits (English / zh-TW) |
 | [Field guide](docs/field-guide.zh-TW.md) | Safe real-car workflow and troubleshooting (zh-TW) |
 | [Protocol deviations](docs/protocol-deviations.zh-TW.md) | Standards and hardware-behaviour notes (zh-TW) |
 | [Vehicle data sources](docs/vehicle-data-sources.md) | Official snapshots, field semantics, hashes, and market limits |

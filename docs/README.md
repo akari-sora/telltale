@@ -10,6 +10,10 @@ certifications of an adapter, diagnosis, repair, vehicle, or safety outcome.
   combinations, purchase-link disclosures, and the limits of each observation.
 - [Field guide](field-guide.zh-TW.md) — choosing a transport, collecting useful
   evidence, and troubleshooting safely at the vehicle (Traditional Chinese).
+- [Free APK Android Auto installation](android-auto/free-apk-installation.md) —
+  missing-launcher FAQ, the tested KingInstaller classic method, signature and
+  permission precautions, and the limits of the Note9 / 1.0.19 observation
+  (English / Traditional Chinese).
 - [Powertrain battery profiles](powertrain-battery-profiles.md) — schema-v3
   catalog coverage, installable community and pollable-experimental maps
   labelled unverified, the Mode 21 one-shot laboratory, source and

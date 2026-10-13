@@ -55,10 +55,17 @@ OBD2 故障診斷。它的設計原則是誠實呈現不確定性，不把格式
 
 從 1.0.19 起，一般手機 `field` App 也包含 Android Auto 投影，兩個畫面共用
 `com.cbstudio.telltale` 的設定與連線，不需要另裝 `carproto`。選擇與裝置 ABI 相符
-的 APK。Android Auto 的車機安裝驗收使用 Google Play 內部測試；GitLab APK
-的手動安裝不等於受信任的車機安裝來源。Google 車用類別的正式上架審核仍待完成。
+的 APK。APK 內含 Android Auto 元件，不代表手機的 Android Auto 一定會列出 App。
 [Obtainium](https://github.com/ImranR98/Obtainium) 可從
 `https://gitlab.com/aa22396584/telltale/-/releases` 追蹤更新。
+
+**已安裝，Android Auto 啟動器卻沒有 Telltale？** 只開 Android Auto 的「未知來源」
+不保證能解決。已在 Note9／Android Auto 17.8.663874-release 實測：透過第三方
+KingInstaller 2.3 的 classic／Google installer 方法，以同一份官方 GitLab
+1.0.19 arm64-v8a、同簽章 APK 原地覆蓋更新後，Telltale 出現在清單中。
+這項安裝方法限於上述組合實測，尚未在 Note9 用 1.0.20 重測。步驟、撤回權限與簽章注意事項見
+[免費 APK 的 Android Auto 安裝指南](docs/android-auto/free-apk-installation.md)。
+清單可見不代表已驗證 DHU、實體車機或 OBD 連線；Google 車用類別審核仍未解決。
 
 GitLab 使用[發行程序](docs/maintainers/release.md)所述的維護者簽章沿革。Android
 只有在已安裝 APK 與替代 APK 的簽章相容時，才允許原地更新。已實測由 GitLab
@@ -185,6 +192,7 @@ Samsung 實體手機到 Mac 的 BLE GATT 無線路徑，已搭配模擬 ELM327 p
 | 文件 | 用途 |
 | --- | --- |
 | [文件索引](docs/README.md) | 所有使用、證據與維護者文件 |
+| [免費 APK 的 Android Auto 安裝](docs/android-auto/free-apk-installation.md) | 清單不顯示 FAQ、已實測安裝方法與限制（中英文） |
 | [實車指南](docs/field-guide.zh-TW.md) | 安全的實車流程與故障排除 |
 | [協定差異](docs/protocol-deviations.zh-TW.md) | 標準查證與硬體行為註記 |
 | [車輛資料來源](docs/vehicle-data-sources.md) | 官方快照、欄位語意、雜湊與市場邊界 |

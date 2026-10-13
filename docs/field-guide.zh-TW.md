@@ -21,9 +21,12 @@ GT86、手機、韌體或 PID；完整邊界見[硬體相容性說明](hardware-
 1. **只有 Bluetooth Classic 轉接器要先在系統藍牙設定完成配對。** App 不能替
    Classic 發起配對；多數配對碼是 `1234` 或 `0000`。盒子上寫 BLE、4.0 或 5.0
    的轉接器**不要配對**，到 App 裡選 Bluetooth LE 掃描即可。
-2. 手機裝好 field build。從 GitHub Releases 下載時，檔名是 `telltale-v*.apk`，
-   使用 **community key** 簽署；Google Play 安裝則是另一條簽章線。兩者不能互相
-   覆蓋更新。切換前先在 App 內匯出紀錄，再解除安裝；解除安裝會刪除 App 本機資料。
+2. 手機裝好 field build。官方 GitLab 維護者 APK、GitHub **community key** APK
+   與 Google Play 是不同發布／簽章線，不能假定可互相覆蓋。簽章不符時保留
+   既有 App，先匯出重要紀錄，不盲目卸載；解除安裝會刪除本機資料。
+   1.0.19 起 field 已含 AA 元件；若手機有 App、AA 清單卻沒有，先在家看
+   [免費 APK 安裝與 AA 排錯指南](android-auto/free-apk-installation.md)。Note9 的
+   KingInstaller 成功紀錄只證明清單可見，不證明 OBD 或實體車機能用。
 3. 打開 App → **Demo 模擬器 → 啟動模擬器**，確認儀表板會動、故障碼能掃。
    這一步不需要車也不需要轉接器，用來確認 App 裝好了、畫面會動。
 
