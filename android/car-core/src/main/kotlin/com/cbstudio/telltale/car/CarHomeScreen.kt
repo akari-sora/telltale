@@ -6,6 +6,9 @@ import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
 import androidx.car.app.model.Header
+import androidx.car.app.model.GridItem
+import androidx.car.app.model.GridTemplate
+import androidx.car.app.model.ItemList
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
@@ -14,6 +17,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
+import com.cbstudio.telltale.car.diagnostics.CarDtcRuntime
 import com.cbstudio.telltale.car.hardware.CarSpeedResolver
 import com.cbstudio.telltale.car.hardware.CarVehicleMotionResolver
 import com.cbstudio.telltale.car.health.CarAlertPhase
@@ -35,16 +39,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Driver-distraction-safe live telemetry dashboard screen (AA-03, AA-05).
+ * Read-only live telemetry dashboard using host-owned templates (AA-03, AA-05, AA-10).
  *
  * Implements:
+ * - Optional four-metric Grid dashboard, with item clicks opening the numerical Pane.
  * - Dynamic row limit adaptation via [ConstraintManager.CONTENT_LIMIT_TYPE_PANE] (4 to 6 rows).
  * - Prioritized metric presentation: Speed, RPM, Coolant, Voltage, MAP, Engine Load.
  * - Multi-source speed arbitration (AA-05): OBD-first with host CarInfo fallback (display/raw).
  * - In-template alert presentation for coolant temperature (AA-05).
  * - Missing & stale data contracts: missing/unavailable shows `--`, quiet/stale shows `Stale`.
  *   Never fabricates fictitious 0 values.
- * - DDG compliance: strictly read-only, no interactive/destructive buttons, 1Hz throttled invalidation,
+ * - Read-only telemetry and template navigation, 1Hz throttled invalidation,
  *   with immediate invalidation on semantic alert transitions.
  */
 class CarHomeScreen(
@@ -58,10 +63,14 @@ class CarHomeScreen(
     private val speedResolver: CarSpeedResolver = sessionRuntime?.speedResolver ?: CarSpeedResolver(),
     private val hostSpeedRepository: CarHostSpeedRepository = sessionRuntime?.hostSpeedRepository ?: CarHostSpeedRepository(),
     private val alertRepository: CarAlertRepository = sessionRuntime?.alertRepository ?: CarAlertRepository(),
+    private val graphicalDashboard: Boolean = false,
+    private val gridContentLimitProvider: (() -> Int)? = null,
+    private val numericBackAction: Boolean = false,
 ) : Screen(carContext), DefaultLifecycleObserver {
 
     companion object {
         const val MAX_PANE_ROWS = 6
+        const val MAX_GRID_ITEMS = 4
         const val DEFAULT_PANE_LIMIT = 4
         const val THROTTLE_INTERVAL_MS = 1_000L
     }
@@ -71,11 +80,26 @@ class CarHomeScreen(
         val text: String,
         val icon: CarMetricIcon,
         val warning: Boolean = false,
+        val graphicValue: Double? = null,
     )
 
     internal data class DisplayModel(
         val rows: List<MetricRow>,
     )
+
+    // Resolve once per screen: data support/connection changes must never alter
+    // Grid item count or titles (the host's task-step refresh contract).
+    private val gridLimit: Int? by lazy {
+        if (!graphicalDashboard) null else try {
+            val limit = gridContentLimitProvider?.invoke()
+                ?: (constraintManager ?: carContext.getCarService(ConstraintManager::class.java))
+                    .getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_GRID)
+            if (limit > 0) minOf(limit, MAX_GRID_ITEMS) else null
+        } catch (_: Exception) {
+            null // Keep the existing numerical Pane when host constraints are unavailable.
+        }
+    }
+    private val gaugeGraphic by lazy { CarGaugeGraphic(carContext) }
 
     private var internalScope: CoroutineScope? = null
     private var observeJob: Job? = null
@@ -237,7 +261,7 @@ class CarHomeScreen(
 
     internal fun buildDisplayModel(state: CarTelemetryState): DisplayModel {
         val candidates = buildCandidateRows(state)
-        val limit = resolveContentLimit()
+        val limit = gridLimit ?: resolveContentLimit()
         return DisplayModel(candidates.take(limit))
     }
 
@@ -280,6 +304,14 @@ class CarHomeScreen(
         }
 
         val frame = (state as? CarTelemetryState.Current)?.frame
+        fun graphicNumber(value: Double?, format: String): Double? {
+            if (gridLimit == null || value == null || !value.isFinite()) return null
+            // Match the visible native reading, so invisible precision changes stay quiet.
+            val rounded = format.format(Locale.US, value).toDouble()
+            return if (rounded == 0.0) 0.0 else rounded
+        }
+        fun graphicValue(signal: CarSignalValue?, format: String): Double? =
+            if (signal?.status == CarSignalStatus.LIVE) graphicNumber(signal.value, format) else null
 
         // AA-05: Resolved speed through arbitration (OBD live > Host display > Host raw > Stale / Unavailable)
         val resolvedSpeed = speedResolver.resolve(state, hostSpeedRepository.sample.value)
@@ -332,15 +364,27 @@ class CarHomeScreen(
         val loadText = formatSignal(frame?.engineLoadPct, "%", "%.0f")
 
         return listOf(
-            MetricRow(carContext.getString(R.string.car_home_speed_title), speedText, CarMetricIcon.SPEED),
-            MetricRow(carContext.getString(R.string.car_home_rpm_title), rpmText, CarMetricIcon.RPM),
+            MetricRow(
+                carContext.getString(R.string.car_home_speed_title), speedText, CarMetricIcon.SPEED,
+                graphicValue = if (resolvedSpeed.status == CarSignalStatus.LIVE) {
+                    graphicNumber(resolvedSpeed.speedKmh, "%.0f")
+                } else null,
+            ),
+            MetricRow(
+                carContext.getString(R.string.car_home_rpm_title), rpmText, CarMetricIcon.RPM,
+                graphicValue = graphicValue(frame?.rpm, "%.0f"),
+            ),
             MetricRow(
                 carContext.getString(R.string.car_home_coolant_title),
                 coolantText,
                 CarMetricIcon.TEMPERATURE,
                 warning = coolantWarning,
+                graphicValue = graphicValue(frame?.coolantC, "%.0f"),
             ),
-            MetricRow(carContext.getString(R.string.car_home_voltage_title), voltageText, CarMetricIcon.VOLTAGE),
+            MetricRow(
+                carContext.getString(R.string.car_home_voltage_title), voltageText, CarMetricIcon.VOLTAGE,
+                graphicValue = graphicValue(frame?.controlModuleVoltageV, "%.1f"),
+            ),
             MetricRow(carContext.getString(R.string.car_powertrain_map_title), mapText, CarMetricIcon.PRESSURE),
             MetricRow(carContext.getString(R.string.car_home_load_title), loadText, CarMetricIcon.LOAD),
         )
@@ -349,6 +393,8 @@ class CarHomeScreen(
     override fun onGetTemplate(): Template {
         val model = buildDisplayModel(repository.state.value)
         lastRenderedModel = model
+
+        if (gridLimit != null) return gridTemplate(model)
 
         val paneBuilder = Pane.Builder()
         for (row in model.rows) {
@@ -361,33 +407,101 @@ class CarHomeScreen(
             )
         }
 
-        val healthAction = Action.Builder()
-            .setTitle(carContext.getString(R.string.car_action_health))
+        val secondaryAction = Action.Builder()
+            .setTitle(carContext.getString(
+                if (numericBackAction) R.string.car_action_powertrain else R.string.car_action_health,
+            ))
             .setOnClickListener {
-                screenManager.push(
-                    CarHealthScreen(
-                        carContext = carContext,
-                        telemetryRepository = repository,
-                        constraintManager = constraintManager,
-                        contentLimitProvider = contentLimitProvider,
-                        clock = clock,
-                        sessionRuntime = sessionRuntime,
-                        hostSpeedRepository = hostSpeedRepository,
-                        motionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
-                        alertRepository = alertRepository,
-                    ),
-                )
+                if (numericBackAction) {
+                    screenManager.push(
+                        CarPowertrainScreen(
+                            carContext = carContext,
+                            repository = repository,
+                            constraintManager = constraintManager,
+                            contentLimitProvider = contentLimitProvider,
+                            clock = clock,
+                            sessionRuntime = sessionRuntime,
+                            speedResolver = speedResolver,
+                            hostSpeedRepository = hostSpeedRepository,
+                            alertRepository = alertRepository,
+                        ),
+                    )
+                } else openHealth()
             }
             .build()
 
         val header = Header.Builder()
             .setTitle(carContext.getString(R.string.car_app_name))
-            .setStartHeaderAction(Action.APP_ICON)
-            .addEndHeaderAction(healthAction)
+            .setStartHeaderAction(if (numericBackAction) Action.BACK else Action.APP_ICON)
+            .addEndHeaderAction(secondaryAction)
             .build()
 
         return PaneTemplate.Builder(paneBuilder.build())
             .setHeader(header)
+            .build()
+    }
+
+    private fun openHealth() {
+        screenManager.push(
+            CarHealthScreen(
+                carContext = carContext,
+                telemetryRepository = repository,
+                dtcRepository = sessionRuntime?.dtcRepository ?: CarDtcRuntime.repository,
+                constraintManager = constraintManager,
+                contentLimitProvider = contentLimitProvider,
+                clock = clock,
+                sessionRuntime = sessionRuntime,
+                hostSpeedRepository = hostSpeedRepository,
+                motionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
+                alertRepository = alertRepository,
+            ),
+        )
+    }
+
+    private fun openNumericDashboard() {
+        screenManager.push(
+            CarHomeScreen(
+                carContext = carContext,
+                repository = repository,
+                constraintManager = constraintManager,
+                contentLimitProvider = contentLimitProvider,
+                clock = clock,
+                sessionRuntime = sessionRuntime,
+                speedResolver = speedResolver,
+                hostSpeedRepository = hostSpeedRepository,
+                alertRepository = alertRepository,
+                numericBackAction = true,
+            ),
+        )
+    }
+
+    private fun gridTemplate(model: DisplayModel): GridTemplate {
+        val list = ItemList.Builder()
+        for (metric in model.rows) {
+            list.addItem(
+                GridItem.Builder()
+                    .setTitle(metric.title)
+                    .setText(metric.text)
+                    .setImage(
+                        gaugeGraphic.icon(metric.icon, metric.graphicValue, metric.warning, carContext.isDarkMode),
+                        GridItem.IMAGE_TYPE_LARGE,
+                    )
+                    .setOnClickListener { openNumericDashboard() }
+                    .build(),
+            )
+        }
+        val healthAction = Action.Builder()
+            .setTitle(carContext.getString(R.string.car_action_health))
+            .setOnClickListener { openHealth() }
+            .build()
+        val header = Header.Builder()
+            .setTitle(carContext.getString(R.string.car_app_name))
+            .setStartHeaderAction(Action.APP_ICON)
+            .addEndHeaderAction(healthAction)
+            .build()
+        return GridTemplate.Builder()
+            .setHeader(header)
+            .setSingleList(list.build())
             .build()
     }
 }

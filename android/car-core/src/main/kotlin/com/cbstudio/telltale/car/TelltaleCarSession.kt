@@ -35,7 +35,7 @@ class TelltaleCarSession(
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !sessionRuntime.isStarted) {
             sessionRuntime.start()
         }
-        return CarHomeScreen(carContext = carContext, sessionRuntime = sessionRuntime)
+        return CarHomeScreen(carContext = carContext, sessionRuntime = sessionRuntime, graphicalDashboard = true)
     }
 
     override fun onStart(owner: LifecycleOwner) {

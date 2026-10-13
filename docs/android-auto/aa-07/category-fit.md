@@ -6,6 +6,20 @@
 **Exit Qualification Verdict:** `ELIGIBLE_CANDIDATE (CATEGORY_FIT_UNRESOLVED / READY_FOR_CLOSED_REVIEW)`  
 **Evaluation Standard:** Google Android for Cars Quality Guidelines (v1.7+)  
 
+**2026-10-13 Grid branch scope:** Session launch now selects a four-metric
+`GridTemplate` dashboard with supplementary Bitmap gauge snapshots and native
+readings. Each tile opens the retained numerical `PaneTemplate` dashboard with
+Back and Powertrain actions. Grid's named Health header action opens Health
+directly, keeping the deepest static diagnostic path at four templates.
+Failed/nonpositive Grid constraint queries fall back to the original numerical
+Pane with Health access.
+New branch verification is tracked in [AA-10](../aa-10-grid-dashboard.md) and is
+**PENDING**, with projected DHU acceptance **NOT_RUN** because the installed
+phone image provides only an Android Auto stub. Prior AA-09 Pane captures and
+PASS records below remain historical evidence; they do not establish acceptance
+of the new Grid images, navigation or layout. Category fit remains
+**`CATEGORY_FIT_UNRESOLVED`**.
+
 ---
 
 ## 1. Executive Summary & Category Fit Rationale
@@ -25,7 +39,9 @@ Under Google Play's Android for Cars application categories:
 
 ## 2. Google Android for Cars Standard Alignment (Canonical Criteria)
 
-The application has been audited and verified against the canonical Google Android for Cars review criteria (Tier 1 Core App Quality and Tier 2 / Car Ready Criteria applicable to IOT, Android Auto, and AAOS):
+The historical implementation was audited against the Android for Cars review
+criteria applicable to IOT, Android Auto and AAOS. The new Grid branch requires
+separate verification; the historical records are retained below.
 
 ### 2.1 Core Quality & Driving Safety Criteria
 
@@ -40,9 +56,10 @@ The application has been audited and verified against the canonical Google Andro
 - **Compliance Status:** **PASS**.
 
 #### AC-1: Task Completion Limits
-- **Google Standard:** Tasks can be completed in ≤ 5 screens.
-- **Implementation:** All user tasks complete within 1 to 2 screens. Launch -> Home telemetry dashboard (1 screen); Home -> DTC Summary (2 screens); Home -> Powertrain telemetry (2 screens). No deep screen nesting exists (max navigation stack depth = 2).
-- **Compliance Status:** **PASS**.
+- **Google Standard:** A task may use at most five templates; the fifth must be NavigationTemplate, PaneTemplate, MessageTemplate, MediaPlaybackTemplate, SignInTemplate or LongMessageTemplate. ListTemplate is not a permitted fifth template. See [official template restrictions](https://developer.android.com/training/cars/apps/library/template-restrictions).
+- **Historical record:** The earlier Pane audit recorded telemetry and navigation tasks within 1 to 2 screens and a maximum stack depth of 2.
+- **Current implementation:** Grid Home -> Health -> DTC Summary -> Detail is the deepest static path, at 4 templates. Grid has a named Health header action; each tile opens Values (numerical Home) with Back and Powertrain, so Grid -> Values -> Powertrain uses 3 templates. Values has no Health action that could place DTC Detail in a fifth ListTemplate slot. Original numerical fallback Home retains Health access. No task-quota reset workaround or DTC contract change is used. Non-refresh DTC list updates can consume additional steps and remain a host-validation gap; static path depth alone is not full quota acceptance.
+- **Compliance Status:** **HISTORICAL PANE PASS / GRID PENDING**; host task-step and Back navigation acceptance must be recorded for this branch.
 
 #### DR-1: Interaction Response Time
 - **Google Standard:** Button and action response time must be ≤ 2 seconds.
@@ -88,7 +105,7 @@ The application has been audited and verified against the canonical Google Andro
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **PC-1** | Permitted Car App Categories | App must belong to a supported category and cannot include features outside permitted car app categories | Yes | Android Auto / AAOS | Declared `androidx.car.app.category.IOT` in `TelltaleCarAppService` `<intent-filter>`. Confined to read-only vehicle telemetry & OBD-II peripheral sensor monitoring; zero unpermitted features | **PROVISIONAL CANDIDATE** |
 | **PE-1** | Parked-Only Activities | AAOS: App-implemented activities must not provide functionality beyond parked setup, settings, or sign-in | Yes | AAOS | Zero custom driving activities declared for AAOS; 100% templated UI rendered by host via `CarAppService`. In-motion code inspection and deep diagnostic data strictly gated behind `CarDtcMotionGate` and `ParkedOnlyOnClickListener` | **PASS** |
-| **AC-1** | Task Completion Limits | Users must be able to complete tasks within 5 screens | Yes | Android Auto / AAOS | Max backstack depth is 2 across entire car app. Primary telemetry completed in 1 screen, health overview in 1 screen, DTC fault summary/detail in 2 screens (well under 5-screen limit) | **PASS** |
+| **AC-1** | Task Completion Limits | At most 5 task templates, with the fifth restricted to an allowed terminal type | Yes | Android Auto / AAOS | Historical Pane audit recorded a depth of 2. New deepest static path is Grid -> Health -> DTC Summary -> Detail (4 templates); Grid -> Values -> Powertrain uses 3, without a Values -> Health link. No quota-reset workaround; non-refresh DTC updates and actual host quota behavior still need validation | **HISTORICAL PANE PASS / GRID PENDING** |
 | **DR-1** | Action Response Time | Action responses must complete in ≤ 2 seconds | Yes | Android Auto / AAOS | Reactive `StateFlow` local template updates execute < 100 ms; verified via DHU baseline walkthrough | **PASS** |
 | **DR-2** | App Startup Time | App session initialization and first frame render must complete within 10 seconds | Yes | Android Auto / AAOS | `onCreateSession` and initial `CarHomeScreen` render complete in ~800 ms in both DHU and AAOS emulator | **PASS** |
 | **DR-3** | Content Loading Time | Content loading time must complete within 10 seconds | Yes | Android Auto / AAOS | Telemetry data streams continuously with coroutine dispatcher; screen refresh rate < 200 ms | **PASS** |
@@ -97,13 +114,13 @@ The application has been audited and verified against the canonical Google Andro
 | **EP-4** | Automotive Screenshots | AAOS: App must provide actual capture screenshots on generic AAOS emulator (portrait 800×1280 & landscape 1024×768) reflecting actual app appearance | Yes | Play Store (AAOS) | Natively captured 6 unique screenshots (3 portrait 800×1280 and 3 landscape 1024×768) 24-bit RGB PNG from generic AAOS emulators without resizing or synthetic post-processing; shared across listing locales | **PASS** |
 | **IN-1** | Notifications & Interruptions | Non-driving notifications prohibited; no unsolicited intrusive audio or pop-up interruptions while driving | Yes | Android Auto / AAOS | Zero notifications posted while driving; zero audio focus requested; alerts displayed only as in-template status badges | **PASS** |
 | **AR-1** | Activity Region & System Cutouts | AAOS: App-implemented Activity interactive UI must not be obscured by system bars or cutouts | Yes | AAOS | Implements 0 custom activities on AAOS; renders 100% via `CarAppService` official Car App Library templates; host layout engine guarantees zero obstruction by system bars or cutouts | **PASS** |
-| **SA-1** | Surface Animation | Must not display animated elements while driving; exception for parked Canvas animation directly related to driving task | Yes | Android Auto / AAOS | Zero animations rendered in any template; static text, standard metrics, and static status badges only | **PASS** |
+| **SA-1** | Surface Animation | Must not display animated elements while driving; exception for parked Canvas animation directly related to driving task | Yes | Android Auto / AAOS | Historical Pane UI used static icons. Grid uses static Bitmap arc snapshots on model changes at the existing approximately 1 Hz limit, with immediate semantic alert refresh; no interpolated needle, flashing, transition animation or animation timer. Snapshot refresh is not asserted to be an official animation-policy exemption | **HISTORICAL PANE PASS / GRID PENDING** |
 | **AD-1** | In-Car Advertising | Visual and text advertising restrictions on car display; strictly no commercial advertisements while driving | Yes | Android Auto / AAOS | 100% ad-free; zero ad SDKs or promotional text in `:car-core` | **PASS** |
-| **IU-1** | Image Usage | Image usage rules on car display; images and icons must be relevant, driver-safe, and obey sizing/contrast standards (not input handling) | Yes | Android Auto / AAOS | Home/Health/Powertrain use app-owned monochrome metric vector resources through `CarIcon`; host-default tint with redundant warning text and semantic warning tint. No bitmap charts or custom surface; see `DESIGN.md` and AA-09 graphics verification | **PASS** |
+| **IU-1** | Image Usage | Image usage rules on car display; images and icons must be relevant, driver-safe, and obey sizing/contrast standards (not input handling) | Yes | Android Auto / AAOS | Grid Home uses supplementary 128-pixel Bitmap gauge snapshots with native reading/unit/status text and labelled visual scales. Numerical Home/Health/Powertrain retain vector Row icons. No custom Surface; historical vector evidence is in AA-09 and new image verification is in AA-10 | **HISTORICAL VECTOR PASS / GRID PENDING** |
 | **VI-1** | Visual / Phone Flow Prompts | Android Auto: If directing user to interact with phone, car screen must display a prompt indicating to check phone only when safe/parked | Yes | Android Auto | Vehicle-speed permission is requested only from a `ParkedOnlyOnClickListener`. After the host accepts the parked-only action and before the phone permission request begins, the car display shows localized guidance to complete the permission on the phone while parked. No phone handoff is initiated while driving. | **PASS** |
 | **ST-1** | Scrolling Text | Must not display auto-scrolling (marquee) text | Yes | Android Auto / AAOS | Zero auto-scrolling/marquee text widgets; all strings are static or user-scrolled when permitted | **PASS** |
-| **VD-1** | Visual Distraction / Contrast | Icons and colors must meet Android Auto contrast requirements; no distracting high-contrast flashes or non-compliant palettes | Yes | Android Auto / AAOS | Uses host-selected `CarColor.DEFAULT` and semantic warning tokens; actual host day/night rendering is verified separately in AA-09, without claiming a measured contrast ratio from token use alone | **PASS** |
-| **TH-1** | Custom Theming | AAOS / Android Auto: If using Car App Library 1.9+ custom theming, app must support both light and dark themes | Yes | Android Auto / AAOS | **N/A (Condition Not Triggered)**: Telltale pins Car App Library 1.8.0-rc01 and does not implement custom theming (`androidx.car.app.theme`); relies entirely on host system day/night semantic color palette (`CarColor`) | **N/A** |
+| **VD-1** | Visual Distraction / Contrast | Icons and colors must meet Android Auto contrast requirements; no distracting high-contrast flashes or non-compliant palettes | Yes | Android Auto / AAOS | Pane uses host-selected `CarColor.DEFAULT` and warning tokens; its historical host rendering is recorded in AA-09. Grid Bitmap palettes follow `CarContext.isDarkMode`; new host image/readability and contrast evidence is pending, without deriving a measured ratio from palette choice alone | **HISTORICAL PANE PASS / GRID PENDING** |
+| **TH-1** | Custom Theming | AAOS / Android Auto: If using Car App Library 1.9+ custom theming, app must support both light and dark themes | Yes | Android Auto / AAOS | **N/A (Condition Not Triggered)**: Telltale pins Car App Library 1.8.0-rc01 and does not implement custom theming (`androidx.car.app.theme`). Pane uses host semantic colors; Grid images have explicit light/dark palettes whose rendering is checked separately under VD-1 | **N/A** |
 | **NA-1** | Notification Advertising | Prohibits displaying advertisements or commercial messages through notifications | Yes | Android Auto / AAOS | Generates zero notifications; no push notification service in `:car-core` | **PASS** |
 | **PA-1** | In-Car Payments | Restricts payment flows in-car; driving payments must comply with strict automotive payment policies | No | Android Auto / AAOS | Telltale contains zero in-car purchasing, checkout, or billing flows | **N/A** |
 | **IT-1** | IoT Device Interaction | Driving: view connected device state & simple one-touch control; prohibited from device setup, complex automation flow creation/modification, or fine-grained control while driving | Yes | Android Auto / AAOS | In-motion UI strictly restricted to read-only glanceable vehicle telemetry. Device setup/pairing is offloaded to mobile app; diagnostic DTC troubleshooting and freeze-frame inspection locked behind stationary gate (`speed == 0 km/h` via `CarDtcMotionGate`); Mode 04 clear fault 100% excluded | **PASS** |
@@ -114,7 +131,7 @@ The application has been audited and verified against the canonical Google Andro
 
 | Operational Capability | Driving State (`speed > 0 km/h`) | Parked / Stationary State (`speed == 0 km/h`) | Review Justification |
 | :--- | :--- | :--- | :--- |
-| **Telemetry Home Dashboard** | Active (Glanceable 4-row Pane) | Active (Glanceable 4-row Pane) | Primary monitor safe at all speeds (<2s glanceability) |
+| **Telemetry Home Dashboard** | Read-only Grid, with numerical Pane access/fallback | Read-only Grid, with numerical Pane access/fallback | Four fixed-priority metrics, native readings and supplementary images; new Grid glanceability and host acceptance are pending |
 | **Coolant Overheat Alert** | Active In-Template Badge (`High`) | Active In-Template Badge (`High`) | Critical safety alert visible to driver without modal dialog |
 | **Vehicle Health Overview** | Active (MIL On/Off, Code count) | Active (Full status breakdown) | High-level summary allowed while driving |
 | **Diagnostic Code List** | **LOCKED / BLOCKED** (`Parked only`) | **ACCESSIBLE** (Up to list limit) | Prevents reading lengthy codes while driving (Host & Gate locked) |
@@ -127,4 +144,9 @@ The application has been audited and verified against the canonical Google Andro
 ## 4. Exit Qualification Verdict
 
 **Final Assessment: `ELIGIBLE_CANDIDATE (CATEGORY_FIT_UNRESOLVED / READY_FOR_CLOSED_REVIEW)`**  
-The Telltale Android for Cars implementation strictly complies with all Google Play driver distraction, template constraint, and performance mandates. The category fit (`androidx.car.app.category.IOT`) is established as a sound candidate hypothesis and is ready for closed testing track review with escalation playbooks prepared.
+The historical engineering records support the prior implementation's review
+preparation. The new Grid branch has not completed its separate host acceptance
+and image-policy verification. The category fit (`androidx.car.app.category.IOT`)
+remains a candidate hypothesis for formal review; neither the category declaration
+nor successful template/model tests establish Google Play approval. See AA-10 for
+new branch results and remaining NOT_RUN cases.

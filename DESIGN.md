@@ -3,18 +3,24 @@
 ## Source of truth
 
 Status: Active for the existing phone design and Android for Cars prototype.
-Last refreshed: 2026-10-11. This change focuses on Android Auto/AAOS metric
-graphics; it does not establish Google Play category eligibility.
+Last refreshed: 2026-10-13. This change adds a GridTemplate dashboard with
+supplementary gauge images and retains the numerical Pane dashboard. New branch
+host acceptance is pending; it does not establish Google Play category eligibility.
 
 Evidence reviewed: `lib/core/theme/app_colors.dart`, `app_theme.dart`, the
 Home/Health/Powertrain screens and tests in `android/car-core`,
-`docs/android-auto/aa-00-eligibility.md`, and the actual 800×480 DHU dashboard
-captured during the October 11 baseline device run. That baseline gave each
-metric a title and secondary reading, without a metric graphic.
+`docs/android-auto/aa-00-eligibility.md`, the Grid implementation in
+`CarHomeScreen.kt` / `CarGaugeGraphic.kt`, and the historical October 11–12
+host evidence recorded in AA-09. Those Pane captures are historical evidence,
+not acceptance of the new Grid dashboard. See AA-10 for the new verification record.
 
 Official references checked on this date:
 
 - [IoT guide](https://developer.android.com/training/cars/apps/iot)
+- [Grid template UX](https://developer.android.com/design/ui/cars/guides/templates/grid-template)
+- [Grid refresh rules](https://developer.android.com/reference/androidx/car/app/model/GridTemplate)
+- [Task template restrictions](https://developer.android.com/training/cars/apps/library/template-restrictions)
+- [Grid item image and text APIs](https://developer.android.com/reference/androidx/car/app/model/GridItem.Builder)
 - [Pane refresh rules](https://developer.android.com/reference/androidx/car/app/model/PaneTemplate)
 - [Row image and text APIs](https://developer.android.com/reference/androidx/car/app/model/Row.Builder)
 - [Car quality guidelines](https://developer.android.com/docs/quality-guidelines/car-app-quality)
@@ -25,17 +31,20 @@ Official references checked on this date:
 Telltale is a calm, precise vehicle diagnostic instrument. Trust comes from
 explicit units, data freshness, and the distinction between observed and
 unavailable readings. The phone uses aqua accents, amber caution, and red faults.
-Car displays use the host's semantic colors and typography. Avoid decorative
-imagery, simulated readings, flashing alerts, and unverified safety claims.
+Car displays use the host's typography and native text. Pane icons use semantic
+host colors; Grid images provide separate light/dark palettes. Avoid decorative
+imagery, fabricated readings, flashing alerts, and unverified safety claims.
 
 ## Product goals
 
 Help drivers locate a metric quickly and distinguish a valid reading from a
 warning or absent data. Retain read-only telemetry and parked diagnostic flows.
-This pass adds recognizable metric graphics and redundant warning cues. It
+This pass adds a grid of static gauge snapshots and redundant warning cues. It
 does not add chart history, pairing, custom driving surfaces, or new navigation.
-Success means clear actual DHU captures, preserved telemetry semantics, and
-passing native template, localization, lifecycle, and boundary tests.
+Success requires preserved telemetry semantics, passing native template,
+localization, lifecycle and boundary tests, and actual host evidence. Unit/model
+or bitmap tests alone do not establish head-unit acceptance. DHU is NOT_RUN for
+this branch because the installed phone image has only an Android Auto stub.
 
 ## Personas and jobs
 
@@ -47,58 +56,85 @@ assets with explicit provenance, not evidence from a real vehicle.
 
 ## Information architecture
 
-Keep Home → Health → Powertrain and the existing parked DTC summary/detail.
-Keep metric order and host content limits. Each metric has a stable localized
-title, a unit-bearing secondary reading, and a matching semantic icon. Stable
-titles are a functional requirement: changing them consumes Pane task steps.
+Session launch selects graphical Home. Its fixed priority is Speed, RPM,
+Coolant and Module Voltage, capped by the host's Grid item limit. Each tile opens
+the existing numerical Values Home with Back and Powertrain actions. Grid's
+named Health header action opens Health directly, retaining Powertrain and
+the parked DTC summary/detail. The deepest path, Grid → Health → DTC Summary →
+Detail, uses four templates; Grid → Values → Powertrain uses three. Values has
+no Health intermediate action. The fifth task template has a restricted terminal
+type list that excludes ListTemplate, so diagnostics must not be pushed into
+that slot. No quota-reset workaround is used. These paths do not by themselves
+prove quota acceptance: non-refresh DTC list updates also need host validation.
+Direct construction of Home still defaults to Pane with Health access for the
+baseline and numerical fallback. Each metric retains a stable localized title and a
+unit-bearing secondary reading. Template titles, tile count and tile titles
+remain stable across live, missing, stale, unsupported and disconnected states.
 
 ## Design principles
 
-Use graphics to identify the metric, not to invent its range or history.
-Retain text alongside icons, and warning text alongside semantic color.
-Favor a stable layout over moving needles, animations, or continuously changing
-icons. The host owns layout and sizing, so phone gauge styling is not copied.
-The tradeoff is fewer visual chart details in exchange for predictable template
-refreshes and readable metrics across head units.
+Use graphics as a supplementary view of the current reading, with explicit
+display scales rather than inferred vehicle limits or history. Retain native
+text alongside images, and warning text alongside color and shape. Do not add
+needle interpolation, animated transitions or autonomous animation timers.
+Snapshots change only with the existing model-diff refresh. The host owns layout
+and displayed image size, so a specific four-circle or 2 × 2 layout is not promised.
 
 ## Visual language
 
-Use simple monochrome vector metric symbols in the standard Row icon slot:
-speedometer, tachometer, thermometer, battery, pressure, and engine/status.
-Use `CarColor.DEFAULT` normally; use a semantic warning color only when the
-existing alert/diagnostic state establishes that warning. Do not dim unavailable
-text or claim that an absent value equals zero. The host controls type, spacing,
-row size, corners, elevation, and day/night theme. No new animation or palette.
+Grid images are 128 × 128 pixel Bitmap snapshots containing a metric symbol,
+an arc and labelled scale endpoints. Their light/dark palette follows
+`CarContext.isDarkMode`; native title, reading, unit and freshness remain outside
+the bitmap. Display scales are 0–240 km/h, 0–8000 RPM, −40–215 °C and 0–24 V.
+These are visual scales, not redlines, supported PID limits or health thresholds.
+Out-of-scale values clamp only the arc; native formatted readings remain intact.
+Absent or stale values draw no value arc and never substitute zero. Established
+coolant warnings add a warning shape and color while retaining existing text.
+
+Numerical Home, Health and Powertrain retain monochrome vector Row icons with
+`CarColor.DEFAULT` or an established semantic warning tint. The host may override
+colors; images and tint never replace a native-text explanation. No chart history,
+animated needle or custom driving Surface is added.
 
 ## Components
 
-Reuse `PaneTemplate`, `Row`, existing localized text and alert state. A small
-car-core metric icon helper owns resource selection and host-tinted `CarIcon`
-creation. Screens own metric/state mapping; telemetry repositories retain data
-ownership. Shared Home, Health and Powertrain changes apply to both projected
-Android Auto and AAOS. No bitmap charts or custom surface permissions.
+Reuse existing localized text, alert state and telemetry ownership.
+`CarHomeScreen` renders `GridTemplate` / `GridItem` in graphical mode and
+`PaneTemplate` / `Row` in numerical mode. `CarGaugeGraphic` owns the supplementary
+Bitmap snapshots and a bounded eight-entry CarIcon cache. The existing metric
+icon helper remains responsible for host-tinted Pane icons. Shared car-core
+applies to projected Android Auto and AAOS. No Surface permission, category
+change, dependency or experimental chart/progress API is added.
 
 ## Accessibility
 
 Target readable host contrast in day/night mode; do not override font sizes or
-force phone color tokens onto a head unit. Row text retains the metric name,
-value, unit and warning/freshness text for host accessibility. Icons are
-redundant cues, never the only explanation. Preserve localized RTL numeric
-isolation, existing focus/navigation, and read-only rows. No motion is added.
+force phone typography onto a head unit. Native Grid/Row text retains the metric
+name, value, unit and warning/freshness text for host accessibility. Image labels
+are supplementary and may shrink; they are not the only explanation. Preserve
+localized RTL numeric isolation and existing parked diagnostic gates. Grid clicks
+only open numerical telemetry; they issue no vehicle command. Day/night contrast
+and focus/readability need actual host verification.
 
 ## Responsive behavior
 
 Support the host's small landscape, wide and portrait layouts, plus AAOS.
-The host chooses icon size, row placement and input behavior. Honor the queried
-Pane content limit and current fallback; do not increase row counts for graphics.
-Check scrolling and rotary/touch navigation using the actual host.
+The host chooses image size, grid columns, row placement and input behavior.
+Query `CONTENT_LIMIT_TYPE_GRID` once per graphical screen, use a positive limit
+capped at four, and retain that count for its lifetime. A failed query or nonpositive
+limit selects the original Pane fallback; the Pane path still queries its own
+content limit. No item-size/shape API is required. The official 128 × 128 dp image
+guidance is not a guarantee that these 128-pixel sources appear at that size.
+Check scaling, scrolling and rotary/touch navigation using the actual host.
 
 ## Interaction states
 
 Loading/empty/unavailable show the existing `--` text. Stale readings remain
 explicitly stale and do not become plausible numbers. Connected live readings
-retain units and formatting. Established coolant warnings retain `High` text
-with a redundant warning-colored metric icon. Diagnostic health states use the
+retain units and formatting. Current coolant warnings retain `High` text with
+redundant warning color and shape. A same-stream-epoch stale timeout retains
+the established warning state alongside explicit stale text and no current-value
+arc; an unrelated epoch must not inherit that warning. Diagnostic health states use the
 existing coordinator/repository decision, not guessed numeric thresholds.
 Parked-only disabled diagnostics, disconnect and recovery behavior are retained.
 
@@ -110,21 +146,25 @@ Promotional captions identify Demo/controlled fixture data and actual app source
 
 ## Implementation constraints
 
-AndroidX Car App Library remains pinned at 1.8.0-rc01; use established Row/CarIcon
-APIs, no new dependencies or experimental chart/progress APIs. Keep approximately
-1 Hz model-diff refresh, stable row titles, lifecycle ownership, speed arbitration,
-read-only bridge and motion gates. Do not promote the prototype category into
-production. Test icon presence/state mapping, title stability, missing/stale
-data, RTL and existing behavioral tests. Build projected and automotive variants;
-capture actual DHU day/night and screen-size evidence with APK/source hashes.
-The device pass also found a late projection handoff rejected after phone
-pause. Repair that existing handoff with exact native lease identity and the
-existing background ATRV proof; do not create a second OBD/Flutter session.
+AndroidX Car App Library remains pinned at 1.8.0-rc01; use established Grid,
+Pane and CarIcon APIs. Keep approximately 1 Hz model-diff refresh, immediate
+semantic alert refresh, stable titles/counts, lifecycle ownership, speed
+arbitration, read-only bridge and motion gates. Collectors and pending refresh
+jobs stop with the screen lifecycle; no infinite graphics loop is introduced.
+Do not promote the prototype category into production. Test image/state mapping,
+title/count stability, scale clamping, missing/stale data, bounded caching, RTL,
+navigation, constraints/fallback and existing behavioral contracts. Build/lint
+projected and automotive variants, run Flutter regressions and protected contract
+gates, and record exact source/APK hashes with host screenshots where available.
+Preserve the earlier exact native lease identity and background ATRV handoff
+repair documented in AA-09; do not create a second OBD/Flutter session.
 
 ## Open questions
 
 - Google Play eligibility for OBD telemetry under IoT remains unresolved; owner:
   product/release. See AA-00. This does not block local prototype improvements.
-- A supported future template may allow richer telemetry charts; owner: car UI.
-  Revisit only with category/API support and host evidence. Full curves currently
+- New Grid host acceptance, screenshot readability and image-policy review remain
+  pending; owner: car UI/release. AAOS validation is limited to owned read-only
+  simulation. No physical vehicle/head-unit acceptance is claimed.
+- Richer charts require category/API support and host evidence. Full curves
   remain on the phone.
