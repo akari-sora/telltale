@@ -1776,6 +1776,38 @@ real ELM327. The 2026-08-27 observation at the top of this file later closed
 that blanket gap for one purchased BLE adapter and one GT86 connection only;
 it did not add the missing protocol-level transcript review.
 
+## 2026-10-13 — 1.0.20 (203) on an emulator and the official DHU, not a phone
+
+Scope first: this is an **emulator** walk with the maintainer-signed GitLab APK
+(`telltale-v1.0.20-arm64-v8a.apk`, sha256 `789df654…d910d8`, signer
+`362133c0…a579`), not a physical phone and not a local `--flavor field` build.
+It is therefore **not** a "Device walk attested" entry in the §0.2 sense, and no
+such line is added here.
+
+Setup: read-only AVD `Telltale_QA_Phone_20261011` (Android 16, arm64), Android
+Auto 17.7, Desktop Head Unit 2.0 at 1280×720 with speed/gear/parking-brake
+sensors, and the software ELM327 fixture `controlled_elm.py` on
+`127.0.0.1:35019` through `adb reverse`. Synthetic values only.
+
+| Check | Result |
+|---|---|
+| In-place upgrade 1.0.19 (2022) → 1.0.20 (2032), saved adapter and theme kept | pass |
+| Telltale in the Android Auto launcher; Home shows live speed, RPM, coolant, module voltage, MAP, load | pass |
+| Fault codes open when parked; at DHU `speed 20` a tap shows "Parked only" and does not navigate | pass |
+| Phone HOME while projecting, and DHU exit/reopen, keep the same process and connection | pass |
+| Explicit Disconnect on the phone: no reconnect within 60 s, projection service stops | pass |
+| Android Auto cold-starts the app, phone opened 12 s later (the !129 case) | **10/10 dashboard, 0 "Restart required"** |
+| Full logcat (239,299 lines) and crash buffer: no FATAL, ANR or `E/flutter` | pass |
+
+The phone side was walked on the same emulator in light and dark themes:
+connection, dashboard, performance screen (no timed run), fault codes with the
+P0133 freeze frame, PID manager and editor (opened, not saved), settings.
+
+Not covered: a real vehicle, Bluetooth adapters, a physical head unit or phone,
+the Play-delivered split APKs, and an update through Play. The 1.0.19
+acceptance of the same kind (8 checks on the DHU plus a Note 9 phone walk) is
+summarised in the v1.0.19 GitLab release notes.
+
 ## What would move this forward, in order of value
 
 1. Privately review the retained 2026-08-27 transcript, then publish only a
