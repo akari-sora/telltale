@@ -382,7 +382,8 @@ class CarHomeScreen(
                 graphicValue = graphicValue(frame?.coolantC, "%.0f"),
             ),
             MetricRow(
-                carContext.getString(R.string.car_home_voltage_title), voltageText, CarMetricIcon.VOLTAGE,
+                carContext.getString(if (gridLimit != null) R.string.car_grid_voltage_title else R.string.car_home_voltage_title),
+                voltageText, CarMetricIcon.VOLTAGE,
                 graphicValue = graphicValue(frame?.controlModuleVoltageV, "%.1f"),
             ),
             MetricRow(carContext.getString(R.string.car_powertrain_map_title), mapText, CarMetricIcon.PRESSURE),

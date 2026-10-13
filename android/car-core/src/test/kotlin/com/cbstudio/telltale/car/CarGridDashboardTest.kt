@@ -64,7 +64,7 @@ import org.robolectric.annotation.Config
 class CarGridDashboardTest {
 
     private lateinit var carContext: TestCarContext
-    private val expectedTitles = listOf("Speed", "RPM", "Coolant", "Module Voltage")
+    private val expectedTitles = listOf("Speed", "RPM", "Coolant", "Voltage")
 
     @Before
     fun setUp() {
