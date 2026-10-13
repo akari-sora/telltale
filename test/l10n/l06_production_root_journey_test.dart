@@ -49,6 +49,12 @@ import 'package:universal_ble/universal_ble.dart';
 
 import '../support/l10n_root_harness.dart';
 
+/// Longer than the initial scripted idle (3s of fake time) plus the
+/// acceleration needed to pass 5 km/h. Prepare then overlaps a moving sample
+/// unless the harness holds the drive at idle. Forty 100ms pumps, not a
+/// longer real timeout.
+const _recordingPrepareDwell = Duration(seconds: 4);
+
 class _TestBarrier {
   final Completer<void> entered = Completer<void>();
   final Completer<void> release = Completer<void>();
@@ -63,7 +69,7 @@ void main() {
   late L10nRootHarness harness;
 
   setUp(() async {
-    harness = L10nRootHarness();
+    harness = L10nRootHarness()..recordingPrepareDwell = _recordingPrepareDwell;
     await harness.initialize();
   });
 
@@ -101,6 +107,11 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
+    // Start rechecks speed across real file I/O. The demo timer is this
+    // tester's fake clock, so install the idle simulator before connect.
+    // No case in this file needs a moving sample. Every demo connect in
+    // this file, including C02's second connect, goes through here.
+    harness.holdDemoAtIdle();
     await tester.tap(start, warnIfMissed: false);
     await tester.pump();
 

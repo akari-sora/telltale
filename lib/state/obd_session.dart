@@ -1102,15 +1102,24 @@ class ObdSession extends Notifier<ObdConnectionState> {
         : FieldEventRecordResult.memoryOnly;
   }
 
+  /// Builds the simulator for [connectDemo]. Tests only.
+  ///
+  /// A test can keep the drive timer from starting so the car stays at
+  /// 0 km/h. Production never sets this.
+  @visibleForTesting
+  DemoTransport Function(Duration responseLatency)? demoTransportFactory;
+
   /// Starts the built-in simulator. Needs no permissions and no hardware, so
   /// it is also what the app falls back to when the user just wants to look
   /// around.
-  Future<bool> connectDemo({Duration? responseLatency}) => _connect(
-    DemoTransport(
-      responseLatency: responseLatency ?? const Duration(milliseconds: 18),
-    ),
-    TransportKind.demo,
-  );
+  Future<bool> connectDemo({Duration? responseLatency}) {
+    final latency = responseLatency ?? const Duration(milliseconds: 18);
+    return _connect(
+      demoTransportFactory?.call(latency) ??
+          DemoTransport(responseLatency: latency),
+      TransportKind.demo,
+    );
+  }
 
   /// Connects an arbitrary transport. Tests only.
   ///
