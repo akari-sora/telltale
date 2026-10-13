@@ -8,6 +8,20 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+## 1.0.20 — 2026-10-13
+
+- Fixed an occasional "Restart required to continue safely" screen on the
+  phone when Android Auto starts the app before the phone UI is opened. A share
+  permit that is revoked while startup is still running is now retried instead
+  of permanently blocking startup.
+- Made the l06 production journey test start recording against an idle demo
+  car, so a loaded CI runner can no longer race the simulator past 5 km/h
+  before the recorder finishes preparing. Test-only; `lib/obd/` is unchanged.
+
+Google Play production replaces the 1.0.19 submission that was still in review,
+so the store notes repeat the 1.0.19 integration changes for users updating
+from 1.0.17.
+
 ## 1.0.19 — 2026-10-12
 
 - Integrated Android Auto into the normal phone app (`com.cbstudio.telltale`).
