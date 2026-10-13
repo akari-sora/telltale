@@ -173,13 +173,21 @@
     "host_status": "PARTIAL",
     "observed_layout": "Four tiles in one row; circular gauge graphics visible",
     "remaining": [
-      "Final candidate v3 functional flow",
-      "Portrait",
-      "Day/night and native-text readability",
-      "Simulated VHAL",
-      "Dynamic DTC task quota"
+      "Night native/system-text readability NOT_VERIFIED",
+      "Steady moving-entry and synchronized speed/capture timing NOT_VERIFIED",
+      "Dynamic DTC task quota NOT_VERIFIED",
+      "Host OBD warning/stale/unsupported scenarios NOT_RUN",
+      "Portrait final night NOT_RUN"
     ],
-    "text_renderer_limitation": "SwiftShader captures omit system text across system UI and app content; bounded official host-GPU recheck pending"
+    "text_renderer_limitation": "Completed one bounded switch from SwiftShader to the official host GPU. Complete day frames obtained; night still loses static native/system text. Night readability NOT_VERIFIED.",
+    "observed_cases": [
+      "Complete landscape 1024x768 and portrait 800x1280 day Grid",
+      "Live simulated host 0 km/h and minimum marker",
+      "Tile -> numerical Pane -> Powertrain, direct Health",
+      "Unknown speed blocked diagnostic entry; fresh zero allowed unavailable diagnostic page",
+      "Transient 48 km/h and proportional arc observed, with incomplete static text and unverified timing"
+    ],
+    "authoritative_host_receipt": "aaos/receipt.json"
   },
   "not_run": {
     "projected_dhu": "Installed phone image only provides an Android Auto stub",
