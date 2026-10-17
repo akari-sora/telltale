@@ -2,6 +2,8 @@
 
 # Telltale
 
+> Canonical repository and issues: https://gitlab.com/aa22396584/telltale. The GitHub copy at https://github.com/hoshitabi/telltale is a read-only mirror.
+
 > **Development home:** https://gitlab.com/aa22396584/telltale  
 > Please open issues and merge requests there.  
 > **Mirror:** [Codeberg](https://codeberg.org/ImL1s/telltale)  
