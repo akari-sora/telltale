@@ -2,7 +2,7 @@
 
 # Telltale
 
-> 正本和 issue 在 https://gitlab.com/aa22396584/telltale。
+> 正本和 issue 在 https://gitlab.com/aa22396584/telltale。Releases 和下載：https://gitlab.com/aa22396584/telltale/-/releases
 
 > **開發主庫、Issues 與 MR：** https://gitlab.com/aa22396584/telltale  
 > **鏡像：** [Codeberg](https://codeberg.org/ImL1s/telltale)  
