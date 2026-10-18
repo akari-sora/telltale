@@ -861,6 +861,7 @@ class Elm327Client {
     _canReceiveFilterRestoreFailed = false;
     _canReceiveFilterState = const ElmCanReceiveFilterOff();
     _headerRestoreFailed = false;
+    _enginePhysicalSilent = false;
     _headersOn = false;
     _responseHeadersUncertain = false;
     _responseHeadersRestoreFailed = false;
@@ -2045,6 +2046,7 @@ class Elm327Client {
     Duration? timeout,
     ElmWriteAudit? writeAudit,
     Object? owner,
+    String? noDataFallbackHeader,
   }) {
     _throwIfInsideTransaction();
     _claimWriteAudit(writeAudit);
@@ -2056,56 +2058,144 @@ class Elm327Client {
       var committed = false;
       try {
         if (_outOfSync) await _resync();
-        if (header != _currentHeader) {
-          // Unknown from the moment the write leaves, not from the moment the
-          // reply fails to arrive.
-          //
-          // This file's own doctrine is that a write whose reply is lost has
-          // an *unknown* outcome — and this was the one place that treated it
-          // as undone. The adapter may well have applied the header; if it
-          // did, `_currentHeader` went on naming the old one, the next query
-          // for that old header skipped `ATSH` as redundant, and the request
-          // was physically transmitted to a different controller. A
-          // transmission answering an engine query decodes into a plausible
-          // gauge reading with nothing to indicate it.
-          _currentHeader = null;
-          final ack = await _sendNow(
-            'ATSH $header',
-            commandTimeout,
-            writeAudit: writeAudit,
-            owner: owner,
-          );
-          // `?` is how an ELM327 refuses a header the current bus cannot take.
-          // Proceeding past that sends the query on whatever header the adapter
-          // really holds, and the answer comes back from the wrong ECU looking
-          // exactly like the right one.
-          final acknowledged =
-              ack.isSuccess &&
-              ack.rawLines.any((l) => l.trim().toUpperCase() == 'OK');
-          if (!acknowledged) {
-            throw TransportException(
-              'The adapter refused to switch header $header',
-              issue: TransportIssue.queryHeaderRefused,
-              issueDetail: header,
-            );
-          }
-          _currentHeader = header;
-          committed = true;
-        }
-        completer.complete(
-          await _sendNow(
+        committed = await _installHeader(
+          header,
+          writeAudit: writeAudit,
+          owner: owner,
+        );
+        var response = await _sendNow(
+          command,
+          timeout ?? commandTimeout,
+          completesCommittedTransaction: committed,
+          writeAudit: writeAudit,
+          owner: owner,
+        );
+        final fallback = _functionalFallbackIfPhysicalSilent(
+          requestedHeader: header,
+          fallbackHeader: noDataFallbackHeader,
+          response: response,
+        );
+        if (fallback != null) {
+          committed =
+              await _installHeader(
+                fallback,
+                writeAudit: writeAudit,
+                owner: owner,
+              ) ||
+              committed;
+          response = await _sendNow(
             command,
             timeout ?? commandTimeout,
             completesCommittedTransaction: committed,
             writeAudit: writeAudit,
             owner: owner,
-          ),
-        );
+          );
+          // Remember the physical header as silent only after the documented
+          // functional ID has produced a vehicle reply. A second `NO DATA`
+          // is not a reason to invent an address, and it is not a reason to
+          // treat 7DF as proven.
+          if (response.errorCode != Elm327ErrorCode.noData) {
+            _enginePhysicalSilent = true;
+          }
+        }
+        completer.complete(response);
       } on Object catch (e, st) {
         if (!completer.isCompleted) completer.completeError(e, st);
       }
     });
     return completer.future;
+  }
+
+  /// Installs [header] if it is not already the confirmed one.
+  ///
+  /// Returns true when this call wrote `ATSH`. A `?` is
+  /// [TransportIssue.queryHeaderRefused] and is not recovered from here —
+  /// falling through would send the query on whatever header the adapter
+  /// actually holds.
+  Future<bool> _installHeader(
+    String header, {
+    ElmWriteAudit? writeAudit,
+    Object? owner,
+  }) async {
+    if (header == _currentHeader) return false;
+    // Unknown from the moment the write leaves, not from the moment the
+    // reply fails to arrive.
+    //
+    // This file's own doctrine is that a write whose reply is lost has
+    // an *unknown* outcome — and treating it as undone was how
+    // `_currentHeader` went on naming the old one, the next query for
+    // that old header skipped `ATSH` as redundant, and the request was
+    // physically transmitted to a different controller. A transmission
+    // answering an engine query decodes into a plausible gauge reading
+    // with nothing to indicate it.
+    _currentHeader = null;
+    final ack = await _sendNow(
+      'ATSH $header',
+      commandTimeout,
+      writeAudit: writeAudit,
+      owner: owner,
+    );
+    // `?` is how an ELM327 refuses a header the current bus cannot take.
+    // Proceeding past that sends the query on whatever header the adapter
+    // really holds, and the answer comes back from the wrong ECU looking
+    // exactly like the right one.
+    final acknowledged =
+        ack.isSuccess &&
+        ack.rawLines.any((l) => l.trim().toUpperCase() == 'OK');
+    if (!acknowledged) {
+      throw TransportException(
+        'The adapter refused to switch header $header',
+        issue: TransportIssue.queryHeaderRefused,
+        issueDetail: header,
+      );
+    }
+    _currentHeader = header;
+    return true;
+  }
+
+  /// Functional addressing, and only that, after the physical engine header
+  /// produced `NO DATA`.
+  ///
+  /// The fallback is the bus's documented functional ID (`7DF` / `18DB33F1`),
+  /// never another physical address. An `ATSH` refusal still throws
+  /// [TransportIssue.queryHeaderRefused] from [_installHeader] and is not
+  /// turned into this recovery.
+  String? _functionalFallbackIfPhysicalSilent({
+    required String requestedHeader,
+    required String? fallbackHeader,
+    required ObdResponse response,
+  }) {
+    if (fallbackHeader == null) return null;
+    if (response.errorCode != Elm327ErrorCode.noData) return null;
+    final engine = addressing.engineHeader;
+    final functional = addressing.functionalHeader;
+    if (engine == null || functional == null) return null;
+    if (BusAddressing.normaliseHeader(requestedHeader) != engine) return null;
+    if (BusAddressing.normaliseHeader(fallbackHeader) != functional) {
+      return null;
+    }
+    if (BusAddressing.normaliseHeader(fallbackHeader) ==
+        BusAddressing.normaliseHeader(requestedHeader)) {
+      return null;
+    }
+    return functional;
+  }
+
+  /// The documented functional header, only when [requested] is an engine
+  /// poll — the stored app default or this bus's physical engine address.
+  ///
+  /// A custom `7E1` PID is a named controller. It must not inherit a
+  /// functional fallback: that would ask everyone and then present the first
+  /// answer as the transmission.
+  String? _functionalHeaderForEnginePoll(String requested) {
+    final engine = addressing.engineHeader;
+    final functional = addressing.functionalHeader;
+    if (engine == null || functional == null) return null;
+    final normalised = BusAddressing.normaliseHeader(requested);
+    if (!BusAddressing.isAppDefault(normalised) && normalised != engine) {
+      return null;
+    }
+    return functional;
   }
 
   static final RegExp _adapterInternalErrorRegex = RegExp(r'\bERR\d{2}\b');
@@ -2150,12 +2240,23 @@ class Elm327Client {
     Object? owner,
   }) {
     if (addressing.shouldTransmit(header)) {
+      final functional = _functionalHeaderForEnginePoll(header);
+      if (functional != null && _enginePhysicalSilent) {
+        return sendOnHeader(
+          functional,
+          command,
+          timeout: timeout,
+          writeAudit: writeAudit,
+          owner: owner,
+        );
+      }
       return sendOnHeader(
         header,
         command,
         timeout: timeout,
         writeAudit: writeAudit,
         owner: owner,
+        noDataFallbackHeader: functional,
       );
     }
 
@@ -2187,14 +2288,29 @@ class Elm327Client {
       // functional default and no known physical address — that is round 7's
       // F-2, and inventing one is what it was about — so they are left alone
       // and their replies are separated by frame instead.
+      //
+      // If that physical header has already answered `NO DATA` while
+      // functional addressing worked, do not keep installing it. Issue #109's
+      // clone ACK'd `ATSH 7E0` and then stayed silent; `7DF` still worked.
       final engine = addressing.engineHeader;
-      if (engine != null && addressing.functionalHeader != null) {
+      final functional = addressing.functionalHeader;
+      if (engine != null && functional != null) {
+        if (_enginePhysicalSilent) {
+          return sendOnHeader(
+            functional,
+            command,
+            timeout: timeout,
+            writeAudit: writeAudit,
+            owner: owner,
+          );
+        }
         return sendOnHeader(
           engine,
           command,
           timeout: timeout,
           writeAudit: writeAudit,
           owner: owner,
+          noDataFallbackHeader: functional,
         );
       }
       return send(
@@ -2205,7 +2321,9 @@ class Elm327Client {
       );
     }
 
-    final restore = addressing.restoreHeader;
+    final restore = _enginePhysicalSilent
+        ? (addressing.functionalHeader ?? addressing.restoreHeader)
+        : addressing.restoreHeader;
     if (restore == null) {
       // J1850: no physical engine address is defined and the family's two
       // protocols disagree about the functional one, so there is no known
@@ -5326,6 +5444,17 @@ class Elm327Client {
       const ElmCanReceiveFilterOff();
   bool _canReceiveFilterRestoreFailed = false;
   bool _headerRestoreFailed = false;
+
+  /// The physical engine header was installed and the vehicle still answered
+  /// `NO DATA`, while the documented functional header on this bus has
+  /// produced a reply.
+  ///
+  /// Restoring `ATSH 7E0` (or `18DA10F1`) after that is how issue #109's
+  /// clone spent the rest of the session polling silence: handshake `0100`
+  /// and the census `7DF` request both worked, then every Mode 01 poll went
+  /// out on the physical header that had already failed. Functional
+  /// addressing is the datasheet default, not a guessed controller.
+  bool _enginePhysicalSilent = false;
   bool _responseHeadersUncertain = false;
   bool _responseHeadersRestoreFailed = false;
 

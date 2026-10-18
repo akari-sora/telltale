@@ -425,6 +425,13 @@ class BusAddressing {
   /// address otherwise — and null on J1850, where neither is. Null means the
   /// app cannot get back to a known addressing state and must say so rather
   /// than transmit a guess.
+  ///
+  /// A session that has already *demonstrated* the physical engine header is
+  /// silent — `ATSH` acknowledged, the query returned `NO DATA`, while the
+  /// documented functional header produced a vehicle reply — must not keep
+  /// restoring here. That recovery lives on the client: it switches to
+  /// [functionalHeader], which is not a guessed address. See
+  /// `Elm327Client.sendAddressed`.
   String? get restoreHeader => engineHeader ?? functionalHeader;
 
   /// The one spelling of a header the whole app agrees on.
