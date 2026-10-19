@@ -1,0 +1,17 @@
+# Telltale OBD session excerpt — issue #109 follow-up, engine running
+# App 1.0.21 (fe7e40a). User-exported; not adapter or on-vehicle validation.
+# deviceIdentifier redacted to AA:BB:CC:11:22:33. No VIN in the source.
+# Protocol: AUTO, ISO 15765-4 (CAN 11/500). ATDPN=A6. ATI=ELM327 v1.5. AT@1=ICSolution.
+#
+# 150 Mode 01 010C replies had two lines; 58 of those pairs disagreed.
+# ATH0, so neither line carries a source ID. First-wins would pick at random.
+
+>> ATH1
+>> ATSH 7DF
+>> 0100
+<< 7E8064100BE3FA813
+<< 7E906410098188011
+>> ATH0
+>> 010C
+<< 410C14F6
+<< 410C14AA

@@ -1,0 +1,3 @@
+# Repo-root `*.log` would drop these excerpts. Same pattern as
+# test/privacy/fixtures/.gitignore.
+!*.log

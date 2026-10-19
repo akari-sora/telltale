@@ -1,0 +1,38 @@
+# Telltale OBD session excerpt — issue #109 follow-up, engine off
+# App 1.0.21 (fe7e40a). User-exported; not adapter or on-vehicle validation.
+# deviceIdentifier redacted to AA:BB:CC:11:22:33. No VIN in the source.
+# Protocol: AUTO, ISO 15765-4 (CAN 11/500). ATDPN=A6. ATI=ELM327 v1.5. AT@1=ICSolution.
+#
+# Physical 7E0 is silent; functional 7DF answers from 7E8 and 7E9.
+# After the 7DF fallback, Mode 01 polling restored ATH0, so duplicate PID lines
+# were rejected. Support queries 015E/0160 then repeated NO DATA because the
+# concatenated 0140 mask was never six bytes from 7E8 alone.
+
+>> ATSH 7E0
+<< OK
+>> 010C
+<< NO DATA
+>> ATSH 7DF
+<< OK
+>> 010C
+<< 410C0000
+<< 410C0000
+>> ATH1
+>> ATSH 7DF
+>> 0100
+<< 7E8064100BE3FA813
+<< 7E906410098188011
+>> ATH0
+>> 010C
+<< 410C0000
+<< 410C0000
+>> 0120
+<< 4120A007B011
+<< 412080018001
+>> 0140
+<< 4140FED08410
+<< 414040000000
+>> 0160
+<< NO DATA
+>> 015E
+<< NO DATA

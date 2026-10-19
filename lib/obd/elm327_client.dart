@@ -84,8 +84,7 @@ enum Elm327ErrorCode {
     // goes unanswered surfaced as "this vehicle does not support that
     // PID", in the same tree that says elsewhere, correctly, that silence
     // is not a clean answer.
-    Elm327ErrorCode.noData =>
-      'No reply arrived — it may be temporary silence, or the vehicle may not support this.',
+    Elm327ErrorCode.noData => 'No reply arrived — it may be temporary silence, or the vehicle may not support this.',
     Elm327ErrorCode.busInitError => 'Bus initialisation failed.',
     Elm327ErrorCode.canError => 'CAN bus error.',
     Elm327ErrorCode.unableToConnect =>
@@ -396,8 +395,7 @@ String initNoteText(InitNote note) => switch (note) {
   InitNote.pidEchoMismatch =>
     'The reply echoes a different PID from the one that was asked for.',
   InitNote.timedOut => 'Timed out.',
-  InitNote.unexpected =>
-    'This step failed with an unexpected error. The full error is kept in the transcript.',
+  InitNote.unexpected => 'This step failed with an unexpected error. The full error is kept in the transcript.',
 };
 
 /// Requires the literal `OK` acknowledgement a state-changing AT command owes.
@@ -2058,11 +2056,32 @@ class Elm327Client {
       var committed = false;
       try {
         if (_outOfSync) await _resync();
+        final mode01 = _isMode01HexCommand(command);
+        final engineResponseId = _iso15765EngineResponseId();
+        final functional = addressing.functionalHeader;
+        final requestingFunctional =
+            functional != null &&
+            BusAddressing.normaliseHeader(header) == functional;
         committed = await _installHeader(
           header,
           writeAudit: writeAudit,
           owner: owner,
         );
+        // Functional fallback is a broadcast: more than one ECU may answer.
+        // Keep ATH1 so each line carries its ISO 15765-4 response ID, then
+        // keep only the engine's (request + 8, 7E8). ATCRA is not used here
+        // — clones often refuse it, and ordinary polling already omits it.
+        if (mode01 &&
+            engineResponseId != null &&
+            _enginePhysicalSilent &&
+            requestingFunctional) {
+          committed =
+              await _ensureMode01ResponseHeaders(
+                writeAudit: writeAudit,
+                owner: owner,
+              ) ||
+              committed;
+        }
         var response = await _sendNow(
           command,
           timeout ?? commandTimeout,
@@ -2076,6 +2095,14 @@ class Elm327Client {
           response: response,
         );
         if (fallback != null) {
+          if (mode01 && engineResponseId != null) {
+            committed =
+                await _ensureMode01ResponseHeaders(
+                  writeAudit: writeAudit,
+                  owner: owner,
+                ) ||
+                committed;
+          }
           committed =
               await _installHeader(
                 fallback,
@@ -2090,13 +2117,20 @@ class Elm327Client {
             writeAudit: writeAudit,
             owner: owner,
           );
+          if (mode01 && engineResponseId != null) {
+            response = _selectEngineMode01Response(response, engineResponseId);
+          }
           // Remember the physical header as silent only after the documented
-          // functional ID has produced a vehicle reply. A second `NO DATA`
+          // functional ID has produced an engine reply. A second `NO DATA`
           // is not a reason to invent an address, and it is not a reason to
-          // treat 7DF as proven.
-          if (response.isSuccess && response.frames.isNotEmpty) {
+          // treat 7DF as proven. A 7E9-only reply is also not the engine.
+          if (_engineReplyProvesPhysicalSilent(response, engineResponseId)) {
             _enginePhysicalSilent = true;
           }
+        } else if (mode01 &&
+            _enginePhysicalSilent &&
+            engineResponseId != null) {
+          response = _selectEngineMode01Response(response, engineResponseId);
         }
         completer.complete(response);
       } on Object catch (e, st) {
@@ -2196,6 +2230,89 @@ class Elm327Client {
       return null;
     }
     return functional;
+  }
+
+  /// Mode 01 service requests (`0100`, `010C`, `010C0D…`). AT commands
+  /// and other services are not attributed through this path.
+  static bool _isMode01HexCommand(String command) {
+    final n = command.toUpperCase().replaceAll(' ', '');
+    return n.length >= 2 &&
+        n.length.isEven &&
+        n.startsWith('01') &&
+        RegExp(r'^[0-9A-F]+$').hasMatch(n);
+  }
+
+  /// ISO 15765-4 11-bit: physical request `7E0`–`7E7` answers on
+  /// request + 8 (`7E8`–`7EF`). Null on 29-bit or unknown engine headers.
+  String? _iso15765EngineResponseId() {
+    final engine = addressing.engineHeader;
+    if (engine == null) return null;
+    final id = int.tryParse(BusAddressing.normaliseHeader(engine), radix: 16);
+    if (id == null || id < 0x7E0 || id > 0x7E7) return null;
+    return (id + 8).toRadixString(16).toUpperCase();
+  }
+
+  Future<bool> _ensureMode01ResponseHeaders({
+    ElmWriteAudit? writeAudit,
+    Object? owner,
+  }) async {
+    if (_headersOn) return false;
+    final ack = await _sendNow(
+      'ATH1',
+      commandTimeout,
+      writeAudit: writeAudit,
+      owner: owner,
+    );
+    return _saidOk(ack);
+  }
+
+  bool _engineReplyProvesPhysicalSilent(
+    ObdResponse response,
+    String? engineResponseId,
+  ) {
+    if (!response.isSuccess || response.frames.isEmpty) return false;
+    if (engineResponseId == null) return true;
+    return response.frames.any(
+      (frame) => frame.sourceId?.toUpperCase() == engineResponseId,
+    );
+  }
+
+  /// Keep the engine ECU's Mode 01 payload; drop other responders without
+  /// treating them as a duplicate PID. Missing 7E8 is `NO DATA`.
+  ObdResponse _selectEngineMode01Response(
+    ObdResponse response,
+    String engineResponseId,
+  ) {
+    if (!response.isSuccess) return response;
+    final engineFrames = [
+      for (final frame in response.frames)
+        if (frame.sourceId?.toUpperCase() == engineResponseId) frame,
+    ];
+    if (engineFrames.isEmpty) {
+      return ObdResponse(
+        rawLines: response.rawLines,
+        errorCode: Elm327ErrorCode.noData,
+        attributedSources: response.attributedSources,
+        observedFrames: response.observedFrames,
+        headersEnabled: _headersOn,
+        batteryVoltage: response.batteryVoltage,
+        pendingFrames: response.pendingFrames,
+      );
+    }
+    final primary = engineFrames.first.bytes;
+    return ObdResponse(
+      rawLines: response.rawLines,
+      hexPayload: primary
+          .map((b) => b.toRadixString(16).toUpperCase().padLeft(2, '0'))
+          .join(),
+      bytes: primary,
+      frames: List.unmodifiable(engineFrames),
+      attributedSources: response.attributedSources,
+      observedFrames: response.observedFrames,
+      headersEnabled: true,
+      batteryVoltage: response.batteryVoltage,
+      pendingFrames: response.pendingFrames,
+    );
   }
 
   static final RegExp _adapterInternalErrorRegex = RegExp(r'\bERR\d{2}\b');
@@ -5473,6 +5590,10 @@ class Elm327Client {
   bool get headerRestoreFailed => _headerRestoreFailed;
 
   bool get headersOn => _headersOn;
+
+  /// True once a functional retry produced an engine Mode 01 reply after
+  /// physical `7E0` was silent. Subsequent engine polls stay on `7DF`.
+  bool get enginePhysicalSilent => _enginePhysicalSilent;
 
   bool get responseHeadersUncertain => _responseHeadersUncertain;
 
