@@ -8,6 +8,17 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+## 1.0.21 — 2026-10-19
+
+- When physical engine addressing (`ATSH 7E0`) is acknowledged but Mode 01
+  queries return `NO DATA`, later engine polls retry the same command on the
+  documented functional header (`7DF` / `18DB33F1`) and remember that header
+  only after a successful vehicle payload. Custom headers such as `7E1` do
+  not inherit the fallback. (issue #109)
+- Evidence is offline replay of one user-exported session log, an emulator
+  rig, and CI. This has not been run on a real adapter or vehicle, and it
+  does not claim compatibility with any adapter or car.
+
 ## 1.0.20 — 2026-10-13
 
 - Fixed an occasional "Restart required to continue safely" screen on the

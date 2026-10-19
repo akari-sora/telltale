@@ -1,0 +1,1 @@
+When physical 7E0 is silent after ATSH, Mode 01 polls retry on functional 7DF and keep that only after a real vehicle reply. Evidence: one user-exported session replay, emulator rig, and CI. Not validated on a real adapter or vehicle. Does not claim adapter or car compatibility.

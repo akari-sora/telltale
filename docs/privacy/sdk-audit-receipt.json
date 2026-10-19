@@ -268,7 +268,7 @@
     "lib/ui/widgets/telemetry/telemetry_status_copy.dart": "7d1b7898638cab522859f047103e27c0c098fe72539cffb69b5ed8e74fd92e34",
     "lib/ui/widgets/transcript_export.dart": "892ae443512db9278b4462f9c438a3b14a21b139ef99d960bd428a7fc8ae3bdb",
     "pubspec.lock": "8cb7876cb7f2d393a9a65e56d365382cf0075922e8b76c0eed12390749910240",
-    "pubspec.yaml": "29f5789f2baed6095c5179be17f83989bc3c1e2d53b7e0fb8a58bca50c3abb8c"
+    "pubspec.yaml": "9b60c6e0ffdff7aa3fd26dac4999ab99cbc89cc7ab386600978e4f14872d67b0"
   },
   "summary": "Verified zero third-party telemetry, tracking, advertising, analytics, or crash reporting dependencies across pubspec.yaml, pubspec.lock, lib, and build.gradle.kts."
 }
