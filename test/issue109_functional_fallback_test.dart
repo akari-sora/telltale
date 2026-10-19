@@ -1,17 +1,18 @@
 /// Issue #109: a clone that answers 0100 on functional addressing, then goes
 /// silent once the app installs `ATSH 7E0`.
 ///
-/// Offline replay of one user-exported session (app 1.0.17, Sony XQ-DQ72,
-/// ELM327 clone reporting `v1.5` / `ICSolution`, BLE, CAN 11/500, ATDPN=A6).
-/// Device identifiers were already redacted in the source transcript.
+/// Offline replay of user-exported sessions (app 1.0.17 then 1.0.21 / fe7e40a,
+/// ELM327 clone reporting `v1.5` / `ICSolution`, CAN 11/500, ATDPN=A6).
+/// Device identifiers were redacted in the source transcripts.
 ///
 /// This is not real-adapter or on-vehicle evidence. The fixture feeds the
-/// byte exchange from that log through a fake transport and asserts the
+/// byte exchange from those logs through a fake transport and asserts the
 /// addressing the client settles on.
 library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
@@ -21,6 +22,10 @@ import 'package:torque_obd/obd/polling_engine.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
 
 import 'support/fake_elm327.dart';
+
+final Map<String, dynamic> _followupFixture = jsonDecode(
+  File('test/fixtures/issue109/v1.0.21_followup.json').readAsStringSync(),
+) as Map<String, dynamic>;
 
 /// Handshake and 0100 bodies taken from the issue #109 transcript.
 ///
@@ -56,6 +61,15 @@ const _rpm = '410C1AF8\r>';
 const _speed = '410D3C\r>';
 const _headeredRpm = '7E804410C1AF8\r>';
 const _headeredSpeed = '7E803410D3C\r>';
+const _headeredOtherRpm = '7E904410C2EE0\r>';
+
+/// Support masks from the v1.0.21 logs. Engine 0140 is `FED08410`: PID 5C
+/// is present, 5E is not, and the continuation bit is clear, so 0160 must
+/// not be asked once this block is attributed to 7E8.
+const _headerless0120 = '4120A007B011\r412080018001\r\r>';
+const _headered0120 = '7E8064120A007B011\r7E906412080018001\r\r>';
+const _headerless0140 = '4140FED08410\r414040000000\r\r>';
+const _headered0140 = '7E8064140FED08410\r7E906414040000000\r\r>';
 
 /// Clone that ACKs `ATSH 7E0` and then answers every physically addressed
 /// query with `NO DATA`, while the adapter default / `7DF` still works —
@@ -65,6 +79,9 @@ class _Issue109CloneTransport extends BaseObdTransport {
     this.livePidsSilentOnFunctional = false,
     this.secondControllerAnswersRpm = false,
     this.livePidsCanErrorOnFunctional = false,
+    this.engineSilentOnFunctionalRpm = false,
+    this.secondControllerAnswersFirst = false,
+    this.useLogRpmPair = false,
   });
 
   /// When true, 7DF / default addressing also returns `NO DATA` for live
@@ -72,12 +89,23 @@ class _Issue109CloneTransport extends BaseObdTransport {
   final bool livePidsSilentOnFunctional;
 
   /// When true, a functional `010C` is answered by two controllers with
-  /// different values. The client must not pick one.
+  /// different values. The engine frame is 7E8.
   final bool secondControllerAnswersRpm;
 
   /// When true, 7DF answers live PIDs with `CAN ERROR` rather than data.
   /// Handshake `0100` still succeeds so the session can connect.
   final bool livePidsCanErrorOnFunctional;
+
+  /// When true, only 7E9 answers functional `010C`. 7E8 is absent.
+  final bool engineSilentOnFunctionalRpm;
+
+  /// When true, 7E9 is printed before 7E8. First-line attribution would
+  /// publish the transmission's rpm.
+  final bool secondControllerAnswersFirst;
+
+  /// When true, `010C` uses the v1.0.21 engine-on headerless pair, labelled
+  /// 7E8/7E9 from the census reconstruction in the fixture.
+  final bool useLogRpmPair;
 
   final List<String> sent = [];
 
@@ -177,16 +205,50 @@ class _Issue109CloneTransport extends BaseObdTransport {
     if (livePidsCanErrorOnFunctional) return 'CAN ERROR\r\r>';
 
     if (command == '010C') {
+      if (engineSilentOnFunctionalRpm) {
+        return _headersOn ? _headeredOtherRpm : '410C2EE0\r>';
+      }
+      if (useLogRpmPair) {
+        const engine = '7E804410C14F6';
+        const other = '7E904410C14AA';
+        if (_headersOn) {
+          return secondControllerAnswersFirst
+              ? '$other\r$engine\r>'
+              : '$engine\r$other\r>';
+        }
+        return secondControllerAnswersFirst
+            ? '410C14AA\r410C14F6\r>'
+            : '410C14F6\r410C14AA\r>';
+      }
       if (secondControllerAnswersRpm && !_headersOn) {
-        return '410C1AF8\r410C2EE0\r>';
+        return secondControllerAnswersFirst
+            ? '410C2EE0\r410C1AF8\r>'
+            : '410C1AF8\r410C2EE0\r>';
       }
       if (secondControllerAnswersRpm && _headersOn) {
-        return '7E804410C1AF8\r7E904410C2EE0\r>';
+        return secondControllerAnswersFirst
+            ? '7E904410C2EE0\r7E804410C1AF8\r>'
+            : '7E804410C1AF8\r7E904410C2EE0\r>';
       }
       return _headersOn ? _headeredRpm : _rpm;
     }
     if (command == '010D') {
       return _headersOn ? _headeredSpeed : _speed;
+    }
+    if (command == '0120') {
+      if (_headersOn && secondControllerAnswersFirst) {
+        return '7E906412080018001\r7E8064120A007B011\r\r>';
+      }
+      return _headersOn ? _headered0120 : _headerless0120;
+    }
+    if (command == '0140') {
+      if (_headersOn && secondControllerAnswersFirst) {
+        return '7E906414040000000\r7E8064140FED08410\r\r>';
+      }
+      return _headersOn ? _headered0140 : _headerless0140;
+    }
+    if (command == '015E' || command == '0160') {
+      return _noData;
     }
     return _noData;
   }
@@ -382,9 +444,65 @@ void main() {
       },
     );
 
-    test('two different functional 010C replies are not attributed at random', () async {
+    test(
+      'two different functional 010C replies are not attributed at random',
+      () async {
+        final transport = _Issue109CloneTransport(
+          secondControllerAnswersRpm: true,
+        );
+        final client = await _connect(transport);
+        const rpm = PidLibrary.engineRpm;
+        final engine = await _pollUntilDecided(client, pids: [rpm]);
+
+        expect(
+          engine.current.readings[rpm.id]?.value,
+          closeTo(1726, 1),
+          reason:
+              'functional fallback keeps ATH1 and the ISO 15765-4 engine '
+              'response 7E8 (410C1AF8 = 1726 rpm); 7E9\'s 3000 rpm is ignored',
+        );
+        expect(
+          transport.sent.where((c) => c.startsWith('ATCRA')),
+          isEmpty,
+          reason:
+              'ordinary Mode 01 polling must not install a CAN receive filter; '
+              'clones often refuse ATCRA, and this app already omits it from init',
+        );
+        expect(
+          transport.sent,
+          contains('ATH1'),
+          reason: 'headers stay on so 7E8 can be told from 7E9',
+        );
+
+        await engine.dispose();
+        await client.dispose();
+      },
+    );
+
+    test('7E9 printing first is still the engine 7E8 rpm', () async {
       final transport = _Issue109CloneTransport(
         secondControllerAnswersRpm: true,
+        secondControllerAnswersFirst: true,
+      );
+      final client = await _connect(transport);
+      const rpm = PidLibrary.engineRpm;
+      final engine = await _pollUntilDecided(client, pids: [rpm]);
+
+      expect(
+        engine.current.readings[rpm.id]?.value,
+        closeTo(1726, 1),
+        reason:
+            'taking the first headered line would publish 3000 rpm from 7E9',
+      );
+      expect(engine.current.readings[rpm.id]?.value, isNot(closeTo(3000, 1)));
+
+      await engine.dispose();
+      await client.dispose();
+    });
+
+    test('7E8 absent is an error; 7E9 is not used as engine rpm', () async {
+      final transport = _Issue109CloneTransport(
+        engineSilentOnFunctionalRpm: true,
       );
       final client = await _connect(transport);
       const rpm = PidLibrary.engineRpm;
@@ -393,8 +511,79 @@ void main() {
       expect(
         engine.current.readings[rpm.id],
         isNull,
+        reason: 'a TCM frame is not an engine reading',
+      );
+      expect(engine.current.faults[rpm.id], isNotNull);
+
+      await engine.dispose();
+      await client.dispose();
+    });
+
+    test(
+      'v1.0.21 engine-on log pair keeps the reconstructed 7E8 rpm',
+      () async {
+        final reconstructed =
+            _followupFixture['reconstructed_headered_010C_engine_on']
+                as Map<String, dynamic>;
+        final transport = _Issue109CloneTransport(useLogRpmPair: true);
+        final client = await _connect(transport);
+        const rpm = PidLibrary.engineRpm;
+        final engine = await _pollUntilDecided(client, pids: [rpm]);
+
+        expect(
+          engine.current.readings[rpm.id]?.value,
+          closeTo(
+            (reconstructed['engine_rpm_from_7E8'] as num).toDouble(),
+            0.01,
+          ),
+          reason:
+              'the capture\'s headerless 410C14F6/410C14AA pair is replayed '
+              'with census IDs; 7E8 is 1341.5 rpm, not 7E9\'s 1322.5',
+        );
+        expect(
+          File('test/fixtures/issue109/engine_on_excerpt.log')
+              .readAsStringSync(),
+          contains('410C14F6'),
+        );
+
+        await engine.dispose();
+        await client.dispose();
+      },
+    );
+
+    test('7E8 0140 mask skips 015E and 0160 after discovery', () async {
+      final transport = _Issue109CloneTransport();
+      final client = await _connect(transport);
+      const rpm = PidLibrary.engineRpm;
+      const fuel = PidLibrary.engineFuelRate;
+      final engine = PollingEngine(client)..setActivePids([rpm, fuel]);
+      engine.start();
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (!engine.current.readings.containsKey(rpm.id) &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      await engine.discoverSupportedPids();
+      await engine.stop();
+
+      expect(
+        engine.isKnownUnsupported(fuel),
+        isTrue,
         reason:
-            '1726 rpm is not more true than 3000 rpm for having printed first',
+            'engine 0140 FED08410 has no 015E bit; physics must not keep '
+            'asking it after that mask is attributed to 7E8',
+      );
+      final last0140 = transport.sent.lastIndexOf('0140');
+      expect(last0140, greaterThanOrEqualTo(0));
+      expect(
+        transport.sent.skip(last0140).where((c) => c == '0160'),
+        isEmpty,
+        reason: '0140 continuation bit is clear; 0160 is not the next block',
+      );
+      expect(
+        File('test/fixtures/issue109/engine_off_excerpt.log')
+            .readAsStringSync(),
+        contains('015E'),
       );
 
       await engine.dispose();
@@ -482,6 +671,14 @@ void main() {
         reason: 'falling back when 7E0 worked would broadcast a unicast query',
       );
       expect(transport.commandLog, contains('ATSH7E0'));
+      expect(
+        transport.commandLog.where((c) => c == 'ATH1'),
+        isEmpty,
+        reason:
+            'physical Mode 01 polling stays headers-off; ATH1 is only for '
+            'functional fallback attribution',
+      );
+      expect(transport.commandLog.where((c) => c.startsWith('ATCRA')), isEmpty);
       await client.dispose();
     });
   });

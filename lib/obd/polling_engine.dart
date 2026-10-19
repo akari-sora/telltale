@@ -1056,8 +1056,9 @@ class PollingEngine {
           query,
           owner: pollingOwner,
         );
-        final raw = response.bytes;
+        final raw = _mode01EnginePayload(response);
         if (response.isSuccess &&
+            raw != null &&
             raw.length == 6 &&
             raw[0] == 0x41 &&
             raw[1] == expectedBase) {
@@ -2425,6 +2426,39 @@ class PollingEngine {
     final id = int.tryParse(responseId.trim(), radix: 16);
     if (id == null || id < 0x7E8 || id > 0x7EF) return null;
     return (id - 8).toRadixString(16).toUpperCase();
+  }
+
+  /// Inverse of [_physicalRequestFor]: `7E0`–`7E7` answers on request + 8.
+  static String? _physicalResponseFor(String? requestId) {
+    if (requestId == null) return null;
+    final id = int.tryParse(requestId.trim(), radix: 16);
+    if (id == null || id < 0x7E0 || id > 0x7E7) return null;
+    return (id + 8).toRadixString(16).toUpperCase();
+  }
+
+  /// Mode 01 payload from the engine ECU when headers named the responders.
+  ///
+  /// Other ECUs answering a 7DF broadcast are ignored. If headers are on and
+  /// 7E8 is missing, the payload is unknown — not the first other ECU.
+  List<int>? _mode01EnginePayload(ObdResponse response) {
+    final frames = _mode01EngineFrames(response);
+    if (frames != null) {
+      if (frames.isEmpty) return null;
+      return frames.first.bytes;
+    }
+    return response.bytes.isEmpty ? null : response.bytes;
+  }
+
+  /// Engine-only frames when the adapter printed ISO 15765-4 IDs; null when
+  /// the exchange cannot be attributed that way.
+  List<ObdFrame>? _mode01EngineFrames(ObdResponse response) {
+    final engineId = _physicalResponseFor(client.addressing.engineHeader);
+    if (engineId == null) return null;
+    if (!response.frames.any((frame) => frame.sourceId != null)) return null;
+    return [
+      for (final frame in response.frames)
+        if (frame.sourceId?.toUpperCase() == engineId) frame,
+    ];
   }
 
   /// Asks named controllers for this category directly, and reports who
@@ -4698,7 +4732,23 @@ class PollingEngine {
     ObdResponse response,
     List<QueuedRequest> batch,
   ) {
-    final bytes = response.bytes;
+    // After functional fallback, Mode 01 replies may include 7E8 and 7E9.
+    // Keep the engine ECU (request + 8). Other responders are not duplicates.
+    // Custom headers (7E1…) are a named controller and must not be forced
+    // onto 7E8.
+    final enginePoll = batch.every((request) {
+      if (!request.pid.isMode01) return false;
+      if (BusAddressing.isAppDefault(request.pid.header)) return true;
+      final engine = client.addressing.engineHeader;
+      return engine != null &&
+          BusAddressing.normaliseHeader(request.pid.header) == engine;
+    });
+    final engineFrames = enginePoll ? _mode01EngineFrames(response) : null;
+    if (engineFrames != null && engineFrames.isEmpty) return const {};
+    final frames = engineFrames ?? response.frames;
+    final bytes = engineFrames != null
+        ? [for (final frame in engineFrames) ...frame.bytes]
+        : response.bytes;
     if (bytes.isEmpty) return const {};
 
     final expected = <int, Pid>{};
@@ -4752,7 +4802,7 @@ class PollingEngine {
       // only the boundary can.
       final matching = <List<int>>[];
       var extra = 0;
-      for (final frame in response.frames) {
+      for (final frame in frames) {
         final data = frame.bytes;
         if (data.length >= 2 && data[0] == 0x41 && data[1] == code) {
           matching.add(data.sublist(2));
