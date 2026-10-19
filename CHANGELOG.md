@@ -8,6 +8,17 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+## 1.0.22 — 2026-10-20
+
+- After the functional `7DF` fallback, more than one ECU can answer Mode 01
+  (for example `7E8` and `7E9`). Headers-off replies were refused as
+  duplicate PIDs, which blanked RPM and related gauges. The fallback now
+  keeps headers on (`ATH1`) and accepts only the engine response `7E8`.
+  (issue #109)
+- Tested by replaying user-exported session logs and in CI. Not yet
+  validated on a real vehicle or adapter; no adapter or car compatibility
+  is claimed.
+
 ## 1.0.21 — 2026-10-19
 
 - When physical engine addressing (`ATSH 7E0`) is acknowledged but Mode 01

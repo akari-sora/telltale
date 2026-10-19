@@ -1,0 +1,1 @@
+After the 7DF fallback, two ECUs can answer and gauges went blank. The fallback now keeps headers on (ATH1) and reads only the engine reply 7E8. Tested by replaying user logs and CI. Not yet validated on a real vehicle.
