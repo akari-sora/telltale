@@ -64,6 +64,7 @@ class _Issue109CloneTransport extends BaseObdTransport {
   _Issue109CloneTransport({
     this.livePidsSilentOnFunctional = false,
     this.secondControllerAnswersRpm = false,
+    this.livePidsCanErrorOnFunctional = false,
   });
 
   /// When true, 7DF / default addressing also returns `NO DATA` for live
@@ -73,6 +74,10 @@ class _Issue109CloneTransport extends BaseObdTransport {
   /// When true, a functional `010C` is answered by two controllers with
   /// different values. The client must not pick one.
   final bool secondControllerAnswersRpm;
+
+  /// When true, 7DF answers live PIDs with `CAN ERROR` rather than data.
+  /// Handshake `0100` still succeeds so the session can connect.
+  final bool livePidsCanErrorOnFunctional;
 
   final List<String> sent = [];
 
@@ -169,6 +174,7 @@ class _Issue109CloneTransport extends BaseObdTransport {
 
     if (_physical) return _noData;
     if (livePidsSilentOnFunctional) return _noData;
+    if (livePidsCanErrorOnFunctional) return 'CAN ERROR\r\r>';
 
     if (command == '010C') {
       if (secondControllerAnswersRpm && !_headersOn) {
@@ -273,6 +279,32 @@ void main() {
     );
 
     test(
+      'sendOnHeader with a guessed 7E1 fallback is ignored — only 7DF is legal',
+      () async {
+        final transport = _Issue109CloneTransport();
+        final client = await _connect(transport);
+        final stuck = await client.sendOnHeader(
+          '7E0',
+          '010C',
+          noDataFallbackHeader: '7E1',
+        );
+        expect(
+          stuck.errorCode,
+          Elm327ErrorCode.noData,
+          reason: 'a named other controller is not a recovery address',
+        );
+        expect(
+          transport.sent.where((c) => c == 'ATSH7E1' || c == 'ATSH7DF'),
+          isEmpty,
+          reason:
+              'fail-closed: the fallback argument is not an address to try; '
+              'it must already be this bus\'s documented functional ID',
+        );
+        await client.dispose();
+      },
+    );
+
+    test(
       'after the fix, polling settles on working addressing and decoded PIDs',
       () async {
         final transport = _Issue109CloneTransport();
@@ -368,6 +400,56 @@ void main() {
       await engine.dispose();
       await client.dispose();
     });
+
+    test(
+      'CAN ERROR on 7DF is not a vehicle reply and must not skip 7E0 later',
+      () async {
+        final transport = _Issue109CloneTransport(
+          livePidsCanErrorOnFunctional: true,
+        );
+        final client = await _connect(transport);
+        final first = await client.sendAddressed('7E0', '010C');
+        expect(first.errorCode, Elm327ErrorCode.canError);
+        expect(transport.sent, contains('ATSH7E0'));
+        expect(transport.sent, contains('ATSH7DF'));
+
+        final before = transport.sent.length;
+        await client.sendAddressed('7E0', '010C');
+        expect(
+          transport.sent.skip(before),
+          contains('ATSH7E0'),
+          reason:
+              'an adapter error on the functional ID is not proof that 7E0 '
+              'is silent; the next engine poll must still try it',
+        );
+        await client.dispose();
+      },
+    );
+
+    test('reconnect forgets the functional preference', () async {
+      final transport = _Issue109CloneTransport();
+      final client = await _connect(transport);
+      final recovered = await client.sendAddressed('7E0', '010C');
+      expect(recovered.isSuccess, isTrue);
+      expect(transport.sent, contains('ATSH7DF'));
+
+      await client.disconnect();
+      expect(
+        await client.connect(),
+        isTrue,
+        reason: 'the same client object is what reconnect uses in tests',
+      );
+      final before = transport.sent.length;
+      await client.sendAddressed('7E0', '010C');
+      expect(
+        transport.sent.skip(before),
+        contains('ATSH7E0'),
+        reason:
+            'a new connection must not inherit the previous session\'s '
+            'conclusion that 7E0 is silent',
+      );
+      await client.dispose();
+    });
   });
 
   group('physical engine addressing still used when it actually answers', () {
@@ -400,6 +482,43 @@ void main() {
         reason: 'falling back when 7E0 worked would broadcast a unicast query',
       );
       expect(transport.commandLog, contains('ATSH7E0'));
+      await client.dispose();
+    });
+  });
+
+  group('custom headers are not recovered via 7DF', () {
+    test('a silent 7E1 PID is not retried on the functional ID', () async {
+      final transport = FakeElm327(
+        protocol: BusProtocol.can11,
+        ecus: [
+          FakeEcu(
+            name: 'ECM',
+            requestId: '7E0',
+            responseId: '7E8',
+            responses: {
+              '0100': [0x41, 0x00, 0xBE, 0x3F, 0xA8, 0x13],
+              '010C': [0x41, 0x0C, 0x1A, 0xF8],
+            },
+          ),
+        ],
+      );
+      final client = Elm327Client(
+        transport,
+        commandTimeout: const Duration(milliseconds: 200),
+      );
+      expect(await client.connect(), isTrue);
+      final response = await client.sendAddressed('7E1', '010C');
+      expect(
+        response.errorCode,
+        Elm327ErrorCode.noData,
+        reason: 'no TCM is present; silence is the answer, not a 7DF guess',
+      );
+      expect(
+        transport.commandLog.where((c) => c == 'ATSH7DF'),
+        isEmpty,
+        reason: '7E1 names a controller; broadcasting would misattribute',
+      );
+      expect(transport.commandLog, contains('ATSH7E1'));
       await client.dispose();
     });
   });

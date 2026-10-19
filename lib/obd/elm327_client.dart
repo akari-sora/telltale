@@ -2094,7 +2094,7 @@ class Elm327Client {
           // functional ID has produced a vehicle reply. A second `NO DATA`
           // is not a reason to invent an address, and it is not a reason to
           // treat 7DF as proven.
-          if (response.errorCode != Elm327ErrorCode.noData) {
+          if (response.isSuccess && response.frames.isNotEmpty) {
             _enginePhysicalSilent = true;
           }
         }
