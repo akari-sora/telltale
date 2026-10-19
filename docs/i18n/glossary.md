@@ -62,7 +62,7 @@ See also [do-not-translate.md](do-not-translate.md) and [hedge-register.md](hedg
 | 即時 PID 儀表 | Live PID dashboards | README.md:88 ↔ README.zh-TW.md:77 (T1) | evidenced | INCONSISTENCY: 'dashboard' is '儀表板' at README.md:36/README.zh-TW.md:34 and store/README.md:27, but 'PID dashboards' is 儀表 here and 'BMS gauges' is also '儀表' (README.md:96 ↔ README.zh-TW.md:84). 儀表 does double duty for gauge and dashboard-of-gauges. |
 | 含氧感知器 | oxygen sensor | lib/l10n/app_en.arb:698 ↔ lib/l10n/app_zh_Hant.arb:190 (T1 same ARB key `dtcMonitorOxygenSensor`) | evidenced | 感知器 (TW) not 傳感器 (CN). Label moved out of ReadinessMonitor.oxygenSensor into the ARBs (L04) so lib/obd stays Flutter-free; the enum still carries the identity. |
 | 增壓壓力 | boost pressure | lib/l10n/app_en.arb:650 ↔ lib/l10n/app_zh_Hant.arb:178 (T1 same ARB key `dtcMonitorBoostPressure`) | evidenced | Label moved out of ReadinessMonitor.boostPressure into the ARBs (L04) so lib/obd stays Flutter-free; the enum still carries the identity. |
-| 多幀 | multi-frame | docs/verification/review-log.md:41 '### C2 · 多幀長度行被當成資料' + :43 naming `_parse` ↔ lib/obd/elm327_client.dart:4 'multi-frame reassembly' and :6001 "a multi-frame envelope's total length" (T3, same named function) | inferred | zh at docs/verification/review-log.md:41; en at lib/obd/elm327_client.dart:4. Both are this project's words, never written side by side. |
+| 多幀 | multi-frame | docs/verification/review-log.md:41 '### C2 · 多幀長度行被當成資料' + :43 naming `_parse` ↔ lib/obd/elm327_client.dart:4 'multi-frame reassembly' and :6130 "a multi-frame envelope's total length" (T3, same named function) | inferred | zh at docs/verification/review-log.md:41; en at lib/obd/elm327_client.dart:4. Both are this project's words, never written side by side. |
 | 失火監控 | misfire | lib/l10n/app_en.arb:2769 ↔ lib/l10n/app_zh_Hant.arb:187 (T1 same ARB key) | evidenced | Label moved out of ReadinessMonitor.misfire into the ARBs (L04) so lib/obd stays Flutter-free; the enum still carries the identity. |
 | 定址 | addressing | docs/protocol-deviations.zh-TW.md:101 '正確定址被丟掉了' ↔ docs/protocol-deviations.zh-TW.md:107 names `lib/obd/addressing.dart:1` and 'addressing' (T3) | evidenced | 'functional addressing' = 功能定址 (field-guide:211); 'physical header' = 實體標頭 (protocol-deviations:107). |
 | 已儲存 | stored | lib/l10n/app_en.arb:489 ↔ lib/l10n/app_zh_Hant.arb:786 (T1 same ARB key) | evidenced | Moved out of DtcKind when lib/obd/ stopped carrying screen copy. The enum still holds 已儲存 as `transcriptLabel`, which is export copy and stays Chinese in every locale — do not cite that as the UI translation. |
@@ -228,7 +228,7 @@ See also [do-not-translate.md](do-not-translate.md) and [hedge-register.md](hedg
 | 測試證據 | test evidence | README.md:198 'Start with [test evidence]' ↔ README.zh-TW.md:168 '[測試證據]' (T1) | evidenced |  |
 | 裝置驗證 | device verification | README.md:199 ↔ README.zh-TW.md:169 (T1) | evidenced |  |
 | 車輛資料來源 | Vehicle data sources | README.md:221 doc table ↔ README.zh-TW.md:190 (T2) | evidenced |  |
-| 驗證馬具矩陣 | verification rig matrix | README.md:200-201 'verification rig matrix' ↔ README.zh-TW.md:170 '驗證馬具矩陣' (T1) | evidenced | 'rig' = 馬具 in prose but stays `rig` as a flavor/identifier (README.zh-TW.md:154,176). |
+| 驗證馬具矩陣 | verification rig matrix | README.md:200-201 'verification rig matrix' ↔ README.zh-TW.md:172 '驗證馬具矩陣' (T1) | evidenced | 'rig' = 馬具 in prose but stays `rig` as a flavor/identifier (README.zh-TW.md:156,180). |
 
 ## Known gaps
 
