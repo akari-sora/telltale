@@ -118,10 +118,12 @@ that same parser, and also refuses to fire while fewer distinct sources
 are present than `lastResponderCount`.
 
 With headers off, source ids are absent, so the same guard counts
-finished lines instead of CAN ids. A late second-ECU line still joins
-the same command. Command timeout will accept a conclusive buffer even
-if a previously-seen ECU stayed silent, so a missing sibling cannot
-drop the link.
+finished lines instead of CAN ids. `lastResponderCount` is derived from
+those unheadered hex payload lines on successful replies (CAF1
+total-length lines and ISO-TP `1:`/`2:` continuations are not extra
+ECUs). A late second-ECU line still joins the same command. Command
+timeout will accept a conclusive buffer even if a previously-seen ECU
+stayed silent, so a missing sibling cannot drop the link.
 
 ## Timeouts
 
@@ -147,12 +149,15 @@ is rediscovered on the next handshake, same as today.
 
 ## `NO DATA`
 
-Three consecutive single-PID `NO DATA` replies now mark the PID
-`unsupported` with the existing five-minute recheck, instead of
-`noAnswer` with a 60 s backoff. The `#110` log retries `015E` in a hot
-loop; fuel rate is absent from that vehicle’s `0140` mask and should not
-occupy the bus. This is a behaviour change on every PID, listed in the
-merge request.
+Three consecutive single-PID `NO DATA` replies mark the PID `noAnswer`
+with a 60 s backoff. That is not a capability claim: the adapter timed
+out. The longer `unsupported` / five-minute recheck is only for `015E`,
+and only when this session has already completed a reply without a
+prompt or the adapter is a clone (`firmwareNeverReleased`). The `#110`
+log retries fuel rate in a hot loop; that PID is absent from the
+vehicle’s `0140` mask. Every other PID, including an intermittent
+sensor on a working car, keeps the 60 s `noAnswer` rest. A later real
+answer still wins on recheck.
 
 ## What this is not
 

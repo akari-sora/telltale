@@ -201,6 +201,47 @@ void main() {
       expect(joined.isSuccess, isTrue);
     });
 
+    test(
+      'headers off: lastResponderCount is derived without ATH1',
+      () async {
+        final transport = _issue110Adapter();
+        final client = Elm327Client(
+          transport,
+          commandTimeout: const Duration(milliseconds: 900),
+        );
+        addTearDown(client.dispose);
+        expect(await client.connect(), isTrue);
+        // Handshake `0100` stays ATH0. Two ECUs print two hex lines, not CAN
+        // ids; the line count must still arm the second-ECU guard.
+        expect(client.lastResponderCount, greaterThanOrEqualTo(2));
+
+        transport.omitPromptFor.add('010D');
+        final firstMissing = await client.send(
+          '010D',
+          timeout: const Duration(milliseconds: 220),
+        );
+        expect(firstMissing.isSuccess, isTrue);
+        expect(client.promptlessCompleteCount, greaterThanOrEqualTo(1));
+        transport.omitPromptFor.remove('010D');
+
+        transport.omitPromptFor.add('010C');
+        transport.forceReplySequence('010C', ['410C0B56']);
+        final pending = client.send('010C');
+        var finished = false;
+        unawaited(pending.then((_) => finished = true));
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        expect(
+          finished,
+          isFalse,
+          reason:
+              'one unheadered line is not enough while a second ECU is owed',
+        );
+        transport.emitBytes(ascii.encode('410C0B5C\r>'));
+        final joined = await pending;
+        expect(joined.isSuccess, isTrue);
+      },
+    );
+
     test('STOPPED after a promptless close is not the next command', () async {
       final transport = _issue110Adapter();
       final client = Elm327Client(
@@ -408,6 +449,189 @@ void main() {
         final tries = transport.commandLog.where((c) => c == '015E').length;
         // A 7E0 `NO DATA` still tries documented 7DF once, so two wire reads
         // can count as one strike.
+        expect(
+          tries,
+          inInclusiveRange(3, 6),
+          reason: 'commands: ${transport.commandLog}',
+        );
+      },
+    );
+
+    test(
+      'genuine adapter keeps noAnswer and the 60 s rest',
+      () async {
+        final transport = FakeElm327(
+          protocol: BusProtocol.can11,
+          identity: 'ELM327 v2.1',
+          deviceDescription: 'ELM327 v2.1',
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: {
+                '0100': [0x41, 0x00, 0xBE, 0x3F, 0xA8, 0x13],
+                '010C': [0x41, 0x0C, 0x1A, 0xF8],
+              },
+            ),
+          ],
+        );
+        final client = Elm327Client(
+          transport,
+          commandTimeout: const Duration(milliseconds: 200),
+        );
+        addTearDown(client.dispose);
+        expect(await client.connect(), isTrue);
+        expect(
+          client.adapterIdentity.concerns.map((c) => c.kind),
+          isNot(contains(AdapterConcernKind.firmwareNeverReleased)),
+        );
+        final engine = PollingEngine(client)
+          ..recheckInterval = const Duration(minutes: 5)
+          ..setActivePids(const [PidLibrary.engineFuelRate]);
+        addTearDown(engine.dispose);
+        engine.start();
+        final deadline = DateTime.now().add(const Duration(seconds: 4));
+        while (engine.current.faults[PidLibrary.engineFuelRate.id] !=
+                PidFault.noAnswer &&
+            DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        await engine.stop();
+        expect(
+          engine.current.faults[PidLibrary.engineFuelRate.id],
+          PidFault.noAnswer,
+        );
+        expect(
+          engine.current.faults[PidLibrary.engineFuelRate.id],
+          isNot(PidFault.unsupported),
+        );
+        final tries = transport.commandLog.where((c) => c == '015E').length;
+        expect(
+          tries,
+          inInclusiveRange(3, 6),
+          reason: 'commands: ${transport.commandLog}',
+        );
+      },
+    );
+
+    test(
+      '015E after a promptless complete uses the five-minute recheck',
+      () async {
+        final transport = FakeElm327(
+          protocol: BusProtocol.can11,
+          identity: 'ELM327 v2.1',
+          deviceDescription: 'ELM327 v2.1',
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: {
+                '0100': [0x41, 0x00, 0xBE, 0x3F, 0xA8, 0x13],
+                '010C': [0x41, 0x0C, 0x1A, 0xF8],
+                '010D': [0x41, 0x0D, 0x00],
+              },
+            ),
+          ],
+        );
+        final client = Elm327Client(
+          transport,
+          commandTimeout: const Duration(milliseconds: 200),
+        );
+        addTearDown(client.dispose);
+        expect(await client.connect(), isTrue);
+        expect(
+          client.adapterIdentity.concerns.map((c) => c.kind),
+          isNot(contains(AdapterConcernKind.firmwareNeverReleased)),
+        );
+        // The first unanswered `015E` itself is the missing prompt. Later
+        // strikes then see `promptlessCompleteCount > 0` on a genuine chip.
+        transport.omitPromptFor.add('015E');
+        final engine = PollingEngine(client)
+          ..recheckInterval = const Duration(minutes: 5)
+          ..setActivePids(
+            const [PidLibrary.engineFuelRate],
+            includeProfileDerivedInputs: false,
+          );
+        addTearDown(engine.dispose);
+        engine.start();
+        final deadline = DateTime.now().add(const Duration(seconds: 6));
+        while (engine.current.faults[PidLibrary.engineFuelRate.id] !=
+                PidFault.unsupported &&
+            DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        await engine.stop();
+        expect(client.promptlessCompleteCount, greaterThanOrEqualTo(1));
+        expect(
+          engine.current.faults[PidLibrary.engineFuelRate.id],
+          PidFault.unsupported,
+          reason: 'commands: ${transport.commandLog}',
+        );
+        expect(
+          engine.current.faults[PidLibrary.engineFuelRate.id],
+          isNot(PidFault.noAnswer),
+        );
+        final tries = transport.commandLog.where((c) => c == '015E').length;
+        expect(
+          tries,
+          inInclusiveRange(3, 6),
+          reason: 'commands: ${transport.commandLog}',
+        );
+      },
+    );
+
+    test(
+      'clone NO DATA on a PID other than 015E stays noAnswer',
+      () async {
+        final transport = FakeElm327(
+          protocol: BusProtocol.can11,
+          identity: 'ELM327 v1.5',
+          deviceDescription: 'ICSolution',
+          ecus: [
+            FakeEcu(
+              name: 'ECM',
+              requestId: '7E0',
+              responseId: '7E8',
+              responses: {
+                '0100': [0x41, 0x00, 0xBE, 0x3F, 0xA8, 0x13],
+                '010C': [0x41, 0x0C, 0x1A, 0xF8],
+              },
+            ),
+          ],
+        );
+        final client = Elm327Client(
+          transport,
+          commandTimeout: const Duration(milliseconds: 200),
+        );
+        addTearDown(client.dispose);
+        expect(await client.connect(), isTrue);
+        expect(
+          client.adapterIdentity.concerns.map((c) => c.kind),
+          contains(AdapterConcernKind.firmwareNeverReleased),
+        );
+        final engine = PollingEngine(client)
+          ..recheckInterval = const Duration(minutes: 5)
+          ..setActivePids(const [PidLibrary.coolantTemp]);
+        addTearDown(engine.dispose);
+        engine.start();
+        final deadline = DateTime.now().add(const Duration(seconds: 4));
+        while (engine.current.faults[PidLibrary.coolantTemp.id] !=
+                PidFault.noAnswer &&
+            DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        await engine.stop();
+        expect(
+          engine.current.faults[PidLibrary.coolantTemp.id],
+          PidFault.noAnswer,
+        );
+        expect(
+          engine.current.faults[PidLibrary.coolantTemp.id],
+          isNot(PidFault.unsupported),
+        );
+        final tries = transport.commandLog.where((c) => c == '0105').length;
         expect(
           tries,
           inInclusiveRange(3, 6),

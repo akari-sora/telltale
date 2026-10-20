@@ -4535,12 +4535,27 @@ class PollingEngine {
 
   final Map<String, int> _formulaStrikes = {};
 
-  /// How many in a row before a PID is written off as unsupported.
+  /// How many in a row before a PID is rested.
   ///
   /// Three rather than one: the ELM327 datasheet defines `NO DATA` as no
   /// accepted response before the timeout, which a slow or busy ECU can produce
-  /// on a PID it fully supports.
+  /// on a PID it fully supports. The default rest is [PidFault.noAnswer] for
+  /// [noAnswerBackoff]; see [_hotLoopNoDataBackoff] for the `015E` exception.
   static const int _noDataStrikesBeforeUnsupported = 3;
+
+  /// Whether three `NO DATA` strikes should use the five-minute unsupported
+  /// recheck instead of the one-minute [PidFault.noAnswer] rest.
+  ///
+  /// Only fuel rate (`015E`), and only after this session has already seen a
+  /// missing prompt or on a clone (`firmwareNeverReleased`). Every other PID
+  /// keeps the default: silence is not a capability claim.
+  bool _hotLoopNoDataBackoff(Pid pid) {
+    if (pid.modeAndPid.toUpperCase() != '015E') return false;
+    if (client.promptlessCompleteCount > 0) return true;
+    return client.adapterIdentity.concerns.any(
+      (c) => c.kind == AdapterConcernKind.firmwareNeverReleased,
+    );
+  }
 
   /// Marks a PID as faulted and drops its last reading.
   ///
@@ -4582,15 +4597,27 @@ class PollingEngine {
           _publish(epoch);
           return;
         }
-        // Three unanswered single-PID reads are treated as unsupported, with
-        // the same five-minute recheck as a mask denial. The #110 clone
-        // retried `015E` in a hot loop; backing off 60 s as `noAnswer` still
-        // occupied the bus. A later real answer still wins on recheck.
-        _invalidateSharedWire(
-          pid,
-          PidFault.unsupported,
-          retryAfter: DateTime.now().add(recheckInterval),
-        );
+        // `NO DATA` is the adapter's timeout, not a capability claim. Three
+        // misses rest the PID as `noAnswer` for a minute so an intermittent
+        // sensor on a working car does not go grey as "unsupported".
+        //
+        // Fuel rate (`015E`) is the #110 hot-loop exception: that log retried
+        // it every cycle. The five-minute `unsupported` recheck applies only
+        // to that PID, and only when this session already completed without
+        // a prompt or the adapter is a clone. A later real answer still wins.
+        if (_hotLoopNoDataBackoff(pid)) {
+          _invalidateSharedWire(
+            pid,
+            PidFault.unsupported,
+            retryAfter: DateTime.now().add(recheckInterval),
+          );
+        } else {
+          _invalidateSharedWire(
+            pid,
+            PidFault.noAnswer,
+            retryAfter: DateTime.now().add(noAnswerBackoff),
+          );
+        }
         _noDataStrikes.remove(id);
       } else {
         scheduler.handleCorruptionEvent();

@@ -82,10 +82,10 @@ enum Elm327ErrorCode {
     // `NO DATA` is the *adapter* saying nothing arrived before its own
     // timeout — a busy ECU, a receive filter, or one aggressive timing
     // window produces it exactly as an absent sensor does. Three
-    // consecutive single-PID misses then rest the PID as unsupported
-    // with the five-minute recheck. Reading the first miss as a
-    // capability claim is the mistake this whole codebase is organised
-    // against, and it was still being told to the user in those words.
+    // consecutive misses rest as noAnswer / 60s; `015E` on a clone or
+    // promptless session uses the five-minute unsupported recheck.
+    // Reading the first miss as a capability claim is the mistake this
+    // whole codebase is organised against, still told in those words.
     //
     // It is also used for whole *services*: a Mode 03 fault-code read that
     // goes unanswered surfaced as "this vehicle does not support that
@@ -846,7 +846,7 @@ class Elm327Client {
   /// Whether [_resync] is currently draining the link waiting for a prompt.
   bool get isResyncing => _draining != null;
 
-  /// Distinct CAN response ids observed on a headered reply this session.
+  /// Distinct responders this session (CAN ids, or unheadered hex lines).
   int lastResponderCount = 0;
 
   /// How many OBD replies completed without a prompt this connection.
@@ -7737,8 +7737,9 @@ class Elm327Client {
     // Unheadered payload: a BLE/UART chunk split mid-line is not a reply.
     // Issue 106 M106-04 is this shape (`41 0C 1A` with no CR and no `>`).
     if (!_bufferHasCompleteLine()) return false;
-    // Headers off: [lastResponderCount] cannot look at source ids. Count
-    // finished lines instead so a late second-ECU line still joins.
+    // Headers off: source ids are absent. [lastResponderCount] is derived
+    // from unheadered hex payload lines on earlier replies; count finished
+    // lines here so a late second-ECU line still joins.
     if (requireKnownResponders &&
         lastResponderCount > 1 &&
         _completeNonEmptyLineCount() < lastResponderCount) {
@@ -7796,6 +7797,39 @@ class Elm327Client {
         if (frame.sourceId != null && frame.sourceId!.isNotEmpty)
           frame.sourceId!,
     };
-    if (ids.length > lastResponderCount) lastResponderCount = ids.length;
+    final count = ids.isNotEmpty
+        ? ids.length
+        : _unheaderedResponderHint(response);
+    if (count > lastResponderCount) lastResponderCount = count;
+  }
+
+  /// How many ECUs an unheadered reply implies.
+  ///
+  /// ATH0 strips CAN ids, so [lastResponderCount] would otherwise stay 0–1
+  /// and the second-ECU line-count guard would never arm. Count hex payload
+  /// lines; skip `SEARCHING...`, CAF1 total-length headers (`00F`), and
+  /// ISO-TP continuation segments after `0:` (those belong to the same ECU).
+  /// Over-count of a damaged envelope is conservative: command timeout still
+  /// completes with `requireKnownResponders: false`.
+  int _unheaderedResponderHint(ObdResponse response) {
+    var lines = 0;
+    for (final line in response.rawLines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final upper = trimmed.toUpperCase();
+      if (upper.contains('SEARCHING')) continue;
+      if (_lengthHeader.hasMatch(trimmed)) continue;
+      if (_seqPrefix.hasMatch(trimmed)) {
+        final seq = int.tryParse(trimmed.split(':').first.trim(), radix: 16);
+        if (seq == 0) lines++;
+        continue;
+      }
+      if (_hexLine.hasMatch(trimmed)) lines++;
+    }
+    var frames = 0;
+    for (final frame in response.frames) {
+      if (frame.bytes.isNotEmpty) frames++;
+    }
+    return lines > frames ? lines : frames;
   }
 }
