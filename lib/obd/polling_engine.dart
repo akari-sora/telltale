@@ -4322,10 +4322,13 @@ class PollingEngine {
       // wire. `wroteSinceAudit` is the same fact Mode 04 uses: ATSH/ATH1
       // can fail without the service bytes ever leaving, and a flush
       // timeout can happen after they have. Count only the latter.
-      if (client.wroteSinceAudit(pollAudit, command)) {
+      final pidWritten = client.wroteSinceAudit(pollAudit, command);
+      if (pidWritten) {
         _noteMode01Packed(command);
       }
-      if (error is TimeoutException && batch.length == 1) {
+      // Only a read that reached the wire can have been swallowed. A header
+      // step that timed out first never asked this PID anything.
+      if (error is TimeoutException && batch.length == 1 && pidWritten) {
         final id = batch.single.pid.id;
         final strikes = (_timeoutStrikes[id] ?? 0) + 1;
         _timeoutStrikes[id] = strikes;

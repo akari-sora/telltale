@@ -1620,7 +1620,17 @@ class Elm327Client {
     }
     final trailingHold = _trailingPromptHoldIfPending();
     if (trailingHold != null) {
+      final generationBeforeHold = _connectionGeneration;
       await trailingHold;
+      // A disconnect releases the hold so nothing waits on it forever. What
+      // it releases belongs to the connection that is going; it must not be
+      // written while that connection is being torn down.
+      if (_connectionGeneration != generationBeforeHold) {
+        throw const TransportException(
+          'Connection generation changed; command belongs to a prior connection.',
+          issue: TransportIssue.notConnected,
+        );
+      }
       // The hold can take most of an adapter window. The checks above were
       // made before it: a session retired or a deadline passed during it
       // must refuse here, before any byte is handed to the transport.
@@ -2156,6 +2166,11 @@ class Elm327Client {
     // probe's answer may still be in flight, so the stream cannot be called
     // in step. The link goes.
     var probeWriteStalled = false;
+    // The caller's deadline cut the probe's write short. Whether the bytes
+    // left is unknown, so no prompt seen meanwhile can be called its answer:
+    // the caller is refused, the stream stays out of step with the probe
+    // still owed, and the next resync waits for that answer.
+    var probeWriteUnknown = false;
     // The passive stretch used up the caller's whole budget. Nothing is
     // probed for a caller that has already gone; the next resync probes.
     var callerSpentInWait = false;
@@ -2188,7 +2203,11 @@ class Elm327Client {
         await transport.write(probe).timeout(writeBudget);
       } on TimeoutException {
         // A caller budget that ran out first is handled below as just that.
-        probeWriteStalled = !(callerLimited && left < writeTimeout);
+        if (callerLimited && left < writeTimeout) {
+          probeWriteUnknown = true;
+        } else {
+          probeWriteStalled = true;
+        }
       } on Object {
         // The bytes may still have gone out; the drain waits out the window.
         transcript.recordNote('Probe write failed');
@@ -2200,6 +2219,7 @@ class Elm327Client {
       );
       if (!drain.isCompleted) drain.complete(false);
     }
+    if (probeWriteUnknown && !drain.isCompleted) drain.complete(false);
     final (window, callerLimited) = callerSpentInWait
         ? (Duration.zero, true)
         : remaining();
@@ -2223,7 +2243,8 @@ class Elm327Client {
     // link is dead tore down a session whose valid prompt was 100 ms away,
     // comfortably inside the three seconds this recovery actually allows. The
     // caller is refused; the link keeps the benefit of the doubt it was given.
-    if (!sawPrompt && !probeWriteStalled && callerLimited) {
+    if (probeWriteUnknown || (!sawPrompt && !probeWriteStalled && callerLimited)) {
+      _outOfSync = true;
       // The rest of the window this client allows, minus what was spent.
       final spent = _clock().difference(started);
       _extendResyncGrace(

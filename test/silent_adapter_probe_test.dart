@@ -53,6 +53,7 @@ class _QuietAdapter extends BaseObdTransport {
   /// Takes the bytes and answers them, but the write Future never settles:
   /// a Wi-Fi `socket.add` that went out followed by a `flush` that hangs.
   bool stallAfterAccepting = false;
+  final Set<String> stallAfterAcceptingFor = {};
   void Function(String command)? onWrite;
 
   void once(String command, List<(String, Duration)>? reply) =>
@@ -99,7 +100,9 @@ class _QuietAdapter extends BaseObdTransport {
         }
       }
     }
-    if (stallAfterAccepting) return Completer<void>().future;
+    if (stallAfterAccepting || stallAfterAcceptingFor.contains(key)) {
+      return Completer<void>().future;
+    }
   }
 }
 
@@ -418,6 +421,72 @@ void main() {
 
       expect(transport.sent, ['011F', 'ATI']);
       expect(lost, [1]);
+    });
+
+    test(
+      'a caller-cut probe write keeps the stream out of step, whatever drains',
+      () async {
+        final (client, transport, lost) = await _connected();
+        addTearDown(client.dispose);
+        // The probe is taken and then its write hangs until the caller's
+        // deadline. An older prompt drains meanwhile; the probe's own answer
+        // is still on its way and must not land on the next command.
+        transport
+          ..once('011F', null)
+          ..once('ATI', [
+            ('>', Duration.zero),
+            ('ELM327 v1.5\r\r>', const Duration(milliseconds: 500)),
+          ])
+          ..once('010D', [('410D3C\r\r>', const Duration(milliseconds: 100))])
+          ..stallAfterAcceptingFor.add('ATI');
+
+        await expectLater(
+          client.send('011F'),
+          throwsA(isA<TimeoutException>()),
+        );
+        await expectLater(
+          client.send(
+            '0105',
+            deadline: DateTime.now().add(const Duration(milliseconds: 1300)),
+          ),
+          throwsA(isA<TimeoutException>()),
+        );
+        expect(client.isOutOfSync, isTrue);
+        final next = await client.send('010D');
+
+        expect(next.hexPayload, '410D3C');
+        expect(lost, isEmpty);
+      },
+    );
+
+    test('a client disconnect during the hold writes nothing after it',
+        () async {
+      final (client, transport, lost) = await _connected();
+      transport
+        ..once('011F', null)
+        ..once('ATI', [('ELM327 v1.5\r\r>', const Duration(milliseconds: 150))]);
+
+      await expectLater(client.send('011F'), throwsA(isA<TimeoutException>()));
+      await expectLater(
+        client.send(
+          '0105',
+          deadline: DateTime.now().add(const Duration(milliseconds: 1100)),
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      transport.sent.clear();
+
+      final parked = expectLater(
+        client.send('010D'),
+        throwsA(isA<TransportException>()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await client.disconnect();
+
+      await parked;
+      expect(transport.sent, isNot(contains('010D')));
+      await client.dispose();
     });
 
     test('a session retired during the hold sends nothing after it', () async {
