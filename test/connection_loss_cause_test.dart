@@ -155,6 +155,54 @@ void main() {
     expect(causes, [ConnectionLossCause.writeStalled]);
   });
 
+  test(
+    'a resync gives its verdict even when its window outlasts the grace',
+    () async {
+      // The grace is published at the resync's start on the wall clock; the
+      // drain timer is armed after the pre-wait and the probe, for what is left
+      // of the window on the client's clock. When those drift, a watchdog tick
+      // lands between them and drops the link before the resync can say "Probe
+      // got no answer" — the line #112's next export is for. Seen once under
+      // load in the full suite. A clock that stops at the resync's start makes
+      // the drift a whole second, so a tick always lands in it.
+      final transport = _adapter();
+      DateTime? frozen;
+      final notesAtLoss = <String>[];
+      final causes = <ConnectionLossCause?>[];
+      late final Elm327Client client;
+      client =
+          Elm327Client(
+              transport,
+              commandTimeout: const Duration(milliseconds: 150),
+              clock: () => frozen ?? DateTime.now(),
+            )
+            ..onConnectionLost = () {
+              causes.add(client.connectionLossCause);
+              notesAtLoss.addAll(
+                client.transcript.entries
+                    .map((e) => e.note)
+                    .whereType<String>(),
+              );
+            };
+      addTearDown(client.dispose);
+      expect(await client.connect(), isTrue);
+      transport.goSilent = true;
+      // Idle first, as between polls: the watchdog only drops past its five
+      // seconds of silence, and the tick that lands in the drift must be past
+      // them, as it was in the run that showed this.
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
+
+      await expectLater(client.send('010D'), throwsA(isA<TimeoutException>()));
+      client.onResyncStarted = () => frozen ??= DateTime.now();
+      await client.send('010C').then<void>((_) {}, onError: (_) {});
+      await pumpEventQueue();
+
+      expect(causes, [ConnectionLossCause.adapterSilent]);
+      expect(notesAtLoss, contains('Probe got no answer'));
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+  );
+
   test('a link closed while it was opening gets no handshake', () async {
     // A Wi-Fi socket still connecting has nothing for a close to act on, so
     // it opened anyway and the handshake went out for a client nobody owned.
