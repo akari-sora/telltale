@@ -1709,10 +1709,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
       // exception is a connect whose own link went mid-handshake: the failure
       // on screen is its own, and the step that carried the reset still has
       // to end failed rather than stay "running" for good.
-      if (_superseded(generation) &&
-          _lostOwnScreen != (generation, _generation)) {
-        return;
-      }
+      if (_superseded(generation) && !_ownLossOnScreen(generation)) return;
       // Replace the in-flight entry for a step rather than appending, so the
       // wizard shows one row per command that mutates from running → ok.
       final existing = steps.indexWhere((s) => s.index == progress.index);
@@ -1756,7 +1753,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
         // handshake does not stop for lets it start the next one, and the
         // teardown then cancels the listener before that step ends, so it
         // would stay "running" on the failure for good.
-        if (_lostOwnScreen == (generation, _generation)) {
+        if (_ownLossOnScreen(generation)) {
           state = state.copyWith(
             initSteps: List.unmodifiable([
               for (final step in steps)
@@ -2854,6 +2851,14 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// moves the generation. Not set for an automatic attempt's own loss, whose
   /// screen is the drop it was trying to undo.
   (int, int)? _lostOwnScreen;
+
+  /// Whether the failure on screen is still the one [generation]'s own link
+  /// loss published. The generation pair is not enough alone: an older
+  /// disconnect that finishes late publishes the idle screen without moving
+  /// the generation.
+  bool _ownLossOnScreen(int generation) =>
+      _lostOwnScreen == (generation, _generation) &&
+      state.phase == ConnectionPhase.failed;
 
   /// The connection generation that last attempted a Mode 04 clear. Such a
   /// session is never reconnected automatically; see
