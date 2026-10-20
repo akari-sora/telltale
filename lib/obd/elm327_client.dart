@@ -2316,6 +2316,10 @@ class Elm327Client {
     _outOfSync = false;
     // The prompt that was owed has arrived. The grace was only for that wait.
     _resyncGraceUntil = null;
+    // Nothing is owed any more, so no probe is either. A probe skipped for a
+    // caller without the budget must not fire on a later, unrelated resync.
+    _resyncActiveProbe = false;
+    _resyncProbeAfterSilence = false;
   }
 
   /// Accounts for an answered probe, if one was outstanding: records it,

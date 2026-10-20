@@ -428,6 +428,7 @@ void main() {
       final (client, transport, lost) = await _connected(
         writeTimeout: const Duration(milliseconds: 500),
       );
+      addTearDown(client.dispose);
       transport
         ..once('011F', null)
         ..once('ATI', [('ELM327 v1.5\r\r>', const Duration(milliseconds: 900))]);
@@ -445,14 +446,19 @@ void main() {
 
       final parked = expectLater(
         client.send('010D'),
-        throwsA(isA<TransportException>()),
+        throwsA(
+          isA<TransportException>().having(
+            (e) => e.issue,
+            'issue',
+            TransportIssue.notConnected,
+          ),
+        ),
       );
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await client.disconnect();
 
       await parked;
       expect(transport.sent, isNot(contains('010D')));
-      await client.dispose();
     });
 
     test('a session retired during the hold sends nothing after it', () async {
