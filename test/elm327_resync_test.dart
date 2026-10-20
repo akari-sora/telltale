@@ -118,6 +118,13 @@ void main() {
         client.transcript.render(),
         contains('Connection is out of sync, starting realignment'),
       );
+      // The late reply landed inside the silent resync's listening stretch,
+      // so no probe went out to abort a chip that was still answering.
+      expect(transport.sent, isNot(contains('ATI')));
+      expect(
+        client.transcript.render(),
+        isNot(contains('probing with ATI')),
+      );
 
       await client.dispose();
     });
@@ -133,6 +140,10 @@ void main() {
         commandTimeout: const Duration(milliseconds: 80),
       );
       expect(await client.connect(), isTrue);
+      // Silent to the probe as well, once the handshake is done: the resync
+      // asks with ATI, and only an adapter that ignores that too is the one
+      // this sentence is for.
+      transport.script['ATI'] = ('', const Duration(hours: 1));
 
       await expectLater(client.send('010C'), throwsA(isA<TimeoutException>()));
       await expectLater(

@@ -37,6 +37,8 @@ class Config:
     control_token: str | None
     disconnect_after_armed_fault: bool
     log_path: str
+    swallow_reply_on_command: int | None = None
+    deaf_from_command: int | None = None
 
     def __post_init__(self) -> None:
         configured_faults = sum(
@@ -46,6 +48,8 @@ class Config:
                 self.no_prompt_on_command,
                 self.corrupt_on_command,
                 self.armed_fault,
+                self.swallow_reply_on_command,
+                self.deaf_from_command,
             )
         )
         if configured_faults > 1:
@@ -147,6 +151,8 @@ def parse_config(argv: list[str] | None = None) -> Config:
     parser.add_argument("--close-on-command", type=_positive_int)
     parser.add_argument("--no-prompt-on-command", type=_positive_int)
     parser.add_argument("--corrupt-on-command", type=_positive_int)
+    parser.add_argument("--swallow-reply-on-command", type=_positive_int)
+    parser.add_argument("--deaf-from-command", type=_positive_int)
     parser.add_argument(
         "--arm-next-command",
         choices=("close", "no_prompt", "corrupt"),
@@ -169,6 +175,8 @@ def parse_config(argv: list[str] | None = None) -> Config:
             args.no_prompt_on_command,
             args.corrupt_on_command,
             args.armed_fault,
+            args.swallow_reply_on_command,
+            args.deaf_from_command,
         )
         if value is not None
     ]
@@ -200,6 +208,8 @@ def parse_config(argv: list[str] | None = None) -> Config:
         control_token=args.control_token,
         disconnect_after_armed_fault=args.disconnect_after_armed_fault,
         log_path=args.log,
+        swallow_reply_on_command=args.swallow_reply_on_command,
+        deaf_from_command=args.deaf_from_command,
     )
 
 
@@ -397,6 +407,9 @@ class ChaosProxy:
             peer=str(peer),
         )
         upstream_writer: asyncio.StreamWriter | None = None
+        # A deaf connection keeps reading and never answers, until the client
+        # reconnects. The socket stays open: nothing tells the client.
+        deaf = False
         try:
             upstream_reader, upstream_writer = await asyncio.open_connection(
                 self.config.upstream_host, self.config.upstream_port
@@ -408,6 +421,20 @@ class ChaosProxy:
                     break
                 self._command_seq += 1
                 command_seq = self._command_seq
+                if command_seq == self.config.deaf_from_command:
+                    deaf = True
+                if deaf:
+                    # Read and dropped, never forwarded: logged as the fault,
+                    # not as client_to_upstream.
+                    self.logger.emit(
+                        "fault",
+                        command,
+                        fault="deaf",
+                        connection=connection,
+                        command=command_seq,
+                        armed=False,
+                    )
+                    continue
                 self.logger.emit(
                     "client_to_upstream",
                     command,
@@ -437,6 +464,18 @@ class ChaosProxy:
                     upstream_reader.readuntil(b">"),
                     timeout=self.config.response_timeout,
                 )
+                if command_seq == self.config.swallow_reply_on_command:
+                    # The adapter answered; the client never hears it. The
+                    # next line from the client is answered normally.
+                    self.logger.emit(
+                        "fault",
+                        response,
+                        fault="swallow_reply",
+                        connection=connection,
+                        command=command_seq,
+                        armed=False,
+                    )
+                    continue
                 fault: str | None = None
                 if (
                     command_seq == self.config.no_prompt_on_command

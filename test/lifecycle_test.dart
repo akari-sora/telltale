@@ -123,9 +123,14 @@ void main() {
 
   group('the watchdog and a suspended process', () {
     test('a link is dropped when the adapter really does go quiet', () async {
-      // The control: the watchdog must still do its job.
+      // The control: the watchdog must still do its job. Since #112 a tick
+      // that finds a command still owed a reply, with its reply timer armed,
+      // hands it to the command-timeout path first (here: nothing arrived,
+      // so out of step with a probe armed and a grace window). With nothing
+      // else sent, the drop comes once that grace has passed.
+      final transport = _adapter()..silenceFor.add('010C');
       final client = Elm327Client(
-        _adapter(wedge: {'010C'}),
+        transport,
         watchdogTimeout: const Duration(seconds: 2),
       );
       expect(await client.connect(), isTrue);
@@ -135,24 +140,38 @@ void main() {
 
       // Nothing has arrived for far longer than the watchdog allows, and a
       // command is outstanding.
-      // The wedged command is meant to be abandoned, so its eventual failure
-      // is expected rather than a test error.
+      Object? outcome;
       unawaited(
         client
             .send('010C', timeout: const Duration(seconds: 5))
-            .then((_) {}, onError: (Object _) {}),
+            .then((_) => outcome = 'answered', onError: (Object e) => outcome = e),
       );
       await Future<void>.delayed(const Duration(milliseconds: 50));
       client.lastRxAt = DateTime.now().subtract(const Duration(seconds: 30));
-      await Future<void>.delayed(const Duration(milliseconds: 1300));
 
+      // First tick: the command is ended through the timeout path.
+      var deadline = DateTime.now().add(const Duration(seconds: 3));
+      while (outcome == null && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(outcome, isA<TimeoutException>());
+      expect(client.isOutOfSync, isTrue);
+      // Inside the grace window the link is kept for the next resync.
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      expect(lost, isFalse, reason: 'dropped inside the grace window');
+      // With nothing else sent, the drop follows once the grace has passed.
+      deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (!lost && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
       expect(lost, isTrue);
       await client.dispose();
     });
 
     test('markAlive stops a resume from looking like silence', () async {
+      final transport = _adapter()..silenceFor.add('010C');
       final client = Elm327Client(
-        _adapter(wedge: {'010C'}),
+        transport,
         watchdogTimeout: const Duration(seconds: 2),
       );
       expect(await client.connect(), isTrue);
@@ -160,12 +179,11 @@ void main() {
       var lost = false;
       client.onConnectionLost = () => lost = true;
 
-      // The wedged command is meant to be abandoned, so its eventual failure
-      // is expected rather than a test error.
+      Object? outcome;
       unawaited(
         client
             .send('010C', timeout: const Duration(seconds: 5))
-            .then((_) {}, onError: (Object _) {}),
+            .then((_) => outcome = 'answered', onError: (Object e) => outcome = e),
       );
       await Future<void>.delayed(const Duration(milliseconds: 50));
       // The app was in the background for half a minute.
@@ -173,18 +191,20 @@ void main() {
       // …and this is what resuming must do before the watchdog next ticks.
       client.markAlive();
 
-      await Future<void>.delayed(const Duration(milliseconds: 1300));
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
 
-      // 1.3 s have passed since `markAlive`, well inside the two-second
-      // window. Resetting the clock buys the adapter one more window; it does
-      // not make the link immune, which is the point — a genuinely dead
-      // adapter still gets dropped, just not on the strength of time that
-      // passed while nothing was listening.
+      // Without markAlive the first tick reads thirty seconds of silence and
+      // ends the command early (the timeout path); with it, the command
+      // still has the rest of its own five seconds. Resetting the clock buys
+      // the adapter one more window; it does not make the link immune — a
+      // genuinely dead adapter is still dropped, just not on the strength of
+      // time that passed while nothing was listening.
       expect(
-        lost,
-        isFalse,
+        outcome,
+        isNull,
         reason: 'elapsed wall-clock is not evidence of adapter silence',
       );
+      expect(lost, isFalse);
       await client.dispose();
     });
   });
