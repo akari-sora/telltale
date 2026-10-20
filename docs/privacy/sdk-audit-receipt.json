@@ -171,7 +171,7 @@
     "lib/state/language_switch_guard.dart": "8d64668be1716beac1fdad710bcc6b80f213a5232f2177dee13e2cf9c716f550",
     "lib/state/locale_settings.dart": "5c2f3ad89a3a285f9936adad5bd62ebe2fbf059d9200420fa557ab8248944b94",
     "lib/state/manual_command_refusal.dart": "0477b90c06c956fdb4eab42f652786976323fee007297378b4ba20a78fc471a7",
-    "lib/state/obd_session.dart": "1267f82bfb3f5f685ddc62fe19d502c5f78aa423c56996aeae704e83cdb5b819",
+    "lib/state/obd_session.dart": "f7b8b163e1239c399eb7a01dd0437b00c1648feae63102c0c3a0724f63d81eba",
     "lib/state/pid_mutation_lock.dart": "e989b829d7a20a50a75dedc2ed78054497f22ad539628ae8755efeb5d279982a",
     "lib/state/pid_registry.dart": "e20fca791be536ec1b2b9b05c34c5a11288e18d5b93ac1832e39db9d72d64b4c",
     "lib/state/powertrain_battery_experiments.dart": "8db68f31264a41b0c6a55579955ff1789930ea8c7f0c7d4b7a12e8a2eb4d4cac",

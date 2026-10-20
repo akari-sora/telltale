@@ -2824,7 +2824,9 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// The teardown would cancel it too, but several awaits later, and until
   /// then the dying handshake's failed and skipped steps land on that failure.
   /// Not used for a connect whose failure is its own screen: there the late
-  /// steps are how the step that carried the reset comes to read failed.
+  /// steps are how a critical step that carried the reset comes to read
+  /// failed. (A non-critical one can still leave the next step running; that
+  /// is main's behaviour, #113 item 18.)
   void _stopInitListener() {
     final sub = _initSub;
     _initSub = null;
