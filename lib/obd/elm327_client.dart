@@ -6462,11 +6462,12 @@ class Elm327Client {
       if (_pending != null && _pendingTimeout == null) return;
       // A resync gives its own verdict when its window ends: the probe's
       // answer, or "Probe got no answer" and the drop. Its grace is published
-      // at its start on the wall clock, but its drain timer is armed after
-      // the pre-wait and the probe, for what is left of the window on the
-      // client's clock; when those drift, a tick between them dropped the
-      // link first and the record lost the probe outcome #112's next export
-      // is for. Seen once under load. The drain is bounded by its own timer.
+      // at its start; its drain timer is armed after the pre-wait and the
+      // probe, for what is left of the window. Both read the same clock in
+      // production, but arming late put the timer's deadline about a
+      // millisecond past the grace, and a tick in that gap dropped the link
+      // first: the record lost the probe outcome #112's next export is for.
+      // Seen under load. The drain is bounded by its own timer.
       if (isResyncing) return;
       // Silence only means something when the adapter owes us a reply. An idle
       // link — every active PID unsupported, or the app just resumed from the

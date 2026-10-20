@@ -113,7 +113,7 @@
     "lib/obd/addressing.dart": "534ee0748b756e911e9f8da4fca3fdeee6c814a75b122a549c389f0b7a2ab5ee",
     "lib/obd/dtc/dtc.dart": "439fdcce8db003b7b896b7374303d6481af6c6b38bae8c0e2d3b7b1e365e515f",
     "lib/obd/elapsed_clock.dart": "1ded2466973350b33fe5582f8eae7ed74630a263d4742c7a07b64b82bc01d166",
-    "lib/obd/elm327_client.dart": "be1c7a00b914570c0357b52daa5e9a50ddd61399fe8c515144d9624192779696",
+    "lib/obd/elm327_client.dart": "c3dc205e2f01284dd085ab04cb3f099687bbbe0f2d7fd1f2eab7457b3dcc3a55",
     "lib/obd/elm_can_addressing.dart": "61ca3e9c7bc31cf5db2e4854c9ea5ded43a6460813ed5fd2db5f38ceb778b8c7",
     "lib/obd/elm_composite_transaction.dart": "42145dc0c1d7f80f85c83fa731f66beb87f48e28402b9b134c533cd52b2ac827",
     "lib/obd/elm_flow_control.dart": "9e703fc637e3708af1962a70a98cb7befe5d7535bda60e627de8617c9f4e63a9",
