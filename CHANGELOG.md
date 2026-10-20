@@ -19,10 +19,9 @@ Dates are the date the build was made, not the date it reached anyone.
   which a fault-code clear was attempted. If the reconnect does not
   connect, the screen and the exported session log stay those of the
   session that dropped, with the attempt noted at its end. (issue #112)
-- The watchdog no longer cuts in while a resync is waiting for the probe,
-  so a resync that ends the session writes the probe outcome
-  (`Probe got no answer`) before it does. A link the system reports closed
-  during the probe can still end the session first.
+- The watchdog no longer ends a session while a resync is still waiting on
+  its probe, which could cut the probe's outcome out of the session log. A
+  connection the system reports closed can still end the session first.
 - Tested by unit tests and a loopback Wi-Fi test. Not validated on a real
   vehicle or adapter.
 
