@@ -118,6 +118,13 @@ void main() {
         client.transcript.render(),
         contains('Connection is out of sync, starting realignment'),
       );
+      // The late reply landed inside the silent resync's listening stretch,
+      // so no probe went out to abort a chip that was still answering.
+      expect(transport.sent, isNot(contains('ATI')));
+      expect(
+        client.transcript.render(),
+        isNot(contains('probing with ATI')),
+      );
 
       await client.dispose();
     });

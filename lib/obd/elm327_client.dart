@@ -507,6 +507,7 @@ class Elm327Client {
     this.responsePendingTimeout = const Duration(seconds: 7),
     this.commandTimeout = const Duration(seconds: 5),
     this.writeTimeout = const Duration(seconds: 2),
+    this.probeStormWindow = const Duration(seconds: 60),
     DateTime Function()? clock,
     Duration Function()? elapsed,
     Duration Function()? agingElapsed,
@@ -519,6 +520,12 @@ class Elm327Client {
   final ObdTransport transport;
   final Duration watchdogTimeout;
   final Duration commandTimeout;
+
+  /// How far back answered probes count towards ending the session.
+  ///
+  /// The #112 exports stalled once every 40–140 s; a link that needs a probe
+  /// three times inside a minute is not carrying replies.
+  final Duration probeStormWindow;
   final DateTime Function() _clock;
   final Duration Function()? _elapsedOverride;
   final Duration Function()? _agingElapsedOverride;
@@ -646,15 +653,32 @@ class Elm327Client {
   /// could not show.
   bool _resyncProbeAfterSilence = false;
 
-  /// Answered probes since the last reply to a vehicle command.
+  /// A probe was written and its answer has not been accounted for.
   ///
-  /// A chip that answers `ATI` but never an OBD read is not a link worth
-  /// keeping: recovering forever is a connected screen with nothing on it.
-  int _probeAnswersWithoutVehicleReply = 0;
+  /// An instance field, not a local: a caller whose deadline runs out after
+  /// the probe went out leaves the answer to the next resync, or to a prompt
+  /// that arrives with nothing waiting. Either way that answer still needs
+  /// the trailing hold and still counts.
+  bool _probeOutstanding = false;
 
-  /// How many answered probes in a row, with no vehicle reply between them,
-  /// end the session anyway.
-  static const int maxProbeAnswersWithoutVehicleReply = 3;
+  /// Wire bytes of the owed reply seen before the probe was written.
+  ///
+  /// The drain counts every byte up to its prompt. After a probe, those
+  /// include the probe's own answer, which is not the reply a transaction
+  /// budget is about.
+  int _wireBytesBeforeProbe = 0;
+
+  /// When each answered probe arrived, inside [probeStormWindow].
+  ///
+  /// A chip that answers `ATI` but keeps going silent on what it is asked is
+  /// not a link worth keeping: recovering forever is a frozen screen that
+  /// says connected. Counting by time rather than "since the last reply"
+  /// keeps a session alive that only sends `ATRV` now and then, and still
+  /// ends one where a reply in between does not change the picture.
+  final List<DateTime> _probeAnswers = [];
+
+  /// Answered probes inside [probeStormWindow] that end the session.
+  static const int maxProbeAnswersInWindow = 3;
 
   /// Silence that already existed when the current reply budget was armed.
   ///
@@ -906,7 +930,8 @@ class Elm327Client {
     _headersOn = false;
     lastResponderCount = 0;
     promptlessCompleteCount = 0;
-    _probeAnswersWithoutVehicleReply = 0;
+    _probeOutstanding = false;
+    _probeAnswers.clear();
     _strayPromptExpected = false;
     _resyncActiveProbe = false;
     _quietCompleteTimer?.cancel();
@@ -930,6 +955,9 @@ class Elm327Client {
       if (connected) return;
       _connectionGeneration++;
       _transportLost = true;
+      // A write parked on the trailing hold would otherwise wait forever:
+      // the hold's own timer ignores a generation it no longer belongs to.
+      _releaseTrailingPromptHold();
       final wasInitialized = isInitialized;
       isInitialized = false;
       _watchdog?.cancel();
@@ -1067,6 +1095,7 @@ class Elm327Client {
       _pendingTimeout?.cancel();
       _quietCompleteTimer?.cancel();
       _quietCompleteTimer = null;
+      _releaseTrailingPromptHold();
       // The same sentence as the drop above, and a different identifier on
       // purpose: this link was closed because the app asked, not because
       // anything went wrong with it.
@@ -1181,6 +1210,11 @@ class Elm327Client {
       // three-second drain waiting for a prompt that had already arrived, and
       // on a flaky Bluetooth link that turned every timeout into five seconds
       // plus three of doing nothing.
+      // The owed reply has gone past, so no probe is owed for it either.
+      _resyncActiveProbe = false;
+      _resyncProbeAfterSilence = false;
+      // Its bytes are accounted for; they are not the next reply's.
+      _pendingWireBytes = 0;
       if (_strayPromptExpected && !_frameIsBlank(frame)) {
         // `STOPPED` or other leftover after an early close. Not PID data.
         // The prompt itself puts the stream back on a boundary.
@@ -1188,12 +1222,14 @@ class Elm327Client {
         _releaseTrailingPromptHold();
         _outOfSync = false;
         _resyncGraceUntil = null;
+        _accountProbeAnswer(canDrop: false);
         return;
       }
       _outOfSync = false;
       _resyncGraceUntil = null;
       _strayPromptExpected = false;
       _releaseTrailingPromptHold();
+      _accountProbeAnswer(canDrop: false);
       return;
     }
 
@@ -1370,10 +1406,6 @@ class Elm327Client {
   }
 
   void _completePending(ObdResponse response) {
-    final answered = _pendingCommand?.trim().toUpperCase();
-    if (answered != null && !answered.startsWith('AT')) {
-      _probeAnswersWithoutVehicleReply = 0;
-    }
     // Any reply carrying a voltage refreshes the cached figure, so a periodic
     // ATRV keeps the status pill live rather than pinned to the handshake.
     final volts = response.batteryVoltage;
@@ -1587,7 +1619,27 @@ class Elm327Client {
       if (left < timeout) timeout = left;
     }
     final trailingHold = _trailingPromptHoldIfPending();
-    if (trailingHold != null) await trailingHold;
+    if (trailingHold != null) {
+      await trailingHold;
+      // The hold can take most of an adapter window. The checks above were
+      // made before it: a session retired or a deadline passed during it
+      // must refuse here, before any byte is handed to the transport.
+      if (!completesCommittedTransaction &&
+          !(mayTransmit?.call(owner) ?? true)) {
+        throw const OperationRetiredException(
+          'This session has ended or gone to the background, so the command was not sent.',
+        );
+      }
+      if (deadline != null) {
+        final left = deadline.difference(_clock());
+        if (left <= Duration.zero) {
+          throw TimeoutException(
+            'The time limit for this operation has passed, so $command was not sent.',
+          );
+        }
+        if (left < timeout) timeout = left;
+      }
+    }
     if (_buffer.contains(_promptByte) && _pending == null) {
       _onBytes(const []);
     }
@@ -1989,11 +2041,7 @@ class Elm327Client {
     // Between this timer and that resync the watchdog measured silence since
     // the last byte, found more than five seconds, and dropped the session
     // with the probe never sent. Both 1.0.21 exports ended exactly so.
-    final graceEnd = DateTime.now().add(resyncTimeout);
-    final openGrace = _resyncGraceUntil;
-    if (openGrace == null || openGrace.isBefore(graceEnd)) {
-      _resyncGraceUntil = graceEnd;
-    }
+    _extendResyncGrace(resyncTimeout);
     _failPending(
       TimeoutException('Timed out waiting for a reply', commandTimeout),
     );
@@ -2076,10 +2124,7 @@ class Elm327Client {
     // is refused by the drain; the link keeps the three seconds it was
     // promised either way.
     final adapterWindowEnd = started.add(resyncTimeout);
-    final openGrace = _resyncGraceUntil;
-    if (openGrace == null || openGrace.isBefore(adapterWindowEnd)) {
-      _resyncGraceUntil = adapterWindowEnd;
-    }
+    _extendResyncGrace(resyncTimeout);
     // What is left of the adapter's window, and whether the caller's deadline
     // is the tighter limit. A caller running out of time is not the adapter
     // failing, and the two are told apart below.
@@ -2105,8 +2150,12 @@ class Elm327Client {
     // lands there and drains exactly as before, where a probe written into a
     // chip still answering would abort it with `STOPPED`. Only when nothing
     // has arrived does the probe go out.
-    var probed = false;
-    var probeNeverTaken = false;
+    // The probe's write did not complete within its own limit. Not proof the
+    // bytes stayed home (Wi-Fi hands them to the kernel before `flush`), but
+    // proof the write side is wedged: whatever prompt the drain sees, the
+    // probe's answer may still be in flight, so the stream cannot be called
+    // in step. The link goes.
+    var probeWriteStalled = false;
     // The passive stretch used up the caller's whole budget. Nothing is
     // probed for a caller that has already gone; the next resync probes.
     var callerSpentInWait = false;
@@ -2122,7 +2171,8 @@ class Elm327Client {
         !callerSpentInWait &&
         remaining().$1 > Duration.zero) {
       _resyncActiveProbe = false;
-      probed = true;
+      _probeOutstanding = true;
+      _wireBytesBeforeProbe = _pendingWireBytes;
       transcript.recordNote(
         _resyncProbeAfterSilence
             ? 'Adapter silent after the last command; probing with ATI'
@@ -2138,17 +2188,17 @@ class Elm327Client {
         await transport.write(probe).timeout(writeBudget);
       } on TimeoutException {
         // A caller budget that ran out first is handled below as just that.
-        probeNeverTaken = !(callerLimited && left < writeTimeout);
+        probeWriteStalled = !(callerLimited && left < writeTimeout);
       } on Object {
         // The bytes may still have gone out; the drain waits out the window.
         transcript.recordNote('Probe write failed');
       }
     }
-    if (probeNeverTaken && !drain.isCompleted) {
+    if (probeWriteStalled) {
       transcript.recordNote(
         'Probe write did not complete; the link is not taking bytes',
       );
-      drain.complete(false);
+      if (!drain.isCompleted) drain.complete(false);
     }
     final (window, callerLimited) = callerSpentInWait
         ? (Duration.zero, true)
@@ -2173,29 +2223,30 @@ class Elm327Client {
     // link is dead tore down a session whose valid prompt was 100 ms away,
     // comfortably inside the three seconds this recovery actually allows. The
     // caller is refused; the link keeps the benefit of the doubt it was given.
-    if (!sawPrompt && !probeNeverTaken && callerLimited) {
+    if (!sawPrompt && !probeWriteStalled && callerLimited) {
       // The rest of the window this client allows, minus what was spent.
-      _resyncGraceUntil = started.add(resyncTimeout);
+      final spent = _clock().difference(started);
+      _extendResyncGrace(
+        spent < resyncTimeout ? resyncTimeout - spent : Duration.zero,
+      );
       throw TimeoutException(
         'This operation\'s time limit was reached before the connection '
         'finished synchronising. Try again.',
       );
     }
-    var probesExhausted = false;
+    final probed = _probeOutstanding;
     if (sawPrompt && probed) {
-      _probeAnswersWithoutVehicleReply++;
-      if (_probeAnswersWithoutVehicleReply >=
-          maxProbeAnswersWithoutVehicleReply) {
-        transcript.recordNote(
-          'Probe answered three times with no vehicle reply in between',
-        );
-        probesExhausted = true;
-      }
+      // The prompt that released the drain may be the probe's answer, not
+      // the owed reply. The budget is about the owed reply.
+      _resyncDrainedWireBytes = _wireBytesBeforeProbe;
     }
-    if (!sawPrompt || probesExhausted) {
-      if (probed && !probeNeverTaken && !sawPrompt) {
+    final probesExhausted =
+        sawPrompt && !probeWriteStalled && _accountProbeAnswer();
+    if (!sawPrompt || probesExhausted || probeWriteStalled) {
+      if (probed && !probeWriteStalled && !sawPrompt) {
         transcript.recordNote('Probe got no answer');
       }
+      _probeOutstanding = false;
       // Clearing the flag here — which is what this method used to do
       // unconditionally, in `finally` — declares the stream synchronised on no
       // evidence at all. The outstanding reply is still in flight, so the next
@@ -2219,6 +2270,15 @@ class Elm327Client {
       _watchdog?.cancel();
       _watchdog = null;
       scheduleMicrotask(() => onConnectionLost?.call());
+      if (probesExhausted || probeWriteStalled) {
+        // The adapter answered the check three times, or the link would not
+        // take the check at all. Either way it is not "the adapter did not
+        // answer": what stopped responding is the connection.
+        throw const TransportException(
+          'The connection stopped responding.',
+          issue: TransportIssue.linkStoppedResponding,
+        );
+      }
       throw const TransportException(
         'The adapter\'s replies had fallen out of step with the commands '
         'sent to it, and it did not answer the check that would have put '
@@ -2230,15 +2290,49 @@ class Elm327Client {
     _outOfSync = false;
     // The prompt that was owed has arrived. The grace was only for that wait.
     _resyncGraceUntil = null;
-    if (probed) {
-      transcript.recordNote('Probe answered; the link is back in step');
-      // One probe can earn two prompts: the owed reply's late `>` and the
-      // probe's own, or `STOPPED` from a chip it interrupted and then `?` for
-      // the rest of the line. The drain took the first. Hold the next write
-      // for the adapter window so the second is discarded as leftover rather
-      // than read as that command's answer.
-      _armTrailingPromptHold();
+  }
+
+  /// Accounts for an answered probe, if one was outstanding: records it,
+  /// holds the next write, and says whether this was one answer too many.
+  ///
+  /// One probe can earn two prompts: the owed reply's late `>` and the
+  /// probe's own, or `STOPPED` from a chip it interrupted and then `?` for the
+  /// rest of the line. Whatever took the first, the next write waits out the
+  /// adapter window so the second is discarded as leftover rather than read
+  /// as that command's answer.
+  ///
+  /// [canDrop] is false where nothing could act on "too many" — a prompt
+  /// arriving with no command or resync waiting. That answer still counts,
+  /// so the next probe answered inside the window ends the session.
+  bool _accountProbeAnswer({bool canDrop = true}) {
+    if (!_probeOutstanding) return false;
+    _probeOutstanding = false;
+    final now = DateTime.now();
+    _probeAnswers
+      ..add(now)
+      ..removeWhere((t) => now.difference(t) > probeStormWindow);
+    if (canDrop && _probeAnswers.length >= maxProbeAnswersInWindow) {
+      transcript.recordNote(
+        'Probe answered $maxProbeAnswersInWindow times within '
+        '${probeStormWindow.inSeconds} s; the link is not carrying replies',
+      );
+      return true;
     }
+    transcript.recordNote('Probe answered; the link is back in step');
+    _armTrailingPromptHold();
+    return false;
+  }
+
+  /// Holds the watchdog off for at least [window] from now.
+  ///
+  /// On the watchdog's own clock. The watchdog compares against
+  /// `DateTime.now()`, so a grace computed from an injected clock could land
+  /// in its past, and only ever extends: a shorter grace must not cut a
+  /// longer one that is still owed.
+  void _extendResyncGrace(Duration window) {
+    final end = DateTime.now().add(window);
+    final open = _resyncGraceUntil;
+    if (open == null || open.isBefore(end)) _resyncGraceUntil = end;
   }
 
   /// How long to wait for the outstanding reply's prompt before giving up on
@@ -5836,6 +5930,9 @@ class Elm327Client {
 
   /// Raw bytes of the prompt `_resync` drained, or 0 if the window expired.
   int _resyncDrainedWireBytes = 0;
+
+  /// Exposed for tests: what the last resync charged to a transaction budget.
+  int get resyncDrainedWireBytesForTest => _resyncDrainedWireBytes;
 
   ElmFlowControlState get flowControlState => _flowControlState;
 

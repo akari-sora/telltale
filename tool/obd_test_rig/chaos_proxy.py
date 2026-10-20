@@ -421,23 +421,26 @@ class ChaosProxy:
                     break
                 self._command_seq += 1
                 command_seq = self._command_seq
-                self.logger.emit(
-                    "client_to_upstream",
-                    command,
-                    connection=connection,
-                    command=command_seq,
-                )
                 if command_seq == self.config.deaf_from_command:
                     deaf = True
                 if deaf:
+                    # Read and dropped, never forwarded: logged as the fault,
+                    # not as client_to_upstream.
                     self.logger.emit(
                         "fault",
+                        command,
                         fault="deaf",
                         connection=connection,
                         command=command_seq,
                         armed=False,
                     )
                     continue
+                self.logger.emit(
+                    "client_to_upstream",
+                    command,
+                    connection=connection,
+                    command=command_seq,
+                )
                 armed_fault = self._consume_armed_fault()
                 close_fault = (
                     command_seq == self.config.close_on_command

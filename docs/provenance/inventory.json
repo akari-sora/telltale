@@ -137,7 +137,7 @@
         "integrity_files": [
           {
             "path": "tool/obd_test_rig/chaos_proxy.py",
-            "sha256": "4f0e92787739a6cc01724b8defa29800dd5079a78d6c795cf9b8676fb41c31bb"
+            "sha256": "f832b1a13bbc4ffc9c8c98cc5583883688671fb5338c11020dfae7ac28e1e054"
           }
         ]
       },

@@ -4118,6 +4118,7 @@ class PollingEngine {
   void _markDirectlyAnswered(Pid pid) {
     _faults.remove(pid.id);
     _noDataStrikes.remove(pid.id);
+    _timeoutStrikes.remove(pid.id);
     _formulaStrikes.remove(pid.id);
     _retryAfter.remove(pid.id);
     if (_answeredAtLeastOnce.add(pid.id)) {
@@ -4316,13 +4317,27 @@ class PollingEngine {
       }
       _publish(epoch);
       return;
-    } on Object {
+    } on Object catch (error) {
       // Timeout or dropped link after the PID query may already be on the
       // wire. `wroteSinceAudit` is the same fact Mode 04 uses: ATSH/ATH1
       // can fail without the service bytes ever leaving, and a flush
       // timeout can happen after they have. Count only the latter.
       if (client.wroteSinceAudit(pollAudit, command)) {
         _noteMode01Packed(command);
+      }
+      if (error is TimeoutException && batch.length == 1) {
+        final id = batch.single.pid.id;
+        final strikes = (_timeoutStrikes[id] ?? 0) + 1;
+        _timeoutStrikes[id] = strikes;
+        if (strikes >= _timeoutStrikesBeforeRest) {
+          _timeoutStrikes.remove(id);
+          _invalidateSharedWire(
+            batch.single.pid,
+            PidFault.noAnswer,
+            retryAfter: DateTime.now().add(noAnswerBackoff),
+          );
+          _publish(epoch);
+        }
       }
       await Future<void>.delayed(const Duration(milliseconds: 200));
       return;
@@ -4490,6 +4505,17 @@ class PollingEngine {
 
   /// Consecutive `NO DATA` answers per PID, reset by any successful read.
   final Map<String, int> _noDataStrikes = {};
+
+  /// Consecutive reply timeouts per PID on single-PID reads.
+  ///
+  /// Since #112 a silent adapter is probed instead of dropped, so a PID the
+  /// adapter always swallows no longer ends the session: it costs a command
+  /// timeout plus the probe, every cycle. Two in a row rest it like
+  /// `NO DATA` does. One alone does not, because the #112 exports lost a
+  /// random reply every 40–140 s and that must not grey a working gauge.
+  final Map<String, int> _timeoutStrikes = {};
+
+  static const int _timeoutStrikesBeforeRest = 2;
 
   /// When a backed-off PID may be tried again.
   final Map<String, DateTime> _retryAfter = {};

@@ -8,6 +8,19 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+- When an ELM327 clone goes silent after a command — not even `NO DATA` —
+  the app now probes it with `ATI` before giving up, instead of waiting three
+  seconds and dropping the connection. Three user exports from two
+  ICSolution `ELM327 v1.5` adapters ended this way, and reconnecting by hand
+  always worked, so the adapter was still alive. A watchdog race that could
+  drop the link five seconds after the write, before any probe, is closed
+  too. The session log records whether the probe was answered. Three
+  answered probes within a minute still end the session, and a PID that is
+  swallowed twice in a row rests for a minute like `NO DATA`. (issue #112)
+- Tested by unit tests and a fault-injection rig (an ELM327 emulator behind
+  a proxy that swallows one reply). Not yet validated on a real vehicle or
+  adapter; no adapter or car compatibility is claimed.
+
 ## 1.0.23 — 2026-10-20
 
 - Reworked the ELM327 session pipeline for adapters that swallow the `>`

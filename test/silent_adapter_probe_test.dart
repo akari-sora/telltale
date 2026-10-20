@@ -50,6 +50,11 @@ class _QuietAdapter extends BaseObdTransport {
   final List<String> sent = [];
   bool stallWrites = false;
 
+  /// Takes the bytes and answers them, but the write Future never settles:
+  /// a Wi-Fi `socket.add` that went out followed by a `flush` that hangs.
+  bool stallAfterAccepting = false;
+  void Function(String command)? onWrite;
+
   void once(String command, List<(String, Duration)>? reply) =>
       (queued[command] ??= []).add(reply);
 
@@ -67,6 +72,9 @@ class _QuietAdapter extends BaseObdTransport {
 
   @override
   Future<void> write(List<int> data) async {
+    if (!isConnected) {
+      throw const WriteRefusedException('quiet adapter not connected');
+    }
     if (stallWrites) return Completer<void>().future;
     final key = ascii
         .decode(data, allowInvalid: true)
@@ -74,6 +82,7 @@ class _QuietAdapter extends BaseObdTransport {
         .toUpperCase()
         .replaceAll(' ', '');
     sent.add(key);
+    onWrite?.call(key);
     final pending = queued[key];
     final List<(String, Duration)>? reply;
     if (pending != null && pending.isNotEmpty) {
@@ -81,23 +90,30 @@ class _QuietAdapter extends BaseObdTransport {
     } else {
       reply = [(_handshake[key] ?? '?\r\r>', Duration.zero)];
     }
-    if (reply == null) return;
-    for (final (bytes, delay) in reply) {
-      if (delay == Duration.zero) {
-        scheduleMicrotask(() => emitBytes(ascii.encode(bytes)));
-      } else {
-        Timer(delay, () => emitBytes(ascii.encode(bytes)));
+    if (reply != null) {
+      for (final (bytes, delay) in reply) {
+        if (delay == Duration.zero) {
+          scheduleMicrotask(() => emitBytes(ascii.encode(bytes)));
+        } else {
+          Timer(delay, () => emitBytes(ascii.encode(bytes)));
+        }
       }
     }
+    if (stallAfterAccepting) return Completer<void>().future;
   }
 }
 
-Future<(Elm327Client, _QuietAdapter, List<int>)> _connected() async {
+Future<(Elm327Client, _QuietAdapter, List<int>)> _connected({
+  Duration writeTimeout = const Duration(seconds: 2),
+  Duration probeStormWindow = const Duration(seconds: 60),
+}) async {
   final transport = _QuietAdapter();
   final lost = <int>[];
   final client = Elm327Client(
     transport,
     commandTimeout: const Duration(milliseconds: 150),
+    writeTimeout: writeTimeout,
+    probeStormWindow: probeStormWindow,
   )..onConnectionLost = () => lost.add(1);
   expect(await client.connect(), isTrue);
   transport.sent.clear();
@@ -241,7 +257,7 @@ void main() {
       },
     );
 
-    test('a chip that answers only the probe is dropped after three tries',
+    test('a chip that answers only the probe is dropped on the third answer',
         () async {
       final (client, transport, lost) = await _connected();
       addTearDown(client.dispose);
@@ -258,28 +274,270 @@ void main() {
         );
         expect(lost, isEmpty);
       }
+      // The adapter answered the check; what stopped responding is
+      // everything sent through it. Not the "did not answer" sentence.
       await expectLater(
         client.send('0105'),
         throwsA(
-          isA<TransportException>().having(
-            (e) => e.issue,
-            'issue',
-            TransportIssue.adapterSilentOnResync,
-          ),
+          isA<TransportException>()
+              .having(
+                (e) => e.issue,
+                'issue',
+                TransportIssue.linkStoppedResponding,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                'The connection stopped responding.',
+              ),
         ),
       );
       await Future<void>.delayed(Duration.zero);
 
       expect(lost, [1]);
       expect(
-        _noted(client, 'Probe answered three times with no vehicle reply in between'),
+        _noted(
+          client,
+          'Probe answered 3 times within 60 s; the link is not carrying replies',
+        ),
         isTrue,
       );
     });
 
-    test('a probe write that never completes ends the wait without the drain',
+    test('replies in between do not reset the count inside the window',
         () async {
       final (client, transport, lost) = await _connected();
+      addTearDown(client.dispose);
+      // Answered reads between the stalls are not proof the link is fine:
+      // a chip that loses every other reply is still a frozen screen.
+      for (var i = 0; i < 3; i++) {
+        transport.once('011F', null);
+        await expectLater(
+          client.send('011F'),
+          throwsA(isA<TimeoutException>()),
+        );
+        if (i < 2) {
+          final ok = await client.send('0105');
+          expect(ok.hexPayload, '410564');
+        }
+      }
+      await expectLater(
+        client.send('0105'),
+        throwsA(
+          isA<TransportException>().having(
+            (e) => e.issue,
+            'issue',
+            TransportIssue.linkStoppedResponding,
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(lost, [1]);
+    });
+
+    test('stalls spread wider than the window keep the session', () async {
+      // The #112 exports stalled once every 40-140 s. Scaled down: each
+      // stall-and-recover takes over a second, so with a 1.5 s window no
+      // three answers ever share it, however many there are.
+      final (client, transport, lost) = await _connected(
+        probeStormWindow: const Duration(milliseconds: 1500),
+      );
+      addTearDown(client.dispose);
+      for (var i = 0; i < 4; i++) {
+        transport.once('011F', null);
+        await expectLater(
+          client.send('011F'),
+          throwsA(isA<TimeoutException>()),
+        );
+        final ok = await client.send('0105');
+        expect(ok.hexPayload, '410564');
+      }
+      expect(lost, isEmpty);
+      expect(client.isInitialized, isTrue);
+    });
+
+    test(
+      'a probe answered after its caller gave up still holds the next write',
+      () async {
+        final (client, transport, lost) = await _connected();
+        addTearDown(client.dispose);
+        // The caller's deadline ends after the probe is written but before
+        // it is answered. The answer (and a second prompt behind it) must
+        // still be treated as the probe's, not as the next command's reply.
+        transport
+          ..once('011F', null)
+          ..once('ATI', [
+            ('STOPPED\r\r>', const Duration(milliseconds: 150)),
+            ('?\r\r>', const Duration(milliseconds: 170)),
+          ])
+          ..once('010D', [('410D3C\r\r>', const Duration(milliseconds: 60))]);
+
+        await expectLater(
+          client.send('011F'),
+          throwsA(isA<TimeoutException>()),
+        );
+        await expectLater(
+          client.send(
+            '0105',
+            deadline: DateTime.now().add(const Duration(milliseconds: 1100)),
+          ),
+          throwsA(isA<TimeoutException>()),
+        );
+        expect(transport.sent.last, 'ATI');
+        final next = await client.send('010D');
+
+        expect(next.hexPayload, '410D3C');
+        expect(lost, isEmpty);
+      },
+    );
+
+    test('a stalled probe write drops the link even if a prompt arrived',
+        () async {
+      final (client, transport, lost) = await _connected(
+        writeTimeout: const Duration(milliseconds: 500),
+      );
+      addTearDown(client.dispose);
+      transport.once('011F', null);
+
+      await expectLater(client.send('011F'), throwsA(isA<TimeoutException>()));
+      // The probe goes out and is answered, but its write never completes.
+      // That prompt may be an older reply's; the probe's own answer may
+      // still be on its way. The stream cannot be called in step.
+      transport.stallAfterAccepting = true;
+      await expectLater(
+        client.send('0105'),
+        throwsA(
+          isA<TransportException>().having(
+            (e) => e.issue,
+            'issue',
+            TransportIssue.linkStoppedResponding,
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(transport.sent, ['011F', 'ATI']);
+      expect(lost, [1]);
+    });
+
+    test('a session retired during the hold sends nothing after it', () async {
+      final (client, transport, lost) = await _connected();
+      addTearDown(client.dispose);
+      var live = true;
+      client.mayTransmit = (_) => live;
+      // Caller gives up after the probe is written; its single prompt then
+      // arrives with nothing waiting and arms the hold.
+      transport
+        ..once('011F', null)
+        ..once('ATI', [('ELM327 v1.5\r\r>', const Duration(milliseconds: 150))]);
+
+      await expectLater(client.send('011F'), throwsA(isA<TimeoutException>()));
+      await expectLater(
+        client.send(
+          '0105',
+          deadline: DateTime.now().add(const Duration(milliseconds: 1100)),
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      transport.sent.clear();
+
+      final parked = client.send('010D');
+      // The app goes to the background while the write waits out the hold.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      live = false;
+
+      await expectLater(parked, throwsA(isA<OperationRetiredException>()));
+      expect(transport.sent, isNot(contains('010D')));
+    });
+
+    test('the probe answer is not charged to a transaction budget', () async {
+      final (client, transport, lost) = await _connected();
+      addTearDown(client.dispose);
+      // Flow-control and ISO-TP restores add drained bytes to a 256-byte
+      // budget that refuses, and then sticks, when exceeded. Nothing of the
+      // owed reply arrived here; the drained prompt is the probe's.
+      transport.once('011F', null);
+
+      await expectLater(client.send('011F'), throwsA(isA<TimeoutException>()));
+      await client.send('0105');
+
+      expect(transport.sent, contains('ATI'));
+      expect(client.resyncDrainedWireBytesForTest, 0);
+    });
+
+    test('a deadline that passes during the hold refuses before writing',
+        () async {
+      final (client, transport, lost) = await _connected();
+      addTearDown(client.dispose);
+      // Caller gives up after the probe is written; the probe's single
+      // prompt then arrives with nothing waiting and arms the hold.
+      transport
+        ..once('011F', null)
+        ..once('ATI', [('ELM327 v1.5\r\r>', const Duration(milliseconds: 150))]);
+
+      await expectLater(client.send('011F'), throwsA(isA<TimeoutException>()));
+      await expectLater(
+        client.send(
+          '0105',
+          deadline: DateTime.now().add(const Duration(milliseconds: 1100)),
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      transport.sent.clear();
+
+      await expectLater(
+        client.send(
+          '010D',
+          deadline: DateTime.now().add(const Duration(milliseconds: 100)),
+        ),
+        throwsA(
+          isA<TimeoutException>().having(
+            (e) => e.message,
+            'message',
+            contains('was not sent'),
+          ),
+        ),
+      );
+      expect(transport.sent, isNot(contains('010D')));
+      expect(lost, isEmpty);
+    });
+
+    test('a disconnect during the post-probe hold does not strand a send',
+        () async {
+      final (client, transport, lost) = await _connected();
+      addTearDown(client.dispose);
+      transport
+        ..once('011F', null)
+        ..onWrite = (command) {
+          if (command != 'ATI') return;
+          // After the probe's answer arrives and the hold is armed, before
+          // the hold's own timer would release it.
+          Timer(const Duration(milliseconds: 100), () {
+            transport.disconnect();
+          });
+        };
+
+      await expectLater(client.send('011F'), throwsA(isA<TimeoutException>()));
+      final outcome = await client
+          .send('0105')
+          .then((_) => 'answered', onError: (Object _) => 'failed')
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => 'stranded',
+          );
+
+      expect(outcome, isNot('stranded'));
+    });
+
+    test('a probe write that never completes ends the wait without the drain',
+        () async {
+      // Short enough that the drain would still have time left after it:
+      // listen 1 s, write gives up at 1.5 s, the window runs to 3 s.
+      final (client, transport, lost) = await _connected(
+        writeTimeout: const Duration(milliseconds: 500),
+      );
       addTearDown(client.dispose);
       transport.once('011F', null);
 
@@ -293,7 +551,7 @@ void main() {
           isA<TransportException>().having(
             (e) => e.issue,
             'issue',
-            TransportIssue.adapterSilentOnResync,
+            TransportIssue.linkStoppedResponding,
           ),
         ),
       );
@@ -305,8 +563,8 @@ void main() {
         _noted(client, 'Probe write did not complete; the link is not taking bytes'),
         isTrue,
       );
-      // The write's own two-second limit, not that plus the three-second drain.
-      expect(watch.elapsed, lessThan(Elm327Client.resyncTimeout + client.writeTimeout));
+      // Listen plus the write's own limit, not the rest of the window.
+      expect(watch.elapsed, lessThan(const Duration(milliseconds: 2500)));
     });
   });
 }
