@@ -4141,6 +4141,10 @@
   "performanceNoAnalysisBody": "This run stopped before enough speed samples were recorded to build a trace or split result.",
   "@performanceNoAnalysisBody": {
     "description": "Body in secondary pane explaining why no speed trace or splits are shown after an aborted run."
+  },
+  "connectActivityReconnectingAutomatically": "The adapter stopped answering. Reconnecting automatically…",
+  "@connectActivityReconnectingAutomatically": {
+    "description": "ObdConnectionActivity.reconnectingAutomatically. The link dropped after the adapter stopped answering and the app is trying the same adapter once more without being asked; says why a connection started by itself."
   }
 }
 

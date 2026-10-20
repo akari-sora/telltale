@@ -1279,6 +1279,7 @@
   "performanceGuideStep4": "4. 到達目標車速後即完成本次計時",
   "performanceRecordingTrace": "加速中... 正在記錄速度點位",
   "performanceNoAnalysisTitle": "沒有足夠的分析資料",
-  "performanceNoAnalysisBody": "本次計時在取得足夠的車速樣本前已中止，因此無法產生速度軌跡或分段成績。"
+  "performanceNoAnalysisBody": "本次計時在取得足夠的車速樣本前已中止，因此無法產生速度軌跡或分段成績。",
+  "connectActivityReconnectingAutomatically": "轉接器停止回應，正在自動重新連線…"
 }
 
