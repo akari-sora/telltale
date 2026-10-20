@@ -37,7 +37,16 @@ Choose at most one fault option for the entire proxy run:
 --close-on-command N       close before forwarding command N
 --no-prompt-on-command N   forward reply N without its final `>`
 --corrupt-on-command N     flip one deterministic payload bit in reply N
+--swallow-reply-on-command N
+                           forward command N, discard its whole reply, and
+                           answer the client's next line normally
+--deaf-from-command N      from command N on, read but never forward or answer
+                           on this connection; a reconnect is served normally
 ```
+
+`--swallow-reply-on-command` is the shape three ICSolution `ELM327 v1.5`
+exports ended in: a command written, no byte back, the chip still alive.
+`--deaf-from-command` is the dead-socket shape that only a reconnect clears.
 
 For a device recording fault, replace the numbered option with:
 
