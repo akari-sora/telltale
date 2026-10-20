@@ -32,6 +32,13 @@ AUTHORIZED_OBD_EXACT_FILES = {
     # contract review instead of inheriting a permanent path exception.
     "lib/obd/telemetry_demand.dart":
         "41f3f4571919e93238c4528b7625a1ada903b2f83a30e4b6feb86c24087e47ac",
+    # #110 ELM session pipeline. Profile timings/caps and the live Mode 01
+    # grouping limit on PriorityScheduler. Content-bound for the same reason:
+    # this MR reviews the exact blobs; later edits need a new contract pass.
+    "lib/obd/elm_session_profile.dart":
+        "f1ec66c9bdbde0e4ef553db9819a51fecbae9a3cab0667b13b5377867a22cc9b",
+    "lib/obd/pid/priority_scheduler.dart":
+        "55ba52dc5ebd4aa910225e3e25f5195d0dda75ca00edf9494be6953456f5016d",
 }
 
 
