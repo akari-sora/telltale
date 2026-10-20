@@ -10,6 +10,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
+import 'package:torque_obd/obd/pid/pid.dart';
 import 'package:torque_obd/obd/pid/pid_library.dart';
 import 'package:torque_obd/obd/polling_engine.dart';
 import 'package:torque_obd/obd/telemetry.dart';
@@ -29,12 +30,15 @@ FakeElm327 _adapter() => FakeElm327(
         '0100': [0x41, 0x00, 0xBE, 0x3F, 0xA8, 0x13],
         '010C': [0x41, 0x0C, 0x1A, 0xF8],
         '010D': [0x41, 0x0D, 0x3C],
+        '0105': [0x41, 0x05, 0x64],
       },
     ),
   ],
 );
 
-Future<(PollingEngine, FakeElm327, List<int>)> _polling() async {
+Future<(PollingEngine, FakeElm327, List<int>)> _polling({
+  List<Pid> pids = const [PidLibrary.engineRpm, PidLibrary.vehicleSpeed],
+}) async {
   final transport = _adapter();
   final lost = <int>[];
   final client = Elm327Client(
@@ -45,10 +49,7 @@ Future<(PollingEngine, FakeElm327, List<int>)> _polling() async {
   expect(await client.connect(), isTrue);
   final engine = PollingEngine(client)
     ..recheckInterval = const Duration(minutes: 5)
-    ..setActivePids(
-      const [PidLibrary.engineRpm, PidLibrary.vehicleSpeed],
-      includeProfileDerivedInputs: false,
-    );
+    ..setActivePids(pids, includeProfileDerivedInputs: false);
   addTearDown(engine.dispose);
   return (engine, transport, lost);
 }
@@ -111,6 +112,47 @@ void main() {
     expect(
       engine.current.faults[PidLibrary.vehicleSpeed.id],
       isNot(PidFault.noAnswer),
+    );
+    expect(lost, isEmpty);
+  });
+
+  test('two PIDs that are always swallowed both rest; the session lives',
+      () async {
+    // Review round 2: with a time window, two always-silent PIDs filled it
+    // before either rested and the session dropped on every reconnect.
+    final (engine, transport, lost) = await _polling(
+      pids: const [
+        PidLibrary.engineRpm,
+        PidLibrary.vehicleSpeed,
+        PidLibrary.coolantTemp,
+      ],
+    );
+    transport.silenceFor.addAll({'010D', '0105'});
+    engine.start();
+
+    await _until(
+      () =>
+          engine.current.faults[PidLibrary.vehicleSpeed.id] ==
+              PidFault.noAnswer &&
+          engine.current.faults[PidLibrary.coolantTemp.id] ==
+              PidFault.noAnswer,
+      const Duration(seconds: 15),
+    );
+    final restedAt = transport.commandLog.length;
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    await engine.stop();
+
+    expect(
+      engine.current.faults[PidLibrary.vehicleSpeed.id],
+      PidFault.noAnswer,
+    );
+    expect(
+      engine.current.faults[PidLibrary.coolantTemp.id],
+      PidFault.noAnswer,
+    );
+    expect(
+      transport.commandLog.skip(restedAt).where((c) => c == '010C'),
+      isNotEmpty,
     );
     expect(lost, isEmpty);
   });

@@ -108,7 +108,6 @@ class _QuietAdapter extends BaseObdTransport {
 
 Future<(Elm327Client, _QuietAdapter, List<int>)> _connected({
   Duration writeTimeout = const Duration(seconds: 2),
-  Duration probeStormWindow = const Duration(seconds: 60),
 }) async {
   final transport = _QuietAdapter();
   final lost = <int>[];
@@ -116,7 +115,6 @@ Future<(Elm327Client, _QuietAdapter, List<int>)> _connected({
     transport,
     commandTimeout: const Duration(milliseconds: 150),
     writeTimeout: writeTimeout,
-    probeStormWindow: probeStormWindow,
   )..onConnectionLost = () => lost.add(1);
   expect(await client.connect(), isTrue);
   transport.sent.clear();
@@ -301,52 +299,20 @@ void main() {
       expect(
         _noted(
           client,
-          'Probe answered 3 times within 60 s; the link is not carrying replies',
+          'Probe answered 3 times with no reply to any command in between; '
+          'the link is not carrying replies',
         ),
         isTrue,
       );
     });
 
-    test('replies in between do not reset the count inside the window',
-        () async {
+    test('stalls with a reply between them keep the session', () async {
+      // The #112 exports: a random reply lost every 40-140 s, ordinary
+      // replies in between. Each stall is recovered, and the reply after it
+      // shows the link is carrying replies, so the count starts again.
       final (client, transport, lost) = await _connected();
       addTearDown(client.dispose);
-      // Answered reads between the stalls are not proof the link is fine:
-      // a chip that loses every other reply is still a frozen screen.
-      for (var i = 0; i < 3; i++) {
-        transport.once('011F', null);
-        await expectLater(
-          client.send('011F'),
-          throwsA(isA<TimeoutException>()),
-        );
-        if (i < 2) {
-          final ok = await client.send('0105');
-          expect(ok.hexPayload, '410564');
-        }
-      }
-      await expectLater(
-        client.send('0105'),
-        throwsA(
-          isA<TransportException>().having(
-            (e) => e.issue,
-            'issue',
-            TransportIssue.linkStoppedResponding,
-          ),
-        ),
-      );
-      await Future<void>.delayed(Duration.zero);
-      expect(lost, [1]);
-    });
-
-    test('stalls spread wider than the window keep the session', () async {
-      // The #112 exports stalled once every 40-140 s. Scaled down: each
-      // stall-and-recover takes over a second, so with a 1.5 s window no
-      // three answers ever share it, however many there are.
-      final (client, transport, lost) = await _connected(
-        probeStormWindow: const Duration(milliseconds: 1500),
-      );
-      addTearDown(client.dispose);
-      for (var i = 0; i < 4; i++) {
+      for (var i = 0; i < 5; i++) {
         transport.once('011F', null);
         await expectLater(
           client.send('011F'),
@@ -413,7 +379,7 @@ void main() {
           isA<TransportException>().having(
             (e) => e.issue,
             'issue',
-            TransportIssue.linkStoppedResponding,
+            TransportIssue.writeFailed,
           ),
         ),
       );
@@ -620,7 +586,7 @@ void main() {
           isA<TransportException>().having(
             (e) => e.issue,
             'issue',
-            TransportIssue.linkStoppedResponding,
+            TransportIssue.writeFailed,
           ),
         ),
       );

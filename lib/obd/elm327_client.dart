@@ -507,7 +507,6 @@ class Elm327Client {
     this.responsePendingTimeout = const Duration(seconds: 7),
     this.commandTimeout = const Duration(seconds: 5),
     this.writeTimeout = const Duration(seconds: 2),
-    this.probeStormWindow = const Duration(seconds: 60),
     DateTime Function()? clock,
     Duration Function()? elapsed,
     Duration Function()? agingElapsed,
@@ -520,12 +519,6 @@ class Elm327Client {
   final ObdTransport transport;
   final Duration watchdogTimeout;
   final Duration commandTimeout;
-
-  /// How far back answered probes count towards ending the session.
-  ///
-  /// The #112 exports stalled once every 40–140 s; a link that needs a probe
-  /// three times inside a minute is not carrying replies.
-  final Duration probeStormWindow;
   final DateTime Function() _clock;
   final Duration Function()? _elapsedOverride;
   final Duration Function()? _agingElapsedOverride;
@@ -668,17 +661,20 @@ class Elm327Client {
   /// budget is about.
   int _wireBytesBeforeProbe = 0;
 
-  /// When each answered probe arrived, inside [probeStormWindow].
+  /// Answered probes since any command last completed.
   ///
-  /// A chip that answers `ATI` but keeps going silent on what it is asked is
-  /// not a link worth keeping: recovering forever is a frozen screen that
-  /// says connected. Counting by time rather than "since the last reply"
-  /// keeps a session alive that only sends `ATRV` now and then, and still
-  /// ends one where a reply in between does not change the picture.
-  final List<DateTime> _probeAnswers = [];
+  /// A chip that answers `ATI` while every command sent through it goes
+  /// silent is not a link worth keeping: recovering forever is a frozen
+  /// screen that says connected. Any completed reply resets it, `NO DATA`
+  /// and `ATRV` included: the link is carrying replies then. A PID the
+  /// adapter always swallows between working ones never reaches the limit;
+  /// polling rests that PID instead. A time window could not tell those two
+  /// apart: two always-silent PIDs alone filled it before either rested.
+  int _probeAnswersSinceReply = 0;
 
-  /// Answered probes inside [probeStormWindow] that end the session.
-  static const int maxProbeAnswersInWindow = 3;
+  /// Answered probes in a row, with no command completing between them,
+  /// that end the session.
+  static const int maxProbeAnswersWithoutReply = 3;
 
   /// Silence that already existed when the current reply budget was armed.
   ///
@@ -931,7 +927,7 @@ class Elm327Client {
     lastResponderCount = 0;
     promptlessCompleteCount = 0;
     _probeOutstanding = false;
-    _probeAnswers.clear();
+    _probeAnswersSinceReply = 0;
     _strayPromptExpected = false;
     _resyncActiveProbe = false;
     _quietCompleteTimer?.cancel();
@@ -1406,6 +1402,7 @@ class Elm327Client {
   }
 
   void _completePending(ObdResponse response) {
+    _probeAnswersSinceReply = 0;
     // Any reply carrying a voltage refreshes the cached figure, so a periodic
     // ATRV keeps the status pill live rather than pinned to the handshake.
     final volts = response.batteryVoltage;
@@ -2291,10 +2288,18 @@ class Elm327Client {
       _watchdog?.cancel();
       _watchdog = null;
       scheduleMicrotask(() => onConnectionLost?.call());
-      if (probesExhausted || probeWriteStalled) {
-        // The adapter answered the check three times, or the link would not
-        // take the check at all. Either way it is not "the adapter did not
-        // answer": what stopped responding is the connection.
+      if (probeWriteStalled) {
+        // The check itself could not be handed over. Not "the adapter did
+        // not answer": how much of it reached the adapter is not known.
+        throw const TransportException(
+          'The probe could not be handed to the connection, so the '
+          'connection was dropped.',
+          issue: TransportIssue.writeFailed,
+        );
+      }
+      if (probesExhausted) {
+        // The adapter answered the check three times; the commands between
+        // met silence. Not "the adapter did not answer the check".
         throw const TransportException(
           'The connection stopped responding.',
           issue: TransportIssue.linkStoppedResponding,
@@ -2324,18 +2329,16 @@ class Elm327Client {
   ///
   /// [canDrop] is false where nothing could act on "too many" — a prompt
   /// arriving with no command or resync waiting. That answer still counts,
-  /// so the next probe answered inside the window ends the session.
+  /// so the next answered probe with no reply in between ends the session.
   bool _accountProbeAnswer({bool canDrop = true}) {
     if (!_probeOutstanding) return false;
     _probeOutstanding = false;
-    final now = DateTime.now();
-    _probeAnswers
-      ..add(now)
-      ..removeWhere((t) => now.difference(t) > probeStormWindow);
-    if (canDrop && _probeAnswers.length >= maxProbeAnswersInWindow) {
+    _probeAnswersSinceReply++;
+    if (canDrop &&
+        _probeAnswersSinceReply >= maxProbeAnswersWithoutReply) {
       transcript.recordNote(
-        'Probe answered $maxProbeAnswersInWindow times within '
-        '${probeStormWindow.inSeconds} s; the link is not carrying replies',
+        'Probe answered $maxProbeAnswersWithoutReply times with no reply to '
+        'any command in between; the link is not carrying replies',
       );
       return true;
     }
