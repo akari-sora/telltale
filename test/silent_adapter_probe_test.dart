@@ -206,6 +206,77 @@ void main() {
       expect(_noted(client, 'Probe got no answer'), isTrue);
     });
 
+    test(
+      'a watchdog tick before the next command does not drop the link first',
+      () async {
+        // Found on the rig, not in these unit tests: the command timer clears
+        // the pending reply, and before the next command's resync starts the
+        // watchdog ticks, measures silence since the last byte, and drops the
+        // session. The probe never runs. Both 1.0.21 exports ended exactly
+        // five seconds after the write, which is this path.
+        final transport = _QuietAdapter();
+        final lost = <int>[];
+        final client = Elm327Client(
+          transport,
+          commandTimeout: const Duration(milliseconds: 300),
+          watchdogTimeout: const Duration(milliseconds: 300),
+        )..onConnectionLost = () => lost.add(1);
+        addTearDown(client.dispose);
+        expect(await client.connect(), isTrue);
+        transport.once('011F', null);
+
+        await expectLater(
+          client.send('011F'),
+          throwsA(isA<TimeoutException>()),
+        );
+        // Longer than one watchdog tick: the poll loop's next command is
+        // not always immediate.
+        await Future<void>.delayed(const Duration(milliseconds: 1300));
+        expect(lost, isEmpty);
+        final next = await client.send('0105');
+
+        expect(next.hexPayload, '410564');
+        expect(lost, isEmpty);
+        expect(client.isInitialized, isTrue);
+      },
+    );
+
+    test('a chip that answers only the probe is dropped after three tries',
+        () async {
+      final (client, transport, lost) = await _connected();
+      addTearDown(client.dispose);
+      // ATI keeps answering, every OBD read stays silent. Recovering forever
+      // would be a connected screen with nothing on it.
+      for (var i = 0; i < 4; i++) {
+        transport.once('0105', null);
+      }
+
+      for (var i = 0; i < 3; i++) {
+        await expectLater(
+          client.send('0105'),
+          throwsA(isA<TimeoutException>()),
+        );
+        expect(lost, isEmpty);
+      }
+      await expectLater(
+        client.send('0105'),
+        throwsA(
+          isA<TransportException>().having(
+            (e) => e.issue,
+            'issue',
+            TransportIssue.adapterSilentOnResync,
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(lost, [1]);
+      expect(
+        _noted(client, 'Probe answered three times with no vehicle reply in between'),
+        isTrue,
+      );
+    });
+
     test('a probe write that never completes ends the wait without the drain',
         () async {
       final (client, transport, lost) = await _connected();

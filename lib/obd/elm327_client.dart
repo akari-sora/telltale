@@ -646,6 +646,16 @@ class Elm327Client {
   /// could not show.
   bool _resyncProbeAfterSilence = false;
 
+  /// Answered probes since the last reply to a vehicle command.
+  ///
+  /// A chip that answers `ATI` but never an OBD read is not a link worth
+  /// keeping: recovering forever is a connected screen with nothing on it.
+  int _probeAnswersWithoutVehicleReply = 0;
+
+  /// How many answered probes in a row, with no vehicle reply between them,
+  /// end the session anyway.
+  static const int maxProbeAnswersWithoutVehicleReply = 3;
+
   /// Silence that already existed when the current reply budget was armed.
   ///
   /// The budget starts only after the write is accepted. A stall in that gap
@@ -896,6 +906,7 @@ class Elm327Client {
     _headersOn = false;
     lastResponderCount = 0;
     promptlessCompleteCount = 0;
+    _probeAnswersWithoutVehicleReply = 0;
     _strayPromptExpected = false;
     _resyncActiveProbe = false;
     _quietCompleteTimer?.cancel();
@@ -1359,6 +1370,10 @@ class Elm327Client {
   }
 
   void _completePending(ObdResponse response) {
+    final answered = _pendingCommand?.trim().toUpperCase();
+    if (answered != null && !answered.startsWith('AT')) {
+      _probeAnswersWithoutVehicleReply = 0;
+    }
     // Any reply carrying a voltage refreshes the cached figure, so a periodic
     // ATRV keeps the status pill live rather than pinned to the handshake.
     final volts = response.batteryVoltage;
@@ -1970,6 +1985,15 @@ class Elm327Client {
     _resyncProbeAfterSilence = _buffer.isEmpty;
     _resyncActiveProbe = true;
     _outOfSync = true;
+    // Hold the watchdog until the next command's resync has had its window.
+    // Between this timer and that resync the watchdog measured silence since
+    // the last byte, found more than five seconds, and dropped the session
+    // with the probe never sent. Both 1.0.21 exports ended exactly so.
+    final graceEnd = DateTime.now().add(resyncTimeout);
+    final openGrace = _resyncGraceUntil;
+    if (openGrace == null || openGrace.isBefore(graceEnd)) {
+      _resyncGraceUntil = graceEnd;
+    }
     _failPending(
       TimeoutException('Timed out waiting for a reply', commandTimeout),
     );
@@ -2157,8 +2181,19 @@ class Elm327Client {
         'finished synchronising. Try again.',
       );
     }
-    if (!sawPrompt) {
-      if (probed && !probeNeverTaken) {
+    var probesExhausted = false;
+    if (sawPrompt && probed) {
+      _probeAnswersWithoutVehicleReply++;
+      if (_probeAnswersWithoutVehicleReply >=
+          maxProbeAnswersWithoutVehicleReply) {
+        transcript.recordNote(
+          'Probe answered three times with no vehicle reply in between',
+        );
+        probesExhausted = true;
+      }
+    }
+    if (!sawPrompt || probesExhausted) {
+      if (probed && !probeNeverTaken && !sawPrompt) {
         transcript.recordNote('Probe got no answer');
       }
       // Clearing the flag here — which is what this method used to do
