@@ -178,6 +178,9 @@ void main() {
             )
             ..onConnectionLost = () {
               causes.add(client.connectionLossCause);
+              // The record as the first loss saw it: a second callback would
+              // carry the resync's note in and hide a first one without it.
+              if (causes.length > 1) return;
               notesAtLoss.addAll(
                 client.transcript.entries
                     .map((e) => e.note)
@@ -197,8 +200,9 @@ void main() {
       await client.send('010C').then<void>((_) {}, onError: (_) {});
       await pumpEventQueue();
 
-      expect(causes, [ConnectionLossCause.adapterSilent]);
+      // The outcome first: it is what the record is for.
       expect(notesAtLoss, contains('Probe got no answer'));
+      expect(causes, [ConnectionLossCause.adapterSilent]);
     },
     timeout: const Timeout(Duration(seconds: 20)),
   );
