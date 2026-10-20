@@ -12,6 +12,7 @@
 /// recovery suite.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -37,6 +38,17 @@ const _headeredBatchWithPrompt =
     '7E8220158AAAAAAAAAA\r'
     '7E9100A410C0B5C0D00\r'
     '7E92104201125AAAAAA';
+
+FakeEcu _secondEcu() => FakeEcu(
+      name: 'TCM',
+      requestId: '7E1',
+      responseId: '7E9',
+      responses: {
+        '0100': [0x41, 0x00, 0x98, 0x18, 0x80, 0x11],
+        '010C': [0x41, 0x0C, 0x0B, 0x5C],
+        '010D': [0x41, 0x0D, 0x00],
+      },
+    );
 
 FakeEcu _singleEcm() => FakeEcu(
       name: 'ECM',
@@ -379,6 +391,92 @@ void main() {
       expect(rendered, contains('ATZ'));
       expect(rendered, contains('ELM327 v2.1'));
       expect(client.transcript.entries, isNotEmpty);
+    });
+  });
+
+  group('data then prompt 200-450ms later', () {
+    Future<void> expectWaitsForLatePrompt({
+      required FakeElm327 transport,
+      required bool headersOn,
+    }) async {
+      final client = Elm327Client(
+        transport,
+        commandTimeout: const Duration(seconds: 2),
+      );
+      addTearDown(client.dispose);
+      expect(await client.connect(), isTrue);
+      if (headersOn) {
+        expect((await client.send('ATH1')).isSuccess, isTrue);
+      }
+      transport.promptDelay = const Duration(milliseconds: 350);
+      transport.commandLog.clear();
+      final pending = client.send('010C');
+      var finished = false;
+      unawaited(pending.then((_) => finished = true));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(
+        finished,
+        isFalse,
+        reason:
+            'data without `>` is not a reply until the adapter window closes',
+      );
+      expect(transport.commandLog.contains('010D'), isFalse);
+      final rpm = await pending;
+      expect(rpm.isSuccess, isTrue);
+      expect(rpm.bytes.take(2).toList(), [0x41, 0x0C]);
+      expect(rpm.errorCode, Elm327ErrorCode.none);
+      expect(client.promptlessCompleteCount, 0);
+      final next = await client.send('010D');
+      expect(next.isSuccess, isTrue);
+      expect(transport.emitted.join('\n'), isNot(contains('STOPPED')));
+    }
+
+    test('genuine adapter, single ECU, headers off', () async {
+      await expectWaitsForLatePrompt(
+        transport: FakeElm327(
+          protocol: BusProtocol.can11,
+          identity: 'ELM327 v2.1',
+          deviceDescription: 'ELM327 v2.1',
+          ecus: [_singleEcm()],
+        ),
+        headersOn: false,
+      );
+    });
+
+    test('genuine adapter, single ECU, headers on', () async {
+      await expectWaitsForLatePrompt(
+        transport: FakeElm327(
+          protocol: BusProtocol.can11,
+          identity: 'ELM327 v2.1',
+          deviceDescription: 'ELM327 v2.1',
+          ecus: [_singleEcm()],
+        ),
+        headersOn: true,
+      );
+    });
+
+    test('two ECUs, headers on', () async {
+      await expectWaitsForLatePrompt(
+        transport: FakeElm327(
+          protocol: BusProtocol.can11,
+          identity: 'ELM327 v2.1',
+          deviceDescription: 'ELM327 v2.1',
+          ecus: [_singleEcm(), _secondEcu()],
+        ),
+        headersOn: true,
+      );
+    });
+
+    test('two ECUs, headers off', () async {
+      await expectWaitsForLatePrompt(
+        transport: FakeElm327(
+          protocol: BusProtocol.can11,
+          identity: 'ELM327 v2.1',
+          deviceDescription: 'ELM327 v2.1',
+          ecus: [_singleEcm(), _secondEcu()],
+        ),
+        headersOn: false,
+      );
     });
   });
 }

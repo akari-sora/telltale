@@ -329,7 +329,7 @@ void main() {
     // 4. 丟失 Prompt / 超時假死與再同步 (Lost Prompt, Timeout & Resync Recovery)
     // -------------------------------------------------------------------------
     group('4. 丟失 Prompt / 超時假死與再同步 (Lost Prompt & Timeout Recovery)', () {
-      test('lost prompt on a complete OBD line quiet-completes', () async {
+      test('lost prompt on a complete OBD line completes at command timeout', () async {
         final transport = ChaosStreamTransport();
         final client = Elm327Client(
           transport,
@@ -345,10 +345,19 @@ void main() {
           }
         };
 
-        final response = await client.send(
+        final pending = client.send(
           '010C',
           timeout: const Duration(milliseconds: 300),
         );
+        var finished = false;
+        unawaited(pending.then((_) => finished = true, onError: (_) => finished = true));
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        expect(
+          finished,
+          isFalse,
+          reason: 'first missing prompt waits for command timeout, not a 100ms quiet window',
+        );
+        final response = await pending;
         expect(response.isSuccess, isTrue);
         expect(response.bytes, [0x41, 0x0C, 0x1A, 0xF8]);
         expect(client.promptlessCompleteCount, greaterThanOrEqualTo(1));

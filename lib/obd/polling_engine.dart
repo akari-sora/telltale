@@ -4158,8 +4158,8 @@ class PollingEngine {
       promptlessCompletes: client.promptlessCompleteCount,
     );
     if (client.promptlessCompleteCount > 0 &&
-        scheduler.interCommandDelay < const Duration(milliseconds: 100)) {
-      scheduler.interCommandDelay = const Duration(milliseconds: 100);
+        scheduler.interCommandDelay < ElmSessionProfile.adapterResponseWindow) {
+      scheduler.interCommandDelay = ElmSessionProfile.adapterResponseWindow;
     }
   }
 

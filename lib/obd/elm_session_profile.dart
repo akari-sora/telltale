@@ -8,13 +8,23 @@ import 'pid/priority_scheduler.dart';
 
 /// Timing and batch-size policy for one connected ELM session.
 abstract final class ElmSessionProfile {
-  /// How long an OBD buffer may sit without new bytes or a `>` before the
-  /// client will complete it, if the parser already has a conclusive reply.
-  static const Duration quietCompleteTimeout = Duration(milliseconds: 100);
+  /// Adapter response window after the last bus frame.
+  ///
+  /// `ATST66` is 0x66 × 4 ms = 408 ms. The #110 log shows data then `>`
+  /// ~412–423 ms later on healthy replies (3192→3615, 3750→4169,
+  /// 1673→2085). Completing inside this window and writing again aborts
+  /// the adapter with `STOPPED`.
+  static const Duration adapterResponseWindow = Duration(milliseconds: 450);
 
-  /// Pause after a promptless complete so a late empty `>` is discarded
-  /// instead of closing the next command.
-  static const Duration promptlessWriteHold = Duration(milliseconds: 120);
+  /// Idle time before a promptless OBD buffer may complete, used only after
+  /// this session has already seen a missing prompt. Longer than
+  /// [adapterResponseWindow] so a healthy late `>` still wins.
+  static const Duration quietCompleteTimeout = Duration(milliseconds: 550);
+
+  /// Cap on how long a promptless complete holds the next write waiting for
+  /// a late `>`. The live wait is the remainder of [adapterResponseWindow]
+  /// after the last received byte; this is that window's length.
+  static const Duration promptlessWriteHold = adapterResponseWindow;
 
   /// Adaptive Mode 01 batch size for this session.
   ///

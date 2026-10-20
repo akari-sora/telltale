@@ -108,7 +108,7 @@ void main() {
         third.isSuccess,
         isTrue,
         reason:
-            'complete ISO-TP without `>` must quiet-complete, not drop. '
+            'complete ISO-TP without `>` must complete at timeout, not drop. '
             'error=${third.errorCode} lines=${third.rawLines}',
       );
       expect(client.promptlessCompleteCount, greaterThanOrEqualTo(1));
@@ -160,11 +160,11 @@ void main() {
       expect(rpm.bytes.take(3).toList(), [0x41, 0x0C, 0x0B]);
     });
 
-    test('quiet-complete waits for a second ECU that already spoke', () async {
+    test('headers off: a late second-ECU line joins before complete', () async {
       final transport = _issue110Adapter();
       final client = Elm327Client(
         transport,
-        commandTimeout: const Duration(milliseconds: 800),
+        commandTimeout: const Duration(milliseconds: 900),
       );
       addTearDown(client.dispose);
       expect(await client.connect(), isTrue);
@@ -174,12 +174,89 @@ void main() {
       expect(primed.frames.map((f) => f.sourceId).toSet(), {'7E8', '7E9'});
       expect(client.lastResponderCount, greaterThanOrEqualTo(2));
 
+      transport.omitPromptFor.add('010D');
+      transport.forceReplySequence('010D', ['7E803410D00\r7E903410D00']);
+      final firstMissing = await client.send(
+        '010D',
+        timeout: const Duration(milliseconds: 220),
+      );
+      expect(firstMissing.isSuccess, isTrue);
+      expect(client.promptlessCompleteCount, greaterThanOrEqualTo(1));
+      transport.omitPromptFor.remove('010D');
+      await client.send('ATH0');
+
+      transport.omitPromptFor.add('010C');
+      transport.forceReplySequence('010C', ['410C0B56']);
+      final pending = client.send('010C');
+      var finished = false;
+      unawaited(pending.then((_) => finished = true));
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(
+        finished,
+        isFalse,
+        reason: 'one unheadered line is not enough while a second ECU is owed',
+      );
+      transport.emitBytes(ascii.encode('410C0B5C\r>'));
+      final joined = await pending;
+      expect(joined.isSuccess, isTrue);
+    });
+
+    test('STOPPED after a promptless close is not the next command', () async {
+      final transport = _issue110Adapter();
+      final client = Elm327Client(
+        transport,
+        commandTimeout: const Duration(milliseconds: 300),
+      );
+      addTearDown(client.dispose);
+      expect(await client.connect(), isTrue);
+      await client.send('ATH1');
+      transport.omitPromptFor.add('010C');
+      transport.forceReplySequence('010C', ['7E804410C0B56']);
+      final first = await client.send('010C');
+      expect(first.isSuccess, isTrue);
+      expect(client.promptlessCompleteCount, greaterThanOrEqualTo(1));
+
+      unawaited(
+        Future<void>.delayed(const Duration(milliseconds: 20), () {
+          transport.emitBytes(ascii.encode('STOPPED\r>'));
+        }),
+      );
+      final rpm = await client.sendAddressed('7DF', '010D');
+      expect(rpm.errorCode, isNot(Elm327ErrorCode.stopped));
+      expect(rpm.isSuccess, isTrue);
+      expect(rpm.bytes.take(2).toList(), [0x41, 0x0D]);
+    });
+
+    test('quiet-complete waits for a second ECU that already spoke', () async {
+      final transport = _issue110Adapter();
+      final client = Elm327Client(
+        transport,
+        commandTimeout: const Duration(milliseconds: 900),
+      );
+      addTearDown(client.dispose);
+      expect(await client.connect(), isTrue);
+      await client.send('ATH1');
+      transport.forceReplySequence('010C', ['7E804410C0B56\r7E904410C0B5C']);
+      final primed = await client.send('010C');
+      expect(primed.frames.map((f) => f.sourceId).toSet(), {'7E8', '7E9'});
+      expect(client.lastResponderCount, greaterThanOrEqualTo(2));
+
+      transport.omitPromptFor.add('010D');
+      transport.forceReplySequence('010D', ['7E803410D00\r7E903410D00']);
+      final firstMissing = await client.send(
+        '010D',
+        timeout: const Duration(milliseconds: 220),
+      );
+      expect(firstMissing.isSuccess, isTrue);
+      expect(client.promptlessCompleteCount, greaterThanOrEqualTo(1));
+      transport.omitPromptFor.remove('010D');
+
       transport.omitPromptFor.add('010C');
       transport.forceReplySequence('010C', ['7E804410C0B56']);
       final pending = client.send('010C');
       var finished = false;
       unawaited(pending.then((_) => finished = true));
-      await Future<void>.delayed(const Duration(milliseconds: 180));
+      await Future<void>.delayed(const Duration(milliseconds: 600));
       expect(
         finished,
         isFalse,

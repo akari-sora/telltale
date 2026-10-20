@@ -7,6 +7,27 @@ import 'package:torque_obd/obd/pid/pid_library.dart';
 import 'package:torque_obd/obd/pid/priority_scheduler.dart';
 
 void main() {
+  group('ElmSessionProfile windows', () {
+    test('quiet-complete is longer than the adapter response window', () {
+      expect(
+        ElmSessionProfile.adapterResponseWindow,
+        const Duration(milliseconds: 450),
+      );
+      expect(
+        ElmSessionProfile.quietCompleteTimeout,
+        greaterThan(ElmSessionProfile.adapterResponseWindow),
+      );
+      expect(
+        ElmSessionProfile.quietCompleteTimeout,
+        const Duration(milliseconds: 550),
+      );
+      expect(
+        ElmSessionProfile.promptlessWriteHold,
+        ElmSessionProfile.adapterResponseWindow,
+      );
+    });
+  });
+
   group('ElmSessionProfile.batchSizeCap', () {
     test('genuine and single-ECU clones keep the six-PID ceiling', () {
       expect(

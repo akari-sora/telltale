@@ -5,8 +5,9 @@ This is a design note for the in-app ASCII ELM327 client, not adapter or
 on-vehicle validation.
 
 The ELM327 is half-duplex ASCII. One command is in flight. The adapter
-normally ends a reply with `>` (`0x3E`). That prompt remains the primary
-completion signal. It is no longer the only one.
+ends a healthy reply with `>` (`0x3E`) **after its response window
+closes**. That prompt is the primary completion signal. Completing
+without it is the exception, not the default.
 
 ## Why the previous shape failed
 
@@ -18,6 +19,13 @@ on `commandTimeout` (5 s), marked the stream out of sync, waited
 `resyncTimeout` (3 s) for a `>` that never arrived, and dropped the
 link. `_resync` sent nothing: a bare `\r` is “repeat last command” on
 this chip, and repeating the batch would have made the pile-up worse.
+
+A first redesign quiet-completed every conclusive OBD buffer after
+100 ms. That is inside the adapter's ATST window. The #110 log shows
+data then `>` ~412–423 ms later on healthy replies (3192→3615,
+3750→4169, 1673→2085). Closing early, holding 120 ms, and writing the
+next command aborted the adapter with `STOPPED`, which was then read as
+the next command's answer.
 
 AT commands, `SEARCHING...`, `7F xx 78`, genuine-adapter transcripts,
 single-ECU physical `7E0`, and the GT86 numbered CAF1 batch of six PIDs
@@ -33,8 +41,10 @@ already work. Those paths stay on the prompt.
               |
      +--------|-------------------------------+
      |                                        |
-     |  `>` arrives                           |  quiet window (100 ms
-     |                                        |   of no new bytes)
+     |  `>` arrives                           |  command timeout, or
+     |                                        |  (this session already saw a
+     |                                        |   missing prompt AND idle >
+     |                                        |   adapter response window)
      v                                        v
  parse frame                         parse buffer; conclusive?
      |                                        |
@@ -42,38 +52,39 @@ already work. Those paths stay on the prompt.
      |                                |              |
      v                                v              v
  complete pending              complete pending   keep waiting
- stray-prompt window on        (promptless)       until `>`,
- empty `>` discarded           hold next write    SEARCHING/pending
-                               120 ms             extension, or
-                                                  command timeout
+                               (promptless)       until `>`,
+                               hold next write    SEARCHING/pending
+                               until late `>`     extension, or
+                               or window over     command timeout
 ```
 
 On **command timeout**:
 
 1. If the command is non-AT and the buffer already parses as a
    conclusive OBD reply or adapter error (`NO DATA`, `CAN ERROR`, …),
-   complete it as promptless. Same path as the quiet window.
+   complete it as promptless. That is the first allowed promptless
+   complete in a session.
 2. Otherwise fail the pending command and mark the stream out of sync.
 3. The next `send` runs `_resync`.
    - Empty buffer (true silence): wait passively for `>` up to 3 s, then
      drop the session. A silent adapter is gone; probing would not
      change that.
    - Partial/incomplete bytes: write `ATI` (never a bare `\r`) while the
-     drain is armed. The probe’s `>` is consumed by the drain and not
+     drain is armed. The probe's `>` is consumed by the drain and not
      parsed as PID data. If it arrives, the stream is in step and the
      next command proceeds. If it does not, drop as today.
 
+After a promptless complete, the next write waits until a late `>`
+arrives or the remainder of the adapter response window (ATST66 ≈
+408 ms; profile value 450 ms) has elapsed. `STOPPED` or any non-blank
+leftover in that window is discarded, not parsed as the next command.
+
 `SEARCHING...` and `7F xx 78` still extend the outstanding deadline.
 They are not conclusive replies. `dataError` (truncated ISO-TP, odd
-nibbles) is not conclusive either: more consecutive frames may still
-be in flight. An unheadered payload with no CR/LF is a mid-line
-chunk, not a reply — that is issue 106's M106-04, and it still waits
-for `>` or the command timeout.
+nibbles) is not conclusive either. An unheadered payload with no CR/LF
+is a mid-line chunk, not a reply — issue 106's M106-04.
 
-AT commands (`ATZ`, `ATH1`, `ATSH`, …) still complete only on `>`. An
-`OK` without a prompt is too easy to confuse with a truncated banner,
-and several recovery paths (header restore, `sendGlobal`) depend on
-knowing the AT step actually finished.
+AT commands (`ATZ`, `ATH1`, `ATSH`, …) still complete only on `>`.
 
 ## Clone vs genuine
 
@@ -93,22 +104,26 @@ not a fidelity claim.
 `batchSizeCap` is the live limit. `handleCorruptionEvent` still disables
 fast mode for `BUFFER FULL` / short batches — that path is unchanged.
 
-Inter-command delay stays 10 ms until a promptless complete, then 100 ms
-so a late `>` is more likely to land in the stray-prompt window than on
-the next command.
+After a promptless complete, inter-command delay becomes the adapter
+response window (450 ms) so the next write is not issued while the
+adapter is still in its ATST window.
 
 ## Multi-ECU and ISO-TP
 
 Functional `7DF` keeps `ATH1` so each line carries a response id.
 `_parseHeaderedCan` still groups by source and reassembles per
 controller; `sendOnHeader` still keeps the engine (`7E8`) for Mode 01
-gauges. Quiet-complete uses that same parser, and also refuses to fire
-while fewer distinct sources are present than `lastResponderCount`.
-A late `7E9` therefore still joins the same command. Command timeout
-will accept a conclusive buffer even if a previously-seen ECU stayed
-silent, so a missing sibling cannot drop the link.
+gauges. Quiet-complete (after a missing prompt has been observed) uses
+that same parser, and also refuses to fire while fewer distinct sources
+are present than `lastResponderCount`.
 
-## Timeouts (unchanged bounds)
+With headers off, source ids are absent, so the same guard counts
+finished lines instead of CAN ids. A late second-ECU line still joins
+the same command. Command timeout will accept a conclusive buffer even
+if a previously-seen ECU stayed silent, so a missing sibling cannot
+drop the link.
+
+## Timeouts
 
 | Timer | Duration | Role |
 |---|---|---|
@@ -118,13 +133,14 @@ silent, so a missing sibling cannot drop the link.
 | `SEARCHING...` | 25 s | First-query protocol hunt |
 | `7F xx 78` | 7 s global reads | ECU still working |
 | Resync drain | 3 s | Wait for an owed `>` |
-| Quiet-complete | 100 ms | OBD buffer already conclusive |
-| Promptless write hold | 120 ms | Absorb a late empty `>` |
+| Adapter response window | 450 ms | ATST66 ≈ 408 ms plus margin; data-to-`>` on healthy replies |
+| Quiet-complete | 550 ms | Only after a missing prompt has been observed this session |
+| Promptless write hold | remainder of 450 ms | Wait for a late `>` before the next write |
 
 ## Reconnect
 
 There is no automatic transport reconnect. In-session recovery is the
-quiet-complete / ATI-resync path above. If the adapter is truly silent,
+timeout-complete / ATI-resync path above. If the adapter is truly silent,
 `onConnectionLost` still fails the session and the user reconnects by
 hand. A new `Elm327Client` does not keep `#109`’s `7DF` fallback; that
 is rediscovered on the next handshake, same as today.

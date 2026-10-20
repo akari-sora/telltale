@@ -24,27 +24,24 @@ import 'package:torque_obd/obd/transport/obd_transport.dart';
 
 import 'support/fake_elm327.dart';
 
-/// [wedge] makes the adapter accept a command and emit no reply bytes, so
+/// [wedge] makes the adapter answer a command with data but no `>` prompt, so
 /// the request stays outstanding — which is the state the watchdog exists for,
 /// and the one a suspended process resumes into.
-FakeElm327 _adapter({Set<String> wedge = const {}}) {
-  final transport = FakeElm327(
-    protocol: BusProtocol.can11,
-    ecus: [
-      FakeEcu(
-        name: 'ECM',
-        requestId: '7E0',
-        responseId: '7E8',
-        responses: {
-          '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x13],
-          '010C': [0x41, 0x0C, 0x1A, 0xF8],
-        },
-      ),
-    ],
-  );
-  transport.silenceFor.addAll(wedge);
-  return transport;
-}
+FakeElm327 _adapter({Set<String> wedge = const {}}) => FakeElm327(
+  faults: AdapterFaults(swallowPromptFor: wedge),
+  protocol: BusProtocol.can11,
+  ecus: [
+    FakeEcu(
+      name: 'ECM',
+      requestId: '7E0',
+      responseId: '7E8',
+      responses: {
+        '0100': [0x41, 0x00, 0xBE, 0x1F, 0xA8, 0x13],
+        '010C': [0x41, 0x0C, 0x1A, 0xF8],
+      },
+    ),
+  ],
+);
 
 void main() {
   group('transport loss during the handshake', () {

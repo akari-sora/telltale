@@ -545,7 +545,35 @@ void main() {
   });
 
   group('Elm327DiagnosticLink timeouts and response delay', () {
-    test('T-TIMEOUT-RESP: request without deadline times out on swallowed prompt, throwing responseTimeout after sending wire command', () async {
+    test('T-TIMEOUT-RESP: swallowed prompt of conclusive 0100 completes promptless at command timeout', () async {
+      final swallowed = <String>{};
+      final client = await _createConnectedClient(
+        faults: AdapterFaults(swallowPromptFor: swallowed),
+        commandTimeout: const Duration(milliseconds: 100),
+      );
+      final transport = client.transport as FakeElm327;
+      swallowed.add('0100');
+      final link = Elm327DiagnosticLink(client);
+
+      final request = DiagnosticRequest(
+        id: const DiagnosticRequestId('req-timeout-resp'),
+        pdu: ApplicationPdu(const [0x01, 0x00]),
+        target: DiagnosticTarget.wholeVehicleObd,
+        requiredCapabilities: const {
+          DiagnosticCapability.applicationPdu,
+          DiagnosticCapability.wholeVehicleObd,
+        },
+        connectionGeneration: link.connectionGeneration,
+        ownership: const DiagnosticOwnership(mode: DiagnosticOwnershipMode.oneShot),
+      );
+
+      final response = await link.send(request);
+      expect(response.isSuccess, isTrue);
+      expect(client.promptlessCompleteCount, greaterThanOrEqualTo(1));
+      expect(transport.commandLog.contains('0100'), isTrue);
+    });
+
+    test('T-TIMEOUT-RESP-SILENCE: request without deadline times out when the adapter emits nothing, throwing responseTimeout after sending wire command', () async {
       final client = await _createConnectedClient(
         commandTimeout: const Duration(milliseconds: 100),
       );
@@ -554,7 +582,7 @@ void main() {
       final link = Elm327DiagnosticLink(client);
 
       final request = DiagnosticRequest(
-        id: const DiagnosticRequestId('req-timeout-resp'),
+        id: const DiagnosticRequestId('req-timeout-resp-silence'),
         pdu: ApplicationPdu(const [0x01, 0x00]),
         target: DiagnosticTarget.wholeVehicleObd,
         requiredCapabilities: const {
@@ -612,7 +640,36 @@ void main() {
       expect(transport.commandLog.contains('0100'), isTrue);
     });
 
-    test('T-TIMEOUT-FUTURE-DL: request with unexpired future deadline times out on swallowed prompt, throwing responseTimeout not deadlineExpired', () async {
+    test('T-TIMEOUT-FUTURE-DL: swallowed prompt of conclusive 0100 completes promptless at command timeout even with an unexpired deadline', () async {
+      final swallowed = <String>{};
+      final client = await _createConnectedClient(
+        faults: AdapterFaults(swallowPromptFor: swallowed),
+        commandTimeout: const Duration(milliseconds: 100),
+      );
+      final transport = client.transport as FakeElm327;
+      swallowed.add('0100');
+      final link = Elm327DiagnosticLink(client);
+
+      final request = DiagnosticRequest(
+        id: const DiagnosticRequestId('req-timeout-future-dl'),
+        pdu: ApplicationPdu(const [0x01, 0x00]),
+        target: DiagnosticTarget.wholeVehicleObd,
+        requiredCapabilities: const {
+          DiagnosticCapability.applicationPdu,
+          DiagnosticCapability.wholeVehicleObd,
+        },
+        connectionGeneration: link.connectionGeneration,
+        deadline: DateTime.now().add(const Duration(seconds: 6)),
+        ownership: const DiagnosticOwnership(mode: DiagnosticOwnershipMode.oneShot),
+      );
+
+      final response = await link.send(request);
+      expect(response.isSuccess, isTrue);
+      expect(client.promptlessCompleteCount, greaterThanOrEqualTo(1));
+      expect(transport.commandLog.contains('0100'), isTrue);
+    });
+
+    test('T-TIMEOUT-FUTURE-DL-SILENCE: request with unexpired future deadline times out when the adapter emits nothing, throwing responseTimeout not deadlineExpired', () async {
       final client = await _createConnectedClient(
         commandTimeout: const Duration(milliseconds: 100),
       );
@@ -621,7 +678,7 @@ void main() {
       final link = Elm327DiagnosticLink(client);
 
       final request = DiagnosticRequest(
-        id: const DiagnosticRequestId('req-timeout-future-dl'),
+        id: const DiagnosticRequestId('req-timeout-future-dl-silence'),
         pdu: ApplicationPdu(const [0x01, 0x00]),
         target: DiagnosticTarget.wholeVehicleObd,
         requiredCapabilities: const {

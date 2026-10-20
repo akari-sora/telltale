@@ -36,7 +36,7 @@ AUTHORIZED_OBD_EXACT_FILES = {
     # grouping limit on PriorityScheduler. Content-bound for the same reason:
     # this MR reviews the exact blobs; later edits need a new contract pass.
     "lib/obd/elm_session_profile.dart":
-        "f1ec66c9bdbde0e4ef553db9819a51fecbae9a3cab0667b13b5377867a22cc9b",
+        "d9462457efc8dd8b440ea72510a8953109c97ca9e26c5da41036b4c1d92991a0",
     "lib/obd/pid/priority_scheduler.dart":
         "55ba52dc5ebd4aa910225e3e25f5195d0dda75ca00edf9494be6953456f5016d",
 }

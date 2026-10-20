@@ -213,9 +213,10 @@ class AdapterFaults {
 
   /// Answer these commands with data but never a `>` prompt.
   ///
-  /// After #110, a conclusive OBD buffer without `>` is completed by the
-  /// client after a quiet window. Tests that need a real timeout should use
-  /// [FakeElm327.goSilent] (no bytes at all) rather than this knob.
+  /// After #110, a conclusive OBD buffer without `>` completes at command
+  /// timeout, or after a quiet window once a missing prompt has already
+  /// been observed this session. Tests that need a true empty timeout
+  /// should use [FakeElm327.silenceFor] or [FakeElm327.goSilent].
   final Set<String> swallowPromptFor;
 
   /// Force a literal reply for a command, e.g. `{'0105': 'NO DATA'}` or
@@ -401,6 +402,16 @@ class FakeElm327 extends BaseObdTransport {
   /// are almost always mid-session anyway: an ECU busy with something else,
   /// a link degrading, a clone taking its time.
   Duration responseLatency;
+
+  /// Pause between the reply body and `>`.
+  ///
+  /// A real adapter waits for its ATST window after the last bus frame
+  /// before printing the prompt. Tests that need that gap set this after
+  /// connect so handshake is not slowed. A write while that prompt is
+  /// still owed emits `STOPPED` and cancels the pending `>`.
+  Duration promptDelay = Duration.zero;
+
+  Timer? _trailingPromptTimer;
 
   /// Per-command latency, for when one *controller* is slow rather than the
   /// adapter.
@@ -620,6 +631,8 @@ class FakeElm327 extends BaseObdTransport {
 
   @override
   Future<void> disconnect() async {
+    _trailingPromptTimer?.cancel();
+    _trailingPromptTimer = null;
     for (final timer in _scheduled) {
       timer.cancel();
     }
@@ -720,6 +733,12 @@ class FakeElm327 extends BaseObdTransport {
 
   /// Everything a real adapter does once the bytes have arrived.
   void _acceptAndAnswer(String raw) {
+    if (_trailingPromptTimer != null) {
+      _trailingPromptTimer!.cancel();
+      _scheduled.remove(_trailingPromptTimer);
+      _trailingPromptTimer = null;
+      emitBytes(ascii.encode('STOPPED\r>'));
+    }
     final command = raw.toUpperCase().replaceAll(' ', '');
     commandLog.add(command);
     onCommandWritten?.call(command);
@@ -782,6 +801,18 @@ class FakeElm327 extends BaseObdTransport {
     final emit = omitPrompt ? reply.replaceAll('>', '') : reply;
 
     void send() {
+      if (!omitPrompt && promptDelay > Duration.zero && emit.contains('>')) {
+        _emitChunked(emit.replaceAll('>', ''));
+        _trailingPromptTimer = Timer(promptDelay, () {
+          _trailingPromptTimer = null;
+          emitBytes(ascii.encode('>'));
+          if (dropLinkAfterReplyingFor.contains(command)) {
+            setConnected(false);
+          }
+        });
+        _scheduled.add(_trailingPromptTimer!);
+        return;
+      }
       _emitChunked(emit);
       if (dropLinkAfterReplyingFor.contains(command)) {
         setConnected(false);
