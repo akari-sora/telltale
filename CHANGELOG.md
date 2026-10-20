@@ -8,6 +8,21 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+## 1.0.23 — 2026-10-20
+
+- Reworked the ELM327 session pipeline for adapters that swallow the `>`
+  prompt. A `NO DATA` 3× result now rests as `noAnswer` with a 60 s backoff
+  by default, so an intermittent PID on a working car no longer goes grey as
+  unsupported. The five-minute `unsupported` recheck is reserved for `015E`
+  and only in a session that has already completed without a prompt or on a
+  clone (`firmwareNeverReleased`). Conclusive OBD with a swallowed prompt now
+  completes at command timeout (quiet-complete after 550 ms idle, longer than
+  the 450 ms adapter window), and headers-off replies count finished lines
+  against the derived responder count so a late second-ECU line still joins.
+  (issue #110)
+- Tested by offline fixture replay and in CI (4443 passed). Not yet validated
+  on a real vehicle or adapter; no adapter or car compatibility is claimed.
+
 ## 1.0.22 — 2026-10-20
 
 - After the functional `7DF` fallback, more than one ECU can answer Mode 01
