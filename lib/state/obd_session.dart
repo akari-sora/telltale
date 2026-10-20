@@ -289,6 +289,9 @@ final class _AutomaticReconnect {
     required this.generation,
     required this.ordinal,
     required this.notes,
+    required this.failure,
+    required this.lostRecord,
+    required this.lostHeader,
   }) : screenGeneration = generation;
 
   final int generation;
@@ -298,6 +301,21 @@ final class _AutomaticReconnect {
 
   /// Written into the new attempt's transcript right after its first line.
   final List<String> notes;
+
+  /// The state the drop published. An attempt that ends without connecting
+  /// leaves the screen on it.
+  final ObdConnectionState failure;
+
+  /// The dropped session's record and header, as its teardown filed them.
+  ///
+  /// The export and the disk keep these until the attempt connects. Its own
+  /// record is not a session yet, and until it is one, the session the user
+  /// lost is the one worth exporting.
+  final ObdTranscript? lostRecord;
+  final String lostHeader;
+
+  /// The attempt's own record, once `_connectInner` has made it.
+  ObdTranscript? record;
 
   /// The generation whose screen this attempt still answers for.
   ///
@@ -987,6 +1005,18 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// one.
   ({ObdTranscript transcript, String header})? get exportableRecord {
     final current = _client?.transcript ?? _attemptTranscript;
+    // An automatic reconnect that has not connected is not a session yet.
+    // Until it is one, the session it is trying to replace is the record:
+    // the user did not start this attempt, and cancelling it, leaving the
+    // app or the process dying meanwhile must not cost the drop's record.
+    final attempt = _automaticReconnect;
+    final lost = attempt?.lostRecord;
+    if (attempt != null &&
+        lost != null &&
+        identical(current, attempt.record) &&
+        _connectedGeneration != attempt.generation) {
+      return (transcript: lost, header: attempt.lostHeader);
+    }
     if (current != null && !current.isEmpty) {
       return (transcript: current, header: transcriptHeader);
     }
@@ -1616,7 +1646,9 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // length of session after it: an export from a reconnected session has to
     // say that nobody tapped anything.
     if (automatic) {
-      for (final note in _automaticReconnect!.notes) {
+      final attempt = _automaticReconnect!;
+      attempt.record = _attemptTranscript;
+      for (final note in attempt.notes) {
         _attemptTranscript!.recordNote(note);
       }
     }
@@ -1645,6 +1677,14 @@ class ObdSession extends Notifier<ObdConnectionState> {
           : null,
     );
     await elapsedCache.sync();
+    // A disconnect, another connect, or an automatic attempt standing down
+    // during the sync found no client to stop, and the attempt went on to
+    // build one and send its handshake. Before the client exists is the last
+    // point where stopping costs nothing.
+    if (_superseded(generation)) {
+      await transport.disconnect();
+      return false;
+    }
     final client = Elm327Client(
       transport,
       transcript: _attemptTranscript!,
@@ -1999,10 +2039,10 @@ class ObdSession extends Notifier<ObdConnectionState> {
         ? _automaticReconnectTarget(generation)
         : null;
     // An automatic reconnect whose own link went before it connected — an
-    // `LV RESET` mid-handshake, a socket that closed. Its caller puts the
-    // drop's screen back; publishing a second failure here would leave the
-    // reconnecting line on it, and the generation this moves would read to
-    // the caller as somebody else taking over.
+    // `LV RESET` mid-handshake, a socket that closed. The screen goes back to
+    // the drop's failure, not a second failure carrying the reconnecting
+    // line, and the generation this moves must not read to the attempt as
+    // somebody else taking over.
     final attempt = _automaticReconnect;
     final attemptLostItself =
         attempt != null &&
@@ -2028,7 +2068,9 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // kind and protocol already live on this record; requested and the
     // numeric ATDPN must too, or the Connect panel falls back to the ATDP
     // description once the client is gone.
-    if (!attemptLostItself) {
+    if (attemptLostItself) {
+      state = attempt.failure;
+    } else {
       state = state.copyWith(
         phase: ConnectionPhase.failed,
         requestedProtocol:
@@ -2159,9 +2201,6 @@ class ObdSession extends Notifier<ObdConnectionState> {
     }
     if (_generation != owner) return;
     if (!_foreground || _pauseEpoch != pauseEpoch) return;
-    // As the teardown just filed them. A failed attempt puts them back.
-    final lostRecord = _lastTranscript;
-    final lostHeader = _lastTranscriptHeader;
 
     final startedAt = automaticReconnectClock();
     _automaticReconnects.add(startedAt);
@@ -2174,6 +2213,10 @@ class ObdSession extends Notifier<ObdConnectionState> {
         lostSessionId: lostSessionId,
         lostTranscript: lostTranscript,
       ),
+      failure: failure,
+      // As the drop's teardown just filed them.
+      lostRecord: _lastTranscript,
+      lostHeader: _lastTranscriptHeader,
     );
     _automaticReconnect = attempt;
     // Before the call, and in the same synchronous step: the drop left the
@@ -2210,42 +2253,40 @@ class ObdSession extends Notifier<ObdConnectionState> {
     }
     if (identical(_automaticReconnect, attempt)) _automaticReconnect = null;
     if (connected) return;
+    // However it ended — refused, stood down, cancelled, or replaced by a
+    // connect — the dropped session stays the record.
+    if (started) _fileUnconnectedAttempt(attempt);
     // A tap on 中斷連線 or connect while the attempt ran owns the screen now.
     if (_generation != (started ? attempt.screenGeneration : owner)) return;
-    if (started && lostRecord != null) {
-      _restoreLostRecord(attempt, lostRecord, lostHeader);
-    }
     state = failure;
   }
 
-  /// Puts the dropped session's record back after a failed attempt.
+  /// Files an attempt that never connected under the session it tried to
+  /// save.
   ///
-  /// The attempt's teardown filed *its* transcript as the last session, in
-  /// memory and on disk, over the one the drop had just filed. The screen went
-  /// back to the drop's failure, so an export from it — the moment #112 needs
-  /// one — handed over the attempt's dozen lines of tier refusals instead of
-  /// the session that stopped answering, header and all. The attempt is kept
-  /// as its last lines, quoted at the end of the record it was trying to save.
-  void _restoreLostRecord(
-    _AutomaticReconnect attempt,
-    ObdTranscript lostRecord,
-    String lostHeader,
-  ) {
-    final attemptRecord = _attemptTranscript;
-    lostRecord.recordNote(
+  /// Its teardown filed the attempt's own transcript as the last session, as
+  /// every teardown does. The dropped record goes back in its place, ending
+  /// with a line saying the attempt did not connect and the attempt's last
+  /// lines quoted, and is written to disk again. A connect that has started
+  /// since keeps its own record: only what still points at the attempt moves.
+  void _fileUnconnectedAttempt(_AutomaticReconnect attempt) {
+    final lost = attempt.lostRecord;
+    if (lost == null) return;
+    final own = attempt.record;
+    lost.recordNote(
       'Automatic reconnect ${attempt.ordinal} of $automaticReconnectLimit did '
       'not connect',
     );
-    if (attemptRecord != null &&
-        !identical(attemptRecord, lostRecord) &&
-        !attemptRecord.isEmpty) {
-      for (final note in _quotedTail('Reconnect attempt', attemptRecord)) {
-        lostRecord.recordNote(note);
+    if (own != null && !identical(own, lost) && !own.isEmpty) {
+      for (final note in _quotedTail('Reconnect attempt', own)) {
+        lost.recordNote(note);
       }
     }
-    _attemptTranscript = null;
-    _lastTranscript = lostRecord;
-    _lastTranscriptHeader = lostHeader;
+    if (identical(_attemptTranscript, own)) _attemptTranscript = null;
+    if (_lastTranscript == null || identical(_lastTranscript, own)) {
+      _lastTranscript = lost;
+      _lastTranscriptHeader = attempt.lostHeader;
+    }
     unawaited(_saveTranscriptSnapshot());
   }
 
@@ -2313,7 +2354,16 @@ class ObdSession extends Notifier<ObdConnectionState> {
     _publishSessionBoundary(ObdSessionBoundaryReason.linkLoss);
     _generation++;
     attempt.screenGeneration = _generation;
+    // Closed now, not when the teardown chain reaches it after the earlier
+    // drop's: a link still opening must find its client already closed, or it
+    // handshakes in the background meanwhile. See `Elm327Client.connect`.
+    final client = _client;
+    if (client != null) unawaited(client.disconnect());
     unawaited(_teardown());
+    // Now rather than when the attempt has unwound, which on Classic can be a
+    // whole tier: a user back by then must not find "reconnecting" with a
+    // cancel button on an attempt that has already stood down.
+    state = attempt.failure;
   }
 
   /// The adapter this session was opened to, as the reconnect shortcut would

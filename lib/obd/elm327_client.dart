@@ -518,6 +518,11 @@ enum ConnectionLossCause {
   /// The adapter stopped answering: a resync that could not bring it back
   /// into step, or the watchdog.
   adapterSilent,
+
+  /// The link would not take a write: the resync's probe could not be handed
+  /// over. A transport fault, not the adapter going quiet — Bluetooth out of
+  /// range often looks like this before the OS reports the link closed.
+  writeStalled,
 }
 
 class Elm327Client {
@@ -967,7 +972,21 @@ class Elm327Client {
     _responseHeadersRestoreFailed = false;
     _connectionSession++;
     _connectionGeneration++;
+    final opening = _connectionGeneration;
     await transport.connect();
+    // Disconnected or disposed while the link was still opening. A transport
+    // has nothing to close until its socket exists, so the close found
+    // nothing and the link opened anyway; without this the handshake then
+    // ran on it — `ATZ` through `0100` to a car — for a client nobody owned
+    // any more, after an app that had gone to the background, until it
+    // returned and its caller closed the link again.
+    if (_connectionGeneration != opening) {
+      transcript.recordNote(
+        'Connection closed while it was opening; no handshake sent',
+      );
+      await transport.disconnect();
+      return false;
+    }
     transcript.recordNote(
       'Connection established: ${transport.displayName} (${transport.kind.label})',
     );
@@ -2327,7 +2346,9 @@ class Elm327Client {
       // returns early on it, so nothing else was going to notice either.
       _watchdog?.cancel();
       _watchdog = null;
-      _connectionLossCause = ConnectionLossCause.adapterSilent;
+      _connectionLossCause = probeWriteStalled
+          ? ConnectionLossCause.writeStalled
+          : ConnectionLossCause.adapterSilent;
       scheduleMicrotask(() => onConnectionLost?.call());
       if (probeWriteStalled) {
         // The check itself could not be handed over. Not "the adapter did

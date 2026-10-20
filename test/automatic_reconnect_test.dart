@@ -93,10 +93,19 @@ class _RefusingTransport extends BaseObdTransport {
 class _HeldTransport extends DemoTransport {
   final gate = Completer<void>();
 
+  /// Every command written, so a test can say none went out.
+  final written = <String>[];
+
   @override
   Future<void> connect() async {
     await gate.future;
     await super.connect();
+  }
+
+  @override
+  Future<void> write(List<int> data) async {
+    written.add(ascii.decode(data, allowInvalid: true).trim());
+    await super.write(data);
   }
 }
 
@@ -412,7 +421,12 @@ void main() {
       expect(rig.session.exportableRecord!.header, header);
       final stored = await store().load();
       expect(stored, isNotNull);
-      expect(stored!.body, contains('the session that dropped'));
+      // Not just a line the attempt quoted from it: the note only the
+      // restored record carries.
+      expect(
+        stored!.body,
+        contains('Automatic reconnect 1 of 2 did not connect'),
+      );
       expect(stored.header, header);
     });
 
@@ -438,6 +452,11 @@ void main() {
       );
       rig.session.client!.reportConnectionLostForTest(
         ConnectionLossCause.adapterError,
+      );
+      expect(
+        _fields(rig.state),
+        _fields(dropped),
+        reason: 'back on the drop at once, not when the attempt unwinds',
       );
       held.gate.complete();
       expect(await rig.session.lastReconnect, isFalse);
@@ -580,7 +599,63 @@ void main() {
       );
       expect(rig.session.client, isNull);
       expect(held.isConnected, isFalse, reason: 'no zombie link');
+      expect(
+        held.written,
+        isEmpty,
+        reason: 'no handshake on a link nobody owns',
+      );
     });
+
+    test(
+      'a cancel during the attempt keeps the dropped session as the record',
+      () async {
+        // The attempt's busy screen has a cancel button, which is a disconnect.
+        // It ends on idle, and the export from idle must still be the session
+        // that stopped answering, not an attempt nobody asked for.
+        final dir = Directory.systemTemp.createTempSync(
+          'auto-reconnect-cancel',
+        );
+        addTearDown(() => dir.deleteSync(recursive: true));
+        TranscriptStore store() => TranscriptStore(directory: () async => dir);
+        final rig = await _rig();
+        rig.session.transcriptStore = store();
+        await rig.connect();
+        rig.now += const Duration(seconds: 11);
+        final held = _HeldTransport();
+        rig.session.nextTransport = () => held;
+        rig.session.client!.transcript.recordNote('the session that dropped');
+
+        rig.dropLink();
+        await _eventually(
+          () =>
+              rig.state.activity ==
+                  ObdConnectionActivity.reconnectingAutomatically &&
+              rig.session.client != null,
+        );
+        await rig.session.disconnect();
+        await rig.session.drainTranscriptSnapshotsForTest();
+        expect(rig.exportedNotes, contains('the session that dropped'));
+        expect(
+          (await store().load())!.body,
+          contains('the session that dropped'),
+          reason: 'on disk too, before the attempt has unwound',
+        );
+
+        held.gate.complete();
+        expect(await rig.session.lastReconnect, isFalse);
+        await _settle();
+        await rig.session.drainTranscriptSnapshotsForTest();
+        expect(rig.state.phase, ConnectionPhase.disconnected);
+        expect(
+          rig.exportedNotes,
+          contains('Automatic reconnect 1 of 2 did not connect'),
+        );
+        expect(
+          (await store().load())!.body,
+          contains('Automatic reconnect 1 of 2 did not connect'),
+        );
+      },
+    );
 
     test('a connect during the attempt is the one that ends up live', () async {
       final rig = await _rig();
@@ -666,7 +741,11 @@ void main() {
     test(
       'an attempt still connecting when the app leaves stands down',
       () async {
+        final dir = Directory.systemTemp.createTempSync('auto-reconnect-pause');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        TranscriptStore store() => TranscriptStore(directory: () async => dir);
         final rig = await _rig();
+        rig.session.transcriptStore = store();
         await rig.connect();
         rig.now += const Duration(seconds: 11);
         final held = _HeldTransport();
@@ -682,6 +761,17 @@ void main() {
               rig.session.client != null,
         );
         _background(binding);
+        // At once, not when the attempt has unwound: a user back by then
+        // would find "reconnecting" and a cancel button on nothing.
+        expect(_fields(rig.state), _fields(dropped));
+        // And on disk before the attempt unwinds, in case the process is
+        // killed in the meantime.
+        await rig.session.drainTranscriptSnapshotsForTest();
+        expect(
+          (await store().load())!.body,
+          contains('the session that dropped'),
+        );
+        expect(rig.exportedNotes, contains('the session that dropped'));
         // The link opens anyway, as a Bluetooth tier already in flight does.
         held.gate.complete();
         expect(await rig.session.lastReconnect, isFalse);
@@ -693,6 +783,11 @@ void main() {
           held.isConnected,
           isFalse,
           reason: 'no link left open behind it',
+        );
+        expect(
+          held.written,
+          isEmpty,
+          reason: 'not one byte of handshake after the app left',
         );
         expect(rig.exportedNotes, contains('the session that dropped'));
         expect(
@@ -868,6 +963,47 @@ void main() {
   });
 
   group('end to end over Wi-Fi', () {
+    test('a socket that closes is not reconnected', () async {
+      // The production cause, not a set one: an adapter switched off or out
+      // of range reaches the session as a closed link, and that is not the
+      // silent adapter this is for.
+      final bridge = await _SimulatorBridge.start();
+      addTearDown(bridge.close);
+      final remembered = LastAdapter(
+        id: InternetAddress.loopbackIPv4.address,
+        name: 'Wi-Fi ${InternetAddress.loopbackIPv4.address}',
+        kind: TransportKind.wifi,
+        port: bridge.port,
+      );
+      SharedPreferences.setMockInitialValues({
+        'last_adapter_v1': remembered.encode(),
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final container = ProviderContainer(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      );
+      addTearDown(container.dispose);
+      final session = container.read(obdSessionProvider.notifier);
+      var now = Duration.zero;
+      session.automaticReconnectClock = () => now;
+
+      expect(
+        await session.connectWifi(host: remembered.id, port: remembered.port),
+        isTrue,
+      );
+      now += const Duration(seconds: 11);
+      bridge.closeFirst();
+
+      await _eventually(
+        () =>
+            container.read(obdSessionProvider).phase == ConnectionPhase.failed,
+        reason: 'the closed socket was not noticed',
+      );
+      await _settle();
+      expect(bridge.connections, 1);
+      expect(container.read(obdSessionProvider).isBusy, isFalse);
+    }, timeout: const Timeout(Duration(seconds: 30)));
+
     test('a real silence is probed, dropped, and reconnected once', () async {
       final bridge = await _SimulatorBridge.start();
       addTearDown(bridge.close);
@@ -942,6 +1078,9 @@ final class _SimulatorBridge {
   int get port => _server.port;
 
   void deafen() => _firstIsDeaf = true;
+
+  /// Closes the first connection from the adapter's side.
+  void closeFirst() => _sockets.first.destroy();
 
   Future<void> _accept(Socket socket) async {
     final index = connections++;
