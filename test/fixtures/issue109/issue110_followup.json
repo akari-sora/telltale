@@ -1,0 +1,37 @@
+{
+  "issue": 110,
+  "follows": 109,
+  "app": "1.0.22",
+  "evidence_status": "user-exported session replay; not adapter or on-vehicle validation",
+  "redaction": "session id, Bluetooth address, and device identifiers removed; no VIN in the source traffic",
+  "protocol": "AUTO, ISO 15765-4 (CAN 11/500)",
+  "atdpn": "A6",
+  "adapter": {
+    "ati": "ELM327 v1.5",
+    "at_at1": "ICSolution",
+    "atpps": "answered"
+  },
+  "responders": {
+    "functional_request": "7DF",
+    "engine_request": "7E0",
+    "engine_response": "7E8",
+    "other_response": "7E9"
+  },
+  "physical_7e0": "NO DATA",
+  "pid_015e": {
+    "replies": ["NO DATA", "NO DATA", "NO DATA"],
+    "tries": 3
+  },
+  "batch_010C0D04110B10": {
+    "pid_order": ["010C", "010D", "0104", "0111", "010B", "0110"],
+    "successful_prompted_replies": 2,
+    "third_reply_prompt": "missing",
+    "third_reply_frames_complete": true,
+    "engine_first_frame": "7E8100F410C0B560D00",
+    "engine_rpm_from_third_7e8": 725.5
+  },
+  "aftermath": [
+    "Connection is out of sync, starting realignment",
+    "Connection event: adapter link dropped"
+  ]
+}

@@ -1,0 +1,81 @@
+# Telltale OBD session excerpt — issue #110 (follow-up to #109)
+# App 1.0.22. User-exported session replay. Not adapter or on-vehicle validation.
+# Identifiers removed: session id, Bluetooth address, phone serial, VIN (none
+# present in the source traffic). Adapter self-description kept: ATI=ELM327 v1.5,
+# AT@1=ICSolution. Protocol: AUTO, ISO 15765-4 (CAN 11/500), ATDPN=A6.
+#
+# Physical 7E0 is silent; ATH1 + ATSH 7DF, both 7E8 and 7E9 answer.
+# 015E is NO DATA three times. Multi-PID 010C0D04110B10 succeeds twice with a
+# trailing prompt, then the third reply is a complete ISO-TP pair with no `>`.
+# The client then realigns and drops the link.
+
+>> ATZ
+<< ELM327 v1.5
+>> ATE0
+<< OK
+>> ATL0
+<< OK
+>> ATM0
+<< OK
+>> ATS0
+<< OK
+>> ATAT1
+<< OK
+>> ATST66
+<< OK
+>> ATSP0
+<< OK
+>> ATI
+<< ELM327 v1.5
+>> AT@1
+<< ICSolution
+>> ATRV
+<< 15.3V
+>> 0100
+<< SEARCHING...
+<< 4100BE3FA813
+<< 410098188011
+>> ATDP
+<< AUTO, ISO 15765-4 (CAN 11/500)
+>> ATDPN
+<< A6
+>> ATSH 7E0
+<< OK
+>> 010C
+<< NO DATA
+>> ATH1
+<< OK
+>> ATSH 7DF
+<< OK
+>> 010C
+<< 7E804410C0B46
+<< 7E904410C0B4E
+>> 015E
+<< NO DATA
+>> 015E
+<< NO DATA
+>> 015E
+<< NO DATA
+>> 010C0D04110B10
+<< 7E8100F410C0B680D00
+<< 7E821042011250B6110
+<< 7E822012EAAAAAAAAAA
+<< 7E9100A410C0B740D00
+<< 7E92104201125AAAAAA
+<< >
+>> 010C0D04110B10
+<< 7E8100F410C0B520D00
+<< 7E821042011250B6110
+<< 7E8220160AAAAAAAAAA
+<< 7E9100A410C0B380D00
+<< 7E92104201125AAAAAA
+<< >
+>> 010C0D04110B10
+<< 7E8100F410C0B560D00
+<< 7E821042011250B6110
+<< 7E8220158AAAAAAAAAA
+<< 7E9100A410C0B5C0D00
+<< 7E92104201125AAAAAA
+# no prompt
+-- Connection is out of sync, starting realignment
+-- Connection event: adapter link dropped
