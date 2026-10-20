@@ -1,0 +1,1 @@
+Improved OBD connection recovery: show adapter voltage immediately, restore active dashboard PIDs, and coordinate capability discovery with polling. Android Auto/AAOS preview builds gain clearer metric icons, coolant warning cues, and projection lifecycle continuity.
