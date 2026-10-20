@@ -139,9 +139,14 @@ class _SwallowsClearTransport extends DemoTransport {
 /// A simulator that reports a low-voltage reset to the handshake's `0100`, the
 /// way an adapter browning out during the attempt does.
 class _ResetsAtHandshake extends DemoTransport {
+  _ResetsAtHandshake([this.command = '0100']);
+
+  final String command;
+
   @override
   Future<void> write(List<int> data) async {
-    if (ascii.decode(data, allowInvalid: true).trim().toUpperCase() == '0100') {
+    if (ascii.decode(data, allowInvalid: true).trim().toUpperCase() ==
+        command) {
       Timer(Duration.zero, () => emitBytes(ascii.encode('LV RESET\r\r>')));
       return;
     }
@@ -491,6 +496,28 @@ void main() {
   });
 
   group('a manual connect that resets during its handshake', () {
+    test('on a step it does not stop for leaves nothing running', () async {
+      // `ATDP` is not critical: the handshake records it and starts `ATDPN`,
+      // and the teardown cancels the listener before that one ends.
+      final rig = await _rig();
+      expect(
+        await rig.session.connectForTest(
+          _ResetsAtHandshake('ATDP'),
+          TransportKind.bluetoothClassic,
+          adapter: _adapter,
+        ),
+        isFalse,
+      );
+      await _settle();
+
+      expect(rig.state.phase, ConnectionPhase.failed);
+      expect(rig.state.initSteps, isNotEmpty);
+      expect(
+        rig.state.initSteps.where((s) => s.status == InitStatus.running),
+        isEmpty,
+      );
+    });
+
     test('still finishes its own handshake history', () async {
       // The reset fires the connection-lost callback before the step that
       // carried it completes. The failure that publishes is this connect's

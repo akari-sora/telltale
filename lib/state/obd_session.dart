@@ -1750,6 +1750,28 @@ class ObdSession extends Notifier<ObdConnectionState> {
         // Disconnected or dropped while the handshake ran. Tear down what this
         // attempt built and publish nothing — the state now on screen belongs
         // to whatever superseded it.
+        //
+        // Except when the drop was this connect's own link and nothing has
+        // moved since: that failure is its own screen. A reset on a step the
+        // handshake does not stop for lets it start the next one, and the
+        // teardown then cancels the listener before that step ends, so it
+        // would stay "running" on the failure for good.
+        if (_lostOwnScreen == (generation, _generation)) {
+          state = state.copyWith(
+            initSteps: List.unmodifiable([
+              for (final step in steps)
+                step.status == InitStatus.running
+                    ? InitProgress(
+                        step: step.step,
+                        index: step.index,
+                        total: step.total,
+                        status: InitStatus.failed,
+                        transportIssue: TransportIssue.linkDroppedMidSession,
+                      )
+                    : step,
+            ]),
+          );
+        }
         await client.dispose();
         return false;
       }
