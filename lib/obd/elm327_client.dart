@@ -6458,6 +6458,17 @@ class Elm327Client {
         silentFor = silentFor > prepaid ? silentFor - prepaid : Duration.zero;
       }
       if (silentFor <= limit) return;
+      // A command still owed a reply, with its reply timer still armed, gets
+      // what that timer would give it: a promptless complete, or the probe on
+      // the next resync. Normally the timer fires first. When the isolate
+      // stalls, both are overdue and Dart runs them in scheduled order, so a
+      // tick scheduled just before the timer runs first, reads a wall clock
+      // already past the limit, and used to drop the link with no probe ever
+      // written. Seen once on the #112 rig under heavy load.
+      if (_pending != null && _pendingTimeout != null) {
+        _onCommandTimeout();
+        return;
+      }
       isInitialized = false;
       _watchdog?.cancel();
       _watchdog = null;

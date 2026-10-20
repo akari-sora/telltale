@@ -123,7 +123,11 @@ void main() {
 
   group('the watchdog and a suspended process', () {
     test('a link is dropped when the adapter really does go quiet', () async {
-      // The control: the watchdog must still do its job.
+      // The control: the watchdog must still do its job. Since #112 a tick
+      // that finds a command still owed a reply hands it to the command
+      // timeout path first (promptless complete or a probe on the next
+      // resync), so the drop comes one grace window later if nothing else
+      // is sent.
       final client = Elm327Client(
         _adapter(wedge: {'010C'}),
         watchdogTimeout: const Duration(seconds: 2),
@@ -144,8 +148,11 @@ void main() {
       );
       await Future<void>.delayed(const Duration(milliseconds: 50));
       client.lastRxAt = DateTime.now().subtract(const Duration(seconds: 30));
-      await Future<void>.delayed(const Duration(milliseconds: 1300));
 
+      final deadline = DateTime.now().add(const Duration(seconds: 6));
+      while (!lost && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
       expect(lost, isTrue);
       await client.dispose();
     });

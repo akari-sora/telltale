@@ -153,6 +153,33 @@ void main() {
       },
     );
 
+    test(
+      'a watchdog tick that beats the reply timer still leads to the probe',
+      () async {
+        // Rig, heavy load: the isolate stalled, the watchdog tick and the
+        // reply timer were both overdue, and the tick ran first. It read a
+        // wall clock past the limit and dropped the link before any probe.
+        // Forced here by putting the last byte far in the past while the
+        // command is still owed its reply.
+        final (client, transport, lost) = await _connected();
+        addTearDown(client.dispose);
+        transport.once('011F', null);
+        final owed = client
+            .send('011F', timeout: const Duration(seconds: 5))
+            .then<Object?>((_) => null, onError: (Object e) => e);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        client.lastRxAt = DateTime.now().subtract(const Duration(seconds: 30));
+
+        expect(await owed.timeout(const Duration(seconds: 3)), isA<TimeoutException>());
+        expect(lost, isEmpty);
+        final next = await client.send('0105');
+
+        expect(transport.sent, contains('ATI'));
+        expect(next.hexPayload, '410564');
+        expect(lost, isEmpty);
+      },
+    );
+
     test('a chip still waiting for a lost line end answers the probe with ?',
         () async {
       final (client, transport, lost) = await _connected();
