@@ -15,10 +15,10 @@ Dates are the date the build was made, not the date it reached anyone.
   always worked, so the adapter was still alive. A watchdog race that could
   drop the link five seconds after the write, before any probe, is closed
   too. The session log records whether the probe was answered, unless the
-  connection is reported closed or the probe's write times out first. Three
-  commands in a row that each go silent, with only the probe answering,
-  still end the session, and a single-PID read that times out twice in a row
-  rests for a minute like `NO DATA`. (issue #112)
+  session ends or the probe's write times out first. Three commands in a
+  row that each go silent, with only the probe answering, still end the
+  session, and a single-PID read that times out twice in a row rests for a
+  minute like `NO DATA`. (issue #112)
 - When a session ends because the adapter stopped answering — the probe
   got nothing, only the probe kept answering, or the link stayed silent —
   the app now reconnects to the same remembered adapter once by itself, and
