@@ -8,6 +8,22 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+- When a session ends because the adapter stopped answering — the probe
+  got nothing, or the link stayed silent — the app now reconnects to the
+  same remembered adapter once by itself, and says so on screen. At most
+  twice in ten minutes, only for a session that had been connected for ten
+  seconds, only in the foreground, and never after an adapter that was
+  unplugged or out of range, one that reported an error such as
+  `UNABLE TO CONNECT`, a link that would not take a write, or a session in
+  which a fault-code clear was sent. If the reconnect does not connect, the
+  screen and the exported session log stay those of the session that
+  dropped, with the attempt noted at its end. (issue #112)
+- A resync's probe outcome (`Probe answered` / `Probe got no answer`) is
+  now always written before the link is dropped; a watchdog tick could cut
+  in first and leave the log without it.
+- Tested by unit tests and a loopback Wi-Fi test. Not validated on a real
+  vehicle or adapter.
+
 ## 1.0.24 — 2026-10-20
 
 - When an ELM327 clone goes silent after a command — not even `NO DATA` —
