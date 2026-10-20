@@ -180,6 +180,28 @@ void main() {
       },
     );
 
+    test('a 7F xx 78 window is not cut short by the watchdog', () async {
+      // A controller that answers `7F xx 78` is granted the longer pending
+      // window. The watchdog sized its limit from the original command
+      // budget, gave up first, and since #112 that means the timeout path.
+      final transport = _QuietAdapter();
+      final lost = <int>[];
+      final client = Elm327Client(transport)..onConnectionLost = () => lost.add(1);
+      addTearDown(client.dispose);
+      expect(await client.connect(), isTrue);
+      transport.sent.clear();
+      transport.once('0105', [
+        ('7F0178\r', const Duration(milliseconds: 100)),
+        ('410564\r\r>', const Duration(milliseconds: 6500)),
+      ]);
+
+      final reply = await client.send('0105');
+
+      expect(reply.isSuccess, isTrue);
+      expect(transport.sent, isNot(contains('ATI')));
+      expect(lost, isEmpty);
+    }, timeout: const Timeout(Duration(seconds: 20)));
+
     test('a chip still waiting for a lost line end answers the probe with ?',
         () async {
       final (client, transport, lost) = await _connected();

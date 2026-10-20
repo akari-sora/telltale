@@ -1297,10 +1297,12 @@ class Elm327Client {
     final seen = RegExp(r'7F[0-9A-F]{2}78').allMatches(text).length;
     if (seen <= _pendingSeen) return;
     _pendingSeen = seen;
-    _armPendingTimer(
-      _withinDeadline(responsePendingTimeout),
-      _onCommandTimeout,
-    );
+    final window = _withinDeadline(responsePendingTimeout);
+    // The watchdog sizes its limit from this. Left at the original command
+    // budget, it gave up before the pending window it had just granted —
+    // and since #112 it hands a still-owed command to the timeout path.
+    _pendingDeadline = window;
+    _armPendingTimer(window, _onCommandTimeout);
   }
 
   /// How many `7F xx 78` replies this exchange has already been extended for.
