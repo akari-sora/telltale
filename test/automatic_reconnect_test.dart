@@ -24,6 +24,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:torque_obd/obd/elm327_client.dart';
+import 'package:torque_obd/obd/transcript_store.dart';
 import 'package:torque_obd/obd/transport/demo_transport.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
 import 'package:torque_obd/state/obd_session.dart';
@@ -125,6 +127,19 @@ class _SwallowsClearTransport extends DemoTransport {
   }
 }
 
+/// A simulator that answers a fault-code clear, and says whether one was sent.
+class _RecordsClearTransport extends DemoTransport {
+  bool clearSent = false;
+
+  @override
+  Future<void> write(List<int> data) async {
+    if (ascii.decode(data, allowInvalid: true).trim().toUpperCase() == '04') {
+      clearSent = true;
+    }
+    await super.write(data);
+  }
+}
+
 /// A simulator whose link takes as long as the test says to close, to hold a
 /// teardown open.
 class _SlowToCloseTransport extends DemoTransport {
@@ -199,12 +214,35 @@ final class _Rig {
     );
   }
 
-  /// What `Elm327Client` does once its probe has gone unanswered.
-  void dropLink() => session.client!.onConnectionLost!();
+  /// What `Elm327Client` does once its probe has gone unanswered, or, with
+  /// another [cause], once the link went some other way.
+  void dropLink([
+    ConnectionLossCause cause = ConnectionLossCause.adapterSilent,
+  ]) => session.client!.reportConnectionLostForTest(cause);
+
+  /// The notes in what the export button would hand over right now.
+  Iterable<String> get exportedNotes => session
+      .exportableRecord!
+      .transcript
+      .entries
+      .map((e) => e.note)
+      .whereType<String>();
 
   Iterable<String> get notes =>
       session.client!.transcript.entries.map((e) => e.note).whereType<String>();
 }
+
+void _background(TestWidgetsFlutterBinding binding) => binding
+  ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+  ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+  ..handleAppLifecycleStateChanged(AppLifecycleState.paused);
+
+/// Back to the foreground the way the platform reports it; `resumed` straight
+/// after `paused` is not a transition the lifecycle listener acts on.
+void _foregroundAgain(TestWidgetsFlutterBinding binding) => binding
+  ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+  ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+  ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
 
 Future<_Rig> _rig({LastAdapter? remembered = _adapter}) async {
   SharedPreferences.setMockInitialValues({
@@ -338,6 +376,86 @@ void main() {
         );
       },
     );
+
+    test('a reconnect that fails leaves the dropped session as the record, '
+        'in memory and on disk', () async {
+      // The attempt's teardown filed its own dozen lines over the session that
+      // stopped answering, while the screen went back to that session's
+      // failure: the export from that screen was the wrong session.
+      final dir = Directory.systemTemp.createTempSync('auto-reconnect-record');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      TranscriptStore store() => TranscriptStore(directory: () async => dir);
+      final rig = await _rig();
+      rig.session.transcriptStore = store();
+      await rig.connect();
+      rig.now += const Duration(seconds: 11);
+      rig.session.nextTransport = null;
+      rig.session.client!.transcript.recordNote('the session that dropped');
+      final header = rig.session.exportableRecord!.header;
+
+      rig.dropLink();
+      await _eventually(() => rig.session.reconnects.length == 1);
+      expect(await rig.session.lastReconnect, isFalse);
+      await _settle();
+      await rig.session.drainTranscriptSnapshotsForTest();
+
+      expect(rig.exportedNotes, contains('the session that dropped'));
+      expect(
+        rig.exportedNotes,
+        contains('Automatic reconnect 1 of 2 did not connect'),
+      );
+      expect(
+        rig.exportedNotes,
+        contains(startsWith('Reconnect attempt, last')),
+        reason: 'the attempt is kept, quoted, at the end',
+      );
+      expect(rig.session.exportableRecord!.header, header);
+      final stored = await store().load();
+      expect(stored, isNotNull);
+      expect(stored!.body, contains('the session that dropped'));
+      expect(stored.header, header);
+    });
+
+    test('a reconnect that loses its own link before connecting ends on the '
+        "drop's failure", () async {
+      // An `LV RESET` mid-handshake fires the attempt's own connection-lost
+      // callback. That moved the generation, which read as somebody else
+      // taking over, so the drop's screen was never put back and a failure
+      // carrying the reconnecting line stayed up.
+      final rig = await _rig();
+      await rig.connect();
+      rig.now += const Duration(seconds: 11);
+      final held = _HeldTransport();
+      rig.session.nextTransport = () => held;
+
+      rig.dropLink();
+      final dropped = rig.state;
+      await _eventually(
+        () =>
+            rig.state.activity ==
+                ObdConnectionActivity.reconnectingAutomatically &&
+            rig.session.client != null,
+      );
+      rig.session.client!.reportConnectionLostForTest(
+        ConnectionLossCause.adapterError,
+      );
+      held.gate.complete();
+      expect(await rig.session.lastReconnect, isFalse);
+      await _settle();
+
+      expect(_fields(rig.state), _fields(dropped));
+      expect(
+        rig.states.where((s) => s.phase == ConnectionPhase.failed),
+        everyElement(predicate<ObdConnectionState>((s) => s.activity == null)),
+        reason: 'no failure may carry the reconnecting line',
+      );
+      expect(rig.session.reconnects, hasLength(1));
+      expect(rig.session.client, isNull);
+      expect(
+        rig.exportedNotes,
+        contains('Automatic reconnect 1 of 2 did not connect'),
+      );
+    });
   });
 
   group('is bounded', () {
@@ -369,6 +487,26 @@ void main() {
       await _eventually(
         () => rig.state.isConnected && rig.session.reconnects.length == 3,
       );
+    });
+
+    test('a failed attempt counts toward the two', () async {
+      final rig = await _rig();
+      rig.session.nextTransport = null;
+      for (var drop = 1; drop <= 2; drop++) {
+        await rig.connect();
+        rig.now += const Duration(seconds: 11);
+        rig.dropLink();
+        await _eventually(() => rig.session.reconnects.length == drop);
+        expect(await rig.session.lastReconnect, isFalse);
+        await _settle();
+        expect(rig.state.phase, ConnectionPhase.failed);
+      }
+
+      await rig.connect();
+      rig.now += const Duration(seconds: 11);
+      rig.dropLink();
+      await _settle();
+      expect(rig.session.reconnects, hasLength(2));
     });
 
     test('a session that dies within ten seconds is not retried', () async {
@@ -489,6 +627,82 @@ void main() {
     });
   });
 
+  group('only in the foreground', () {
+    test(
+      'not when the app leaves while the drop is still tearing down',
+      () async {
+        // Checked once at the drop, the rule let a teardown that ends in a
+        // platform Bluetooth close finish after the user had left, and the
+        // cascade started behind them.
+        final rig = await _rig();
+        final slow = _SlowToCloseTransport();
+        await rig.connect(transport: slow);
+        rig.now += const Duration(seconds: 11);
+
+        rig.dropLink();
+        final dropped = rig.state;
+        _background(binding);
+        slow.release.complete();
+        await _settle();
+
+        expect(rig.session.reconnects, isEmpty);
+        expect(_fields(rig.state), _fields(dropped));
+
+        // Nor did it spend one of the two.
+        _foregroundAgain(binding);
+        expect(rig.session.isForeground, isTrue);
+        for (var drop = 1; drop <= 2; drop++) {
+          await rig.connect();
+          rig.now += const Duration(seconds: 11);
+          rig.dropLink();
+          await _eventually(
+            () =>
+                rig.state.isConnected && rig.session.reconnects.length == drop,
+          );
+        }
+      },
+    );
+
+    test(
+      'an attempt still connecting when the app leaves stands down',
+      () async {
+        final rig = await _rig();
+        await rig.connect();
+        rig.now += const Duration(seconds: 11);
+        final held = _HeldTransport();
+        rig.session.nextTransport = () => held;
+        rig.session.client!.transcript.recordNote('the session that dropped');
+
+        rig.dropLink();
+        final dropped = rig.state;
+        await _eventually(
+          () =>
+              rig.state.activity ==
+                  ObdConnectionActivity.reconnectingAutomatically &&
+              rig.session.client != null,
+        );
+        _background(binding);
+        // The link opens anyway, as a Bluetooth tier already in flight does.
+        held.gate.complete();
+        expect(await rig.session.lastReconnect, isFalse);
+        await _settle();
+
+        expect(_fields(rig.state), _fields(dropped));
+        expect(rig.session.client, isNull);
+        expect(
+          held.isConnected,
+          isFalse,
+          reason: 'no link left open behind it',
+        );
+        expect(rig.exportedNotes, contains('the session that dropped'));
+        expect(
+          rig.exportedNotes,
+          contains(contains('the automatic reconnect stands down')),
+        );
+      },
+    );
+  });
+
   group('is never attempted', () {
     test('for the simulator', () async {
       const demo = LastAdapter(
@@ -529,6 +743,47 @@ void main() {
       rig.now += const Duration(seconds: 11);
 
       rig.dropLink();
+      await _settle();
+      expect(rig.session.reconnects, isEmpty);
+      expect(rig.state.phase, ConnectionPhase.failed);
+    });
+
+    test('for an adapter of another kind under the same id', () async {
+      final rig = await _rig(
+        remembered: LastAdapter(
+          id: _adapter.id,
+          name: _adapter.name,
+          kind: TransportKind.bluetoothLe,
+        ),
+      );
+      await rig.connect();
+      rig.now += const Duration(seconds: 11);
+
+      rig.dropLink();
+      await _settle();
+      expect(rig.session.reconnects, isEmpty);
+    });
+
+    test('after the transport closed', () async {
+      // Unplugged, out of range or switched off: a cascade against nothing,
+      // under a line saying the adapter stopped answering.
+      final rig = await _rig();
+      await rig.connect();
+      rig.now += const Duration(seconds: 11);
+
+      rig.dropLink(ConnectionLossCause.transportClosed);
+      await _settle();
+      expect(rig.session.reconnects, isEmpty);
+      expect(rig.state.phase, ConnectionPhase.failed);
+    });
+
+    test('after an adapter error', () async {
+      // `UNABLE TO CONNECT`, `LV RESET`: a new handshake meets it at `0100`.
+      final rig = await _rig();
+      await rig.connect();
+      rig.now += const Duration(seconds: 11);
+
+      rig.dropLink(ConnectionLossCause.adapterError);
       await _settle();
       expect(rig.session.reconnects, isEmpty);
       expect(rig.state.phase, ConnectionPhase.failed);
@@ -580,14 +835,29 @@ void main() {
       expect(rig.state.issue, ObdConnectionIssue.adapterStoppedResponding);
     });
 
+    test('after a clear that has already returned', () async {
+      // The clear's future completes before `sendGlobal` restores `ATH0`, and
+      // a `04` that times out with headers already on throws without a
+      // resync, so the probe that ends the link can run after the clear has
+      // returned. The session that sent one is what counts.
+      final rig = await _rig();
+      final adapter = _RecordsClearTransport();
+      await rig.connect(transport: adapter);
+      rig.now += const Duration(seconds: 11);
+      await rig.session.clearDtcs();
+      expect(adapter.clearSent, isTrue);
+
+      rig.dropLink();
+      await _settle();
+      expect(rig.session.reconnects, isEmpty);
+      expect(rig.state.phase, ConnectionPhase.failed);
+    });
+
     test('from the background', () async {
       final rig = await _rig();
       await rig.connect();
       rig.now += const Duration(seconds: 11);
-      binding
-        ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
-        ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
-        ..handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      _background(binding);
       expect(rig.session.isForeground, isFalse);
 
       rig.dropLink();

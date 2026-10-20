@@ -10,6 +10,7 @@ import 'package:torque_obd/car/car_projection_runtime.dart';
 import 'package:torque_obd/car/car_projection_session_runtime.dart';
 import 'package:torque_obd/car/generated/car_projection_session.g.dart';
 import 'package:torque_obd/car/generated/car_telemetry.g.dart';
+import 'package:torque_obd/obd/elm327_client.dart';
 import 'package:torque_obd/obd/pid/pid_library.dart';
 import 'package:torque_obd/obd/telemetry_demand.dart';
 import 'package:torque_obd/state/obd_session.dart';
@@ -672,7 +673,9 @@ void main() {
         isTrue,
       );
       now += const Duration(seconds: 11);
-      session.client!.onConnectionLost!();
+      session.client!.reportConnectionLostForTest(
+        ConnectionLossCause.adapterSilent,
+      );
       await _eventually(
         () =>
             session.automaticReconnects == 1 &&
@@ -730,7 +733,9 @@ void main() {
         isTrue,
       );
       now += const Duration(seconds: 11);
-      session.client!.onConnectionLost!();
+      session.client!.reportConnectionLostForTest(
+        ConnectionLossCause.adapterSilent,
+      );
       expect(container.read(obdSessionProvider).phase, ConnectionPhase.failed);
 
       await host.sendLease(_lease(active: true, generation: 81, armed: false));

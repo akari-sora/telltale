@@ -500,6 +500,26 @@ final class ElmWriteAudit {
   bool _claimed = false;
 }
 
+/// Why [Elm327Client.onConnectionLost] last fired.
+///
+/// Every listener but one treats the cases alike, so the callback carries no
+/// argument. The session's automatic reconnect (#112) is the one: it is for
+/// an adapter that went quiet, and must not start a Bluetooth cascade after an
+/// adapter that was unplugged or one that reported the ignition off.
+enum ConnectionLossCause {
+  /// The transport reported the link closed: out of range, switched off,
+  /// unplugged.
+  transportClosed,
+
+  /// The adapter answered with an error that means it reset or lost the bus,
+  /// such as `LV RESET` or `UNABLE TO CONNECT`.
+  adapterError,
+
+  /// The adapter stopped answering: a resync that could not bring it back
+  /// into step, or the watchdog.
+  adapterSilent,
+}
+
 class Elm327Client {
   Elm327Client(
     this.transport, {
@@ -873,6 +893,16 @@ class Elm327Client {
   /// state rather than showing frozen gauges.
   void Function()? onConnectionLost;
 
+  /// Why [onConnectionLost] last fired, set just before it does.
+  ConnectionLossCause? get connectionLossCause => _connectionLossCause;
+  ConnectionLossCause? _connectionLossCause;
+
+  /// Fires [onConnectionLost] for [cause] without a link to lose. Tests only.
+  void reportConnectionLostForTest(ConnectionLossCause cause) {
+    _connectionLossCause = cause;
+    onConnectionLost?.call();
+  }
+
   /// Fires when [_resync] begins draining the connection.
   void Function()? onResyncStarted;
 
@@ -968,7 +998,10 @@ class Elm327Client {
       // its caller publish the precise failed-attempt state. Only a session
       // that had already completed initialization needs the asynchronous
       // connection-lost callback and generation teardown.
-      if (wasInitialized) onConnectionLost?.call();
+      if (wasInitialized) {
+        _connectionLossCause = ConnectionLossCause.transportClosed;
+        onConnectionLost?.call();
+      }
     });
 
     lastRxAt = DateTime.now();
@@ -1427,6 +1460,7 @@ class Elm327Client {
       isInitialized = false;
       _watchdog?.cancel();
       _watchdog = null;
+      _connectionLossCause = ConnectionLossCause.adapterError;
       scheduleMicrotask(() => onConnectionLost?.call());
     }
 
@@ -2293,6 +2327,7 @@ class Elm327Client {
       // returns early on it, so nothing else was going to notice either.
       _watchdog?.cancel();
       _watchdog = null;
+      _connectionLossCause = ConnectionLossCause.adapterSilent;
       scheduleMicrotask(() => onConnectionLost?.call());
       if (probeWriteStalled) {
         // The check itself could not be handed over. Not "the adapter did
@@ -6484,6 +6519,7 @@ class Elm327Client {
           issue: TransportIssue.linkStoppedResponding,
         ),
       );
+      _connectionLossCause = ConnectionLossCause.adapterSilent;
       onConnectionLost?.call();
     });
   }

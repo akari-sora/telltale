@@ -285,12 +285,28 @@ final class _DiagnosticExclusiveWireOwner {
 /// by the same token every ownership check in the session already uses — not
 /// by a flag that a later tap could inherit.
 final class _AutomaticReconnect {
-  _AutomaticReconnect({required this.generation, required this.notes});
+  _AutomaticReconnect({
+    required this.generation,
+    required this.ordinal,
+    required this.notes,
+  }) : screenGeneration = generation;
 
   final int generation;
 
+  /// Which of the window's attempts this is, counting from 1.
+  final int ordinal;
+
   /// Written into the new attempt's transcript right after its first line.
   final List<String> notes;
+
+  /// The generation whose screen this attempt still answers for.
+  ///
+  /// [generation] at first. Two things move the generation without handing
+  /// the screen to anybody: the attempt losing its own link before it
+  /// connected, and the app leaving the foreground, which makes it stand
+  /// down. Both move this with it, so the attempt still puts the drop's
+  /// failure back; a tap after either moves the generation past it.
+  int screenGeneration;
 }
 
 /// Turns an exception thrown while connecting into a sentence for a driver.
@@ -721,6 +737,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // the safety gate closed (`_awaitingResumeValidation`): foreground is
     // already false there, but the user did leave again mid-ATRV.
     if (!_foreground && !_awaitingResumeValidation) return;
+    _standDownAutomaticReconnect();
     // Snapshot first, before anything else this method does.
     //
     // `onPause` is the last callback Android reliably delivers before it is
@@ -1663,7 +1680,11 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // Bound to the generation that built this client, so a transport dying
     // after the user has moved on cannot speak for whatever session is current
     // by then.
-    client.onConnectionLost = () => _handleConnectionLost(generation);
+    client.onConnectionLost = () => _handleConnectionLost(
+      generation,
+      adapterWentSilent:
+          client.connectionLossCause == ConnectionLossCause.adapterSilent,
+    );
 
     try {
       final ok = await client.connect();
@@ -1968,15 +1989,31 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// crossed and the failure is shown. The reconnect is a new session that
   /// starts after this one's teardown, exactly as the user's own tap on the
   /// remembered-adapter shortcut would be — see [_reconnectAutomatically].
-  void _handleConnectionLost(int generation) {
+  ///
+  /// [adapterWentSilent] is true only when the client gave up on an adapter
+  /// that stopped answering; nothing else earns an automatic reconnect.
+  void _handleConnectionLost(int generation, {bool adapterWentSilent = false}) {
     if (_superseded(generation)) return;
     // Decided before anything below changes the facts it reads.
-    final retryTo = _automaticReconnectTarget(generation);
+    final retryTo = adapterWentSilent
+        ? _automaticReconnectTarget(generation)
+        : null;
+    // An automatic reconnect whose own link went before it connected — an
+    // `LV RESET` mid-handshake, a socket that closed. Its caller puts the
+    // drop's screen back; publishing a second failure here would leave the
+    // reconnecting line on it, and the generation this moves would read to
+    // the caller as somebody else taking over.
+    final attempt = _automaticReconnect;
+    final attemptLostItself =
+        attempt != null &&
+        attempt.screenGeneration == generation &&
+        _connectedGeneration != generation;
     final lostTranscript = _client?.transcript ?? _attemptTranscript;
     final lostSessionId = _sessionEvidence?.sessionId;
     _client?.transcript.recordNote('Connection event: adapter link dropped');
     _publishSessionBoundary(ObdSessionBoundaryReason.linkLoss);
     _generation++;
+    if (attemptLostItself) attempt.screenGeneration = _generation;
     unawaited(
       ref.read(vehicleProfileProvider.notifier).invalidateForVehicleBoundary(),
     );
@@ -1991,14 +2028,16 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // kind and protocol already live on this record; requested and the
     // numeric ATDPN must too, or the Connect panel falls back to the ATDP
     // description once the client is gone.
-    state = state.copyWith(
-      phase: ConnectionPhase.failed,
-      requestedProtocol: _client?.requestedProtocol ?? state.requestedProtocol,
-      protocolNumber: _client?.protocolNumber ?? state.protocolNumber,
-      error:
-          'The adapter stopped responding and the connection has been dropped.',
-      issue: ObdConnectionIssue.adapterStoppedResponding,
-    );
+    if (!attemptLostItself) {
+      state = state.copyWith(
+        phase: ConnectionPhase.failed,
+        requestedProtocol:
+            _client?.requestedProtocol ?? state.requestedProtocol,
+        protocolNumber: _client?.protocolNumber ?? state.protocolNumber,
+        error: 'The adapter stopped responding and the connection has been dropped.',
+        issue: ObdConnectionIssue.adapterStoppedResponding,
+      );
+    }
     final teardown = _teardown();
     unawaited(teardown);
     if (retryTo == null) return;
@@ -2006,6 +2045,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
       _reconnectAutomatically(
         adapter: retryTo,
         owner: _generation,
+        pauseEpoch: _pauseEpoch,
         afterTeardown: teardown,
         failure: state,
         lostTranscript: lostTranscript,
@@ -2034,11 +2074,19 @@ class ObdSession extends Notifier<ObdConnectionState> {
   ///     pocket is usually the ignition going off, and a Bluetooth cascade
   ///     started from the background with nobody watching is not a reconnect
   ///     anybody asked for. Android Auto keeps its own reconnect path;
-  ///   * never while a fault-code clear is on the wire. A link lost between
-  ///     `04` going out and its answer is the one drop whose verdict — a clear
-  ///     may have happened, do not send another — has to reach the driver
-  ///     before anything connects again, and `DtcScanNotifier` discards a
-  ///     clear's outcome once a new connection has begun.
+  ///   * never for a session that has sent a fault-code clear. A drop after
+  ///     `04` went out is the one whose verdict — a clear may have happened,
+  ///     do not send another — has to reach the driver before anything
+  ///     connects again. Being on the wire was not the test: the clear's
+  ///     future completes before `sendGlobal` restores `ATH0`, and a `04`
+  ///     that timed out with headers already on throws without resyncing, so
+  ///     the probe that ends the link runs after the clear has returned;
+  ///   * only after the adapter went silent: a probe nobody answered, or the
+  ///     watchdog. Not after the transport closed — an adapter unplugged or
+  ///     out of range would get a Bluetooth cascade against nothing, under a
+  ///     line saying it stopped answering — nor after an adapter error such
+  ///     as `UNABLE TO CONNECT`, which a new handshake meets again at `0100`.
+  ///     The caller decides this one; see [_handleConnectionLost].
   LastAdapter? _automaticReconnectTarget(int generation) {
     final lost = _sessionAdapter;
     final connectedAt = _connectedAt;
@@ -2056,7 +2104,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
         return null;
     }
     if (!_foreground) return null;
-    if (_clearInFlight) return null;
+    if (_clearAttemptedGeneration == generation) return null;
     final now = automaticReconnectClock();
     if (now - connectedAt < automaticReconnectMinimumConnected) return null;
     _automaticReconnects.removeWhere(
@@ -2091,9 +2139,14 @@ class ObdSession extends Notifier<ObdConnectionState> {
   ///
   /// [failure] is the state the drop published. A failed reconnect ends on it,
   /// unchanged, so the screen says what it said before this existed.
+  ///
+  /// [pauseEpoch] is the app's at the drop. The teardown has no deadline — it
+  /// ends in a platform Bluetooth close — and a user who saw the failure and
+  /// left must not have a cascade started behind them when it finishes.
   Future<void> _reconnectAutomatically({
     required LastAdapter adapter,
     required int owner,
+    required int pauseEpoch,
     required Future<void> afterTeardown,
     required ObdConnectionState failure,
     required ObdTranscript? lostTranscript,
@@ -2105,13 +2158,19 @@ class ObdSession extends Notifier<ObdConnectionState> {
       // The attempt's own `_teardown()` waits for this chain again, bounded.
     }
     if (_generation != owner) return;
+    if (!_foreground || _pauseEpoch != pauseEpoch) return;
+    // As the teardown just filed them. A failed attempt puts them back.
+    final lostRecord = _lastTranscript;
+    final lostHeader = _lastTranscriptHeader;
 
     final startedAt = automaticReconnectClock();
     _automaticReconnects.add(startedAt);
+    final ordinal = _automaticReconnects.length;
     final attempt = _AutomaticReconnect(
       generation: owner + 1,
+      ordinal: ordinal,
       notes: _automaticReconnectNotes(
-        ordinal: _automaticReconnects.length,
+        ordinal: ordinal,
         lostSessionId: lostSessionId,
         lostTranscript: lostTranscript,
       ),
@@ -2152,8 +2211,58 @@ class ObdSession extends Notifier<ObdConnectionState> {
     if (identical(_automaticReconnect, attempt)) _automaticReconnect = null;
     if (connected) return;
     // A tap on 中斷連線 or connect while the attempt ran owns the screen now.
-    if (_generation != (started ? attempt.generation : owner)) return;
+    if (_generation != (started ? attempt.screenGeneration : owner)) return;
+    if (started && lostRecord != null) {
+      _restoreLostRecord(attempt, lostRecord, lostHeader);
+    }
     state = failure;
+  }
+
+  /// Puts the dropped session's record back after a failed attempt.
+  ///
+  /// The attempt's teardown filed *its* transcript as the last session, in
+  /// memory and on disk, over the one the drop had just filed. The screen went
+  /// back to the drop's failure, so an export from it — the moment #112 needs
+  /// one — handed over the attempt's dozen lines of tier refusals instead of
+  /// the session that stopped answering, header and all. The attempt is kept
+  /// as its last lines, quoted at the end of the record it was trying to save.
+  void _restoreLostRecord(
+    _AutomaticReconnect attempt,
+    ObdTranscript lostRecord,
+    String lostHeader,
+  ) {
+    final attemptRecord = _attemptTranscript;
+    lostRecord.recordNote(
+      'Automatic reconnect ${attempt.ordinal} of $automaticReconnectLimit did '
+      'not connect',
+    );
+    if (attemptRecord != null &&
+        !identical(attemptRecord, lostRecord) &&
+        !attemptRecord.isEmpty) {
+      for (final note in _quotedTail('Reconnect attempt', attemptRecord)) {
+        lostRecord.recordNote(note);
+      }
+    }
+    _attemptTranscript = null;
+    _lastTranscript = lostRecord;
+    _lastTranscriptHeader = lostHeader;
+    unawaited(_saveTranscriptSnapshot());
+  }
+
+  /// The last lines of [record], as notes for another record.
+  ///
+  /// Quoted, never replayed as traffic: these bytes did not cross the link the
+  /// other record is about. Quoting escapes them once more, so `\r` reads
+  /// `\\r`.
+  static List<String> _quotedTail(String label, ObdTranscript record) {
+    final lines = record.render().trimRight().split('\n');
+    final tail = lines.length > _automaticReconnectCarriedLines
+        ? lines.sublist(lines.length - _automaticReconnectCarriedLines)
+        : lines;
+    return [
+      '$label, last ${tail.length} lines, quoted:',
+      for (final line in tail) '| $line',
+    ];
   }
 
   List<String> _automaticReconnectNotes({
@@ -2169,25 +2278,43 @@ class ObdSession extends Notifier<ObdConnectionState> {
           'reconnect; the app is trying the remembered adapter once.',
     ];
     // The lines that say why. The previous session's own record is replaced
-    // by this one on export and on disk, and #112's probe outcome is the
-    // whole reason the previous one mattered.
+    // by this one on export and on disk once it connects, and #112's probe
+    // outcome is the whole reason the previous one mattered.
     if (lostTranscript != null && !lostTranscript.isEmpty) {
-      final lines = lostTranscript.render().trimRight().split('\n');
-      final tail = lines.length > _automaticReconnectCarriedLines
-          ? lines.sublist(lines.length - _automaticReconnectCarriedLines)
-          : lines;
-      // Quoted as notes, never replayed as traffic: these bytes did not cross
-      // this link. Quoting escapes them once more, so `\r` reads `\\r`.
-      notes.add('Previous session, last ${tail.length} lines, quoted:');
-      for (final line in tail) {
-        notes.add('| $line');
-      }
+      notes.addAll(_quotedTail('Previous session', lostTranscript));
     }
     return notes;
   }
 
   bool _isAutomaticReconnect(int generation) =>
       _automaticReconnect?.generation == generation;
+
+  /// Ends an automatic reconnect that has not connected yet, because the app
+  /// is leaving the foreground.
+  ///
+  /// It is only ever made in the foreground, and checking that once at the
+  /// drop was not enough: the attempt then runs a Bluetooth cascade and a
+  /// handshake, seconds or tens of seconds, and a user who pockets the phone
+  /// meanwhile would get a connection opened behind them, with the lifecycle
+  /// gate not yet installed. Its caller puts the drop's screen and record back
+  /// as for any failed attempt. One that has connected is an ordinary session
+  /// by now, and the pause that follows handles it like one.
+  void _standDownAutomaticReconnect() {
+    final attempt = _automaticReconnect;
+    // Still the generation it claimed: not taken over, not already ending.
+    if (attempt == null ||
+        _generation != attempt.generation ||
+        _connectedGeneration == attempt.generation) {
+      return;
+    }
+    _attemptTranscript?.recordNote(
+      'App went to the background; the automatic reconnect stands down',
+    );
+    _publishSessionBoundary(ObdSessionBoundaryReason.linkLoss);
+    _generation++;
+    attempt.screenGeneration = _generation;
+    unawaited(_teardown());
+  }
 
   /// The adapter this session was opened to, as the reconnect shortcut would
   /// name it. Null for the simulator and for test transports.
@@ -2376,8 +2503,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
         !state.isConnected) {
       throw const DiagnosticLinkException(
         kind: DiagnosticFailureKind.retiredOperation,
-        message:
-            'No active diagnostic link ownership authority for connected session.',
+        message: 'No active diagnostic link ownership authority for connected session.',
       );
     }
     return authority.runOneShot<T>(
@@ -2415,8 +2541,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
         _awaitingResumeValidation) {
       throw const DiagnosticLinkException(
         kind: DiagnosticFailureKind.retiredOperation,
-        message:
-            'No active diagnostic link ownership authority for connected session.',
+        message: 'No active diagnostic link ownership authority for connected session.',
       );
     }
 
@@ -2603,6 +2728,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
       );
     }
     _clearInFlight = true;
+    _clearAttemptedGeneration = _generation;
     try {
       if (!identical(_engine, engine)) {
         throw const DtcReadException(
@@ -2618,6 +2744,11 @@ class ObdSession extends Notifier<ObdConnectionState> {
 
   /// Whether a Mode 04 is on the wire right now. See [clearDtcs].
   bool _clearInFlight = false;
+
+  /// The connection generation that last attempted a Mode 04 clear. Such a
+  /// session is never reconnected automatically; see
+  /// [_automaticReconnectTarget].
+  int? _clearAttemptedGeneration;
 
   Future<String?> readVin({DateTime? deadline}) async {
     final engine = _engine;
