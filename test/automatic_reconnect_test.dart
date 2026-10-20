@@ -490,6 +490,37 @@ void main() {
     });
   });
 
+  group('a manual connect that resets during its handshake', () {
+    test('still finishes its own handshake history', () async {
+      // The reset fires the connection-lost callback before the step that
+      // carried it completes. The failure that publishes is this connect's
+      // own screen, so the step that was running must still end failed —
+      // not stay "running" for good because the generation moved.
+      final rig = await _rig();
+      expect(
+        await rig.session.connectForTest(
+          _ResetsAtHandshake(),
+          TransportKind.bluetoothClassic,
+          adapter: _adapter,
+        ),
+        isFalse,
+      );
+      await _settle();
+
+      expect(rig.state.phase, ConnectionPhase.failed);
+      expect(rig.state.initSteps, isNotEmpty);
+      expect(
+        rig.state.initSteps.where((s) => s.status == InitStatus.running),
+        isEmpty,
+      );
+      expect(
+        rig.state.initSteps.where((s) => s.status == InitStatus.failed),
+        isNotEmpty,
+      );
+      expect(rig.session.reconnects, isEmpty);
+    });
+  });
+
   group('a reconnect that resets during its handshake', () {
     test('leaves none of its handshake on the drop it put back', () async {
       // The client schedules the connection-lost callback, then completes

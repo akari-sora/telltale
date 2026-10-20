@@ -1705,8 +1705,14 @@ class ObdSession extends Notifier<ObdConnectionState> {
       // A handshake whose attempt has been superseded — a disconnect, another
       // connect, an automatic attempt that lost its own link and put the
       // drop's failure back — keeps emitting until its teardown cancels this,
-      // several awaits later. Its steps belong to nobody's screen.
-      if (_superseded(generation)) return;
+      // several awaits later. Its steps belong to nobody's screen. The one
+      // exception is a connect whose own link went mid-handshake: the failure
+      // on screen is its own, and the step that carried the reset still has
+      // to end failed rather than stay "running" for good.
+      if (_superseded(generation) &&
+          _lostOwnScreen != (generation, _generation)) {
+        return;
+      }
       // Replace the in-flight entry for a step rather than appending, so the
       // wizard shows one row per command that mutates from running → ok.
       final existing = steps.indexWhere((s) => s.index == progress.index);
@@ -2065,7 +2071,11 @@ class ObdSession extends Notifier<ObdConnectionState> {
     _client?.transcript.recordNote('Connection event: adapter link dropped');
     _publishSessionBoundary(ObdSessionBoundaryReason.linkLoss);
     _generation++;
-    if (attemptLostItself) attempt.screenGeneration = _generation;
+    if (attemptLostItself) {
+      attempt.screenGeneration = _generation;
+    } else {
+      _lostOwnScreen = (generation, _generation);
+    }
     unawaited(
       ref.read(vehicleProfileProvider.notifier).invalidateForVehicleBoundary(),
     );
@@ -2815,6 +2825,13 @@ class ObdSession extends Notifier<ObdConnectionState> {
 
   /// Whether a Mode 04 is on the wire right now. See [clearDtcs].
   bool _clearInFlight = false;
+
+  /// The generation a link loss ended and the one it moved to, when the
+  /// failure it published is that connection's own screen. Late handshake
+  /// steps from it may still finish that screen's history until anything else
+  /// moves the generation. Not set for an automatic attempt's own loss, whose
+  /// screen is the drop it was trying to undo.
+  (int, int)? _lostOwnScreen;
 
   /// The connection generation that last attempted a Mode 04 clear. Such a
   /// session is never reconnected automatically; see
