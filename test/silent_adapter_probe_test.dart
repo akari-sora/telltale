@@ -202,6 +202,34 @@ void main() {
       expect(lost, isEmpty);
     }, timeout: const Timeout(Duration(seconds: 20)));
 
+    test('markAlive after a 7F xx 78 keeps the window it grants', () async {
+      // markAlive re-arms the reply timer with the command window. After a
+      // 7F xx 78 had set the recorded budget to the shorter pending window,
+      // the watchdog kept that one and ended the command early.
+      final transport = _QuietAdapter();
+      final lost = <int>[];
+      final client = Elm327Client(
+        transport,
+        commandTimeout: const Duration(seconds: 10),
+        responsePendingTimeout: const Duration(seconds: 2),
+      )..onConnectionLost = () => lost.add(1);
+      addTearDown(client.dispose);
+      expect(await client.connect(), isTrue);
+      transport.sent.clear();
+      transport.once('0105', [
+        ('7F0178\r', const Duration(milliseconds: 100)),
+        ('410564\r\r>', const Duration(milliseconds: 7000)),
+      ]);
+
+      final reply = client.send('0105');
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      client.markAlive();
+
+      expect((await reply).isSuccess, isTrue);
+      expect(transport.sent, isNot(contains('ATI')));
+      expect(lost, isEmpty);
+    }, timeout: const Timeout(Duration(seconds: 20)));
+
     test('a chip still waiting for a lost line end answers the probe with ?',
         () async {
       final (client, transport, lost) = await _connected();

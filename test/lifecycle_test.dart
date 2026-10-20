@@ -149,12 +149,21 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
       client.lastRxAt = DateTime.now().subtract(const Duration(seconds: 30));
 
-      final deadline = DateTime.now().add(const Duration(seconds: 8));
-      while (!lost && DateTime.now().isBefore(deadline)) {
-        await Future<void>.delayed(const Duration(milliseconds: 50));
+      // First tick: the command is ended through the timeout path.
+      var deadline = DateTime.now().add(const Duration(seconds: 3));
+      while (outcome == null && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
       }
       expect(outcome, isA<TimeoutException>());
       expect(client.isOutOfSync, isTrue);
+      // Inside the grace window the link is kept for the next resync.
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      expect(lost, isFalse, reason: 'dropped inside the grace window');
+      // With nothing else sent, the drop follows once the grace has passed.
+      deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (!lost && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
       expect(lost, isTrue);
       await client.dispose();
     });

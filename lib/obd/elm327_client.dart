@@ -1297,12 +1297,10 @@ class Elm327Client {
     final seen = RegExp(r'7F[0-9A-F]{2}78').allMatches(text).length;
     if (seen <= _pendingSeen) return;
     _pendingSeen = seen;
-    final window = _withinDeadline(responsePendingTimeout);
-    // The watchdog sizes its limit from this. Left at the original command
-    // budget, it gave up before the pending window it had just granted —
-    // and since #112 it hands a still-owed command to the timeout path.
-    _pendingDeadline = window;
-    _armPendingTimer(window, _onCommandTimeout);
+    _armPendingTimer(
+      _withinDeadline(responsePendingTimeout),
+      _onCommandTimeout,
+    );
   }
 
   /// How many `7F xx 78` replies this exchange has already been extended for.
@@ -2007,6 +2005,12 @@ class Elm327Client {
   /// generation's pending command.
   void _armPendingTimer(Duration timeout, void Function() onFire) {
     final generation = _connectionGeneration;
+    // The watchdog sizes its limit from the window actually granted. Every
+    // re-arm changes it: a `7F xx 78` grants the pending window, `markAlive`
+    // the command window again. Left at whatever was set first, the watchdog
+    // gave up before the timer it was backing, and since #112 that hands a
+    // still-owed command to the timeout path early.
+    _pendingDeadline = timeout;
     // Snapshot before the timer, so a stall that happened *before* this
     // budget is not later read as the adapter missing it.
     _silenceBeforeReplyBudget = DateTime.now().difference(lastRxAt);
