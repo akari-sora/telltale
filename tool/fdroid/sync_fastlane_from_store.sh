@@ -25,10 +25,10 @@ sync_locale() {
     # fdroiddata recipe's VercodeOperation) and reads the changelog named
     # after that code, so N.txt alone never shows there. Split builds
     # started at 206.
-    local log code
+    local log code abi
     for log in "$STORE/metadata/$loc/changelogs/"*.txt; do
       code="$(basename "$log" .txt)"
-      [[ "$code" =~ ^[0-9]+$ ]] && (( code >= 206 )) || continue
+      [[ "$code" =~ ^[0-9]+$ ]] && (( 10#$code >= 206 )) || continue
       for abi in 1 2 3; do
         cp "$log" "$dest/changelogs/${code}${abi}.txt"
       done
