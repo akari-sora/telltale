@@ -1,0 +1,1 @@
+Phone and Android Auto share one Telltale app and OBD connection. Fixed car-only cold startup waiting for the phone screen. Android Auto now reads its own required signals and shows actual engine load and manifold pressure. Explicit disconnect no longer triggers automatic reconnection. Improved background continuity. Read-only diagnostics; use a supported OBD adapter.

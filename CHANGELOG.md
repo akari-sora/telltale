@@ -8,6 +8,8 @@ Dates are the date the build was made, not the date it reached anyone.
 
 ## Unreleased
 
+## 1.0.24 — 2026-10-20
+
 - When an ELM327 clone goes silent after a command — not even `NO DATA` —
   the app now probes it with `ATI` before giving up, instead of waiting three
   seconds and dropping the connection. Three user exports from two
@@ -21,6 +23,8 @@ Dates are the date the build was made, not the date it reached anyone.
 - Tested by unit tests and a fault-injection rig (an ELM327 emulator behind
   a proxy that swallows one reply). Not yet validated on a real vehicle or
   adapter; no adapter or car compatibility is claimed.
+- CI retries `pub get` when cloning the Codeberg-hosted Bluetooth plugin
+  resets the TLS connection, which failed the 1.0.23 main pipeline.
 
 ## 1.0.23 — 2026-10-20
 
