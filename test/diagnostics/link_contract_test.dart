@@ -546,13 +546,11 @@ void main() {
 
   group('Elm327DiagnosticLink timeouts and response delay', () {
     test('T-TIMEOUT-RESP: request without deadline times out on swallowed prompt, throwing responseTimeout after sending wire command', () async {
-      final swallowed = <String>{};
       final client = await _createConnectedClient(
-        faults: AdapterFaults(swallowPromptFor: swallowed),
         commandTimeout: const Duration(milliseconds: 100),
       );
       final transport = client.transport as FakeElm327;
-      swallowed.add('0100');
+      transport.silenceFor.add('0100');
       final link = Elm327DiagnosticLink(client);
 
       final request = DiagnosticRequest(
@@ -615,13 +613,11 @@ void main() {
     });
 
     test('T-TIMEOUT-FUTURE-DL: request with unexpired future deadline times out on swallowed prompt, throwing responseTimeout not deadlineExpired', () async {
-      final swallowed = <String>{};
       final client = await _createConnectedClient(
-        faults: AdapterFaults(swallowPromptFor: swallowed),
         commandTimeout: const Duration(milliseconds: 100),
       );
       final transport = client.transport as FakeElm327;
-      swallowed.add('0100');
+      transport.silenceFor.add('0100');
       final link = Elm327DiagnosticLink(client);
 
       final request = DiagnosticRequest(

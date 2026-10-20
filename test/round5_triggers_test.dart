@@ -2144,7 +2144,6 @@ void main() {
       // that then cannot find a prompt either.
       final transport = FakeElm327(
         protocol: BusProtocol.can11,
-        faults: const AdapterFaults(swallowPromptFor: {'03'}),
         ecus: [
           FakeEcu(
             name: 'ECM',
@@ -2154,6 +2153,7 @@ void main() {
           ),
         ],
       );
+      transport.silenceFor.add('03');
 
       final client = Elm327Client(
         transport,
@@ -2539,7 +2539,6 @@ void main() {
       // down on behalf of work nobody was waiting for.
       final transport = FakeElm327(
         protocol: BusProtocol.can11,
-        faults: const AdapterFaults(swallowPromptFor: {'010C'}),
         ecus: [
           FakeEcu(
             name: 'ECM',
@@ -2549,6 +2548,7 @@ void main() {
           ),
         ],
       );
+      transport.silenceFor.add('010C');
       final client = Elm327Client(transport,
           commandTimeout: const Duration(milliseconds: 200));
       expect(await client.connect(), isTrue);
@@ -2640,7 +2640,6 @@ void main() {
       // contract.
       final transport = FakeElm327(
         protocol: BusProtocol.can11,
-        faults: const AdapterFaults(swallowPromptFor: {'010C'}),
         ecus: [
           FakeEcu(
             name: 'ECM',
@@ -2650,6 +2649,7 @@ void main() {
           ),
         ],
       );
+      transport.silenceFor.add('010C');
       var lost = 0;
       final client = Elm327Client(transport,
           commandTimeout: const Duration(milliseconds: 200))
@@ -7785,7 +7785,6 @@ void main() {
       // "never sent". The vehicle may be cleared.
       final transport = FakeElm327(
         protocol: BusProtocol.can11,
-        faults: const AdapterFaults(swallowPromptFor: {'04'}),
         ecus: [
           FakeEcu(
             name: 'ECM',
@@ -7795,6 +7794,7 @@ void main() {
           ),
         ],
       );
+      transport.silenceFor.add('04');
       final engine = await _connect(transport);
       await engine.discoverResponders();
       await expectLater(

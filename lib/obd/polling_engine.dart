@@ -13,8 +13,10 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../diagnostics/diagnostic_link.dart';
 import '../diagnostics/elm327_diagnostic_link.dart';
+import 'adapter_identity.dart';
 import 'addressing.dart';
 import 'dtc/dtc.dart';
+import 'elm_session_profile.dart';
 import 'elapsed_clock.dart';
 import 'freeze_frame.dart';
 import 'readiness.dart';
@@ -4146,6 +4148,19 @@ class PollingEngine {
     scheduler.canBatch =
         client.addressing.isCan && _verifiedSupportBlocks.isNotEmpty;
     scheduler.isBatchable = _isBatchable;
+    final clone = client.adapterIdentity.concerns.any(
+      (c) => c.kind == AdapterConcernKind.firmwareNeverReleased,
+    );
+    scheduler.batchSizeCap = ElmSessionProfile.batchSizeCap(
+      cloneSelfInconsistent: clone,
+      multiEcuFunctional:
+          client.enginePhysicalSilent && client.lastResponderCount > 1,
+      promptlessCompletes: client.promptlessCompleteCount,
+    );
+    if (client.promptlessCompleteCount > 0 &&
+        scheduler.interCommandDelay < const Duration(milliseconds: 100)) {
+      scheduler.interCommandDelay = const Duration(milliseconds: 100);
+    }
   }
 
   Future<void> _pollBatch(List<QueuedRequest> batch, [int? epoch]) async {
@@ -4567,16 +4582,14 @@ class PollingEngine {
           _publish(epoch);
           return;
         }
-        // Repeated silence is still not the vehicle saying it lacks the
-        // sensor — only the support mask says that, and a PID the mask
-        // disclaimed never reaches this path because it is filtered out of the
-        // poll set. So this backs off rather than retiring the PID: a slow ECU
-        // or a receive filter used to grey a working gauge out for the rest of
-        // the session, with nothing on screen explaining why.
+        // Three unanswered single-PID reads are treated as unsupported, with
+        // the same five-minute recheck as a mask denial. The #110 clone
+        // retried `015E` in a hot loop; backing off 60 s as `noAnswer` still
+        // occupied the bus. A later real answer still wins on recheck.
         _invalidateSharedWire(
           pid,
-          PidFault.noAnswer,
-          retryAfter: DateTime.now().add(noAnswerBackoff),
+          PidFault.unsupported,
+          retryAfter: DateTime.now().add(recheckInterval),
         );
         _noDataStrikes.remove(id);
       } else {

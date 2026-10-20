@@ -329,7 +329,33 @@ void main() {
     // 4. 丟失 Prompt / 超時假死與再同步 (Lost Prompt, Timeout & Resync Recovery)
     // -------------------------------------------------------------------------
     group('4. 丟失 Prompt / 超時假死與再同步 (Lost Prompt & Timeout Recovery)', () {
-      test('lost prompt triggers command timeout and marks connection out-of-sync', () async {
+      test('lost prompt on a complete OBD line quiet-completes', () async {
+        final transport = ChaosStreamTransport();
+        final client = Elm327Client(
+          transport,
+          commandTimeout: const Duration(milliseconds: 300),
+        );
+        addTearDown(client.dispose);
+
+        expect(await client.connect(), isTrue);
+
+        transport.onWrite = (cmd, t) {
+          if (cmd == '010C') {
+            t.injectString('41 0C 1A F8\r');
+          }
+        };
+
+        final response = await client.send(
+          '010C',
+          timeout: const Duration(milliseconds: 300),
+        );
+        expect(response.isSuccess, isTrue);
+        expect(response.bytes, [0x41, 0x0C, 0x1A, 0xF8]);
+        expect(client.promptlessCompleteCount, greaterThanOrEqualTo(1));
+        expect(client.isOutOfSync, isFalse);
+      });
+
+      test('lost prompt on a mid-line chunk still times out', () async {
         final transport = ChaosStreamTransport();
         final client = Elm327Client(
           transport,
@@ -339,17 +365,17 @@ void main() {
 
         expect(await client.connect(), isTrue);
 
-        // Stall 010C by sending data without prompt
         transport.onWrite = (cmd, t) {
           if (cmd == '010C') {
-            t.injectString('41 0C 1A F8\r');
+            t.injectString('41 0C 1A');
           }
         };
 
-        expect(
-          () => client.send('010C', timeout: const Duration(milliseconds: 60)),
+        await expectLater(
+          client.send('010C', timeout: const Duration(milliseconds: 60)),
           throwsA(isA<TimeoutException>()),
         );
+        expect(client.isOutOfSync, isTrue);
       });
 
       test('subsequent command resynchronises after lost prompt and succeeds', () async {
