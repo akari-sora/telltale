@@ -2163,11 +2163,6 @@ class Elm327Client {
     // probe's answer may still be in flight, so the stream cannot be called
     // in step. The link goes.
     var probeWriteStalled = false;
-    // The caller's deadline cut the probe's write short. Whether the bytes
-    // left is unknown, so no prompt seen meanwhile can be called its answer:
-    // the caller is refused, the stream stays out of step with the probe
-    // still owed, and the next resync waits for that answer.
-    var probeWriteUnknown = false;
     // The passive stretch used up the caller's whole budget. Nothing is
     // probed for a caller that has already gone; the next resync probes.
     var callerSpentInWait = false;
@@ -2179,9 +2174,18 @@ class Elm327Client {
           callerLimited && wait == left && !drain.isCompleted;
     }
     if (drain.isCompleted) _resyncActiveProbe = false;
+    // The probe gets its whole write limit or is not sent. A caller with
+    // less time left than that would cut the write short, and a write cut
+    // short has an unknown outcome: no prompt seen afterwards could be
+    // called the probe's answer. That caller waits passively and is
+    // refused; the probe stays armed for the next resync, which a poll with
+    // no deadline always reaches.
+    final (probeLeft, probeCallerLimited) = remaining();
+    final probeAffordable = !(probeCallerLimited && probeLeft < writeTimeout);
     if (_resyncActiveProbe &&
         !callerSpentInWait &&
-        remaining().$1 > Duration.zero) {
+        probeAffordable &&
+        probeLeft > Duration.zero) {
       _resyncActiveProbe = false;
       _probeOutstanding = true;
       _wireBytesBeforeProbe = _pendingWireBytes;
@@ -2192,19 +2196,16 @@ class Elm327Client {
       );
       // Bounded like any other write. RFCOMM with its credits exhausted
       // never takes the bytes, and then no prompt is coming either.
-      final (left, callerLimited) = remaining();
+      final (left, _) = remaining();
       final writeBudget = left < writeTimeout ? left : writeTimeout;
       try {
         final probe = ascii.encode('ATI\r');
         transcript.recordWrite(probe);
         await transport.write(probe).timeout(writeBudget);
       } on TimeoutException {
-        // A caller budget that ran out first is handled below as just that.
-        if (callerLimited && left < writeTimeout) {
-          probeWriteUnknown = true;
-        } else {
-          probeWriteStalled = true;
-        }
+        // The caller could afford the whole limit (above), so this is the
+        // link refusing the bytes, not the caller running out.
+        probeWriteStalled = true;
       } on Object {
         // The bytes may still have gone out; the drain waits out the window.
         transcript.recordNote('Probe write failed');
@@ -2216,7 +2217,6 @@ class Elm327Client {
       );
       if (!drain.isCompleted) drain.complete(false);
     }
-    if (probeWriteUnknown && !drain.isCompleted) drain.complete(false);
     final (window, callerLimited) = callerSpentInWait
         ? (Duration.zero, true)
         : remaining();
@@ -2240,14 +2240,8 @@ class Elm327Client {
     // link is dead tore down a session whose valid prompt was 100 ms away,
     // comfortably inside the three seconds this recovery actually allows. The
     // caller is refused; the link keeps the benefit of the doubt it was given.
-    if (probeWriteUnknown || (!sawPrompt && !probeWriteStalled && callerLimited)) {
+    if (!sawPrompt && !probeWriteStalled && callerLimited) {
       _outOfSync = true;
-      // The probe's answer may already have come and gone inside this drain,
-      // behind an older prompt, with nothing left to show for it. Waiting
-      // for it again could wait forever, so the next resync probes again:
-      // its listening stretch takes a late answer if one is still coming,
-      // and a fresh ATI if not.
-      if (probeWriteUnknown) _resyncActiveProbe = true;
       // The rest of the window this client allows, minus what was spent.
       final spent = _clock().difference(started);
       _extendResyncGrace(

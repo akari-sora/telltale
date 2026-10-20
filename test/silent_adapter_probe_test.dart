@@ -328,7 +328,9 @@ void main() {
     test(
       'a probe answered after its caller gave up still holds the next write',
       () async {
-        final (client, transport, lost) = await _connected();
+        final (client, transport, lost) = await _connected(
+        writeTimeout: const Duration(milliseconds: 500),
+      );
         addTearDown(client.dispose);
         // The caller's deadline ends after the probe is written but before
         // it is answered. The answer (and a second prompt behind it) must
@@ -336,8 +338,8 @@ void main() {
         transport
           ..once('011F', null)
           ..once('ATI', [
-            ('STOPPED\r\r>', const Duration(milliseconds: 150)),
-            ('?\r\r>', const Duration(milliseconds: 170)),
+            ('STOPPED\r\r>', const Duration(milliseconds: 900)),
+            ('?\r\r>', const Duration(milliseconds: 920)),
           ])
           ..once('010D', [('410D3C\r\r>', const Duration(milliseconds: 60))]);
 
@@ -348,7 +350,7 @@ void main() {
         await expectLater(
           client.send(
             '0105',
-            deadline: DateTime.now().add(const Duration(milliseconds: 1100)),
+            deadline: DateTime.now().add(const Duration(milliseconds: 1800)),
           ),
           throwsA(isA<TimeoutException>()),
         );
@@ -390,21 +392,15 @@ void main() {
     });
 
     test(
-      'a caller-cut probe write keeps the stream out of step, whatever drains',
+      'a caller without budget for the whole probe write is refused without it',
       () async {
         final (client, transport, lost) = await _connected();
         addTearDown(client.dispose);
-        // The probe is taken and then its write hangs until the caller's
-        // deadline. An older prompt drains meanwhile; the probe's own answer
-        // is still on its way and must not land on the next command.
-        transport
-          ..once('011F', null)
-          ..once('ATI', [
-            ('>', Duration.zero),
-            ('ELM327 v1.5\r\r>', const Duration(milliseconds: 500)),
-          ])
-          ..once('010D', [('410D3C\r\r>', const Duration(milliseconds: 100))])
-          ..stallAfterAcceptingFor.add('ATI');
+        // After the one-second listen only 300 ms of this caller remain, less
+        // than the probe's two-second write limit. A write cut short has an
+        // unknown outcome, so the probe is not sent for this caller at all;
+        // the next resync, with no deadline, sends it.
+        transport.once('011F', null);
 
         await expectLater(
           client.send('011F'),
@@ -417,46 +413,11 @@ void main() {
           ),
           throwsA(isA<TimeoutException>()),
         );
+        expect(transport.sent, isNot(contains('ATI')));
         expect(client.isOutOfSync, isTrue);
         final next = await client.send('010D');
 
-        expect(next.hexPayload, '410D3C');
-        expect(lost, isEmpty);
-      },
-    );
-
-    test(
-      'a caller-cut probe answered before the deadline does not strand the link',
-      () async {
-        final (client, transport, lost) = await _connected();
-        addTearDown(client.dispose);
-        // Both the older prompt and the probe's own answer arrive inside the
-        // caller's deadline, while the probe's write still hangs. The second
-        // prompt is consumed by the finished drain; nothing is left to wait
-        // for, so the next resync must ask again rather than wait it out.
-        transport
-          ..once('011F', null)
-          ..once('ATI', [
-            ('>', Duration.zero),
-            ('ELM327 v1.5\r\r>', const Duration(milliseconds: 100)),
-          ])
-          ..stallAfterAcceptingFor.add('ATI');
-
-        await expectLater(
-          client.send('011F'),
-          throwsA(isA<TimeoutException>()),
-        );
-        await expectLater(
-          client.send(
-            '0105',
-            deadline: DateTime.now().add(const Duration(milliseconds: 1300)),
-          ),
-          throwsA(isA<TimeoutException>()),
-        );
-        transport.stallAfterAccepting = false;
-        transport.stallAfterAcceptingFor.clear();
-        final next = await client.send('010D');
-
+        expect(transport.sent, contains('ATI'));
         expect(next.hexPayload, '410D3C');
         expect(lost, isEmpty);
       },
@@ -464,16 +425,18 @@ void main() {
 
     test('a client disconnect during the hold writes nothing after it',
         () async {
-      final (client, transport, lost) = await _connected();
+      final (client, transport, lost) = await _connected(
+        writeTimeout: const Duration(milliseconds: 500),
+      );
       transport
         ..once('011F', null)
-        ..once('ATI', [('ELM327 v1.5\r\r>', const Duration(milliseconds: 150))]);
+        ..once('ATI', [('ELM327 v1.5\r\r>', const Duration(milliseconds: 900))]);
 
       await expectLater(client.send('011F'), throwsA(isA<TimeoutException>()));
       await expectLater(
         client.send(
           '0105',
-          deadline: DateTime.now().add(const Duration(milliseconds: 1100)),
+          deadline: DateTime.now().add(const Duration(milliseconds: 1800)),
         ),
         throwsA(isA<TimeoutException>()),
       );
@@ -493,7 +456,9 @@ void main() {
     });
 
     test('a session retired during the hold sends nothing after it', () async {
-      final (client, transport, lost) = await _connected();
+      final (client, transport, lost) = await _connected(
+        writeTimeout: const Duration(milliseconds: 500),
+      );
       addTearDown(client.dispose);
       var live = true;
       client.mayTransmit = (_) => live;
@@ -501,13 +466,13 @@ void main() {
       // arrives with nothing waiting and arms the hold.
       transport
         ..once('011F', null)
-        ..once('ATI', [('ELM327 v1.5\r\r>', const Duration(milliseconds: 150))]);
+        ..once('ATI', [('ELM327 v1.5\r\r>', const Duration(milliseconds: 900))]);
 
       await expectLater(client.send('011F'), throwsA(isA<TimeoutException>()));
       await expectLater(
         client.send(
           '0105',
-          deadline: DateTime.now().add(const Duration(milliseconds: 1100)),
+          deadline: DateTime.now().add(const Duration(milliseconds: 1800)),
         ),
         throwsA(isA<TimeoutException>()),
       );
@@ -540,19 +505,21 @@ void main() {
 
     test('a deadline that passes during the hold refuses before writing',
         () async {
-      final (client, transport, lost) = await _connected();
+      final (client, transport, lost) = await _connected(
+        writeTimeout: const Duration(milliseconds: 500),
+      );
       addTearDown(client.dispose);
       // Caller gives up after the probe is written; the probe's single
       // prompt then arrives with nothing waiting and arms the hold.
       transport
         ..once('011F', null)
-        ..once('ATI', [('ELM327 v1.5\r\r>', const Duration(milliseconds: 150))]);
+        ..once('ATI', [('ELM327 v1.5\r\r>', const Duration(milliseconds: 900))]);
 
       await expectLater(client.send('011F'), throwsA(isA<TimeoutException>()));
       await expectLater(
         client.send(
           '0105',
-          deadline: DateTime.now().add(const Duration(milliseconds: 1100)),
+          deadline: DateTime.now().add(const Duration(milliseconds: 1800)),
         ),
         throwsA(isA<TimeoutException>()),
       );
