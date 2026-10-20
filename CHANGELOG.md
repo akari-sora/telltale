@@ -12,15 +12,17 @@ Dates are the date the build was made, not the date it reached anyone.
   got nothing, or the link stayed silent — the app now reconnects to the
   same remembered adapter once by itself, and says so on screen. At most
   twice in ten minutes, only for a session that had been connected for ten
-  seconds, only in the foreground, and never after an adapter that was
-  unplugged or out of range, one that reported an error such as
-  `UNABLE TO CONNECT`, a link that would not take a write, or a session in
-  which a fault-code clear was sent. If the reconnect does not connect, the
-  screen and the exported session log stay those of the session that
-  dropped, with the attempt noted at its end. (issue #112)
-- A resync's probe outcome (`Probe answered` / `Probe got no answer`) is
-  now always written before the link is dropped; a watchdog tick could cut
-  in first and leave the log without it.
+  seconds, only in the foreground, and not when the connection was reported
+  closed (how an unplugged or out-of-range adapter usually shows up, though
+  not always at once), when the adapter reported an error such as
+  `UNABLE TO CONNECT`, when the probe's write timed out, or in a session in
+  which a fault-code clear was attempted. If the reconnect does not
+  connect, the screen and the exported session log stay those of the
+  session that dropped, with the attempt noted at its end. (issue #112)
+- The watchdog no longer cuts in while a resync is waiting for the probe,
+  so a resync that ends the session writes the probe outcome
+  (`Probe got no answer`) before it does. A link the system reports closed
+  during the probe can still end the session first.
 - Tested by unit tests and a loopback Wi-Fi test. Not validated on a real
   vehicle or adapter.
 
