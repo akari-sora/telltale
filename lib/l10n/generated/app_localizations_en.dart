@@ -4791,4 +4791,8 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get performanceNoAnalysisBody =>
       'This run stopped before enough speed samples were recorded to build a trace or split result.';
+
+  @override
+  String get connectActivityReconnectingAutomatically =>
+      'The adapter stopped answering. Reconnecting automatically…';
 }

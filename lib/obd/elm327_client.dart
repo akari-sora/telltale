@@ -500,6 +500,31 @@ final class ElmWriteAudit {
   bool _claimed = false;
 }
 
+/// Why [Elm327Client.onConnectionLost] last fired.
+///
+/// Every listener but one treats the cases alike, so the callback carries no
+/// argument. The session's automatic reconnect (#112) is the one: it is for
+/// an adapter that went quiet, and must not start a Bluetooth cascade after an
+/// adapter that was unplugged or one that reported the ignition off.
+enum ConnectionLossCause {
+  /// The transport reported the link closed: out of range, switched off,
+  /// unplugged.
+  transportClosed,
+
+  /// The adapter answered with an error that means it reset or lost the bus,
+  /// such as `LV RESET` or `UNABLE TO CONNECT`.
+  adapterError,
+
+  /// The adapter stopped answering: a resync that could not bring it back
+  /// into step, or the watchdog.
+  adapterSilent,
+
+  /// The link would not take a write: the resync's probe could not be handed
+  /// over. A transport fault, not the adapter going quiet — Bluetooth out of
+  /// range often looks like this before the OS reports the link closed.
+  writeStalled,
+}
+
 class Elm327Client {
   Elm327Client(
     this.transport, {
@@ -873,6 +898,16 @@ class Elm327Client {
   /// state rather than showing frozen gauges.
   void Function()? onConnectionLost;
 
+  /// Why [onConnectionLost] last fired, set just before it does.
+  ConnectionLossCause? get connectionLossCause => _connectionLossCause;
+  ConnectionLossCause? _connectionLossCause;
+
+  /// Fires [onConnectionLost] for [cause] without a link to lose. Tests only.
+  void reportConnectionLostForTest(ConnectionLossCause cause) {
+    _connectionLossCause = cause;
+    onConnectionLost?.call();
+  }
+
   /// Fires when [_resync] begins draining the connection.
   void Function()? onResyncStarted;
 
@@ -937,7 +972,21 @@ class Elm327Client {
     _responseHeadersRestoreFailed = false;
     _connectionSession++;
     _connectionGeneration++;
+    final opening = _connectionGeneration;
     await transport.connect();
+    // Disconnected or disposed while the link was still opening. A transport
+    // has nothing to close until its socket exists, so the close found
+    // nothing and the link opened anyway; without this the handshake then
+    // ran on it — `ATZ` through `0100` to a car — for a client nobody owned
+    // any more, after an app that had gone to the background, until it
+    // returned and its caller closed the link again.
+    if (_connectionGeneration != opening) {
+      transcript.recordNote(
+        'Connection closed while it was opening; no handshake sent',
+      );
+      await _teardownTransport();
+      return false;
+    }
     transcript.recordNote(
       'Connection established: ${transport.displayName} (${transport.kind.label})',
     );
@@ -968,7 +1017,10 @@ class Elm327Client {
       // its caller publish the precise failed-attempt state. Only a session
       // that had already completed initialization needs the asynchronous
       // connection-lost callback and generation teardown.
-      if (wasInitialized) onConnectionLost?.call();
+      if (wasInitialized) {
+        _connectionLossCause = ConnectionLossCause.transportClosed;
+        onConnectionLost?.call();
+      }
     });
 
     lastRxAt = DateTime.now();
@@ -1427,6 +1479,7 @@ class Elm327Client {
       isInitialized = false;
       _watchdog?.cancel();
       _watchdog = null;
+      _connectionLossCause = ConnectionLossCause.adapterError;
       scheduleMicrotask(() => onConnectionLost?.call());
     }
 
@@ -2293,6 +2346,9 @@ class Elm327Client {
       // returns early on it, so nothing else was going to notice either.
       _watchdog?.cancel();
       _watchdog = null;
+      _connectionLossCause = probeWriteStalled
+          ? ConnectionLossCause.writeStalled
+          : ConnectionLossCause.adapterSilent;
       scheduleMicrotask(() => onConnectionLost?.call());
       if (probeWriteStalled) {
         // The check itself could not be handed over. Not "the adapter did
@@ -6404,6 +6460,15 @@ class Elm327Client {
       // before that budget starts — the tick lands, the command timer is not
       // armed, and a caller who still has a recovery window never gets it.
       if (_pending != null && _pendingTimeout == null) return;
+      // A resync gives its own verdict when its window ends: the probe's
+      // answer, or "Probe got no answer" and the drop. Its grace is published
+      // at its start; its drain timer is armed after the pre-wait and the
+      // probe, for what is left of the window. Both read the same clock in
+      // production, but arming late put the timer's deadline about a
+      // millisecond past the grace, and a tick in that gap dropped the link
+      // first: the record lost the probe outcome #112's next export is for.
+      // Seen under load. The drain is bounded by its own timer.
+      if (isResyncing) return;
       // Silence only means something when the adapter owes us a reply. An idle
       // link — every active PID unsupported, or the app just resumed from the
       // background with a stale wall-clock timestamp — is not a dead one, and
@@ -6484,6 +6549,7 @@ class Elm327Client {
           issue: TransportIssue.linkStoppedResponding,
         ),
       );
+      _connectionLossCause = ConnectionLossCause.adapterSilent;
       onConnectionLost?.call();
     });
   }

@@ -1276,6 +1276,7 @@
   "performanceGuideStep4": "4. Erreichen Sie die Sollgeschwindigkeit, um den Lauf abzuschließen",
   "performanceRecordingTrace": "Beschleunigung läuft... Geschwindigkeitskurve wird aufgezeichnet",
   "performanceNoAnalysisTitle": "Keine Analysedaten",
-  "performanceNoAnalysisBody": "Dieser Lauf wurde gestoppt, bevor genügend Geschwindigkeitsproben aufgezeichnet wurden, um ein Diagramm oder Teilergebnis zu erstellen."
+  "performanceNoAnalysisBody": "Dieser Lauf wurde gestoppt, bevor genügend Geschwindigkeitsproben aufgezeichnet wurden, um ein Diagramm oder Teilergebnis zu erstellen.",
+  "connectActivityReconnectingAutomatically": "Der Adapter reagiert nicht mehr. Die Verbindung wird automatisch neu aufgebaut…"
 }
 
