@@ -2242,6 +2242,12 @@ class Elm327Client {
     // caller is refused; the link keeps the benefit of the doubt it was given.
     if (probeWriteUnknown || (!sawPrompt && !probeWriteStalled && callerLimited)) {
       _outOfSync = true;
+      // The probe's answer may already have come and gone inside this drain,
+      // behind an older prompt, with nothing left to show for it. Waiting
+      // for it again could wait forever, so the next resync probes again:
+      // its listening stretch takes a late answer if one is still coming,
+      // and a fresh ATI if not.
+      if (probeWriteUnknown) _resyncActiveProbe = true;
       // The rest of the window this client allows, minus what was spent.
       final spent = _clock().difference(started);
       _extendResyncGrace(

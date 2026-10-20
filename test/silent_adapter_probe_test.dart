@@ -425,6 +425,43 @@ void main() {
       },
     );
 
+    test(
+      'a caller-cut probe answered before the deadline does not strand the link',
+      () async {
+        final (client, transport, lost) = await _connected();
+        addTearDown(client.dispose);
+        // Both the older prompt and the probe's own answer arrive inside the
+        // caller's deadline, while the probe's write still hangs. The second
+        // prompt is consumed by the finished drain; nothing is left to wait
+        // for, so the next resync must ask again rather than wait it out.
+        transport
+          ..once('011F', null)
+          ..once('ATI', [
+            ('>', Duration.zero),
+            ('ELM327 v1.5\r\r>', const Duration(milliseconds: 100)),
+          ])
+          ..stallAfterAcceptingFor.add('ATI');
+
+        await expectLater(
+          client.send('011F'),
+          throwsA(isA<TimeoutException>()),
+        );
+        await expectLater(
+          client.send(
+            '0105',
+            deadline: DateTime.now().add(const Duration(milliseconds: 1300)),
+          ),
+          throwsA(isA<TimeoutException>()),
+        );
+        transport.stallAfterAccepting = false;
+        transport.stallAfterAcceptingFor.clear();
+        final next = await client.send('010D');
+
+        expect(next.hexPayload, '410D3C');
+        expect(lost, isEmpty);
+      },
+    );
+
     test('a client disconnect during the hold writes nothing after it',
         () async {
       final (client, transport, lost) = await _connected();
