@@ -984,7 +984,7 @@ class Elm327Client {
       transcript.recordNote(
         'Connection closed while it was opening; no handshake sent',
       );
-      await transport.disconnect();
+      await _teardownTransport();
       return false;
     }
     transcript.recordNote(

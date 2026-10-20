@@ -984,7 +984,11 @@ class ObdSession extends Notifier<ObdConnectionState> {
   ObdTranscript? get exportableTranscript =>
       _client?.transcript ?? _attemptTranscript ?? _lastTranscript;
 
-  /// The header for [exportableTranscript].
+  /// The header for [exportableRecord]'s transcript.
+  ///
+  /// Not always [exportableTranscript]'s: while an automatic reconnect has not
+  /// connected, [exportableTranscript] is the attempt's live record and the
+  /// export is the dropped session's. Read [exportableRecord] for a pair.
   String get exportableTranscriptHeader => exportableRecord?.header ?? '';
 
   /// The transcript and the header that describes it, read together.
@@ -1011,9 +1015,12 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // app or the process dying meanwhile must not cost the drop's record.
     final attempt = _automaticReconnect;
     final lost = attempt?.lostRecord;
+    // Also before the attempt has made its own record, while the current
+    // transcript is still the dropped one: the live header has lost the
+    // client's facts by then, and the captured one has them.
     if (attempt != null &&
         lost != null &&
-        identical(current, attempt.record) &&
+        (identical(current, attempt.record) || identical(current, lost)) &&
         _connectedGeneration != attempt.generation) {
       return (transcript: lost, header: attempt.lostHeader);
     }
@@ -1695,6 +1702,11 @@ class ObdSession extends Notifier<ObdConnectionState> {
 
     final steps = <InitProgress>[];
     _initSub = client.initProgress.listen((progress) {
+      // A handshake whose attempt has been superseded — a disconnect, another
+      // connect, an automatic attempt that lost its own link and put the
+      // drop's failure back — keeps emitting until its teardown cancels this,
+      // several awaits later. Its steps belong to nobody's screen.
+      if (_superseded(generation)) return;
       // Replace the in-flight entry for a step rather than appending, so the
       // wizard shows one row per command that mutates from running → ok.
       final existing = steps.indexWhere((s) => s.index == progress.index);
@@ -2282,8 +2294,17 @@ class ObdSession extends Notifier<ObdConnectionState> {
         lost.recordNote(note);
       }
     }
-    if (identical(_attemptTranscript, own)) _attemptTranscript = null;
-    if (_lastTranscript == null || identical(_lastTranscript, own)) {
+    // The attempt's record, or the dropped one itself if the attempt ended
+    // before making its own: either way the captured header goes back with
+    // it, because the attempt's own teardown re-rendered the stored one
+    // without the client's facts.
+    if (identical(_attemptTranscript, own) ||
+        identical(_attemptTranscript, lost)) {
+      _attemptTranscript = null;
+    }
+    if (_lastTranscript == null ||
+        identical(_lastTranscript, own) ||
+        identical(_lastTranscript, lost)) {
       _lastTranscript = lost;
       _lastTranscriptHeader = attempt.lostHeader;
     }

@@ -136,6 +136,19 @@ class _SwallowsClearTransport extends DemoTransport {
   }
 }
 
+/// A simulator that reports a low-voltage reset to the handshake's `0100`, the
+/// way an adapter browning out during the attempt does.
+class _ResetsAtHandshake extends DemoTransport {
+  @override
+  Future<void> write(List<int> data) async {
+    if (ascii.decode(data, allowInvalid: true).trim().toUpperCase() == '0100') {
+      Timer(Duration.zero, () => emitBytes(ascii.encode('LV RESET\r\r>')));
+      return;
+    }
+    await super.write(data);
+  }
+}
+
 /// A simulator that answers a fault-code clear, and says whether one was sent.
 class _RecordsClearTransport extends DemoTransport {
   bool clearSent = false;
@@ -477,6 +490,40 @@ void main() {
     });
   });
 
+  group('a reconnect that resets during its handshake', () {
+    test('leaves none of its handshake on the drop it put back', () async {
+      // The client schedules the connection-lost callback, then completes
+      // the `0100` that carried the reset; the handshake goes on emitting
+      // failed and skipped steps until the teardown cancels the listener,
+      // several awaits later. The drop's screen must not collect them.
+      final rig = await _rig();
+      await rig.connect();
+      rig.now += const Duration(seconds: 11);
+      rig.session.nextTransport = _ResetsAtHandshake.new;
+
+      rig.dropLink();
+      final dropped = rig.state;
+      final afterDrop = rig.states.length;
+      await _eventually(() => rig.session.reconnects.length == 1);
+      expect(await rig.session.lastReconnect, isFalse);
+      await _settle();
+
+      expect(_fields(rig.state), _fields(dropped));
+      // Not even for a moment: the attempt's end puts the failure back once
+      // more, which would hide steps that had landed on it in between.
+      expect(
+        rig.states
+            .skip(afterDrop)
+            .where((s) => s.phase == ConnectionPhase.failed),
+        everyElement(
+          predicate<ObdConnectionState>(
+            (s) => identical(s.initSteps, dropped.initSteps),
+          ),
+        ),
+      );
+    });
+  });
+
   group('is bounded', () {
     test('two automatic reconnects in ten minutes, then the failure', () async {
       final rig = await _rig();
@@ -735,6 +782,51 @@ void main() {
                 rig.state.isConnected && rig.session.reconnects.length == drop,
           );
         }
+      },
+    );
+
+    test(
+      'an attempt that leaves before it has a record keeps the full header',
+      () async {
+        // Held in the vehicle-profile invalidation, before the attempt has made
+        // its own record. Its connect's teardown has already re-rendered the
+        // stored header without the client's facts; the captured one is what
+        // the export and the disk must carry.
+        final dir = Directory.systemTemp.createTempSync('auto-reconnect-early');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        TranscriptStore store() => TranscriptStore(directory: () async => dir);
+        final rig = await _rig();
+        rig.session.transcriptStore = store();
+        await rig.connect();
+        rig.now += const Duration(seconds: 11);
+        final header = rig.session.exportableRecord!.header;
+        final held = Completer<void>();
+        _GatedProfile.gate = held;
+        addTearDown(() {
+          if (!held.isCompleted) held.complete();
+        });
+
+        rig.dropLink();
+        final dropped = rig.state;
+        await _eventually(() => rig.session.reconnects.length == 1);
+        await _settle();
+        expect(rig.session.client, isNull, reason: 'still before the record');
+        _background(binding);
+        await rig.session.drainTranscriptSnapshotsForTest();
+        expect(rig.session.exportableRecord!.header, header);
+        expect((await store().load())!.header, header);
+
+        held.complete();
+        expect(await rig.session.lastReconnect, isFalse);
+        await _settle();
+        await rig.session.drainTranscriptSnapshotsForTest();
+        expect(_fields(rig.state), _fields(dropped));
+        expect(rig.session.exportableRecord!.header, header);
+        expect((await store().load())!.header, header);
+        expect(
+          rig.exportedNotes,
+          contains('Automatic reconnect 1 of 2 did not connect'),
+        );
       },
     );
 
