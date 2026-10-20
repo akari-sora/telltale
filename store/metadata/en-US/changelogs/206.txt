@@ -1,0 +1,1 @@
+For ELM327 clones that sometimes drop the > prompt: a reply whose data already arrived complete is now accepted after a short wait instead of dropping the connection. A PID that gets NO DATA three times rests for 60 seconds. Tested by replaying user logs and CI. Not yet validated on a real vehicle.
