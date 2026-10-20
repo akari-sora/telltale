@@ -1702,14 +1702,6 @@ class ObdSession extends Notifier<ObdConnectionState> {
 
     final steps = <InitProgress>[];
     _initSub = client.initProgress.listen((progress) {
-      // A handshake whose attempt has been superseded — a disconnect, another
-      // connect, an automatic attempt that lost its own link and put the
-      // drop's failure back — keeps emitting until its teardown cancels this,
-      // several awaits later. Its steps belong to nobody's screen. The one
-      // exception is a connect whose own link went mid-handshake: the failure
-      // on screen is its own, and the step that carried the reset still has
-      // to end failed rather than stay "running" for good.
-      if (_superseded(generation) && !_ownLossOnScreen(generation)) return;
       // Replace the in-flight entry for a step rather than appending, so the
       // wizard shows one row per command that mutates from running → ok.
       final existing = steps.indexWhere((s) => s.index == progress.index);
@@ -1747,28 +1739,6 @@ class ObdSession extends Notifier<ObdConnectionState> {
         // Disconnected or dropped while the handshake ran. Tear down what this
         // attempt built and publish nothing — the state now on screen belongs
         // to whatever superseded it.
-        //
-        // Except when the drop was this connect's own link and nothing has
-        // moved since: that failure is its own screen. A reset on a step the
-        // handshake does not stop for lets it start the next one, and the
-        // teardown then cancels the listener before that step ends, so it
-        // would stay "running" on the failure for good.
-        if (_ownLossOnScreen(generation)) {
-          state = state.copyWith(
-            initSteps: List.unmodifiable([
-              for (final step in steps)
-                step.status == InitStatus.running
-                    ? InitProgress(
-                        step: step.step,
-                        index: step.index,
-                        total: step.total,
-                        status: InitStatus.failed,
-                        transportIssue: TransportIssue.linkDroppedMidSession,
-                      )
-                    : step,
-            ]),
-          );
-        }
         await client.dispose();
         return false;
       }
@@ -2092,8 +2062,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
     _generation++;
     if (attemptLostItself) {
       attempt.screenGeneration = _generation;
-    } else {
-      _lostOwnScreen = (generation, _generation);
+      _stopInitListener();
     }
     unawaited(
       ref.read(vehicleProfileProvider.notifier).invalidateForVehicleBoundary(),
@@ -2263,7 +2232,10 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // Before the call, and in the same synchronous step: the drop left the
     // screen on `failed`, and the Android Auto runtime starts its own
     // reconnect for any lease that finds the session neither connected nor
-    // busy. Busy from here on is what keeps it out.
+    // busy. Busy from here on keeps it out while the attempt runs. Once it
+    // stands down the screen is the drop's failure again, and a lease may
+    // start Android Auto's own reconnect, which `_connect` holds until this
+    // attempt has unwound.
     state = ObdConnectionState(
       phase: ConnectionPhase.connecting,
       kind: failure.kind,
@@ -2407,6 +2379,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // Closed now, not when the teardown chain reaches it after the earlier
     // drop's: a link still opening must find its client already closed, or it
     // handshakes in the background meanwhile. See `Elm327Client.connect`.
+    _stopInitListener();
     final client = _client;
     if (client != null) unawaited(client.disconnect());
     unawaited(_teardown());
@@ -2845,20 +2818,18 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// Whether a Mode 04 is on the wire right now. See [clearDtcs].
   bool _clearInFlight = false;
 
-  /// The generation a link loss ended and the one it moved to, when the
-  /// failure it published is that connection's own screen. Late handshake
-  /// steps from it may still finish that screen's history until anything else
-  /// moves the generation. Not set for an automatic attempt's own loss, whose
-  /// screen is the drop it was trying to undo.
-  (int, int)? _lostOwnScreen;
-
-  /// Whether the failure on screen is still the one [generation]'s own link
-  /// loss published. The generation pair is not enough alone: an older
-  /// disconnect that finishes late publishes the idle screen without moving
-  /// the generation.
-  bool _ownLossOnScreen(int generation) =>
-      _lostOwnScreen == (generation, _generation) &&
-      state.phase == ConnectionPhase.failed;
+  /// Stops the handshake's step listener now, for an automatic attempt that
+  /// has just put the drop's failure back on screen.
+  ///
+  /// The teardown would cancel it too, but several awaits later, and until
+  /// then the dying handshake's failed and skipped steps land on that failure.
+  /// Not used for a connect whose failure is its own screen: there the late
+  /// steps are how the step that carried the reset comes to read failed.
+  void _stopInitListener() {
+    final sub = _initSub;
+    _initSub = null;
+    if (sub != null) unawaited(sub.cancel());
+  }
 
   /// The connection generation that last attempted a Mode 04 clear. Such a
   /// session is never reconnected automatically; see

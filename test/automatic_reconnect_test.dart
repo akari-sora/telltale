@@ -139,15 +139,25 @@ class _SwallowsClearTransport extends DemoTransport {
 /// A simulator that reports a low-voltage reset to the handshake's `0100`, the
 /// way an adapter browning out during the attempt does.
 class _ResetsAtHandshake extends DemoTransport {
-  _ResetsAtHandshake([this.command = '0100']);
+  @override
+  Future<void> write(List<int> data) async {
+    if (ascii.decode(data, allowInvalid: true).trim().toUpperCase() == '0100') {
+      Timer(Duration.zero, () => emitBytes(ascii.encode('LV RESET\r\r>')));
+      return;
+    }
+    await super.write(data);
+  }
+}
 
-  final String command;
+/// A simulator that never answers the handshake's `ATRV`, to hold a handshake
+/// in flight after the link has opened.
+class _StallsHandshake extends DemoTransport {
+  bool stalled = false;
 
   @override
   Future<void> write(List<int> data) async {
-    if (ascii.decode(data, allowInvalid: true).trim().toUpperCase() ==
-        command) {
-      Timer(Duration.zero, () => emitBytes(ascii.encode('LV RESET\r\r>')));
+    if (ascii.decode(data, allowInvalid: true).trim().toUpperCase() == 'ATRV') {
+      stalled = true;
       return;
     }
     await super.write(data);
@@ -496,28 +506,6 @@ void main() {
   });
 
   group('a manual connect that resets during its handshake', () {
-    test('on a step it does not stop for leaves nothing running', () async {
-      // `ATDP` is not critical: the handshake records it and starts `ATDPN`,
-      // and the teardown cancels the listener before that one ends.
-      final rig = await _rig();
-      expect(
-        await rig.session.connectForTest(
-          _ResetsAtHandshake('ATDP'),
-          TransportKind.bluetoothClassic,
-          adapter: _adapter,
-        ),
-        isFalse,
-      );
-      await _settle();
-
-      expect(rig.state.phase, ConnectionPhase.failed);
-      expect(rig.state.initSteps, isNotEmpty);
-      expect(
-        rig.state.initSteps.where((s) => s.status == InitStatus.running),
-        isEmpty,
-      );
-    });
-
     test('still finishes its own handshake history', () async {
       // The reset fires the connection-lost callback before the step that
       // carried it completes. The failure that publishes is this connect's
@@ -887,6 +875,38 @@ void main() {
         );
       },
     );
+
+    test('an attempt that leaves mid-handshake puts none of its steps on the '
+        'drop', () async {
+      // Past the link opening: the stand-down's close fails the pending
+      // command, and the handshake records it failed and the rest skipped,
+      // all before the teardown would have reached the listener.
+      final rig = await _rig();
+      await rig.connect();
+      rig.now += const Duration(seconds: 11);
+      final stalls = _StallsHandshake();
+      rig.session.nextTransport = () => stalls;
+
+      rig.dropLink();
+      final dropped = rig.state;
+      await _eventually(() => stalls.stalled);
+      final beforePause = rig.states.length;
+      _background(binding);
+      expect(await rig.session.lastReconnect, isFalse);
+      await _settle();
+
+      expect(_fields(rig.state), _fields(dropped));
+      expect(
+        rig.states
+            .skip(beforePause)
+            .where((s) => s.phase == ConnectionPhase.failed),
+        everyElement(
+          predicate<ObdConnectionState>(
+            (s) => identical(s.initSteps, dropped.initSteps),
+          ),
+        ),
+      );
+    });
 
     test(
       'an attempt still connecting when the app leaves stands down',
