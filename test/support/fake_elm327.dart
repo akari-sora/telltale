@@ -211,7 +211,12 @@ class AdapterFaults {
   /// Sprinkle NUL bytes into the stream, as noisy links do.
   final bool injectNulls;
 
-  /// Answer these commands with data but never a `>` prompt, wedging the link.
+  /// Answer these commands with data but never a `>` prompt.
+  ///
+  /// After #110, a conclusive OBD buffer without `>` completes at command
+  /// timeout, or after a quiet window once a missing prompt has already
+  /// been observed this session. Tests that need a true empty timeout
+  /// should use [FakeElm327.silenceFor] or [FakeElm327.goSilent].
   final Set<String> swallowPromptFor;
 
   /// Force a literal reply for a command, e.g. `{'0105': 'NO DATA'}` or
@@ -398,6 +403,16 @@ class FakeElm327 extends BaseObdTransport {
   /// a link degrading, a clone taking its time.
   Duration responseLatency;
 
+  /// Pause between the reply body and `>`.
+  ///
+  /// A real adapter waits for its ATST window after the last bus frame
+  /// before printing the prompt. Tests that need that gap set this after
+  /// connect so handshake is not slowed. A write while that prompt is
+  /// still owed emits `STOPPED` and cancels the pending `>`.
+  Duration promptDelay = Duration.zero;
+
+  Timer? _trailingPromptTimer;
+
   /// Per-command latency, for when one *controller* is slow rather than the
   /// adapter.
   ///
@@ -495,6 +510,17 @@ class FakeElm327 extends BaseObdTransport {
   void forceReplySequence(String command, List<String> replies) =>
       _replySequences[command.toUpperCase()] = [...replies];
 
+  /// Commands whose `>` is stripped from this instance, in addition to
+  /// [AdapterFaults.swallowPromptFor]. Mutable so a test can omit the prompt
+  /// on a later occurrence after handshake.
+  final Set<String> omitPromptFor = <String>{};
+
+  /// 1-based occurrence at which [omitPromptFor] behaviour starts for a
+  /// command. `{'010C0D04110B10': 3}` drops `>` from the third batch onward.
+  final Map<String, int> omitPromptOnOccurrence = <String, int>{};
+
+  final Map<String, int> _commandHits = <String, int>{};
+
   /// When true the adapter stops answering entirely, without dropping the
   /// link.
   ///
@@ -503,6 +529,12 @@ class FakeElm327 extends BaseObdTransport {
   /// distinct from a disconnect, which the transport reports on its own. It is
   /// the case where nothing tells the app anything.
   bool goSilent = false;
+
+  /// Commands that produce no bytes at all (not even `NO DATA`).
+  ///
+  /// Use this when a test needs a command timeout. Stripping `>` from a
+  /// complete OBD reply is no longer a wedge after #110.
+  final Set<String> silenceFor = <String>{};
 
   /// When true, `write` throws *after* the bytes have reached the adapter.
   ///
@@ -599,6 +631,8 @@ class FakeElm327 extends BaseObdTransport {
 
   @override
   Future<void> disconnect() async {
+    _trailingPromptTimer?.cancel();
+    _trailingPromptTimer = null;
     for (final timer in _scheduled) {
       timer.cancel();
     }
@@ -699,6 +733,12 @@ class FakeElm327 extends BaseObdTransport {
 
   /// Everything a real adapter does once the bytes have arrived.
   void _acceptAndAnswer(String raw) {
+    if (_trailingPromptTimer != null) {
+      _trailingPromptTimer!.cancel();
+      _scheduled.remove(_trailingPromptTimer);
+      _trailingPromptTimer = null;
+      emitBytes(ascii.encode('STOPPED\r>'));
+    }
     final command = raw.toUpperCase().replaceAll(' ', '');
     commandLog.add(command);
     onCommandWritten?.call(command);
@@ -751,11 +791,28 @@ class FakeElm327 extends BaseObdTransport {
         faults.swallowGroupedMode01 &&
         command.startsWith('01') &&
         command.length > 4;
-    final emit = (faults.swallowPromptFor.contains(command) || swallowGrouped)
-        ? reply.replaceAll('>', '')
-        : reply;
+    final hits = _commandHits[command] = (_commandHits[command] ?? 0) + 1;
+    final omitFrom = omitPromptOnOccurrence[command];
+    final omitPrompt =
+        faults.swallowPromptFor.contains(command) ||
+        omitPromptFor.contains(command) ||
+        swallowGrouped ||
+        (omitFrom != null && hits >= omitFrom);
+    final emit = omitPrompt ? reply.replaceAll('>', '') : reply;
 
     void send() {
+      if (!omitPrompt && promptDelay > Duration.zero && emit.contains('>')) {
+        _emitChunked(emit.replaceAll('>', ''));
+        _trailingPromptTimer = Timer(promptDelay, () {
+          _trailingPromptTimer = null;
+          emitBytes(ascii.encode('>'));
+          if (dropLinkAfterReplyingFor.contains(command)) {
+            setConnected(false);
+          }
+        });
+        _scheduled.add(_trailingPromptTimer!);
+        return;
+      }
       _emitChunked(emit);
       if (dropLinkAfterReplyingFor.contains(command)) {
         setConnected(false);
@@ -856,7 +913,7 @@ class FakeElm327 extends BaseObdTransport {
   String _respond(String command) {
     if (command.isEmpty) return '>';
 
-    if (goSilent) return '';
+    if (goSilent || silenceFor.contains(command)) return '';
 
     // `ATCAF0` is transmit and receive. A bare `010C` is not a CAN frame the
     // ECU will answer; the host must have supplied the Single Frame PCI.

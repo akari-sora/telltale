@@ -13,8 +13,10 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../diagnostics/diagnostic_link.dart';
 import '../diagnostics/elm327_diagnostic_link.dart';
+import 'adapter_identity.dart';
 import 'addressing.dart';
 import 'dtc/dtc.dart';
+import 'elm_session_profile.dart';
 import 'elapsed_clock.dart';
 import 'freeze_frame.dart';
 import 'readiness.dart';
@@ -4146,6 +4148,19 @@ class PollingEngine {
     scheduler.canBatch =
         client.addressing.isCan && _verifiedSupportBlocks.isNotEmpty;
     scheduler.isBatchable = _isBatchable;
+    final clone = client.adapterIdentity.concerns.any(
+      (c) => c.kind == AdapterConcernKind.firmwareNeverReleased,
+    );
+    scheduler.batchSizeCap = ElmSessionProfile.batchSizeCap(
+      cloneSelfInconsistent: clone,
+      multiEcuFunctional:
+          client.enginePhysicalSilent && client.lastResponderCount > 1,
+      promptlessCompletes: client.promptlessCompleteCount,
+    );
+    if (client.promptlessCompleteCount > 0 &&
+        scheduler.interCommandDelay < ElmSessionProfile.adapterResponseWindow) {
+      scheduler.interCommandDelay = ElmSessionProfile.adapterResponseWindow;
+    }
   }
 
   Future<void> _pollBatch(List<QueuedRequest> batch, [int? epoch]) async {
@@ -4520,12 +4535,27 @@ class PollingEngine {
 
   final Map<String, int> _formulaStrikes = {};
 
-  /// How many in a row before a PID is written off as unsupported.
+  /// How many in a row before a PID is rested.
   ///
   /// Three rather than one: the ELM327 datasheet defines `NO DATA` as no
   /// accepted response before the timeout, which a slow or busy ECU can produce
-  /// on a PID it fully supports.
+  /// on a PID it fully supports. The default rest is [PidFault.noAnswer] for
+  /// [noAnswerBackoff]; see [_hotLoopNoDataBackoff] for the `015E` exception.
   static const int _noDataStrikesBeforeUnsupported = 3;
+
+  /// Whether three `NO DATA` strikes should use the five-minute unsupported
+  /// recheck instead of the one-minute [PidFault.noAnswer] rest.
+  ///
+  /// Only fuel rate (`015E`), and only after this session has already seen a
+  /// missing prompt or on a clone (`firmwareNeverReleased`). Every other PID
+  /// keeps the default: silence is not a capability claim.
+  bool _hotLoopNoDataBackoff(Pid pid) {
+    if (pid.modeAndPid.toUpperCase() != '015E') return false;
+    if (client.promptlessCompleteCount > 0) return true;
+    return client.adapterIdentity.concerns.any(
+      (c) => c.kind == AdapterConcernKind.firmwareNeverReleased,
+    );
+  }
 
   /// Marks a PID as faulted and drops its last reading.
   ///
@@ -4567,17 +4597,27 @@ class PollingEngine {
           _publish(epoch);
           return;
         }
-        // Repeated silence is still not the vehicle saying it lacks the
-        // sensor — only the support mask says that, and a PID the mask
-        // disclaimed never reaches this path because it is filtered out of the
-        // poll set. So this backs off rather than retiring the PID: a slow ECU
-        // or a receive filter used to grey a working gauge out for the rest of
-        // the session, with nothing on screen explaining why.
-        _invalidateSharedWire(
-          pid,
-          PidFault.noAnswer,
-          retryAfter: DateTime.now().add(noAnswerBackoff),
-        );
+        // `NO DATA` is the adapter's timeout, not a capability claim. Three
+        // misses rest the PID as `noAnswer` for a minute so an intermittent
+        // sensor on a working car does not go grey as "unsupported".
+        //
+        // Fuel rate (`015E`) is the #110 hot-loop exception: that log retried
+        // it every cycle. The five-minute `unsupported` recheck applies only
+        // to that PID, and only when this session already completed without
+        // a prompt or the adapter is a clone. A later real answer still wins.
+        if (_hotLoopNoDataBackoff(pid)) {
+          _invalidateSharedWire(
+            pid,
+            PidFault.unsupported,
+            retryAfter: DateTime.now().add(recheckInterval),
+          );
+        } else {
+          _invalidateSharedWire(
+            pid,
+            PidFault.noAnswer,
+            retryAfter: DateTime.now().add(noAnswerBackoff),
+          );
+        }
         _noDataStrikes.remove(id);
       } else {
         scheduler.handleCorruptionEvent();
