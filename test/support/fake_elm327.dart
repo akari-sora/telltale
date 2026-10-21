@@ -521,6 +521,14 @@ class FakeElm327 extends BaseObdTransport {
 
   final Map<String, int> _commandHits = <String, int>{};
 
+  /// 1-based index of the grouped Mode 01 request (`01` + two or more PIDs,
+  /// any membership) whose `>` is withheld, once. The engine decides batch
+  /// membership, so a replay of a field log keys on "the Nth batch" rather
+  /// than on one exact command string (#114).
+  int? omitPromptOnGroupedMode01;
+
+  int _groupedMode01Hits = 0;
+
   /// When true the adapter stops answering entirely, without dropping the
   /// link.
   ///
@@ -793,7 +801,15 @@ class FakeElm327 extends BaseObdTransport {
         command.length > 4;
     final hits = _commandHits[command] = (_commandHits[command] ?? 0) + 1;
     final omitFrom = omitPromptOnOccurrence[command];
+    var omitGrouped = false;
+    if (command.startsWith('01') &&
+        command.length > 4 &&
+        !const {'0100', '0120', '0140', '0160'}.contains(command)) {
+      _groupedMode01Hits++;
+      omitGrouped = omitPromptOnGroupedMode01 == _groupedMode01Hits;
+    }
     final omitPrompt =
+        omitGrouped ||
         faults.swallowPromptFor.contains(command) ||
         omitPromptFor.contains(command) ||
         swallowGrouped ||

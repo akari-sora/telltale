@@ -4082,6 +4082,7 @@ class PollingEngine {
           rawBytes: bytes,
           timestamp: now,
           receivedElapsed: _nowElapsed(),
+          observedInterval: _observedInterval(sibling.id, _nowElapsed()),
         );
         _markDirectlyAnswered(sibling);
       } on FormulaException {
@@ -4145,6 +4146,27 @@ class PollingEngine {
   /// has already decided the membership by then. Discovery can run beside
   /// the first cycles; once a support block has answered, the next drain
   /// must be allowed to group.
+  /// Smoothed answer-to-answer interval for [pidId] (#114).
+  ///
+  /// Exponential average (new sample weight 1/4) of the gap since the
+  /// previous reading. A gap far beyond the running average (a stall, a
+  /// fault rest) is clipped to twice the average so one outage does not
+  /// teach freshness to forgive the next one.
+  Duration? _observedInterval(String pidId, Duration nowElapsed) {
+    final previous = _readings[pidId];
+    if (previous == null) return null;
+    final gap = nowElapsed - previous.receivedElapsed;
+    if (gap.isNegative || gap == Duration.zero) {
+      return previous.observedInterval;
+    }
+    final average = previous.observedInterval;
+    if (average == null) return gap;
+    final clipped = gap > average * 2 ? average * 2 : gap;
+    return Duration(
+      microseconds: (average.inMicroseconds * 3 + clipped.inMicroseconds) ~/ 4,
+    );
+  }
+
   void _applyBatchingGate() {
     scheduler.canBatch =
         client.addressing.isCan && _verifiedSupportBlocks.isNotEmpty;
@@ -4156,12 +4178,14 @@ class PollingEngine {
       cloneSelfInconsistent: clone,
       multiEcuFunctional:
           client.enginePhysicalSilent && client.lastResponderCount > 1,
-      promptlessCompletes: client.promptlessCompleteCount,
+      promptlessPenalty: client.promptlessPenalty,
     );
-    if (client.promptlessCompleteCount > 0 &&
-        scheduler.interCommandDelay < ElmSessionProfile.adapterResponseWindow) {
-      scheduler.interCommandDelay = ElmSessionProfile.adapterResponseWindow;
-    }
+    // No session-wide inter-command delay after a promptless complete
+    // (#114). The client already holds the one write that follows a
+    // promptless close until the late `>` or the adapter response window
+    // ends; a reply that closed on `>` has, by definition, finished its
+    // ATST window. Raising the delay to 450 ms for the rest of the session
+    // turned every later command into ~455 ms of dead air.
   }
 
   Future<void> _pollBatch(List<QueuedRequest> batch, [int? epoch]) async {
@@ -4451,6 +4475,7 @@ class PollingEngine {
           rawBytes: bytes,
           timestamp: now,
           receivedElapsed: _nowElapsed(),
+          observedInterval: _observedInterval(request.pid.id, _nowElapsed()),
         );
         if (request.pid.id == PidLibrary.vehicleSpeed.id) {
           _trackAcceleration(value, now);

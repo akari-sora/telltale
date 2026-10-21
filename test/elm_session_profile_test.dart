@@ -34,7 +34,7 @@ void main() {
         ElmSessionProfile.batchSizeCap(
           cloneSelfInconsistent: false,
           multiEcuFunctional: false,
-          promptlessCompletes: 0,
+          promptlessPenalty: 0,
         ),
         PriorityScheduler.maxBatchSize,
       );
@@ -42,7 +42,7 @@ void main() {
         ElmSessionProfile.batchSizeCap(
           cloneSelfInconsistent: true,
           multiEcuFunctional: false,
-          promptlessCompletes: 0,
+          promptlessPenalty: 0,
         ),
         6,
       );
@@ -53,7 +53,7 @@ void main() {
         ElmSessionProfile.batchSizeCap(
           cloneSelfInconsistent: true,
           multiEcuFunctional: true,
-          promptlessCompletes: 0,
+          promptlessPenalty: 0,
         ),
         3,
       );
@@ -64,7 +64,7 @@ void main() {
         ElmSessionProfile.batchSizeCap(
           cloneSelfInconsistent: false,
           multiEcuFunctional: false,
-          promptlessCompletes: 1,
+          promptlessPenalty: 1,
         ),
         3,
       );
@@ -72,7 +72,7 @@ void main() {
         ElmSessionProfile.batchSizeCap(
           cloneSelfInconsistent: true,
           multiEcuFunctional: true,
-          promptlessCompletes: 1,
+          promptlessPenalty: 1,
         ),
         1,
       );
@@ -80,7 +80,7 @@ void main() {
         ElmSessionProfile.batchSizeCap(
           cloneSelfInconsistent: true,
           multiEcuFunctional: true,
-          promptlessCompletes: 2,
+          promptlessPenalty: 2,
         ),
         1,
       );
