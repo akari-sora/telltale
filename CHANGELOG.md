@@ -6,26 +6,7 @@ which therefore does not always move in step with the name.
 
 Dates are the date the build was made, not the date it reached anyone.
 
-## Unreleased
-
-- When a session ends because the adapter stopped answering — the probe
-  got nothing, or the link stayed silent — the app now reconnects to the
-  same remembered adapter once by itself, and says so on screen. At most
-  twice in ten minutes, only for a session that had been connected for ten
-  seconds, only in the foreground, and not when the connection was reported
-  closed (how an unplugged or out-of-range adapter usually shows up, though
-  not always at once), when the adapter reported an error such as
-  `UNABLE TO CONNECT`, when the probe's write timed out, or in a session in
-  which a fault-code clear was attempted. If the reconnect does not
-  connect, the screen and the exported session log stay those of the
-  session that dropped, with the attempt noted at its end. (issue #112)
-- The watchdog no longer ends a session while a resync is still waiting on
-  its probe, which could cut the probe's outcome out of the session log. A
-  connection the system reports closed can still end the session first.
-- Tested by unit tests and a loopback Wi-Fi test. Not validated on a real
-  vehicle or adapter.
-
-## 1.0.24 — 2026-10-20
+## 1.0.24 — 2026-10-21
 
 - When an ELM327 clone goes silent after a command — not even `NO DATA` —
   the app now probes it with `ATI` before giving up, instead of waiting three
@@ -33,13 +14,30 @@ Dates are the date the build was made, not the date it reached anyone.
   ICSolution `ELM327 v1.5` adapters ended this way, and reconnecting by hand
   always worked, so the adapter was still alive. A watchdog race that could
   drop the link five seconds after the write, before any probe, is closed
-  too. The session log records whether the probe was answered. Three
-  commands in a row that each go silent, with only the probe answering,
-  still end the session, and a single-PID read that times out twice in a row
-  rests for a minute like `NO DATA`. (issue #112)
-- Tested by unit tests and a fault-injection rig (an ELM327 emulator behind
-  a proxy that swallows one reply). Not yet validated on a real vehicle or
-  adapter; no adapter or car compatibility is claimed.
+  too. The session log records whether the probe was answered, unless the
+  session ends or the probe's write times out first. Three commands in a
+  row that each go silent, with only the probe answering, still end the
+  session, and a single-PID read that times out twice in a row rests for a
+  minute like `NO DATA`. (issue #112)
+- When a session ends because the adapter stopped answering — the probe
+  got nothing, only the probe kept answering, or the link stayed silent —
+  the app now reconnects to the same remembered adapter once by itself, and
+  says so on screen. At most twice in ten minutes, only for a session that
+  had been connected for ten seconds, only in the foreground, and not when
+  the connection was reported closed (how an unplugged or out-of-range
+  adapter usually shows up, though not always at once), when the adapter
+  reported an error such as `UNABLE TO CONNECT`, when the probe's write
+  timed out, or in a session in which a fault-code clear was attempted. If
+  the reconnect does not connect, the screen and the exported session log
+  stay those of the session that dropped, with the attempt noted at its
+  end. (issue #112)
+- The watchdog no longer ends a session while a resync is still waiting on
+  its probe, which could cut the probe's outcome out of the session log. A
+  connection the system reports closed can still end the session first.
+- Tested by unit tests, a fault-injection rig (an ELM327 emulator behind a
+  proxy that swallows one reply) and a loopback Wi-Fi test. Not yet
+  validated on a real vehicle or adapter; no adapter or car compatibility
+  is claimed.
 - CI retries `pub get` when cloning the Codeberg-hosted Bluetooth plugin
   resets the TLS connection, which failed the 1.0.23 main pipeline.
 
