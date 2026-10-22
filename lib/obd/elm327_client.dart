@@ -924,7 +924,41 @@ class Elm327Client {
   int lastResponderCount = 0;
 
   /// How many OBD replies completed without a prompt this connection.
+  ///
+  /// Lifetime evidence that this adapter can withhold `>`. It arms the
+  /// quiet-complete window and the `015E` backoff. It is **not** the batch
+  /// demotion input: see [promptlessPenalty] (#114).
   int promptlessCompleteCount = 0;
+
+  /// Live batch-demotion pressure from missing prompts (#114).
+  ///
+  /// Each promptless complete adds one. Every
+  /// [ElmSessionProfile.promptlessRecoveryStreak] consecutive OBD replies
+  /// that close on a real `>` forgive one. Before #114 the lifetime count
+  /// above fed the batch cap directly, so one withheld prompt nine seconds
+  /// into Wade's session pinned the rest of it to single-PID polling.
+  int promptlessPenalty = 0;
+
+  /// Consecutive prompted OBD replies since the last promptless complete.
+  int promptedStreak = 0;
+
+  void _notePromptedObdReply(String? command, ObdResponse response) {
+    if (command == null) return;
+    if (command.trim().toUpperCase().startsWith('AT')) return;
+    if (!response.isSuccess) {
+      promptedStreak = 0;
+      return;
+    }
+    promptedStreak++;
+    if (promptlessPenalty > 0 &&
+        promptedStreak >= ElmSessionProfile.promptlessRecoveryStreak) {
+      promptlessPenalty--;
+      promptedStreak = 0;
+      transcript.recordNote(
+        'Prompts are back on time; restoring larger batches',
+      );
+    }
+  }
 
   Stream<InitProgress> get initProgress => _initProgress.stream;
 
@@ -961,6 +995,8 @@ class Elm327Client {
     _headersOn = false;
     lastResponderCount = 0;
     promptlessCompleteCount = 0;
+    promptlessPenalty = 0;
+    promptedStreak = 0;
     _probeOutstanding = false;
     _probeAnswersSinceReply = 0;
     _strayPromptExpected = false;
@@ -1304,6 +1340,7 @@ class Elm327Client {
     _pendingWireBytes = 0;
     final response = _parse(frame);
     _noteResponders(response);
+    _notePromptedObdReply(_pendingCommand, response);
     _completePending(response);
 
     // Remainder after this chunk's prompt is the next frame's raw prefix.
@@ -1494,6 +1531,9 @@ class Elm327Client {
   }
 
   void _failPending(Object error) {
+    // A failed wire exchange breaks the healthy run, even when it never
+    // produced a parsed reply (for example, a command timeout).
+    if (_pending != null) promptedStreak = 0;
     _pendingTimeout?.cancel();
     _pendingTimeout = null;
     _quietCompleteTimer?.cancel();
@@ -8029,6 +8069,8 @@ class Elm327Client {
     if (promptless) {
       _armTrailingPromptHold();
       promptlessCompleteCount++;
+      promptlessPenalty++;
+      promptedStreak = 0;
       transcript.recordNote(
         'Reply completed without a prompt; treating the assembled data as finished',
       );

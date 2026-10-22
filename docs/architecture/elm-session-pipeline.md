@@ -97,16 +97,50 @@ not a fidelity claim.
 |---|---|---|
 | Genuine / self-consistent, or clone on physical `7E0` (one ECU) | 6 | GT86 and the batching-gate fixture stay here |
 | Clone (`firmwareNeverReleased`) **and** functional `7DF` fallback with more than one responder | 3 | Smaller ISO-TP replies; the #110 six-PID envelope is what lost the prompt |
-| After one promptless complete | 3, or 1 if already 3 | Adaptive demotion, not `fastMode` off |
-| After two promptless completes | 1 | Single-PID fallback |
+| Live promptless penalty 1 | 3, or 1 if already 3 | Adaptive demotion, not `fastMode` off |
+| Live promptless penalty 2+ | 1 | Single-PID fallback while prompts keep going missing |
+| Every 12 consecutive OBD replies that close on `>` | penalty − 1 | Cap climbs back (#114) |
 
 `PriorityScheduler.maxBatchSize` remains 6 (the hardware ceiling).
 `batchSizeCap` is the live limit. `handleCorruptionEvent` still disables
 fast mode for `BUFFER FULL` / short batches — that path is unchanged.
 
-After a promptless complete, inter-command delay becomes the adapter
-response window (450 ms) so the next write is not issued while the
-adapter is still in its ATST window.
+A promptless complete is an **event**, not a property of the session
+([#114](https://gitlab.com/aa22396584/telltale/-/issues/114)). Before
+#114 the lifetime `promptlessCompleteCount` fed the cap and the engine
+also raised the inter-command delay to 450 ms for the rest of the
+session. A user export (ICSolution v1.5, two `7DF` responders) shows one
+promptless batch at ~9 s, then 33 s of single-PID requests ~455 ms apart
+(3.6 s per round of 8), every one of which closed on a real `>`. Values
+updated every 3.6 s against a 2 s freshness floor, so every gauge
+flashed 「過期」.
+
+Now:
+
+- `promptlessCompleteCount` stays lifetime evidence (quiet-complete
+  arming, the `015E` backoff).
+- `promptlessPenalty` drives the cap and decays by one every
+  `ElmSessionProfile.promptlessRecoveryStreak` (12) consecutive
+  successful OBD replies that end on `>`. AT replies do not count;
+  unsuccessful OBD replies and failed exchanges reset the streak.
+- There is no session-wide pacing. Only the one write after a promptless
+  close is held (the promptless write hold below). A reply that closed on
+  `>` has already finished its ATST window.
+
+## Freshness follows the observed round
+
+`Reading.maxAge` was only the priority tier's target × 8, floored at
+2 s and capped at 10 s. Each reading now also carries
+`observedInterval`, a smoothed answer-to-answer gap measured by the poll
+loop (new-sample weight ¼, a single gap clipped to 2× the average).
+`maxAge` is the larger of the tier slack and 3 × the observed interval,
+still within 2–10 s. Pauses, inactive PIDs and failed or corrupt exchanges
+break cadence continuity, including definitions sharing the same wire
+request. The next successful answer starts a new baseline; a second
+clean answer establishes its interval. A value arriving on its real
+cadence is live; one that misses three rounds is stale. Regression tests:
+`test/issue114_wade_replay_test.dart` and
+`test/polling_cadence_continuity_test.dart`.
 
 ## Multi-ECU and ISO-TP
 

@@ -26,21 +26,31 @@ abstract final class ElmSessionProfile {
   /// after the last received byte; this is that window's length.
   static const Duration promptlessWriteHold = adapterResponseWindow;
 
+  /// Consecutive prompted OBD replies that forgive one promptless demotion.
+  ///
+  /// At batched rates this is roughly one to two seconds of healthy traffic;
+  /// at single-PID rates it is a few seconds. A missing prompt is an event,
+  /// not a property of the session (#114): Wade's log shows one promptless
+  /// reply at 13.9 s followed by 28 s of replies that all closed on `>`.
+  static const int promptlessRecoveryStreak = 12;
+
   /// Adaptive Mode 01 batch size for this session.
   ///
   /// [PriorityScheduler.maxBatchSize] is the hardware ceiling (6). This is
   /// the live cap. A self-inconsistent clone on functional multi-ECU
-  /// addressing starts at 3; each promptless complete demotes 6→3→1.
+  /// addressing starts at 3; each unit of live [promptlessPenalty] demotes
+  /// 6→3→1. The penalty decays on prompted replies (see
+  /// [promptlessRecoveryStreak]), so the cap climbs back.
   static int batchSizeCap({
     required bool cloneSelfInconsistent,
     required bool multiEcuFunctional,
-    required int promptlessCompletes,
+    required int promptlessPenalty,
   }) {
     var cap = PriorityScheduler.maxBatchSize;
     if (cloneSelfInconsistent && multiEcuFunctional) {
       cap = 3;
     }
-    final demotions = promptlessCompletes < 0 ? 0 : promptlessCompletes;
+    final demotions = promptlessPenalty < 0 ? 0 : promptlessPenalty;
     for (var i = 0; i < demotions; i++) {
       cap = cap <= 3 ? 1 : 3;
     }

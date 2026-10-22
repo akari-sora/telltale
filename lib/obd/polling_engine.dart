@@ -309,6 +309,7 @@ class PollingEngine {
   );
   final Map<String, Reading> _readings = {};
   final Map<String, PidFault> _faults = {};
+  final Set<String> _cadenceDiscontinuities = {};
 
   List<Pid> _active = const [];
 
@@ -543,6 +544,9 @@ class PollingEngine {
     _active = List.unmodifiable(merged.values);
     _syncDashboardLeases();
     final live = {for (final pid in _scheduledDefinitions()) pid.id: pid};
+    _cadenceDiscontinuities.addAll(
+      _readings.keys.where((id) => !live.containsKey(id)),
+    );
     _authorizedProfileDefinitions = Map.unmodifiable({
       for (final pid in live.values)
         if (pid.ownerProfileId != null) pid.id: pid,
@@ -3815,6 +3819,7 @@ class PollingEngine {
     interruptCapabilityDiscovery();
     if (!_running) return;
     _running = false;
+    _cadenceDiscontinuities.addAll(_readings.keys);
     final epoch = _epoch;
     // Retired here rather than when the next loop starts. The barrier below is
     // bounded at two seconds and a command may take longer, so a reply that
@@ -3832,6 +3837,7 @@ class PollingEngine {
       onTimeout: () {},
     );
     _loopDone.remove(epoch);
+    _cadenceDiscontinuities.addAll(_readings.keys);
     // The in-flight request was already popped. Retire the remainder so the
     // next start rebuilds the schedule and retries the interrupted PID.
     scheduler.retireQueuedRequests(const {});
@@ -4082,6 +4088,7 @@ class PollingEngine {
           rawBytes: bytes,
           timestamp: now,
           receivedElapsed: _nowElapsed(),
+          observedInterval: _observedInterval(sibling.id, _nowElapsed()),
         );
         _markDirectlyAnswered(sibling);
       } on FormulaException {
@@ -4097,6 +4104,13 @@ class PollingEngine {
           pid.id != source.id &&
           TelemetryDemand.wireKeyFor(pid.header, pid.modeAndPid) == key,
     );
+  }
+
+  void _interruptCadenceForSharedWire(Pid source) {
+    _cadenceDiscontinuities.add(source.id);
+    for (final sibling in _sharedWireSiblings(source)) {
+      _cadenceDiscontinuities.add(sibling.id);
+    }
   }
 
   void _invalidateSharedWire(
@@ -4145,6 +4159,28 @@ class PollingEngine {
   /// has already decided the membership by then. Discovery can run beside
   /// the first cycles; once a support block has answered, the next drain
   /// must be allowed to group.
+  /// Smoothed answer-to-answer interval for [pidId] (#114).
+  ///
+  /// Exponential average (new sample weight 1/4) of the gap since the
+  /// previous reading. A gap far beyond the running average (a stall, a
+  /// fault rest) is clipped to twice the average so one outage does not
+  /// teach freshness to forgive the next one.
+  Duration? _observedInterval(String pidId, Duration nowElapsed) {
+    if (_cadenceDiscontinuities.remove(pidId)) return null;
+    final previous = _readings[pidId];
+    if (previous == null) return null;
+    final gap = nowElapsed - previous.receivedElapsed;
+    if (gap.isNegative || gap == Duration.zero) {
+      return previous.observedInterval;
+    }
+    final average = previous.observedInterval;
+    if (average == null) return gap;
+    final clipped = gap > average * 2 ? average * 2 : gap;
+    return Duration(
+      microseconds: (average.inMicroseconds * 3 + clipped.inMicroseconds) ~/ 4,
+    );
+  }
+
   void _applyBatchingGate() {
     scheduler.canBatch =
         client.addressing.isCan && _verifiedSupportBlocks.isNotEmpty;
@@ -4156,12 +4192,14 @@ class PollingEngine {
       cloneSelfInconsistent: clone,
       multiEcuFunctional:
           client.enginePhysicalSilent && client.lastResponderCount > 1,
-      promptlessCompletes: client.promptlessCompleteCount,
+      promptlessPenalty: client.promptlessPenalty,
     );
-    if (client.promptlessCompleteCount > 0 &&
-        scheduler.interCommandDelay < ElmSessionProfile.adapterResponseWindow) {
-      scheduler.interCommandDelay = ElmSessionProfile.adapterResponseWindow;
-    }
+    // No session-wide inter-command delay after a promptless complete
+    // (#114). The client already holds the one write that follows a
+    // promptless close until the late `>` or the adapter response window
+    // ends; a reply that closed on `>` has, by definition, finished its
+    // ATST window. Raising the delay to 450 ms for the rest of the session
+    // turned every later command into ~455 ms of dead air.
   }
 
   Future<void> _pollBatch(List<QueuedRequest> batch, [int? epoch]) async {
@@ -4318,6 +4356,9 @@ class PollingEngine {
       _publish(epoch);
       return;
     } on Object catch (error) {
+      for (final request in batch) {
+        _interruptCadenceForSharedWire(request.pid);
+      }
       // Timeout or dropped link after the PID query may already be on the
       // wire. `wroteSinceAudit` is the same fact Mode 04 uses: ATSH/ATH1
       // can fail without the service bytes ever leaving, and a flush
@@ -4347,6 +4388,9 @@ class PollingEngine {
     }
 
     if (!response.isSuccess) {
+      for (final request in batch) {
+        _interruptCadenceForSharedWire(request.pid);
+      }
       _handleErrorResponse(batch, response, epoch);
       return;
     }
@@ -4381,6 +4425,7 @@ class PollingEngine {
         !_isProfileResponseBatch(batch)) {
       scheduler.handleCorruptionEvent();
       for (final request in batch) {
+        _interruptCadenceForSharedWire(request.pid);
         scheduler.enqueueRequest(request);
       }
       return;
@@ -4451,6 +4496,7 @@ class PollingEngine {
           rawBytes: bytes,
           timestamp: now,
           receivedElapsed: _nowElapsed(),
+          observedInterval: _observedInterval(request.pid.id, _nowElapsed()),
         );
         if (request.pid.id == PidLibrary.vehicleSpeed.id) {
           _trackAcceleration(value, now);

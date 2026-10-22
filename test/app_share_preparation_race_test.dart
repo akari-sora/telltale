@@ -103,9 +103,13 @@ void main() {
             if (openings == 1) {
               yield [1];
             } else {
-              for (var i = 0; i < 513; i++) {
-                yield List<int>.filled(64 * 1024, 1);
+              // Exercise the byte boundary and cleanup, without making 512
+              // durable flushes a shared-filesystem throughput requirement.
+              final chunk = List<int>.filled(1024 * 1024, 1);
+              for (var i = 0; i < 32; i++) {
+                yield chunk;
               }
+              yield [1];
             }
           },
         ),
@@ -137,8 +141,9 @@ void main() {
         subject: 'exact',
         knownByteLength: limit,
         streamFactory: () async* {
-          final chunk = List<int>.filled(64 * 1024, 0x61);
-          for (var i = 0; i < 512; i++) {
+          // Keep the exact 32 MiB payload while bounding durable flush work.
+          final chunk = List<int>.filled(1024 * 1024, 0x61);
+          for (var i = 0; i < 32; i++) {
             yield chunk;
           }
         },
