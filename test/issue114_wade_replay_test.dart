@@ -113,6 +113,11 @@ void main() {
         addTearDown(engine.dispose);
         await engine.discoverSupportedPids();
         engine.setActivePids(_wadePids);
+        // Six high-priority PIDs target 60 ms. A 20 ms reply plus the
+        // scheduler's 10 ms pacing makes requests become due together.
+        // Zero-latency replies can phase-lock into legal singletons even
+        // after the batch cap recovers, so tail grouping needs this offer.
+        transport.responseLatency = const Duration(milliseconds: 20);
 
         // The field log's fifth batch lost its `>`; the replay drops it on the
         // third so the test stays short. The position is not the point.
