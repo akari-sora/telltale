@@ -309,6 +309,7 @@ class PollingEngine {
   );
   final Map<String, Reading> _readings = {};
   final Map<String, PidFault> _faults = {};
+  final Set<String> _cadenceDiscontinuities = {};
 
   List<Pid> _active = const [];
 
@@ -543,6 +544,9 @@ class PollingEngine {
     _active = List.unmodifiable(merged.values);
     _syncDashboardLeases();
     final live = {for (final pid in _scheduledDefinitions()) pid.id: pid};
+    _cadenceDiscontinuities.addAll(
+      _readings.keys.where((id) => !live.containsKey(id)),
+    );
     _authorizedProfileDefinitions = Map.unmodifiable({
       for (final pid in live.values)
         if (pid.ownerProfileId != null) pid.id: pid,
@@ -3815,6 +3819,7 @@ class PollingEngine {
     interruptCapabilityDiscovery();
     if (!_running) return;
     _running = false;
+    _cadenceDiscontinuities.addAll(_readings.keys);
     final epoch = _epoch;
     // Retired here rather than when the next loop starts. The barrier below is
     // bounded at two seconds and a command may take longer, so a reply that
@@ -3832,6 +3837,7 @@ class PollingEngine {
       onTimeout: () {},
     );
     _loopDone.remove(epoch);
+    _cadenceDiscontinuities.addAll(_readings.keys);
     // The in-flight request was already popped. Retire the remainder so the
     // next start rebuilds the schedule and retries the interrupted PID.
     scheduler.retireQueuedRequests(const {});
@@ -4100,6 +4106,13 @@ class PollingEngine {
     );
   }
 
+  void _interruptCadenceForSharedWire(Pid source) {
+    _cadenceDiscontinuities.add(source.id);
+    for (final sibling in _sharedWireSiblings(source)) {
+      _cadenceDiscontinuities.add(sibling.id);
+    }
+  }
+
   void _invalidateSharedWire(
     Pid source,
     PidFault fault, {
@@ -4153,6 +4166,7 @@ class PollingEngine {
   /// fault rest) is clipped to twice the average so one outage does not
   /// teach freshness to forgive the next one.
   Duration? _observedInterval(String pidId, Duration nowElapsed) {
+    if (_cadenceDiscontinuities.remove(pidId)) return null;
     final previous = _readings[pidId];
     if (previous == null) return null;
     final gap = nowElapsed - previous.receivedElapsed;
@@ -4342,6 +4356,9 @@ class PollingEngine {
       _publish(epoch);
       return;
     } on Object catch (error) {
+      for (final request in batch) {
+        _interruptCadenceForSharedWire(request.pid);
+      }
       // Timeout or dropped link after the PID query may already be on the
       // wire. `wroteSinceAudit` is the same fact Mode 04 uses: ATSH/ATH1
       // can fail without the service bytes ever leaving, and a flush
@@ -4371,6 +4388,9 @@ class PollingEngine {
     }
 
     if (!response.isSuccess) {
+      for (final request in batch) {
+        _interruptCadenceForSharedWire(request.pid);
+      }
       _handleErrorResponse(batch, response, epoch);
       return;
     }
@@ -4405,6 +4425,7 @@ class PollingEngine {
         !_isProfileResponseBatch(batch)) {
       scheduler.handleCorruptionEvent();
       for (final request in batch) {
+        _interruptCadenceForSharedWire(request.pid);
         scheduler.enqueueRequest(request);
       }
       return;

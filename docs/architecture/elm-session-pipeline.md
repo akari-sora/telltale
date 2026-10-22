@@ -121,8 +121,8 @@ Now:
   arming, the `015E` backoff).
 - `promptlessPenalty` drives the cap and decays by one every
   `ElmSessionProfile.promptlessRecoveryStreak` (12) consecutive
-  successful OBD replies that end on `>`. AT replies and `NO DATA` do not
-  count.
+  successful OBD replies that end on `>`. AT replies do not count;
+  unsuccessful OBD replies and failed exchanges reset the streak.
 - There is no session-wide pacing. Only the one write after a promptless
   close is held (the promptless write hold below). A reply that closed on
   `>` has already finished its ATST window.
@@ -134,9 +134,13 @@ Now:
 `observedInterval`, a smoothed answer-to-answer gap measured by the poll
 loop (new-sample weight ¼, a single gap clipped to 2× the average).
 `maxAge` is the larger of the tier slack and 3 × the observed interval,
-still within 2–10 s. A value arriving on its real cadence is live; one
-that misses three rounds is stale. Regression replay:
-`test/issue114_wade_replay_test.dart`.
+still within 2–10 s. Pauses, inactive PIDs and failed or corrupt exchanges
+break cadence continuity, including definitions sharing the same wire
+request. The next successful answer starts a new baseline; a second
+clean answer establishes its interval. A value arriving on its real
+cadence is live; one that misses three rounds is stale. Regression tests:
+`test/issue114_wade_replay_test.dart` and
+`test/polling_cadence_continuity_test.dart`.
 
 ## Multi-ECU and ISO-TP
 

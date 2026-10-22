@@ -945,7 +945,10 @@ class Elm327Client {
   void _notePromptedObdReply(String? command, ObdResponse response) {
     if (command == null) return;
     if (command.trim().toUpperCase().startsWith('AT')) return;
-    if (!response.isSuccess) return;
+    if (!response.isSuccess) {
+      promptedStreak = 0;
+      return;
+    }
     promptedStreak++;
     if (promptlessPenalty > 0 &&
         promptedStreak >= ElmSessionProfile.promptlessRecoveryStreak) {
@@ -1528,6 +1531,9 @@ class Elm327Client {
   }
 
   void _failPending(Object error) {
+    // A failed wire exchange breaks the healthy run, even when it never
+    // produced a parsed reply (for example, a command timeout).
+    if (_pending != null) promptedStreak = 0;
     _pendingTimeout?.cancel();
     _pendingTimeout = null;
     _quietCompleteTimer?.cancel();

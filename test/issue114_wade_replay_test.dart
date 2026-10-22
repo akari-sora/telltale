@@ -14,6 +14,8 @@
 /// Not adapter or on-vehicle validation.
 library;
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:torque_obd/obd/adapter_identity.dart';
 import 'package:torque_obd/obd/elm327_client.dart';
@@ -120,15 +122,20 @@ void main() {
 
         final deadline = DateTime.now().add(const Duration(seconds: 8));
         var recoveredAt = -1;
+        final livePids = <String>{};
+        final staleTransitions = <String>{};
         while (DateTime.now().isBefore(deadline)) {
           await Future<void>.delayed(const Duration(milliseconds: 20));
+          final current = engine.current;
+          for (final pid in _wadePids) {
+            if (current.readings.containsKey(pid.id) && !current.isStale(pid)) {
+              livePids.add(pid.id);
+            } else if (livePids.contains(pid.id)) {
+              staleTransitions.add(pid.modeAndPid);
+            }
+          }
           if (client.promptlessCompleteCount < 1) continue;
           if (recoveredAt < 0) recoveredAt = transport.commandLog.length;
-          final after = transport.commandLog
-              .skip(recoveredAt)
-              .where(_isMode01Poll)
-              .toList();
-          if (after.length >= 40) break;
         }
 
         // Freshness is judged while the loop is still running.
@@ -166,6 +173,12 @@ void main() {
           reason: 'no session-wide adapter-window pacing after recovery',
         );
         expect(client.promptlessPenalty, 0);
+        expect(livePids, containsAll(_wadePids.map((pid) => pid.id)));
+        expect(
+          staleTransitions,
+          isEmpty,
+          reason: 'an already-live value must stay live throughout recovery',
+        );
         expect(staleNow, isEmpty, reason: 'no value flashes 過期 while polling');
       },
     );
@@ -236,6 +249,49 @@ void main() {
       }
       expect(client.promptlessPenalty, 1);
     });
+
+    for (final failure in ['NO DATA', 'CAN ERROR', 'timeout']) {
+      test('$failure interrupts the healthy recovery streak', () async {
+        final transport = _wadeAdapter();
+        final client = Elm327Client(
+          transport,
+          commandTimeout: const Duration(milliseconds: 400),
+        );
+        addTearDown(client.dispose);
+        expect(await client.connect(), isTrue);
+        await client.send('ATH1');
+        transport.omitPromptOnOccurrence['010C0D04'] = 1;
+        await client.send('010C0D04');
+        transport.omitPromptOnOccurrence.remove('010C0D04');
+        for (
+          var i = 0;
+          i < ElmSessionProfile.promptlessRecoveryStreak - 1;
+          i++
+        ) {
+          expect((await client.send('0105')).isSuccess, isTrue);
+        }
+
+        if (failure == 'timeout') {
+          transport.silenceFor.add('015E');
+          await expectLater(
+            client.send('015E'),
+            throwsA(isA<TimeoutException>()),
+          );
+          transport.silenceFor.remove('015E');
+        } else {
+          transport.forceReply('015E', failure);
+          expect((await client.send('015E')).isSuccess, isFalse);
+        }
+        expect(client.promptlessPenalty, 1);
+        expect(client.promptedStreak, 0);
+        for (var i = 1; i < ElmSessionProfile.promptlessRecoveryStreak; i++) {
+          expect((await client.send('0105')).isSuccess, isTrue);
+          expect(client.promptlessPenalty, 1, reason: 'need a new full streak');
+        }
+        expect((await client.send('0105')).isSuccess, isTrue);
+        expect(client.promptlessPenalty, 0);
+      });
+    }
   });
 
   group('#114 freshness follows the observed round', () {
