@@ -6,6 +6,24 @@ which therefore does not always move in step with the name.
 
 Dates are the date the build was made, not the date it reached anyone.
 
+## 1.0.25 — 2026-10-22
+
+- A complete OBD reply that arrives without the final ELM327 `>` no longer
+  leaves the rest of the session on slow single-PID polling. Grouped polling
+  recovers after healthy prompted replies, so live readings no longer flash
+  stale because one earlier reply omitted its prompt. The latest raw 1.0.24
+  export confirms the reported shape — 55 single-PID commands followed the
+  fifth grouped promptless reply — but the regression uses sanitized reply
+  values and models the behavior rather than replaying that exact chronology.
+  (issue #114)
+- Freshness cadence now restarts after polling stops, a PID is disabled, or a
+  timeout, error, incomplete grouped reply or recovery interrupts polling.
+  The interruption is no longer learned as a normal answer interval, and two
+  uninterrupted answers establish the new cadence, including for PIDs that
+  share one wire reply. (issue #114)
+- Covered by unit tests and a regression using sanitized replies from the real
+  1.0.24 export. Real adapter and vehicle validation remains pending.
+
 ## 1.0.24 — 2026-10-21
 
 - When an ELM327 clone goes silent after a command — not even `NO DATA` —

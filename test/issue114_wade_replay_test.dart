@@ -6,10 +6,10 @@
 /// `7E9` answer functional `7DF`). The raw log is not committed: it carries
 /// device identifiers. Values below are copied from its replies.
 ///
-/// In the field log one grouped reply (`010C0D04`) arrived complete without
-/// `>` at ~9 s. From then on, for the remaining ~33 s, every command was a
-/// single PID ~455 ms apart (3.6 s per round of 8) although every one of
-/// those replies closed on a real `>`.
+/// In the field log the fifth `010C0D04` was sent at ~8.9 s and completed
+/// without `>` at ~13.9 s. The remaining 55 commands stayed single-PID through
+/// ~42.3 s, with a median 521 ms interval (about 4.2 s per round of 8), even
+/// though those replies closed on a real `>`.
 ///
 /// Not adapter or on-vehicle validation.
 library;
