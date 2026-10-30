@@ -1146,8 +1146,6 @@ final class ActiveTestProfile {
 
   /// Creates a defensive, immutable snapshot for safe active test execution.
   ServiceRecipeSnapshot toSnapshot() => ServiceRecipeSnapshot.fromProfile(this);
-  ServiceRecipeSnapshot createSnapshot() =>
-      ServiceRecipeSnapshot.fromProfile(this);
 }
 
 /// Defensive, immutable snapshot of an active-test service recipe.
@@ -1190,7 +1188,3 @@ final class ServiceRecipeSnapshot {
   DiagnosticSessionType get sessionType => profile.sessionType;
   int? get requiredSecurityLevel => profile.requiredSecurityLevel;
 }
-
-/// Alias for [ServiceRecipeSnapshot].
-typedef ActiveTestProfileSnapshot = ServiceRecipeSnapshot;
-
