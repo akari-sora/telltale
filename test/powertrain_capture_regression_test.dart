@@ -42,13 +42,52 @@ const _p0105 = [
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x1E, 0x20, 0x1F,
 ];
 
+// 220106 positive response on 7E4 -> 7EC, echo included: 30 payload bytes.
+const _p0106 = [
+  0x62, 0x01, 0x06,
+  0x00, 0x00, 0x00, 0x19, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+
+// 220101 positive response on ICCU/OBC 744 -> 74C, echo included: 12 payload bytes.
+const _pIccu0101 = [
+  0x62, 0x01, 0x01,
+  0x00, 0x00, 0x00, 0x00, 0x09, 0x06, 0x01, 0x40, 0x00, 0x00, 0x00, 0x00,
+];
+
+// 220100 positive response on A/C 7B3 -> 7BB, echo included: 16 payload bytes.
+const _pAc0100 = [
+  0x62, 0x01, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x7C, 0x82, 0x00, 0x64, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+
+// 22B002 positive response on Cluster 7C6 -> 7CE, echo included: 9 payload bytes.
+const _pCluB002 = [
+  0x62, 0xB0, 0x02,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x39,
+];
+
+// 22C002 positive response on TPMS 7A0 -> 7A8, echo included: 19 payload bytes.
+const _pTpmsC002 = [
+  0x62, 0xC0, 0x02,
+  0x00, 0x00, 0x00, 180, 75, 0x00, 0x00, 180, 75, 0x00,
+  0x00, 185, 76, 0x00, 0x00, 185, 76, 0x00, 0x00,
+];
+
 /// What two independent implementations decode from the capture above.
 const _expected = <String, double>{
   'soc_bms': 71.0,
   'pack_current': 1.5,
   'pack_voltage': 748.6,
+  'pack_power': 1.1229,
   'batt_temp_max': 33.0,
   'batt_temp_min': 30.0,
+  'batt_temp_1': 32.0,
+  'batt_temp_2': 31.0,
+  'batt_temp_3': 32.0,
+  'batt_temp_4': 30.0,
   'cell_volt_max': 3.9,
   'cell_volt_max_no': 17.0,
   'cell_volt_min': 3.88,
@@ -58,8 +97,28 @@ const _expected = <String, double>{
   'cum_discharge_ah': 36338.4,
   'cum_energy_charged': 27424.1,
   'cum_energy_discharged': 26435.4,
+  'cum_operating_time': 12611.7511,
+  'isolation_resistance': 3000.0,
   'soh': 96.8,
   'soc_display': 72.0,
+  'max_regen_power': 269.25,
+  'max_discharge_power': 277.0,
+  'batt_heater_temp_1': 32.0,
+  'cooling_water_temp': 25.0,
+  'obc_ac_voltage': 231.0,
+  'obc_ac_current': 32.0,
+  'indoor_temp': 22.0,
+  'outdoor_temp': 25.0,
+  'evaporator_temp': 10.0,
+  'odometer_km': 12345.0,
+  'tpms_fl_pressure': 36.0,
+  'tpms_fl_temp': 25.0,
+  'tpms_fr_pressure': 36.0,
+  'tpms_fr_temp': 25.0,
+  'tpms_rl_pressure': 37.0,
+  'tpms_rl_temp': 26.0,
+  'tpms_rr_pressure': 37.0,
+  'tpms_rr_temp': 26.0,
 };
 
 Future<Map<String, Reading>> _pollProfile(
@@ -81,7 +140,31 @@ Future<Map<String, Reading>> _pollProfile(
         name: 'E-GMP BMS',
         requestId: '7E4',
         responseId: '7EC',
-        responses: responses,
+        responses: {'220106': _p0106, ...responses},
+      ),
+      FakeEcu(
+        name: 'E-GMP ICCU/OBC',
+        requestId: '744',
+        responseId: '74C',
+        responses: const {'220101': _pIccu0101},
+      ),
+      FakeEcu(
+        name: 'E-GMP A/C',
+        requestId: '7B3',
+        responseId: '7BB',
+        responses: const {'220100': _pAc0100},
+      ),
+      FakeEcu(
+        name: 'E-GMP Cluster',
+        requestId: '7C6',
+        responseId: '7CE',
+        responses: const {'22B002': _pCluB002},
+      ),
+      FakeEcu(
+        name: 'E-GMP TPMS',
+        requestId: '7A0',
+        responseId: '7A8',
+        responses: const {'22C002': _pTpmsC002},
       ),
     ],
   );

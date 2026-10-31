@@ -19,8 +19,8 @@
       "catalog_manifest": {
         "manifest_file": "assets/powertrain_battery/powertrain_battery_catalog.manifest.json",
         "target_file": "assets/powertrain_battery/powertrain_battery_catalog.json",
-        "expected_sha256": "8f505e20c2ea2c777b26cb422c882be51ccfbae48de343254a16d501b80df3e9",
-        "expected_size_bytes": 443259,
+        "expected_sha256": "93d9b2f873b8dec349f77cdccef14201c9b0f85f873c53a67d318b5665c1fc01",
+        "expected_size_bytes": 454033,
         "expected_schema_version": 3,
         "profile_count": 221
       },

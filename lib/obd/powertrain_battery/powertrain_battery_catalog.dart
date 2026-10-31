@@ -132,6 +132,8 @@ final class PowertrainBatteryCatalogSnapshot {
   final int profileCount;
   final int signalCount;
   final Map<String, int> countsByPowertrain;
+
+  PowertrainBatteryProfile? byId(String id) => catalog.byId(id);
 }
 
 final class PowertrainBatteryCatalogAssetException implements Exception {

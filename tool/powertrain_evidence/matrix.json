@@ -1,8 +1,8 @@
 {
   "catalog": {
     "catalog_file": "powertrain_battery_catalog.json",
-    "catalog_sha256": "8f505e20c2ea2c777b26cb422c882be51ccfbae48de343254a16d501b80df3e9",
-    "catalog_size_bytes": 443259,
+    "catalog_sha256": "93d9b2f873b8dec349f77cdccef14201c9b0f85f873c53a67d318b5665c1fc01",
+    "catalog_size_bytes": 454033,
     "manifest_file": "powertrain_battery_catalog.manifest.json",
     "profile_count": 221,
     "profiles": [
@@ -3244,7 +3244,7 @@
         "year_to": 2021
       },
       {
-        "command_count": 2,
+        "command_count": 7,
         "evidence": "sourceBacked",
         "identity_evidence": {
           "market": "exact",

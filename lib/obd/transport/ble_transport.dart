@@ -53,9 +53,33 @@ class BleAdapterHandle {
 }
 
 class BleTransport extends BaseObdTransport {
-  BleTransport(this.handle);
+  BleTransport(
+    this.handle, {
+    this.maxWriteChunkBytes = defaultMaxWriteChunkBytes,
+    this.interChunkDelay = defaultInterChunkDelay,
+    this.interWriteDelay = defaultInterWriteDelay,
+  }) : assert(maxWriteChunkBytes > 0);
 
   final BleAdapterHandle handle;
+
+  /// Maximum bytes per single BLE GATT write.
+  ///
+  /// Standard BLE 4.0 default ATT_MTU (23) yields a 20-byte ATT value payload.
+  /// Even when the host OS negotiates a larger MTU for notifications, many
+  /// cheap ELM327 v1.5 BLE-to-UART bridge chips use a fixed 20-byte RX buffer
+  /// on their write characteristic and silently drop or hang on larger writes.
+  /// Short ELM327 commands (`<= 20` bytes) are always sent atomically in one
+  /// write; longer payloads are chunked at [maxWriteChunkBytes].
+  static const int defaultMaxWriteChunkBytes = 20;
+  static const Duration defaultInterChunkDelay = Duration(milliseconds: 15);
+  static const Duration defaultInterWriteDelay = Duration(milliseconds: 12);
+
+  final int maxWriteChunkBytes;
+  final Duration interChunkDelay;
+  final Duration interWriteDelay;
+
+  Future<void> _writeChain = Future<void>.value();
+  DateTime? _lastWriteCompletedAt;
 
   BleDevice get _device => BleDevice(deviceId: handle.id, name: handle.name);
 
@@ -467,21 +491,70 @@ class BleTransport extends BaseObdTransport {
     }
     _write = null;
     _notify = null;
+    _lastWriteCompletedAt = null;
     setConnected(false);
   }
 
   @override
-  Future<void> write(List<int> data) async {
+  Future<void> write(List<int> data) {
+    if (_write == null) {
+      return Future<void>.error(const WriteRefusedException('BLE 連線尚未建立。'));
+    }
+    final completer = Completer<void>();
+    _writeChain = _writeChain.catchError((_) {}).then((_) async {
+      try {
+        await _writePaced(data);
+        completer.complete();
+      } on Object catch (e, st) {
+        completer.completeError(e, st);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> _writePaced(List<int> data) async {
     final characteristic = _write;
     if (characteristic == null) {
       throw const WriteRefusedException('BLE 連線尚未建立。');
     }
+    if (interWriteDelay > Duration.zero && _lastWriteCompletedAt != null) {
+      final elapsed = DateTime.now().difference(_lastWriteCompletedAt!);
+      final remaining = interWriteDelay - elapsed;
+      if (remaining > Duration.zero) {
+        await Future<void>.delayed(remaining);
+      }
+    }
+    final rechecked = _write;
+    if (rechecked == null) {
+      throw const WriteRefusedException('BLE 連線尚未建立。');
+    }
     // Write-without-response avoids an ACK round-trip per command, which
     // roughly doubles achievable PIDs/sec on chatty adapters.
-    final withoutResponse = characteristic.properties.contains(
+    final withoutResponse = rechecked.properties.contains(
       CharacteristicProperty.writeWithoutResponse,
     );
-    await characteristic.write(data, withResponse: !withoutResponse);
+    if (data.length <= maxWriteChunkBytes) {
+      await rechecked.write(data, withResponse: !withoutResponse);
+      _lastWriteCompletedAt = DateTime.now();
+      return;
+    }
+    for (var offset = 0; offset < data.length; offset += maxWriteChunkBytes) {
+      if (offset > 0 && interChunkDelay > Duration.zero) {
+        await Future<void>.delayed(interChunkDelay);
+      }
+      final current = _write;
+      if (current == null) {
+        throw const WriteRefusedException('BLE 連線尚未建立。');
+      }
+      final end = offset + maxWriteChunkBytes < data.length
+          ? offset + maxWriteChunkBytes
+          : data.length;
+      await current.write(
+        data.sublist(offset, end),
+        withResponse: !withoutResponse,
+      );
+      _lastWriteCompletedAt = DateTime.now();
+    }
   }
 }
 

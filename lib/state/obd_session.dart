@@ -2838,6 +2838,12 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// [_automaticReconnectTarget].
   int? _clearAttemptedGeneration;
 
+  /// Canonical Powertrain/Battery catalog profile ID auto-detected on the
+  /// current connection (such as `hyundai-ioniq5-egmp-2021-2024-community`),
+  /// or `null` if none was matched.
+  String? get detectedPowertrainProfileId =>
+      _engine?.detectedPowertrainProfileId;
+
   Future<String?> readVin({DateTime? deadline}) async {
     final engine = _engine;
     if (engine == null) {

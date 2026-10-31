@@ -745,7 +745,7 @@
         {
           "path": "lib/obd/transport/ble_transport.dart",
           "symbol": "BleTransport",
-          "sha256": "48785811ea65563bfb16889b6c8a1274ad3ce5147a902e05d47c1eddffc86faa",
+          "sha256": "9a0cbda467323782beebb4e671695f0910eca949d68e8165edae3a06a4de39af",
           "storage_fact": "network-socket-or-ble"
         },
         {
