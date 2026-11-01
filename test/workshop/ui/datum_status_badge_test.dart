@@ -8,6 +8,7 @@ import 'package:torque_obd/diagnostics/availability.dart';
 import 'package:torque_obd/obd/physics/vehicle_profile.dart';
 import 'package:torque_obd/obd/pid/pid_library.dart';
 import 'package:torque_obd/ui/widgets/status/datum_status_badge.dart';
+
 import '../../support/localized_app.dart';
 
 void main() {
@@ -46,6 +47,7 @@ void main() {
     expect(find.textContaining('車重'), findsOneWidget);
     expect(find.textContaining('迎風面積'), findsOneWidget);
     expect(find.textContaining('傳動效率'), findsOneWidget);
+    expect(find.textContaining('此處沒有這個解碼'), findsNothing);
   });
 
   testWidgets('outlier badge keeps the value labelled 異常', (tester) async {

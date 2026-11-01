@@ -442,6 +442,11 @@
   "@datumStatusFollowsData": {
     "description": "Shown in the per-value details dialog when the datum carries no badge. It must never read as 'valid', 'OK' or 'normal' — it says only that nothing was flagged."
   },
+  "datumStatusDetailsHint": "Tap for data status details",
+  "datumStatusUnverifiedExplanation": "Unverified means no real-vehicle comparison for this decoder on your vehicle is documented here. It does not mean the reading is wrong, and it does not certify its accuracy. Freshness and faults are shown separately.",
+  "@datumStatusUnverifiedExplanation": {
+    "description": "Explains the unverified evidence badge in status details without asserting accuracy or replacing freshness and fault labels."
+  },
   "datumStatusFormula": "Formula",
   "derivedAirflow": "Airflow",
   "derivedEcuFuelTitle": "ECU fuel data",

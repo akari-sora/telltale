@@ -989,6 +989,18 @@ abstract class AppLocalizations {
   /// **'Status follows the data'**
   String get datumStatusFollowsData;
 
+  /// No description provided for @datumStatusDetailsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap for data status details'**
+  String get datumStatusDetailsHint;
+
+  /// Explains the unverified evidence badge in status details without asserting accuracy or replacing freshness and fault labels.
+  ///
+  /// In en, this message translates to:
+  /// **'Unverified means no real-vehicle comparison for this decoder on your vehicle is documented here. It does not mean the reading is wrong, and it does not certify its accuracy. Freshness and faults are shown separately.'**
+  String get datumStatusUnverifiedExplanation;
+
   /// No description provided for @datumStatusFormula.
   ///
   /// In en, this message translates to:
