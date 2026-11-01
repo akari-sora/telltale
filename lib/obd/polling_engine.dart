@@ -2013,18 +2013,20 @@ class PollingEngine {
   /// Whether the no-engine reading was in force the last time it was checked.
   bool _noEngineReadingInForce = false;
 
-  /// PIDs the no-engine reading demoted to unsupported.
+  /// PIDs the no-engine reading demoted to unsupported, with the rest it set.
   ///
   /// Kept apart because a `7F 01 12` refusal and the `015E` rest set the same
   /// fault, and their backoff has nothing to do with whether there is an
-  /// engine.
-  final Set<String> _restedByNoEngineReading = {};
+  /// engine. The rest is remembered so a later refusal of the same PID, which
+  /// sets its own, is not mistaken for this one.
+  final Map<String, DateTime> _restedByNoEngineReading = {};
 
   /// Marks [pid] unsupported because the masks say no controller has it.
   void _demoteUnsupported(Pid pid, DateTime now) {
     _invalidate(pid.id, PidFault.unsupported);
-    _retryAfter[pid.id] = now.add(recheckInterval);
-    if (_noEngineControllerOnBus) _restedByNoEngineReading.add(pid.id);
+    final until = now.add(recheckInterval);
+    _retryAfter[pid.id] = until;
+    if (_noEngineControllerOnBus) _restedByNoEngineReading[pid.id] = until;
   }
 
   /// Notices the no-engine reading ending, whatever ended it.
@@ -2037,9 +2039,11 @@ class PollingEngine {
   void _reconcileEngineEvidence() {
     final inForce = _noEngineControllerOnBus;
     if (_noEngineReadingInForce && !inForce) {
-      for (final id in _restedByNoEngineReading) {
-        if (_faults[id] == PidFault.unsupported) _retryAfter.remove(id);
-      }
+      _restedByNoEngineReading.forEach((id, until) {
+        if (_faults[id] == PidFault.unsupported && _retryAfter[id] == until) {
+          _retryAfter.remove(id);
+        }
+      });
       _restedByNoEngineReading.clear();
       _publishCapabilitySummary();
     }

@@ -551,6 +551,47 @@ void main() {
       expect(transport.sent.where((c) => c == '0121').length, before);
     });
 
+    test('a refusal at the recheck keeps its own backoff', () async {
+      // Synthetic, from the Codex final review: rpm is rested by the
+      // no-engine reading, its recheck is refused with 7F 01 12, then a MIL
+      // read is answered by 7E8. The refusal set its own rest, which the
+      // engine showing up must not cut short.
+      final physical = <String, String>{};
+      final transport = _Ioniq5Transport(
+        physical: physical,
+        functional0101: '7E806410100000000\r\r>',
+      );
+      final engine = await _discovered(transport);
+      const rpm = PidLibrary.engineRpm;
+      engine.recheckInterval = const Duration(milliseconds: 1500);
+      engine.setActivePids(const [rpm]);
+      engine.start();
+      var deadline = DateTime.now().add(const Duration(seconds: 3));
+      while (engine.current.faults[rpm.id] != PidFault.unsupported &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(engine.current.faults[rpm.id], PidFault.unsupported);
+      physical['010C'] = '7F0112';
+      final sentBefore = transport.sent.length;
+      deadline = DateTime.now().add(const Duration(seconds: 4));
+      while (!transport.sent.sublist(sentBefore).contains('010C') &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      // Let the refusal be handled before the engine shows.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await engine.stop();
+      final refused = transport.sent.where((c) => c == '010C').length;
+      expect(refused, greaterThanOrEqualTo(1));
+      expect(engine.current.faults[rpm.id], PidFault.unsupported);
+      expect(await engine.readMilStatus(), isNotNull);
+      engine.start();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await engine.stop();
+      expect(transport.sent.where((c) => c == '010C').length, refused);
+    });
+
     test('a 7E8 heard by a MIL read reaches capability subscribers', () async {
       // Synthetic: discovery heard no engine, then a MIL read is answered by
       // 7E8 (06 41 01 00 00 00 00).
