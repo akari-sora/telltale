@@ -955,6 +955,7 @@ class PollingEngine {
     // exists, and a reply that missed it is evidence about the reply.
     if (seen.isNotEmpty) {
       _responders = Set.unmodifiable({...?_responders, ...seen});
+      _reconcileEngineEvidence();
     }
     return _responders;
   }
@@ -1141,6 +1142,7 @@ class PollingEngine {
         bytes.sublist(2),
       );
     }
+    _reconcileEngineEvidence();
     return engineRaw;
   }
 
@@ -2002,6 +2004,36 @@ class PollingEngine {
   /// controller does not leave the bus between two exchanges.
   final Set<String> _observedResponders = <String>{};
 
+  /// Records a controller this session heard from. An engine controller among
+  /// them ends the no-engine reading, so every write goes through here.
+  void _addObservedResponder(String source) {
+    if (_observedResponders.add(source)) _reconcileEngineEvidence();
+  }
+
+  /// Whether the no-engine reading was in force the last time it was checked.
+  bool _noEngineReadingInForce = false;
+
+  /// Notices the no-engine reading ending, whatever ended it.
+  ///
+  /// Called wherever engine evidence can arrive, and once per poll cycle as a
+  /// backstop. When the reading goes, what it called unsupported is unknown
+  /// again: those PIDs stop resting until the recheck and are asked next
+  /// cycle, and subscribers get a summary without the responder accounting.
+  /// On a no-engine reading there were no engine masks, so every
+  /// `unsupported` fault came from it.
+  void _reconcileEngineEvidence() {
+    final inForce = _noEngineControllerOnBus;
+    if (_noEngineReadingInForce && !inForce) {
+      for (final entry in _faults.entries) {
+        if (entry.value == PidFault.unsupported) {
+          _retryAfter.remove(entry.key);
+        }
+      }
+      _publishCapabilitySummary();
+    }
+    _noEngineReadingInForce = inForce;
+  }
+
   /// Every controller this session has evidence for, or null if there is none.
   ///
   /// The handshake census and the replies seen since are both *lower bounds*,
@@ -2157,7 +2189,7 @@ class PollingEngine {
                 bytes.length >= 2 &&
                 bytes[1] == expectingService);
         if (about) {
-          _observedResponders.add(source);
+          _addObservedResponder(source);
           heardAboutThis.add(source);
         }
       }
@@ -2182,7 +2214,7 @@ class PollingEngine {
             // the case that must not erase a real module. It is coverage, not
             // an answer to this service.
             _resolveIdentity(source);
-            _observedResponders.add(source);
+            _addObservedResponder(source);
           case ObservedEvidence.answered:
             _resolveIdentity(source);
             // A complete frame about something else is definite evidence that
@@ -2191,7 +2223,7 @@ class PollingEngine {
             // Mode 03 exchange used to make `7EA` a session-long fault-code
             // debt it had never incurred.
             if (frame.service == expectingService) {
-              _observedResponders.add(source);
+              _addObservedResponder(source);
               heardAboutThis.add(source);
             }
         }
@@ -2556,7 +2588,7 @@ class PollingEngine {
         // Completion stays a separate, stricter question, asked of content by
         // `_clearCompleted`, because "this controller erased its memory" is a
         // claim about what was said and not about who said it.
-        if (frame.service == 0x04) _observedResponders.add(source);
+        if (frame.service == 0x04) _addObservedResponder(source);
       }
       return;
     }
@@ -2621,7 +2653,7 @@ class PollingEngine {
           // clear by the same demonstration the rule is built on, not by
           // association with a different service.
           _resolveIdentity(source);
-          _observedResponders.add(source);
+          _addObservedResponder(source);
       }
     }
     _clearUnresolved.removeWhere(_observedResponders.contains);
@@ -2749,7 +2781,7 @@ class PollingEngine {
         }
         if (answered) {
           reached.add(source);
-          _observedResponders.add(source);
+          _addObservedResponder(source);
         }
       } on Object {
         // A controller that cannot be reached by name is exactly as silent as
@@ -2779,7 +2811,7 @@ class PollingEngine {
     for (final doubts in _unresolvedIdentities.values) {
       if (doubts.remove(source)) wasDoubted = true;
     }
-    if (wasDoubted) _observedResponders.add(source);
+    if (wasDoubted) _addObservedResponder(source);
   }
 
   /// Whether one frame is a controller reporting the clear finished.
@@ -3442,7 +3474,7 @@ class PollingEngine {
         if (frame.service != 0x01 || frame.operand != 0x01) continue;
         {
           _resolveIdentity(source);
-          _observedResponders.add(source);
+          _addObservedResponder(source);
         }
       }
       return null;
@@ -3481,7 +3513,7 @@ class PollingEngine {
       // PID 01 is mandatory for emissions-related modules, and those are the
       // ones J1979 requires to answer Mode 03.
       _resolveIdentity(source);
-      _observedResponders.add(source);
+      _addObservedResponder(source);
 
       // The whole payload, and only now.
       //
@@ -4203,6 +4235,7 @@ class PollingEngine {
   /// Tops the queue up with any scheduled PID whose target interval has elapsed.
   void _refillQueue() {
     if (scheduler.isNotEmpty) return;
+    _reconcileEngineEvidence();
     final now = DateTime.now();
     final unionByWire = {
       for (final demand in demands.uniqueWireRequests()) demand.wireKey: demand,
@@ -4350,8 +4383,11 @@ class PollingEngine {
     _retryAfter.remove(pid.id);
     // Built-in Mode 01 values are taken from the engine controller only, so
     // one of them answering proves there is one, whatever the census missed.
-    if (pid.isMode01 && BusAddressing.isAppDefault(pid.header)) {
+    if (pid.isMode01 &&
+        BusAddressing.isAppDefault(pid.header) &&
+        !_engineEvidenceSeen) {
       _engineEvidenceSeen = true;
+      _reconcileEngineEvidence();
     }
     if (_answeredAtLeastOnce.add(pid.id)) {
       _publishCapabilitySummary();

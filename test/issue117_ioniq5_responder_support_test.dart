@@ -107,6 +107,7 @@ class _Ioniq5Transport extends BaseObdTransport {
     this.census0100,
     this.later0100,
     this.physical = const {},
+    this.functional0101,
   });
 
   /// When true, `7EB` does not answer the functional `0120` although its
@@ -122,6 +123,9 @@ class _Ioniq5Transport extends BaseObdTransport {
   /// Synthetic headerless replies on physical `7E0`. Default: `NO DATA`, as
   /// in the export. Pass a mutable map to make the engine answer later.
   final Map<String, String> physical;
+
+  /// Synthetic reply to a functional `0101`. Default: `NO DATA`.
+  final String? functional0101;
 
   /// While set, a headered functional `0100` after the census is held until
   /// it completes.
@@ -246,6 +250,8 @@ class _Ioniq5Transport extends BaseObdTransport {
         return _headersOn ? _headered0160 : _headerless0160;
       case '0121':
         return _headersOn ? _headered0121 : _headerless0121;
+      case '0101':
+        return functional0101 ?? _noData;
     }
     return _noData;
   }
@@ -492,6 +498,64 @@ void main() {
   group('an engine the census missed is still the engine', () {
     // Synthetic. The engine masks are the issue #109 export's 7E8 masks
     // (0100 BE3FA813, 0120 A007B011, 0140 FED08410); 7EB is this export's.
+    test('a 7E8 heard by a MIL read reaches capability subscribers', () async {
+      // Synthetic: discovery heard no engine, then a MIL read is answered by
+      // 7E8 (06 41 01 00 00 00 00).
+      final transport = _Ioniq5Transport(
+        functional0101: '7E806410100000000\r\r>',
+      );
+      final engine = await _discovered(transport);
+      const rpm = PidLibrary.engineRpm;
+      ObdCapabilitySummary? last;
+      final sub = engine.capabilitySummaries.listen((s) => last = s);
+      addTearDown(sub.cancel);
+      expect(
+        engine.capabilitySummary.statusFor(rpm),
+        PidCapabilityStatus.unsupported,
+      );
+      final mil = await engine.readMilStatus();
+      expect(mil, isNotNull);
+      expect(
+        engine.capabilitySummary.statusFor(rpm),
+        PidCapabilityStatus.unknown,
+      );
+      expect(last, isNotNull);
+      expect(last!.responderAccountedBlockIds, isEmpty);
+      expect(last!.statusFor(rpm), PidCapabilityStatus.unknown);
+    });
+
+    test(
+      'engine evidence after discovery releases what it had rested',
+      () async {
+        // Synthetic: the engine starts answering physical requests only after
+        // discovery has finished. With the default five-minute recheck, rpm
+        // must not stay dark until then.
+        final physical = <String, String>{};
+        final transport = _Ioniq5Transport(physical: physical);
+        final engine = await _discovered(transport);
+        const rpm = PidLibrary.engineRpm;
+        const mil = PidLibrary.distanceWithMil;
+        engine.setActivePids(const [rpm, mil]);
+        engine.start();
+        var deadline = DateTime.now().add(const Duration(seconds: 3));
+        while (engine.current.faults[rpm.id] != PidFault.unsupported &&
+            DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        expect(engine.current.faults[rpm.id], PidFault.unsupported);
+        physical['0121'] = '41210005';
+        physical['010C'] = '410C1AF8';
+        deadline = DateTime.now().add(const Duration(seconds: 5));
+        while (!engine.current.readings.containsKey(rpm.id) &&
+            DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        await engine.stop();
+        expect(engine.current.readings[mil.id]?.value, closeTo(5, 0.01));
+        expect(engine.current.readings[rpm.id]?.value, closeTo(1726, 0.5));
+      },
+    );
+
     test('its mask in the discovery reply restores the engine rule', () async {
       final transport = _Ioniq5Transport(
         census0100: '7EB06410080000001\r\r>',
