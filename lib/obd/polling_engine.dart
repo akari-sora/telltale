@@ -2019,8 +2019,9 @@ class PollingEngine {
   /// backstop. When the reading goes, what it called unsupported is unknown
   /// again: those PIDs stop resting until the recheck and are asked next
   /// cycle, and subscribers get a summary without the responder accounting.
-  /// On a no-engine reading there were no engine masks, so every
-  /// `unsupported` fault came from it.
+  /// On a no-engine reading there were no engine masks, so nearly every
+  /// `unsupported` fault came from it; a `7F 01 12` refusal or the `015E`
+  /// rest can also set one, and those are asked once more at worst.
   void _reconcileEngineEvidence() {
     final inForce = _noEngineControllerOnBus;
     if (_noEngineReadingInForce && !inForce) {
@@ -4120,9 +4121,13 @@ class PollingEngine {
           // that answers the grouped request and not that singleton then
           // published `noAnswer` for every member and never recovered.
           _applyBatchingGate();
-          _refillQueue();
-          final batch = scheduler.popBatch();
+          final refillDemoted = _refillQueue();
+          final popped = _dropNewlyUnsupported(scheduler.popBatch());
+          final batch = popped.batch;
           if (batch.isEmpty) {
+            // Nothing goes out, so nothing else would publish: a gauge just
+            // demoted to 此車輛不支援 would keep showing its last fault.
+            if (refillDemoted || popped.demoted) _publish(epoch);
             await Future<void>.delayed(const Duration(milliseconds: 20));
             continue;
           }
@@ -4233,9 +4238,13 @@ class PollingEngine {
   }
 
   /// Tops the queue up with any scheduled PID whose target interval has elapsed.
-  void _refillQueue() {
-    if (scheduler.isNotEmpty) return;
+  ///
+  /// Returns whether it demoted a PID to unsupported, which changes what the
+  /// dashboard should show even when nothing is then sent.
+  bool _refillQueue() {
+    if (scheduler.isNotEmpty) return false;
     _reconcileEngineEvidence();
+    var demoted = false;
     final now = DateTime.now();
     final unionByWire = {
       for (final demand in demands.uniqueWireRequests()) demand.wireKey: demand,
@@ -4259,6 +4268,7 @@ class PollingEngine {
         if (_faults[pid.id] != PidFault.unsupported) {
           _invalidate(pid.id, PidFault.unsupported);
           _retryAfter[pid.id] = now.add(recheckInterval);
+          demoted = true;
           continue;
         }
       }
@@ -4284,6 +4294,35 @@ class PollingEngine {
       final due = last == null || now.difference(last) >= period;
       if (due) scheduler.enqueue(pid, priority);
     }
+    return demoted;
+  }
+
+  /// Drops batch members that discovery has since shown to be unsupported.
+  ///
+  /// Polling starts before discovery, so the queue can already hold every
+  /// gauge and physics input when the support masks land — and a member in
+  /// the queue never passes [_refillQueue]'s check again until it has spent
+  /// its `NO DATA` strikes. On the #117 export's replies that was 28 dead
+  /// requests after discovery, with the gauges reading 無回應 meanwhile. A
+  /// member that is already marked unsupported is a scheduled recheck and is
+  /// left alone.
+  ({List<QueuedRequest> batch, bool demoted}) _dropNewlyUnsupported(
+    List<QueuedRequest> batch,
+  ) {
+    final now = DateTime.now();
+    var demoted = false;
+    final kept = <QueuedRequest>[];
+    for (final request in batch) {
+      final pid = request.pid;
+      if (_knownUnsupported(pid) && _faults[pid.id] != PidFault.unsupported) {
+        _invalidate(pid.id, PidFault.unsupported);
+        _retryAfter[pid.id] = now.add(recheckInterval);
+        demoted = true;
+        continue;
+      }
+      kept.add(request);
+    }
+    return (batch: demoted ? kept : batch, demoted: demoted);
   }
 
   /// Evaluates every other live definition that shares this wire request.

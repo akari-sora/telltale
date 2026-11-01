@@ -433,7 +433,8 @@ void main() {
     test(
       'polling that starts before discovery stops asking once it lands',
       () async {
-        // ObdSession starts polling and then runs discovery after the census.
+        // ObdSession starts polling and then runs discovery after the census,
+        // so the queue already holds the gauges and their physics inputs.
         final transport = _Ioniq5Transport();
         final client = await _connect(transport);
         final engine = PollingEngine(client);
@@ -442,20 +443,43 @@ void main() {
         const gauges = [PidLibrary.engineRpm, PidLibrary.vehicleSpeed];
         engine.setActivePids(gauges);
         engine.start();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
         await engine.discoverSupportedPids();
-        // Let whatever was already queued drain, then watch.
-        await Future<void>.delayed(const Duration(milliseconds: 1500));
         final settled = transport.sent.length;
         await Future<void>.delayed(const Duration(milliseconds: 1500));
         await engine.stop();
-        final later = transport.sent.sublist(settled);
-        expect(later, isNot(contains('010C')));
-        expect(later, isNot(contains('010D')));
+        final deadAfter = [
+          for (final command in transport.sent.sublist(settled))
+            if (_polledInExport.contains(command)) command,
+        ];
+        // At most the one request already on the wire when discovery
+        // returned: once on 7E0, once on 7DF.
+        expect(deadAfter.length, lessThanOrEqualTo(2), reason: '$deadAfter');
         for (final pid in gauges) {
           expect(engine.current.faults[pid.id], PidFault.unsupported);
         }
       },
     );
+
+    test('the dashboard stream itself says 此車輛不支援', () async {
+      final engine = await _discovered(_Ioniq5Transport());
+      const gauges = [PidLibrary.engineRpm, PidLibrary.vehicleSpeed];
+      Map<String, PidFault>? lastFaults;
+      final sub = engine.snapshots.listen((s) => lastFaults = s.faults);
+      addTearDown(sub.cancel);
+      engine.setActivePids(gauges);
+      engine.start();
+      final deadline = DateTime.now().add(const Duration(seconds: 3));
+      bool shown() =>
+          gauges.every((pid) => lastFaults?[pid.id] == PidFault.unsupported);
+      while (!shown() && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      await engine.stop();
+      for (final pid in gauges) {
+        expect(lastFaults?[pid.id], PidFault.unsupported, reason: pid.id);
+      }
+    });
 
     test('a refused reply records nothing', () async {
       // Synthetic: the census heard only 7EC; its later 0100 line has no PCI
