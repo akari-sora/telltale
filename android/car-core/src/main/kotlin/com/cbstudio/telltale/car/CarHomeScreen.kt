@@ -5,15 +5,18 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
+import androidx.car.app.model.CarIcon
 import androidx.car.app.model.Header
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
+import androidx.car.app.versioning.CarAppApiLevels
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.cbstudio.telltale.car.hardware.CarHostSpeedRepository
+import com.cbstudio.telltale.car.diagnostics.CarDtcRuntime
 import com.cbstudio.telltale.car.hardware.CarSpeedResolver
 import com.cbstudio.telltale.car.hardware.CarVehicleMotionResolver
 import com.cbstudio.telltale.car.health.CarAlertPhase
@@ -35,16 +38,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Driver-distraction-safe live telemetry dashboard screen (AA-03, AA-05).
+ * Read-only live telemetry dashboard using host-owned templates (AA-03, AA-05, AA-10, AA-11).
  *
  * Implements:
- * - Dynamic row limit adaptation via [ConstraintManager.CONTENT_LIMIT_TYPE_PANE] (4 to 6 rows).
+ * - A PaneTemplate whose rows carry the native readings. With [graphicalDashboard] on a Car API 4+
+ *   host it adds one large gauge image beside the rows (AA-11); without it, rows only.
+ * - Row limit from [ConstraintManager.CONTENT_LIMIT_TYPE_PANE] (capped at 6), resolved once per
+ *   screen so row count and titles never change between refreshes.
  * - Prioritized metric presentation: Speed, RPM, Coolant, Voltage, MAP, Engine Load.
  * - Multi-source speed arbitration (AA-05): OBD-first with host CarInfo fallback (display/raw).
  * - In-template alert presentation for coolant temperature (AA-05).
  * - Missing & stale data contracts: missing/unavailable shows `--`, quiet/stale shows `Stale`.
  *   Never fabricates fictitious 0 values.
- * - DDG compliance: strictly read-only, no interactive/destructive buttons, 1Hz throttled invalidation,
+ * - Read-only telemetry and template navigation, 1Hz throttled invalidation,
  *   with immediate invalidation on semantic alert transitions.
  */
 class CarHomeScreen(
@@ -58,6 +64,7 @@ class CarHomeScreen(
     private val speedResolver: CarSpeedResolver = sessionRuntime?.speedResolver ?: CarSpeedResolver(),
     private val hostSpeedRepository: CarHostSpeedRepository = sessionRuntime?.hostSpeedRepository ?: CarHostSpeedRepository(),
     private val alertRepository: CarAlertRepository = sessionRuntime?.alertRepository ?: CarAlertRepository(),
+    private val graphicalDashboard: Boolean = false,
 ) : Screen(carContext), DefaultLifecycleObserver {
 
     companion object {
@@ -71,11 +78,36 @@ class CarHomeScreen(
         val text: String,
         val icon: CarMetricIcon,
         val warning: Boolean = false,
+        val graphicValue: Double? = null,
+        // Gauge image only: the formatted number the native text shows, and what the image may claim.
+        val graphicText: String? = null,
+        val gaugeState: CarGaugeState = CarGaugeState.NO_DATA,
     )
 
     internal data class DisplayModel(
         val rows: List<MetricRow>,
     )
+
+    // Resolve once per screen: PaneTemplate refreshes require the same row count and row titles.
+    private val rowLimit: Int by lazy { resolveContentLimit() }
+    private val gaugeGraphic by lazy { CarGaugeGraphic(carContext) }
+
+    // Pane.Builder.setImage requires Car API 4. Resolved once; an unknown level means rows only.
+    private val paneImageSupported: Boolean by lazy {
+        graphicalDashboard && try {
+            carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_4
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Builds the Pane image; a failure leaves the Pane with its rows only. Replaceable in tests. */
+    internal var dashboardImage: (List<MetricRow>, Boolean) -> CarIcon? = { rows, dark ->
+        gaugeGraphic.dashboard(
+            rows.map { CarGaugeReadout(it.icon, it.graphicValue, it.graphicText, it.gaugeState, it.warning) },
+            dark,
+        )
+    }
 
     private var internalScope: CoroutineScope? = null
     private var observeJob: Job? = null
@@ -236,15 +268,18 @@ class CarHomeScreen(
         }
 
     internal fun buildDisplayModel(state: CarTelemetryState): DisplayModel {
-        val candidates = buildCandidateRows(state)
-        val limit = resolveContentLimit()
-        return DisplayModel(candidates.take(limit))
+        return DisplayModel(buildCandidateRows(state).take(rowLimit))
     }
 
     private fun buildCandidateRows(state: CarTelemetryState): List<MetricRow> {
         val isRtl = CarTextIsolation.isRtlContext(carContext)
         val missingText = carContext.getString(R.string.car_signal_missing)
         val staleText = carContext.getString(R.string.car_signal_stale)
+
+        fun formatNumber(value: Double, format: String): String {
+            val formatted = format.format(Locale.US, value)
+            return if (formatted == "-0" || formatted == "-0.0") formatted.removePrefix("-") else formatted
+        }
 
         fun formatSignal(signal: CarSignalValue?, unit: String, format: String): String {
             return when (state) {
@@ -260,13 +295,7 @@ class CarHomeScreen(
                             CarSignalStatus.LIVE -> {
                                 val value = signal.value
                                 if (value != null && value.isFinite()) {
-                                    val formatted = format.format(Locale.US, value)
-                                    val cleanFormatted = if (formatted == "-0" || formatted == "-0.0") {
-                                        formatted.removePrefix("-")
-                                    } else {
-                                        formatted
-                                    }
-                                    CarTextIsolation.wrapMetric(cleanFormatted, unit, isRtl)
+                                    CarTextIsolation.wrapMetric(formatNumber(value, format), unit, isRtl)
                                 } else {
                                     missingText
                                 }
@@ -280,6 +309,37 @@ class CarHomeScreen(
         }
 
         val frame = (state as? CarTelemetryState.Current)?.frame
+        fun graphicNumber(value: Double?, format: String): Double? {
+            if (!graphicalDashboard || value == null || !value.isFinite()) return null
+            // Match the visible native reading, so invisible precision changes stay quiet.
+            val rounded = format.format(Locale.US, value).toDouble()
+            return if (rounded == 0.0) 0.0 else rounded
+        }
+        fun graphicValue(signal: CarSignalValue?, format: String): Double? =
+            if (signal?.status == CarSignalStatus.LIVE) graphicNumber(signal.value, format) else null
+        fun graphicText(value: Double?, format: String): String? =
+            graphicNumber(value, format)?.let { formatNumber(it, format) }
+
+        // Mirrors formatSignal's branches, so the image and the native text claim the same thing.
+        fun statusState(status: CarSignalStatus, value: Double?): CarGaugeState = when (status) {
+            CarSignalStatus.LIVE ->
+                if (value != null && value.isFinite()) CarGaugeState.LIVE else CarGaugeState.NO_DATA
+            CarSignalStatus.STALE -> CarGaugeState.STALE
+            CarSignalStatus.UNAVAILABLE -> CarGaugeState.NO_DATA
+            CarSignalStatus.UNSUPPORTED -> CarGaugeState.UNSUPPORTED
+        }
+        fun signalState(signal: CarSignalValue?): CarGaugeState {
+            if (!graphicalDashboard) return CarGaugeState.NO_DATA
+            return when (state) {
+                is CarTelemetryState.Stale ->
+                    if (state.lastReceivedAtElapsedMs != null) CarGaugeState.STALE else CarGaugeState.NO_DATA
+                is CarTelemetryState.Awaiting, is CarTelemetryState.Incompatible -> CarGaugeState.NO_DATA
+                is CarTelemetryState.Current ->
+                    if (signal == null) CarGaugeState.NO_DATA else statusState(signal.status, signal.value)
+            }
+        }
+        fun liveText(signal: CarSignalValue?, format: String): String? =
+            if (signal?.status == CarSignalStatus.LIVE) graphicText(signal.value, format) else null
 
         // AA-05: Resolved speed through arbitration (OBD live > Host display > Host raw > Stale / Unavailable)
         val resolvedSpeed = speedResolver.resolve(state, hostSpeedRepository.sample.value)
@@ -287,13 +347,7 @@ class CarHomeScreen(
             CarSignalStatus.LIVE -> {
                 val value = resolvedSpeed.speedKmh
                 if (value != null && value.isFinite()) {
-                    val formatted = "%.0f".format(Locale.US, value)
-                    val cleanFormatted = if (formatted == "-0" || formatted == "-0.0") {
-                        formatted.removePrefix("-")
-                    } else {
-                        formatted
-                    }
-                    CarTextIsolation.wrapMetric(cleanFormatted, "km/h", isRtl)
+                    CarTextIsolation.wrapMetric(formatNumber(value, "%.0f"), "km/h", isRtl)
                 } else {
                     missingText
                 }
@@ -308,9 +362,11 @@ class CarHomeScreen(
         val coolantBase = formatSignal(frame?.coolantC, "°C", "%.0f")
         val alertSnapshot = matchingAlertSnapshot(state, alertRepository.snapshot.value)
         val coolantWarning = alertSnapshot?.coolant == CarAlertPhase.ACTIVE ||
+                alertSnapshot?.coolant == CarAlertPhase.PENDING_CLEAR ||
                 alertSnapshot?.coolant == CarAlertPhase.UNKNOWN_AFTER_WARNING
         val coolantText = when {
-            alertSnapshot?.coolant == CarAlertPhase.ACTIVE -> {
+            alertSnapshot?.coolant == CarAlertPhase.ACTIVE ||
+                    alertSnapshot?.coolant == CarAlertPhase.PENDING_CLEAR -> {
                 if (coolantBase != missingText && coolantBase != staleText) {
                     "$coolantBase · ${carContext.getString(R.string.car_alert_high)}"
                 } else {
@@ -326,21 +382,51 @@ class CarHomeScreen(
             }
             else -> coolantBase
         }
+        // An unknown-after-warning coolant without a reading is shown as Stale by the native text.
+        val coolantState = signalState(frame?.coolantC).let {
+            if (graphicalDashboard && alertSnapshot?.coolant == CarAlertPhase.UNKNOWN_AFTER_WARNING &&
+                (coolantBase == missingText || coolantBase == staleText)
+            ) CarGaugeState.STALE else it
+        }
+        val speedLive = resolvedSpeed.status == CarSignalStatus.LIVE
 
         val voltageText = formatSignal(frame?.controlModuleVoltageV, "V", "%.1f")
         val mapText = formatSignal(frame?.mapKpa, "kPa", "%.0f")
         val loadText = formatSignal(frame?.engineLoadPct, "%", "%.0f")
 
         return listOf(
-            MetricRow(carContext.getString(R.string.car_home_speed_title), speedText, CarMetricIcon.SPEED),
-            MetricRow(carContext.getString(R.string.car_home_rpm_title), rpmText, CarMetricIcon.RPM),
+            MetricRow(
+                carContext.getString(R.string.car_home_speed_title), speedText, CarMetricIcon.SPEED,
+                graphicValue = if (speedLive) graphicNumber(resolvedSpeed.speedKmh, "%.0f") else null,
+                graphicText = if (speedLive) graphicText(resolvedSpeed.speedKmh, "%.0f") else null,
+                gaugeState = if (!graphicalDashboard) {
+                    CarGaugeState.NO_DATA
+                } else {
+                    statusState(resolvedSpeed.status, resolvedSpeed.speedKmh)
+                },
+            ),
+            MetricRow(
+                carContext.getString(R.string.car_home_rpm_title), rpmText, CarMetricIcon.RPM,
+                graphicValue = graphicValue(frame?.rpm, "%.0f"),
+                graphicText = liveText(frame?.rpm, "%.0f"),
+                gaugeState = signalState(frame?.rpm),
+            ),
             MetricRow(
                 carContext.getString(R.string.car_home_coolant_title),
                 coolantText,
                 CarMetricIcon.TEMPERATURE,
                 warning = coolantWarning,
+                graphicValue = graphicValue(frame?.coolantC, "%.0f"),
+                graphicText = liveText(frame?.coolantC, "%.0f"),
+                gaugeState = coolantState,
             ),
-            MetricRow(carContext.getString(R.string.car_home_voltage_title), voltageText, CarMetricIcon.VOLTAGE),
+            MetricRow(
+                carContext.getString(R.string.car_home_voltage_title),
+                voltageText, CarMetricIcon.VOLTAGE,
+                graphicValue = graphicValue(frame?.controlModuleVoltageV, "%.1f"),
+                graphicText = liveText(frame?.controlModuleVoltageV, "%.1f"),
+                gaugeState = signalState(frame?.controlModuleVoltageV),
+            ),
             MetricRow(carContext.getString(R.string.car_powertrain_map_title), mapText, CarMetricIcon.PRESSURE),
             MetricRow(carContext.getString(R.string.car_home_load_title), loadText, CarMetricIcon.LOAD),
         )
@@ -360,24 +446,21 @@ class CarHomeScreen(
                     .build(),
             )
         }
+        // Image preparation/rendering exceptions and OOM leave the authoritative rows intact.
+        if (paneImageSupported) {
+            val image = try {
+                dashboardImage(model.rows, carContext.isDarkMode)
+            } catch (_: Exception) {
+                null
+            } catch (_: OutOfMemoryError) {
+                null
+            }
+            image?.let(paneBuilder::setImage)
+        }
 
         val healthAction = Action.Builder()
             .setTitle(carContext.getString(R.string.car_action_health))
-            .setOnClickListener {
-                screenManager.push(
-                    CarHealthScreen(
-                        carContext = carContext,
-                        telemetryRepository = repository,
-                        constraintManager = constraintManager,
-                        contentLimitProvider = contentLimitProvider,
-                        clock = clock,
-                        sessionRuntime = sessionRuntime,
-                        hostSpeedRepository = hostSpeedRepository,
-                        motionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
-                        alertRepository = alertRepository,
-                    ),
-                )
-            }
+            .setOnClickListener { openHealth() }
             .build()
 
         val header = Header.Builder()
@@ -389,5 +472,22 @@ class CarHomeScreen(
         return PaneTemplate.Builder(paneBuilder.build())
             .setHeader(header)
             .build()
+    }
+
+    private fun openHealth() {
+        screenManager.push(
+            CarHealthScreen(
+                carContext = carContext,
+                telemetryRepository = repository,
+                dtcRepository = sessionRuntime?.dtcRepository ?: CarDtcRuntime.repository,
+                constraintManager = constraintManager,
+                contentLimitProvider = contentLimitProvider,
+                clock = clock,
+                sessionRuntime = sessionRuntime,
+                hostSpeedRepository = hostSpeedRepository,
+                motionResolver = sessionRuntime?.motionResolver ?: CarVehicleMotionResolver(),
+                alertRepository = alertRepository,
+            ),
+        )
     }
 }
