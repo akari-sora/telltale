@@ -436,6 +436,20 @@ class ObdSession extends Notifier<ObdConnectionState> {
         ref
             .read(powertrainExperimentalProbeConsentsProvider.notifier)
             .revokeAll();
+      } else {
+        final client = _client;
+        final engine = _engine;
+        if (client != null &&
+            engine != null &&
+            engine.supportDiscoveryComplete) {
+          unawaited(
+            _probeAndConfigurePowertrainBatteryProfile(
+              generation: _generation,
+              client: client,
+              engine: engine,
+            ),
+          );
+        }
       }
     });
     // A confirmed profile opens the MAP/MAF inputs used by speed-density and
@@ -1889,14 +1903,6 @@ class ObdSession extends Notifier<ObdConnectionState> {
                 );
               }),
             );
-          } else {
-            unawaited(
-              _probeAndConfigurePowertrainBatteryProfile(
-                generation: authorityGeneration,
-                client: authorityClient,
-                engine: authorityEngine,
-              ),
-            );
           }
         }
       },
@@ -2871,12 +2877,17 @@ class ObdSession extends Notifier<ObdConnectionState> {
   int? _clearAttemptedGeneration;
 
   String? _probedPowertrainProfileId;
+  int? _probedPowertrainProfileGeneration;
+  int? _probingPowertrainProfileGeneration;
 
   /// Canonical Powertrain/Battery catalog profile ID auto-detected on the
   /// current connection (such as `hyundai-ioniq5-egmp-2021-2024-community`),
-  /// or `null` if none was matched.
+  /// or `null` if none was matched (or if an active BMS probe refuted the
+  /// passive Mode 01 heuristic).
   String? get detectedPowertrainProfileId =>
-      _probedPowertrainProfileId ?? _engine?.detectedPowertrainProfileId;
+      _probedPowertrainProfileGeneration == _generation
+          ? _probedPowertrainProfileId
+          : _engine?.detectedPowertrainProfileId;
 
   Future<String?> _probeAndConfigurePowertrainBatteryProfile({
     required int generation,
@@ -2894,29 +2905,47 @@ class ObdSession extends Notifier<ObdConnectionState> {
     }
     final detected = engine.detectedPowertrainProfileId;
     if (detected == null) return null;
+    if (_probedPowertrainProfileGeneration == generation) {
+      return _probedPowertrainProfileId;
+    }
     if (!ref.read(powertrainBatteryExperimentalAccessProvider)) {
       return detected;
     }
+    if (_probingPowertrainProfileGeneration == generation) {
+      return detected;
+    }
+    _probingPowertrainProfileGeneration = generation;
     final wireOwner = _PowertrainProbeWireOwner(
       pauseEpoch: _pauseEpoch,
       connectionGeneration: generation,
       experimentalAccessEpoch: _experimentalAccessEpoch,
     );
-    final bmsConfirmed = await _runDiagnosticOneShot<bool>(
-      operationName: 'probeEgmpBms',
-      action: () => PowertrainBatteryProbe.probeEgmpBms(
-        client,
-        owner: wireOwner,
-      ),
-    );
-    if (bmsConfirmed &&
-        _generation == generation &&
-        identical(_client, client) &&
-        identical(_engine, engine)) {
-      _probedPowertrainProfileId = detected;
-      syncActivePids(ref.read(activePidsProvider));
+    try {
+      final bmsConfirmed = await _runDiagnosticOneShot<bool>(
+        operationName: 'probeEgmpBms',
+        action: () => PowertrainBatteryProbe.probeEgmpBms(
+          client,
+          owner: wireOwner,
+        ),
+      );
+      if (_generation == generation &&
+          identical(_client, client) &&
+          identical(_engine, engine)) {
+        _probedPowertrainProfileGeneration = generation;
+        _probedPowertrainProfileId = bmsConfirmed ? detected : null;
+        if (bmsConfirmed) {
+          syncActivePids(ref.read(activePidsProvider));
+        }
+        return _probedPowertrainProfileId;
+      }
+      return null;
+    } on Object {
+      return detectedPowertrainProfileId;
+    } finally {
+      if (_probingPowertrainProfileGeneration == generation) {
+        _probingPowertrainProfileGeneration = null;
+      }
     }
-    return detected;
   }
 
   Future<String?> readVin({DateTime? deadline}) async {
@@ -3036,6 +3065,8 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // The recording is worth keeping in all of them, and this is the one place
     // that does not have to enumerate them.
     _probedPowertrainProfileId = null;
+    _probedPowertrainProfileGeneration = null;
+    _probingPowertrainProfileGeneration = null;
     _stopPeriodicSnapshots();
     unawaited(_saveTranscriptSnapshot());
     final chained = _drainTeardown(_teardownDraining);

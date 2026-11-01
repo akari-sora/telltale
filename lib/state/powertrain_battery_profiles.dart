@@ -498,7 +498,10 @@ List<Pid> filterAuthorizedPowertrainPids(
     if (pid.ownerProfileId == null)
       pid
     else if (isLivePowertrainAuthorization(
-      authorizations[pid.ownerProfileId],
+      authorizations[pid.ownerProfileId] ??
+          authorizations[PowertrainBatteryCatalog.resolveProfileId(
+            pid.ownerProfileId!,
+          )],
       connectionGeneration: connectionGeneration,
       sourceRevision: pid.sourceRevision,
     ))

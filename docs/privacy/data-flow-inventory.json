@@ -25,8 +25,8 @@
     "CLAIM-DEVELOPER-NO-COLLECTION": {
       "required_keywords": {
         "zh": [
-          "\u4e0d\u6536\u96c6\u8cc7\u6599",
-          "\u6c92\u6709\u4f3a\u670d\u5668"
+          "不收集資料",
+          "沒有伺服器"
         ],
         "en": [
           "collects nothing",
@@ -35,11 +35,11 @@
       },
       "forbidden_terms": {
         "zh": [
-          "\u81ea\u52d5\u4e0a\u50b3\u81f3",
-          "\u6703\u81ea\u52d5\u4e0a\u50b3",
-          "\u4e3b\u52d5\u4e0a\u50b3\u81f3",
-          "\u4e0a\u50b3\u96f2\u7aef",
-          "\u4e0a\u50b3\u81f3\u4f3a\u670d\u5668"
+          "自動上傳至",
+          "會自動上傳",
+          "主動上傳至",
+          "上傳雲端",
+          "上傳至伺服器"
         ],
         "en": [
           "upload to cloud",
@@ -73,8 +73,8 @@
       },
       "forbidden_terms": {
         "zh": [
-          "\u96f2\u7aef\u8cc7\u6599\u5eab",
-          "\u9060\u7aef\u5099\u4efd\u540c\u6b65"
+          "雲端資料庫",
+          "遠端備份同步"
         ],
         "en": [
           "cloud database",
@@ -100,8 +100,8 @@
       },
       "forbidden_terms": {
         "zh": [
-          "\u81ea\u52d5\u4e0a\u50b3\u8a3a\u65b7",
-          "\u96f2\u7aef\u5206\u6790VIN"
+          "自動上傳診斷",
+          "雲端分析VIN"
         ],
         "en": [
           "automatically upload diagnostic",
@@ -127,8 +127,8 @@
       },
       "forbidden_terms": {
         "zh": [
-          "\u4fdd\u8b49\u5b8c\u5168\u53bb\u8b58\u5225",
-          "\u81ea\u52d5\u906e\u853d\u6240\u6709\u81ea\u8a02\u6587\u5b57"
+          "保證完全去識別",
+          "自動遮蔽所有自訂文字"
         ],
         "en": [
           "guaranteed complete de-identification",
@@ -144,8 +144,8 @@
     "CLAIM-SHARE-CACHE-LIFECYCLE": {
       "required_keywords": {
         "zh": [
-          "15 \u5206\u9418",
-          "24 \u5c0f\u6642",
+          "15 分鐘",
+          "24 小時",
           "telltale-app-shares/"
         ],
         "en": [
@@ -156,12 +156,12 @@
       },
       "forbidden_terms": {
         "zh": [
-          "24\u5c0f\u6642\u5fc5\u5b9a\u522a\u9664",
-          "24 \u5c0f\u6642\u5fc5\u5b9a\u522a\u9664",
-          "24\u5c0f\u6642\u5167\u5fc5\u5b9a\u522a\u9664",
-          "24 \u5c0f\u6642\u5167\u5fc5\u5b9a\u522a\u9664",
-          "\u5fc5\u5b9a\u522a\u9664",
-          "\u80cc\u666f\u6392\u7a0b\u5fc5\u5b9a\u522a\u9664"
+          "24小時必定刪除",
+          "24 小時必定刪除",
+          "24小時內必定刪除",
+          "24 小時內必定刪除",
+          "必定刪除",
+          "背景排程必定刪除"
         ],
         "en": [
           "guaranteed deletion within 24",
@@ -178,8 +178,8 @@
     "CLAIM-USER-CONTROLLED-SHARE": {
       "required_keywords": {
         "zh": [
-          "\u4e94\u7a2e\u6b63\u5f0f\u532f\u51fa",
-          "\u7121\u6cd5\u53ec\u56de"
+          "五種正式匯出",
+          "無法召回"
         ],
         "en": [
           "five formal export",
@@ -188,9 +188,9 @@
       },
       "forbidden_terms": {
         "zh": [
-          "\u4fdd\u8b49\u53ec\u56de\u5916\u90e8",
-          "\u627f\u8afe\u53ec\u56de\u5916\u90e8",
-          "\u522a\u9664\u5df2\u4ea4\u4ed8\u526f\u672c"
+          "保證召回外部",
+          "承諾召回外部",
+          "刪除已交付副本"
         ],
         "en": [
           "can recall external copies",
@@ -217,8 +217,8 @@
       },
       "forbidden_terms": {
         "zh": [
-          "INTERNET \u7d55\u4e0d\u9023\u7db2\u969b\u7db2\u8def",
-          "\u5168\u57df\u7981\u6b62\u516c\u7db2\u9023\u7dda"
+          "INTERNET 絕不連網際網路",
+          "全域禁止公網連線"
         ],
         "en": [
           "never connects to any network",
@@ -234,8 +234,8 @@
     "CLAIM-EXTERNAL-AFFILIATE-LINKS": {
       "required_keywords": {
         "zh": [
-          "\u5206\u6f64",
-          "\u9ede\u4e0b\u53bb\u6642"
+          "分潤",
+          "點下去時"
         ],
         "en": [
           "affiliate",
@@ -244,8 +244,8 @@
       },
       "forbidden_terms": {
         "zh": [
-          "\u9644\u5e36VIN",
-          "\u50b3\u9001\u9059\u6e2c\u81f3\u8ce3\u5834"
+          "附帶VIN",
+          "傳送遙測至賣場"
         ],
         "en": [
           "append vin",
@@ -273,8 +273,8 @@
       },
       "forbidden_terms": {
         "zh": [
-          "\u5ee3\u544a\u5ee3\u64ad",
-          "\u8ffd\u8e64\u6b0a\u9650"
+          "廣告廣播",
+          "追蹤權限"
         ],
         "en": [
           "broadcast advertisement",
@@ -290,7 +290,7 @@
     "CLAIM-NO-THIRD-PARTY-SDKS": {
       "required_keywords": {
         "zh": [
-          "\u6c92\u6709\u6574\u5408\u4efb\u4f55\u5206\u6790",
+          "沒有整合任何分析",
           "pubspec.yaml"
         ],
         "en": [
@@ -300,8 +300,8 @@
       },
       "forbidden_terms": {
         "zh": [
-          "\u555f\u7528 Firebase",
-          "\u555f\u7528\u8ffd\u8e64 SDK"
+          "啟用 Firebase",
+          "啟用追蹤 SDK"
         ],
         "en": [
           "enable firebase",
@@ -317,8 +317,8 @@
     "CLAIM-OS-BACKUP-BEHAVIOR": {
       "required_keywords": {
         "zh": [
-          "\u4f5c\u696d\u7cfb\u7d71\u5099\u4efd",
-          "\u89e3\u9664\u5b89\u88dd"
+          "作業系統備份",
+          "解除安裝"
         ],
         "en": [
           "system backup",
@@ -327,12 +327,12 @@
       },
       "forbidden_terms": {
         "zh": [
-          "\u4fdd\u8b49\u4e0d\u5099\u4efd",
-          "\u7d55\u4e0d\u5099\u4efd",
-          "\u6c38\u4e0d\u5099\u4efd",
-          "\u7981\u6b62\u5099\u4efd",
-          "\u7d55\u4e0d\u8907\u88fd",
-          "\u4e0d\u6703\u8907\u88fd"
+          "保證不備份",
+          "絕不備份",
+          "永不備份",
+          "禁止備份",
+          "絕不複製",
+          "不會複製"
         ],
         "en": [
           "guarantee no backup",
@@ -355,7 +355,7 @@
       "required_keywords": {
         "zh": [
           "GPL-3.0",
-          "\u539f\u59cb\u78bc"
+          "原始碼"
         ],
         "en": [
           "GPL-3.0",
@@ -364,8 +364,8 @@
       },
       "forbidden_terms": {
         "zh": [
-          "\u5c08\u6709\u79c1\u6709\u4ee3\u78bc",
-          "\u4e0d\u53ef\u516c\u958b\u9a57\u8b49"
+          "專有私有代碼",
+          "不可公開驗證"
         ],
         "en": [
           "closed source proprietary",
@@ -536,7 +536,7 @@
         {
           "path": "lib/state/pid_registry.dart",
           "symbol": "PidRegistry",
-          "sha256": "e20fca791be536ec1b2b9b05c34c5a11288e18d5b93ac1832e39db9d72d64b4c",
+          "sha256": "cef687e73abc4023ff1919f5c93e06408361f22ca78afc49e4e2aa6bfb946ff3",
           "storage_fact": "SharedPreferences"
         }
       ],

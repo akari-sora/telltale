@@ -17,6 +17,8 @@ import 'package:torque_obd/obd/powertrain_battery/powertrain_battery_probe.dart'
 import 'package:torque_obd/obd/powertrain_battery/powertrain_battery_profile.dart';
 import 'package:torque_obd/obd/powertrain_battery/profile_pid_installer.dart';
 import 'package:torque_obd/obd/transport/ble_transport.dart';
+import 'package:torque_obd/obd/transport/obd_transport.dart';
+import 'package:torque_obd/state/obd_session.dart';
 import 'package:torque_obd/state/pid_registry.dart';
 import 'package:torque_obd/state/powertrain_battery_profiles.dart';
 import 'package:universal_ble/universal_ble.dart';
@@ -377,6 +379,77 @@ void main() {
         );
         expect(lease, isNotNull);
         consents.complete(lease!);
+
+        // Verify PidRegistry alias resolution for install/year/uninstall.
+        final registryNotifier = container.read(pidRegistryProvider.notifier);
+        final installOutcome = await registryNotifier.installPowertrainProfile(
+          snapshot,
+          'hyundai_kia_egmp',
+          vehicleYear: 2023,
+        );
+        expect(installOutcome.applied, isTrue);
+        expect(registryNotifier.installedVehicleYear('hyundai_kia_egmp'), 2023);
+        expect(
+          registryNotifier.installedVehicleYear(
+            'hyundai-ioniq5-egmp-2021-2024-community',
+          ),
+          2023,
+        );
+        final uninstallOutcome = await registryNotifier
+            .uninstallPowertrainProfile('hyundai_kia_egmp');
+        expect(uninstallOutcome.applied, isTrue);
+        expect(
+          registryNotifier.installedVehicleYear('hyundai_kia_egmp'),
+          isNull,
+        );
+
+        // Verify ObdSession end-to-end e-GMP auto-detection runs probeEgmpBms
+        // exactly once per connection generation (never looping in
+        // onDisplacedPollingRestored) and confirms the profile ID.
+        final egmpAdapter = FakeElm327(
+          protocol: BusProtocol.can11,
+          ecus: [
+            FakeEcu(
+              name: 'VCU',
+              requestId: '7E2',
+              responseId: '7EA',
+              responses: const {
+                '0100': [0x41, 0x00, 0x98, 0x18, 0x00, 0x01],
+              },
+            ),
+            FakeEcu(
+              name: 'BMS',
+              requestId: '7E4',
+              responseId: '7EC',
+              responses: const {
+                '220101': _bms0101Full,
+              },
+            ),
+          ],
+        );
+        final session = container.read(obdSessionProvider.notifier);
+        expect(
+          await session.connectForTest(egmpAdapter, TransportKind.demo),
+          isTrue,
+        );
+        final deadline = DateTime.now().add(const Duration(seconds: 2));
+        while (egmpAdapter.commandLog.where((c) => c == '220101').isEmpty &&
+            DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(
+          egmpAdapter.commandLog.where((c) => c == '220101'),
+          hasLength(1),
+          reason:
+              'probeEgmpBms must run at most once per connection generation '
+              'and must not loop when displaced polling is restored',
+        );
+        expect(
+          session.detectedPowertrainProfileId,
+          'hyundai-ioniq5-egmp-2021-2024-community',
+        );
+        await session.disconnect();
       },
     );
   });

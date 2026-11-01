@@ -283,9 +283,7 @@ class PidRegistry extends Notifier<List<Pid>> {
           issue: PowertrainProfileInstallIssue.catalogShaMissing,
         );
       }
-      final profile = snapshot.catalog.profiles
-          .where((candidate) => candidate.id == profileId)
-          .firstOrNull;
+      final profile = snapshot.catalog.byId(profileId);
       if (profile == null) {
         throw PowertrainProfileInstallException(
           '$profileId is not in the verified catalog',
@@ -330,14 +328,19 @@ class PidRegistry extends Notifier<List<Pid>> {
     final token = lock.tryAcquire('catalog-uninstall');
     if (token == null) return const PidMutationOutcome.locked();
     try {
-      final nextYears = Map.of(_installedYears)..remove(profileId);
+      final canonicalId = PowertrainBatteryCatalog.resolveProfileId(profileId);
+      final nextYears = Map.of(_installedYears)
+        ..remove(profileId)
+        ..remove(canonicalId);
       await _persistProfileInstalls(nextYears);
       _installedYears
         ..clear()
         ..addAll(nextYears);
       state = [
         for (final pid in state)
-          if (pid.ownerProfileId != profileId) pid,
+          if (pid.ownerProfileId != profileId &&
+              pid.ownerProfileId != canonicalId)
+            pid,
       ];
       _powertrainRestoreSettled = true;
       return const PidMutationOutcome.applied();
@@ -347,7 +350,9 @@ class PidRegistry extends Notifier<List<Pid>> {
   }
 
   /// The model year confirmed when [profileId] was installed, if it is.
-  int? installedVehicleYear(String profileId) => _installedYears[profileId];
+  int? installedVehicleYear(String profileId) =>
+      _installedYears[profileId] ??
+      _installedYears[PowertrainBatteryCatalog.resolveProfileId(profileId)];
 
   final Map<String, int> _installedYears = {};
 
@@ -397,9 +402,6 @@ class PidRegistry extends Notifier<List<Pid>> {
         return;
       }
 
-      final byId = {
-        for (final profile in catalog.profiles) profile.id: profile,
-      };
       final restored = <Pid>[];
       final nextYears = <String, int>{};
       for (final entry in stored) {
@@ -413,14 +415,14 @@ class PidRegistry extends Notifier<List<Pid>> {
         final profileId = decoded['profile_id'];
         final vehicleYear = decoded['vehicle_year'];
         if (profileId is! String || vehicleYear is! int) continue;
-        final profile = byId[profileId];
+        final profile = catalog.byId(profileId);
         if (profile == null || !profile.appliesToYear(vehicleYear)) continue;
         try {
           restored.addAll(PowertrainProfilePidInstaller.build(profile));
         } on PowertrainProfileInstallException {
           continue;
         }
-        nextYears[profileId] = vehicleYear;
+        nextYears[profile.id] = vehicleYear;
       }
 
       // The stored references are the sole authority: every profile PID in the
