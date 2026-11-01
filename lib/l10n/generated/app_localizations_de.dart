@@ -4876,4 +4876,8 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get performanceNoAnalysisBody =>
       'Dieser Lauf wurde gestoppt, bevor genügend Geschwindigkeitsproben aufgezeichnet wurden, um ein Diagramm oder Teilergebnis zu erstellen.';
+
+  @override
+  String get connectActivityReconnectingAutomatically =>
+      'Der Adapter reagiert nicht mehr. Die Verbindung wird automatisch neu aufgebaut…';
 }

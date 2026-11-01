@@ -31,15 +31,12 @@ Bluetooth Classic (RFCOMM/SPP)、Bluetooth LE (GATT UART)、Wi-Fi (TCP)，以及
 
 〇開源
 
-原始碼在 Codeberg，GPL-3.0，你可以自己編譯自己用：
-https://codeberg.org/ImL1s/telltale
-鏡像也在 GitLab 與 GitHub：
-https://gitlab.com/aa22396584/telltale
+原始碼在 GitLab，GPL-3.0，你可以自己編譯自己用：
 https://gitlab.com/aa22396584/telltale
 
 Play 上的付費版功能完全一樣，沒有閹割版 —— 是給不想自己編譯的人，以及願意支持繼續開發的人。
 
-F-Droid、社群版（GitHub／Codeberg／GitLab Release）與 Google Play 使用三把不同的簽章金鑰，彼此不能覆蓋安裝，這是刻意的安全邊界。
+F-Droid、GitLab Release 與 Google Play 使用三把不同的簽章金鑰，彼此不能覆蓋安裝，這是刻意的安全邊界。
 
 〇需要什麼
 

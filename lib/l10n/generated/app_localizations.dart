@@ -7499,6 +7499,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This run stopped before enough speed samples were recorded to build a trace or split result.'**
   String get performanceNoAnalysisBody;
+
+  /// ObdConnectionActivity.reconnectingAutomatically. The link dropped after the adapter stopped answering and the app is trying the same adapter once more without being asked; says why a connection started by itself.
+  ///
+  /// In en, this message translates to:
+  /// **'The adapter stopped answering. Reconnecting automatically…'**
+  String get connectActivityReconnectingAutomatically;
 }
 
 class _AppLocalizationsDelegate

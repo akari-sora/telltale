@@ -4278,6 +4278,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get performanceNoAnalysisBody => '本次計時在取得足夠的車速樣本前已中止，因此無法產生速度軌跡或分段成績。';
+
+  @override
+  String get connectActivityReconnectingAutomatically => '轉接器停止回應，正在自動重新連線…';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -8553,4 +8556,7 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get performanceNoAnalysisBody => '本次計時在取得足夠的車速樣本前已中止，因此無法產生速度軌跡或分段成績。';
+
+  @override
+  String get connectActivityReconnectingAutomatically => '轉接器停止回應，正在自動重新連線…';
 }

@@ -4,9 +4,13 @@
 /// the error matrix, multi-frame reassembly and the stall watchdog. Any
 /// [ObdTransport] can be driven by it.
 ///
-/// The ELM327 is strictly half-duplex — one command, one reply, terminated by
-/// the `>` prompt — so commands are serialised through [_pending]. Overlapping
-/// sends would interleave replies with no way to tell which is which.
+/// The ELM327 is strictly half-duplex — one command, one reply. The `>`
+/// prompt is the primary completion signal. An OBD buffer may complete
+/// without it only at command timeout, or after this session has already
+/// seen a missing prompt, and only after an idle longer than the adapter's
+/// response window. Commands are serialised through [_pending].
+/// Overlapping sends would interleave replies with no way to tell which is
+/// which. See `docs/architecture/elm-session-pipeline.md`.
 library;
 
 import 'dart:async';
@@ -18,6 +22,7 @@ import 'elm_can_addressing.dart';
 import 'elm_composite_transaction.dart';
 import 'elm_flow_control.dart';
 import 'elm_host_isotp.dart';
+import 'elm_session_profile.dart';
 import 'iso_tp_assembler.dart';
 import 'transport/obd_transport.dart';
 import 'programmable_parameters.dart';
@@ -51,9 +56,9 @@ enum Elm327ErrorCode {
   ///
   /// It was called `isPermanentForPid` and documented as "the PID will never
   /// work on this vehicle", which stopped being true when the poller learned
-  /// to give `NO DATA` three strikes and a sixty-second backoff. The
-  /// description string was corrected and the flag's name and doc were not, so
-  /// the two halves of the same idea disagreed in the same file.
+  /// to give `NO DATA` three strikes and a rest. The description string was
+  /// corrected and the flag's name and doc were not, so the two halves of
+  /// the same idea disagreed in the same file.
   ///
   /// `NO DATA` is the adapter reporting that nothing arrived before its own
   /// timeout — a busy ECU, a receive filter or one aggressive timing window
@@ -72,20 +77,21 @@ enum Elm327ErrorCode {
   /// [InitProgress.detail].
   String get description => switch (this) {
     Elm327ErrorCode.none => '',
-    // Not "the vehicle does not support this".
+    // Not "the vehicle does not support this" on the first miss.
     //
     // `NO DATA` is the *adapter* saying nothing arrived before its own
     // timeout — a busy ECU, a receive filter, or one aggressive timing
-    // window produces it exactly as an absent sensor does. Reading it as a
-    // capability claim is the mistake this whole codebase is organised
-    // against, and it was still being told to the user in those words.
+    // window produces it exactly as an absent sensor does. Three
+    // consecutive misses rest as noAnswer / 60s; `015E` on a clone or
+    // promptless session uses the five-minute unsupported recheck.
+    // Reading the first miss as a capability claim is the mistake this
+    // whole codebase is organised against, still told in those words.
     //
     // It is also used for whole *services*: a Mode 03 fault-code read that
     // goes unanswered surfaced as "this vehicle does not support that
     // PID", in the same tree that says elsewhere, correctly, that silence
     // is not a clean answer.
-    Elm327ErrorCode.noData =>
-      'No reply arrived — it may be temporary silence, or the vehicle may not support this.',
+    Elm327ErrorCode.noData => 'No reply arrived — it may be temporary silence, or the vehicle may not support this.',
     Elm327ErrorCode.busInitError => 'Bus initialisation failed.',
     Elm327ErrorCode.canError => 'CAN bus error.',
     Elm327ErrorCode.unableToConnect =>
@@ -396,8 +402,7 @@ String initNoteText(InitNote note) => switch (note) {
   InitNote.pidEchoMismatch =>
     'The reply echoes a different PID from the one that was asked for.',
   InitNote.timedOut => 'Timed out.',
-  InitNote.unexpected =>
-    'This step failed with an unexpected error. The full error is kept in the transcript.',
+  InitNote.unexpected => 'This step failed with an unexpected error. The full error is kept in the transcript.',
 };
 
 /// Requires the literal `OK` acknowledgement a state-changing AT command owes.
@@ -493,6 +498,31 @@ final class ElmWriteAudit {
   final Elm327Client _client;
   final _commands = <String>{};
   bool _claimed = false;
+}
+
+/// Why [Elm327Client.onConnectionLost] last fired.
+///
+/// Every listener but one treats the cases alike, so the callback carries no
+/// argument. The session's automatic reconnect (#112) is the one: it is for
+/// an adapter that went quiet, and must not start a Bluetooth cascade after an
+/// adapter that was unplugged or one that reported the ignition off.
+enum ConnectionLossCause {
+  /// The transport reported the link closed: out of range, switched off,
+  /// unplugged.
+  transportClosed,
+
+  /// The adapter answered with an error that means it reset or lost the bus,
+  /// such as `LV RESET` or `UNABLE TO CONNECT`.
+  adapterError,
+
+  /// The adapter stopped answering: a resync that could not bring it back
+  /// into step, or the watchdog.
+  adapterSilent,
+
+  /// The link would not take a write: the resync's probe could not be handed
+  /// over. A transport fault, not the adapter going quiet — Bluetooth out of
+  /// range often looks like this before the OS reports the link closed.
+  writeStalled,
 }
 
 class Elm327Client {
@@ -626,6 +656,50 @@ class Elm327Client {
 
   Completer<ObdResponse>? _pending;
   Timer? _pendingTimeout;
+  Timer? _quietCompleteTimer;
+  bool _strayPromptExpected = false;
+  Completer<void>? _trailingPromptGate;
+  Timer? _trailingPromptTimer;
+  bool _resyncActiveProbe = false;
+
+  /// Whether the timed-out command left nothing at all in the buffer.
+  ///
+  /// Only changes which note the probe records. Three user exports from two
+  /// ICSolution v1.5 adapters ended in exactly this state — a write, then no
+  /// byte — and the user recovered each one by reconnecting by hand, so the
+  /// chip was alive. Whether the probe is answered is the fact those exports
+  /// could not show.
+  bool _resyncProbeAfterSilence = false;
+
+  /// A probe was written and its answer has not been accounted for.
+  ///
+  /// An instance field, not a local: a caller whose deadline runs out after
+  /// the probe went out leaves the answer to the next resync, or to a prompt
+  /// that arrives with nothing waiting. Either way that answer still needs
+  /// the trailing hold and still counts.
+  bool _probeOutstanding = false;
+
+  /// Wire bytes of the owed reply seen before the probe was written.
+  ///
+  /// The drain counts every byte up to its prompt. After a probe, those
+  /// include the probe's own answer, which is not the reply a transaction
+  /// budget is about.
+  int _wireBytesBeforeProbe = 0;
+
+  /// Answered probes since any command last completed.
+  ///
+  /// A chip that answers `ATI` while every command sent through it goes
+  /// silent is not a link worth keeping: recovering forever is a frozen
+  /// screen that says connected. Any completed reply resets it, `NO DATA`
+  /// and `ATRV` included: the link is carrying replies then. A PID the
+  /// adapter always swallows between working ones never reaches the limit;
+  /// polling rests that PID instead. A time window could not tell those two
+  /// apart: two always-silent PIDs alone filled it before either rested.
+  int _probeAnswersSinceReply = 0;
+
+  /// Answered probes in a row, with no command completing between them,
+  /// that end the session.
+  static const int maxProbeAnswersWithoutReply = 3;
 
   /// Silence that already existed when the current reply budget was armed.
   ///
@@ -824,11 +898,67 @@ class Elm327Client {
   /// state rather than showing frozen gauges.
   void Function()? onConnectionLost;
 
+  /// Why [onConnectionLost] last fired, set just before it does.
+  ConnectionLossCause? get connectionLossCause => _connectionLossCause;
+  ConnectionLossCause? _connectionLossCause;
+
+  /// Fires [onConnectionLost] for [cause] without a link to lose. Tests only.
+  void reportConnectionLostForTest(ConnectionLossCause cause) {
+    _connectionLossCause = cause;
+    onConnectionLost?.call();
+  }
+
   /// Fires when [_resync] begins draining the connection.
   void Function()? onResyncStarted;
 
+  /// Fires when an OBD reply completed without a trailing `>`.
+  ///
+  /// The polling engine uses this to demote batch size. It is not a
+  /// connection-lost signal.
+  void Function()? onPromptlessComplete;
+
   /// Whether [_resync] is currently draining the link waiting for a prompt.
   bool get isResyncing => _draining != null;
+
+  /// Distinct responders this session (CAN ids, or unheadered hex lines).
+  int lastResponderCount = 0;
+
+  /// How many OBD replies completed without a prompt this connection.
+  ///
+  /// Lifetime evidence that this adapter can withhold `>`. It arms the
+  /// quiet-complete window and the `015E` backoff. It is **not** the batch
+  /// demotion input: see [promptlessPenalty] (#114).
+  int promptlessCompleteCount = 0;
+
+  /// Live batch-demotion pressure from missing prompts (#114).
+  ///
+  /// Each promptless complete adds one. Every
+  /// [ElmSessionProfile.promptlessRecoveryStreak] consecutive OBD replies
+  /// that close on a real `>` forgive one. Before #114 the lifetime count
+  /// above fed the batch cap directly, so one withheld prompt nine seconds
+  /// into Wade's session pinned the rest of it to single-PID polling.
+  int promptlessPenalty = 0;
+
+  /// Consecutive prompted OBD replies since the last promptless complete.
+  int promptedStreak = 0;
+
+  void _notePromptedObdReply(String? command, ObdResponse response) {
+    if (command == null) return;
+    if (command.trim().toUpperCase().startsWith('AT')) return;
+    if (!response.isSuccess) {
+      promptedStreak = 0;
+      return;
+    }
+    promptedStreak++;
+    if (promptlessPenalty > 0 &&
+        promptedStreak >= ElmSessionProfile.promptlessRecoveryStreak) {
+      promptlessPenalty--;
+      promptedStreak = 0;
+      transcript.recordNote(
+        'Prompts are back on time; restoring larger batches',
+      );
+    }
+  }
 
   Stream<InitProgress> get initProgress => _initProgress.stream;
 
@@ -861,12 +991,38 @@ class Elm327Client {
     _canReceiveFilterRestoreFailed = false;
     _canReceiveFilterState = const ElmCanReceiveFilterOff();
     _headerRestoreFailed = false;
+    _enginePhysicalSilent = false;
     _headersOn = false;
+    lastResponderCount = 0;
+    promptlessCompleteCount = 0;
+    promptlessPenalty = 0;
+    promptedStreak = 0;
+    _probeOutstanding = false;
+    _probeAnswersSinceReply = 0;
+    _strayPromptExpected = false;
+    _resyncActiveProbe = false;
+    _quietCompleteTimer?.cancel();
+    _quietCompleteTimer = null;
+    _releaseTrailingPromptHold();
     _responseHeadersUncertain = false;
     _responseHeadersRestoreFailed = false;
     _connectionSession++;
     _connectionGeneration++;
+    final opening = _connectionGeneration;
     await transport.connect();
+    // Disconnected or disposed while the link was still opening. A transport
+    // has nothing to close until its socket exists, so the close found
+    // nothing and the link opened anyway; without this the handshake then
+    // ran on it — `ATZ` through `0100` to a car — for a client nobody owned
+    // any more, after an app that had gone to the background, until it
+    // returned and its caller closed the link again.
+    if (_connectionGeneration != opening) {
+      transcript.recordNote(
+        'Connection closed while it was opening; no handshake sent',
+      );
+      await _teardownTransport();
+      return false;
+    }
     transcript.recordNote(
       'Connection established: ${transport.displayName} (${transport.kind.label})',
     );
@@ -880,6 +1036,9 @@ class Elm327Client {
       if (connected) return;
       _connectionGeneration++;
       _transportLost = true;
+      // A write parked on the trailing hold would otherwise wait forever:
+      // the hold's own timer ignores a generation it no longer belongs to.
+      _releaseTrailingPromptHold();
       final wasInitialized = isInitialized;
       isInitialized = false;
       _watchdog?.cancel();
@@ -894,7 +1053,10 @@ class Elm327Client {
       // its caller publish the precise failed-attempt state. Only a session
       // that had already completed initialization needs the asynchronous
       // connection-lost callback and generation teardown.
-      if (wasInitialized) onConnectionLost?.call();
+      if (wasInitialized) {
+        _connectionLossCause = ConnectionLossCause.transportClosed;
+        onConnectionLost?.call();
+      }
     });
 
     lastRxAt = DateTime.now();
@@ -1015,6 +1177,9 @@ class Elm327Client {
       _watchdog?.cancel();
       _watchdog = null;
       _pendingTimeout?.cancel();
+      _quietCompleteTimer?.cancel();
+      _quietCompleteTimer = null;
+      _releaseTrailingPromptHold();
       // The same sentence as the drop above, and a different identifier on
       // purpose: this link was closed because the app asked, not because
       // anything went wrong with it.
@@ -1081,14 +1246,27 @@ class Elm327Client {
     // previous number stays on the gauge.
     _buffer.addAll(chunk.where((b) => b != 0x00));
 
-    // A reply is complete at the prompt. Anything after it belongs to the next
-    // reply — rare, but it happens when an adapter echoes late.
+    // A reply is complete at the prompt. OBD data without `>` waits until
+    // command timeout, or — only after this session has already seen a
+    // missing prompt — an idle longer than the adapter's response window.
+    // Anything after a prompt belongs to the next reply.
     final promptIndex = _buffer.indexOf(_promptByte);
     if (promptIndex == -1) {
+      if (_pending == null) {
+        if (_strayPromptExpected && !_frameIsBlank(_buffer)) {
+          // Leftover after an early close (`STOPPED`, a late second-ECU
+          // line). Not the next command's prefix.
+          _outOfSync = true;
+        }
+        return;
+      }
       _extendTimeoutIfSearching();
       _extendTimeoutIfPending();
+      _armQuietCompleteTimer();
       return;
     }
+    _quietCompleteTimer?.cancel();
+    _quietCompleteTimer = null;
 
     final frame = _buffer.sublist(0, promptIndex);
     _buffer.removeRange(0, promptIndex + 1);
@@ -1102,6 +1280,7 @@ class Elm327Client {
       // a flow-control budget that has to refuse another write.
       _resyncDrainedWireBytes = _pendingWireBytes;
       _pendingWireBytes = 0;
+      _strayPromptExpected = false;
       if (!draining.isCompleted) draining.complete(true);
       return;
     }
@@ -1115,14 +1294,53 @@ class Elm327Client {
       // three-second drain waiting for a prompt that had already arrived, and
       // on a flaky Bluetooth link that turned every timeout into five seconds
       // plus three of doing nothing.
+      // The owed reply has gone past, so no probe is owed for it either.
+      _resyncActiveProbe = false;
+      _resyncProbeAfterSilence = false;
+      // Its bytes are accounted for; they are not the next reply's.
+      _pendingWireBytes = 0;
+      if (_strayPromptExpected && !_frameIsBlank(frame)) {
+        // `STOPPED` or other leftover after an early close. Not PID data.
+        // The prompt itself puts the stream back on a boundary.
+        _strayPromptExpected = false;
+        _releaseTrailingPromptHold();
+        _outOfSync = false;
+        _resyncGraceUntil = null;
+        _accountProbeAnswer(canDrop: false);
+        return;
+      }
       _outOfSync = false;
       _resyncGraceUntil = null;
+      _strayPromptExpected = false;
+      _releaseTrailingPromptHold();
+      _accountProbeAnswer(canDrop: false);
       return;
     }
+
+    // A promptless complete left the next command exposed to the previous
+    // exchange's late `>` or `STOPPED`. An empty prompt is that leftover.
+    // `STOPPED` is an abort of the previous window, not this command's
+    // data. Anything else (`OK`, `41 0C…`) is the command now in flight.
+    if (_strayPromptExpected &&
+        (_frameIsBlank(frame) || _frameIsStopped(frame))) {
+      final stopped = _frameIsStopped(frame);
+      _strayPromptExpected = false;
+      _releaseTrailingPromptHold();
+      if (stopped && !_buffer.contains(_promptByte)) {
+        _outOfSync = true;
+        return;
+      }
+      if (_buffer.contains(_promptByte)) _onBytes(const []);
+      return;
+    }
+    _strayPromptExpected = false;
+    _releaseTrailingPromptHold();
 
     _lastReplyWireBytes = _pendingWireBytes;
     _pendingWireBytes = 0;
     final response = _parse(frame);
+    _noteResponders(response);
+    _notePromptedObdReply(_pendingCommand, response);
     _completePending(response);
 
     // Remainder after this chunk's prompt is the next frame's raw prefix.
@@ -1273,6 +1491,7 @@ class Elm327Client {
   }
 
   void _completePending(ObdResponse response) {
+    _probeAnswersSinceReply = 0;
     // Any reply carrying a voltage refreshes the cached figure, so a periodic
     // ATRV keeps the status pill live rather than pinned to the handshake.
     final volts = response.batteryVoltage;
@@ -1297,21 +1516,31 @@ class Elm327Client {
       isInitialized = false;
       _watchdog?.cancel();
       _watchdog = null;
+      _connectionLossCause = ConnectionLossCause.adapterError;
       scheduleMicrotask(() => onConnectionLost?.call());
     }
 
     _pendingTimeout?.cancel();
     _pendingTimeout = null;
+    _quietCompleteTimer?.cancel();
+    _quietCompleteTimer = null;
     final pending = _pending;
     _pending = null;
+    _pendingCommand = null;
     if (pending != null && !pending.isCompleted) pending.complete(response);
   }
 
   void _failPending(Object error) {
+    // A failed wire exchange breaks the healthy run, even when it never
+    // produced a parsed reply (for example, a command timeout).
+    if (_pending != null) promptedStreak = 0;
     _pendingTimeout?.cancel();
     _pendingTimeout = null;
+    _quietCompleteTimer?.cancel();
+    _quietCompleteTimer = null;
     final pending = _pending;
     _pending = null;
+    _pendingCommand = null;
     if (pending == null || pending.isCompleted) return;
     // Marked handled before it is failed.
     //
@@ -1479,6 +1708,42 @@ class Elm327Client {
       }
       if (left < timeout) timeout = left;
     }
+    final trailingHold = _trailingPromptHoldIfPending();
+    if (trailingHold != null) {
+      final generationBeforeHold = _connectionGeneration;
+      await trailingHold;
+      // A disconnect releases the hold so nothing waits on it forever. What
+      // it releases belongs to the connection that is going; it must not be
+      // written while that connection is being torn down.
+      if (_connectionGeneration != generationBeforeHold) {
+        throw const TransportException(
+          'Connection generation changed; command belongs to a prior connection.',
+          issue: TransportIssue.notConnected,
+        );
+      }
+      // The hold can take most of an adapter window. The checks above were
+      // made before it: a session retired or a deadline passed during it
+      // must refuse here, before any byte is handed to the transport.
+      if (!completesCommittedTransaction &&
+          !(mayTransmit?.call(owner) ?? true)) {
+        throw const OperationRetiredException(
+          'This session has ended or gone to the background, so the command was not sent.',
+        );
+      }
+      if (deadline != null) {
+        final left = deadline.difference(_clock());
+        if (left <= Duration.zero) {
+          throw TimeoutException(
+            'The time limit for this operation has passed, so $command was not sent.',
+          );
+        }
+        if (left < timeout) timeout = left;
+      }
+    }
+    if (_buffer.contains(_promptByte) && _pending == null) {
+      _onBytes(const []);
+    }
+    if (_outOfSync) await _resync(deadline: deadline);
     var outgoing = command.trim();
     if (_hostVisibleIsoTp) {
       final logical = outgoing.toUpperCase().replaceAll(' ', '');
@@ -1833,6 +2098,12 @@ class Elm327Client {
   /// generation's pending command.
   void _armPendingTimer(Duration timeout, void Function() onFire) {
     final generation = _connectionGeneration;
+    // The watchdog sizes its limit from the window actually granted. Every
+    // re-arm changes it: a `7F xx 78` grants the pending window, `markAlive`
+    // the command window again. Left at whatever was set first, the watchdog
+    // gave up before the timer it was backing, and since #112 that hands a
+    // still-owed command to the timeout path early.
+    _pendingDeadline = timeout;
     // Snapshot before the timer, so a stall that happened *before* this
     // budget is not later read as the adapter missing it.
     _silenceBeforeReplyBudget = DateTime.now().difference(lastRxAt);
@@ -1851,8 +2122,32 @@ class Elm327Client {
   /// to the previous request — the dashboard would show last cycle's values as
   /// this cycle's, forever, with nothing to make it self-heal. So the link is
   /// marked out of sync and resynchronised before anything else is sent.
+  ///
+  /// OBD data that already parses as a conclusive reply is not that case: the
+  /// clone simply withheld `>`. Completing it here is the first allowed
+  /// promptless complete in a session; later commands may then use the
+  /// quiet window, which is longer than the adapter's response window.
   void _onCommandTimeout() {
+    _quietCompleteTimer?.cancel();
+    _quietCompleteTimer = null;
+    if (_completeObdBufferIfConclusive(
+      promptless: true,
+      requireKnownResponders: false,
+    )) {
+      return;
+    }
+    // Probe in both cases. Partial bytes mean the reply stopped mid-way;
+    // an empty buffer is the shape every #110 follow-up export ended in, and
+    // a live ELM327 answers the next line it gets — any byte also aborts one
+    // that is still busy. A passive wait cannot tell that from a dead link.
+    _resyncProbeAfterSilence = _buffer.isEmpty;
+    _resyncActiveProbe = true;
     _outOfSync = true;
+    // Hold the watchdog until the next command's resync has had its window.
+    // Between this timer and that resync the watchdog measured silence since
+    // the last byte, found more than five seconds, and dropped the session
+    // with the probe never sent. Both 1.0.21 exports ended exactly so.
+    _extendResyncGrace(resyncTimeout);
     _failPending(
       TimeoutException('Timed out waiting for a reply', commandTimeout),
     );
@@ -1899,15 +2194,17 @@ class Elm327Client {
 
   /// Waits out whatever the adapter still owes us, then clears the desync.
   ///
-  /// Deliberately sends **nothing**. A bare `\r` is not a passive re-prompt on
-  /// an ELM327 — the datasheet defines it as "repeat the previous command", so
-  /// using it to resynchronise would re-issue whatever just timed out and make
-  /// the pile-up worse.
+  /// A bare `\r` is not a passive re-prompt on an ELM327 — the datasheet
+  /// defines it as "repeat the previous command", so using it to
+  /// resynchronise would re-issue whatever just timed out and make the
+  /// pile-up worse. Empty silence therefore still waits passively for `>`.
   ///
-  /// Instead this waits for a real `>` from the outstanding reply. Only when
-  /// the prompt has actually been seen is the link back in step; if none
-  /// arrives inside the deadline the adapter is not answering at all and the
-  /// caller is told, rather than the desync being cleared on a guess.
+  /// When the timed-out command left partial bytes, this writes `ATI` instead
+  /// (never `\r`). The probe's prompt is consumed by the drain and is not
+  /// parsed as PID data. Only when a real `>` has been seen is the link back
+  /// in step; if none arrives inside the deadline the adapter is not
+  /// answering and the session is dropped, rather than the desync being
+  /// cleared on a guess.
   Future<void> _resync({DateTime? deadline}) async {
     // Worth a line of its own. A resync is the app saying the stream is out of
     // step, and the bytes around it read very differently once you know that
@@ -1933,17 +2230,95 @@ class Elm327Client {
     // is refused by the drain; the link keeps the three seconds it was
     // promised either way.
     final adapterWindowEnd = started.add(resyncTimeout);
-    final openGrace = _resyncGraceUntil;
-    if (openGrace == null || openGrace.isBefore(adapterWindowEnd)) {
-      _resyncGraceUntil = adapterWindowEnd;
+    _extendResyncGrace(resyncTimeout);
+    // What is left of the adapter's window, and whether the caller's deadline
+    // is the tighter limit. A caller running out of time is not the adapter
+    // failing, and the two are told apart below.
+    (Duration, bool) remaining() {
+      var left = adapterWindowEnd.difference(_clock());
+      var callerLimited = false;
+      if (deadline != null) {
+        final callerLeft = deadline.difference(_clock());
+        if (callerLeft < left) {
+          left = callerLeft;
+          callerLimited = true;
+        }
+      }
+      return (left.isNegative ? Duration.zero : left, callerLimited);
     }
-    final window = deadline == null
-        ? resyncTimeout
-        : (() {
-            final left = deadline.difference(_clock());
-            if (left <= Duration.zero) return Duration.zero;
-            return left < resyncTimeout ? left : resyncTimeout;
-          })();
+
+    // Active recovery after a command timeout. A bare `\r` repeats the last
+    // command; ATI asks the adapter to speak without re-issuing the PID.
+    // Other resyncs (a stray leftover, a failed write) stay a passive wait.
+    //
+    // Partial bytes probe at once, as #110 did. Silence first waits a short
+    // passive stretch inside the same window: a reply that is merely late
+    // lands there and drains exactly as before, where a probe written into a
+    // chip still answering would abort it with `STOPPED`. Only when nothing
+    // has arrived does the probe go out.
+    // The probe's write did not complete within its own limit. Not proof the
+    // bytes stayed home (Wi-Fi hands them to the kernel before `flush`), but
+    // proof the write side is wedged: whatever prompt the drain sees, the
+    // probe's answer may still be in flight, so the stream cannot be called
+    // in step. The link goes.
+    var probeWriteStalled = false;
+    // The passive stretch used up the caller's whole budget. Nothing is
+    // probed for a caller that has already gone; the next resync probes.
+    var callerSpentInWait = false;
+    if (_resyncActiveProbe && _resyncProbeAfterSilence) {
+      final (left, callerLimited) = remaining();
+      final wait = left < silentProbeDelay ? left : silentProbeDelay;
+      await _drainOrTimeout(drain, wait);
+      callerSpentInWait =
+          callerLimited && wait == left && !drain.isCompleted;
+    }
+    if (drain.isCompleted) _resyncActiveProbe = false;
+    // The probe gets its whole write limit or is not sent. A caller with
+    // less time left than that would cut the write short, and a write cut
+    // short has an unknown outcome: no prompt seen afterwards could be
+    // called the probe's answer. That caller waits passively and is
+    // refused; the probe stays armed for the next resync, which a poll with
+    // no deadline always reaches.
+    final (probeLeft, probeCallerLimited) = remaining();
+    final probeAffordable = !(probeCallerLimited && probeLeft < writeTimeout);
+    if (_resyncActiveProbe &&
+        !callerSpentInWait &&
+        probeAffordable &&
+        probeLeft > Duration.zero) {
+      _resyncActiveProbe = false;
+      _probeOutstanding = true;
+      _wireBytesBeforeProbe = _pendingWireBytes;
+      transcript.recordNote(
+        _resyncProbeAfterSilence
+            ? 'Adapter silent after the last command; probing with ATI'
+            : 'Probing with ATI to recover the prompt; not repeating the last command',
+      );
+      // Bounded like any other write. RFCOMM with its credits exhausted
+      // never takes the bytes, and then no prompt is coming either.
+      final (left, _) = remaining();
+      final writeBudget = left < writeTimeout ? left : writeTimeout;
+      try {
+        final probe = ascii.encode('ATI\r');
+        transcript.recordWrite(probe);
+        await transport.write(probe).timeout(writeBudget);
+      } on TimeoutException {
+        // The caller could afford the whole limit (above), so this is the
+        // link refusing the bytes, not the caller running out.
+        probeWriteStalled = true;
+      } on Object {
+        // The bytes may still have gone out; the drain waits out the window.
+        transcript.recordNote('Probe write failed');
+      }
+    }
+    if (probeWriteStalled) {
+      transcript.recordNote(
+        'Probe write did not complete; the link is not taking bytes',
+      );
+      if (!drain.isCompleted) drain.complete(false);
+    }
+    final (window, callerLimited) = callerSpentInWait
+        ? (Duration.zero, true)
+        : remaining();
     final timer = Timer(window, () {
       if (!drain.isCompleted) drain.complete(false);
     });
@@ -1964,15 +2339,31 @@ class Elm327Client {
     // link is dead tore down a session whose valid prompt was 100 ms away,
     // comfortably inside the three seconds this recovery actually allows. The
     // caller is refused; the link keeps the benefit of the doubt it was given.
-    if (!sawPrompt && window < resyncTimeout) {
+    if (!sawPrompt && !probeWriteStalled && callerLimited) {
+      _outOfSync = true;
       // The rest of the window this client allows, minus what was spent.
-      _resyncGraceUntil = started.add(resyncTimeout);
+      final spent = _clock().difference(started);
+      _extendResyncGrace(
+        spent < resyncTimeout ? resyncTimeout - spent : Duration.zero,
+      );
       throw TimeoutException(
         'This operation\'s time limit was reached before the connection '
         'finished synchronising. Try again.',
       );
     }
-    if (!sawPrompt) {
+    final probed = _probeOutstanding;
+    if (sawPrompt && probed) {
+      // The prompt that released the drain may be the probe's answer, not
+      // the owed reply. The budget is about the owed reply.
+      _resyncDrainedWireBytes = _wireBytesBeforeProbe;
+    }
+    final probesExhausted =
+        sawPrompt && !probeWriteStalled && _accountProbeAnswer();
+    if (!sawPrompt || probesExhausted || probeWriteStalled) {
+      if (probed && !probeWriteStalled && !sawPrompt) {
+        transcript.recordNote('Probe got no answer');
+      }
+      _probeOutstanding = false;
       // Clearing the flag here — which is what this method used to do
       // unconditionally, in `finally` — declares the stream synchronised on no
       // evidence at all. The outstanding reply is still in flight, so the next
@@ -1995,7 +2386,27 @@ class Elm327Client {
       // returns early on it, so nothing else was going to notice either.
       _watchdog?.cancel();
       _watchdog = null;
+      _connectionLossCause = probeWriteStalled
+          ? ConnectionLossCause.writeStalled
+          : ConnectionLossCause.adapterSilent;
       scheduleMicrotask(() => onConnectionLost?.call());
+      if (probeWriteStalled) {
+        // The check itself could not be handed over. Not "the adapter did
+        // not answer": how much of it reached the adapter is not known.
+        throw const TransportException(
+          'The probe could not be handed to the connection, so the '
+          'connection was dropped.',
+          issue: TransportIssue.writeFailed,
+        );
+      }
+      if (probesExhausted) {
+        // The adapter answered the check three times; the commands between
+        // met silence. Not "the adapter did not answer the check".
+        throw const TransportException(
+          'The connection stopped responding.',
+          issue: TransportIssue.linkStoppedResponding,
+        );
+      }
       throw const TransportException(
         'The adapter\'s replies had fallen out of step with the commands '
         'sent to it, and it did not answer the check that would have put '
@@ -2007,11 +2418,77 @@ class Elm327Client {
     _outOfSync = false;
     // The prompt that was owed has arrived. The grace was only for that wait.
     _resyncGraceUntil = null;
+    // Nothing is owed any more, so no probe is either. A probe skipped for a
+    // caller without the budget must not fire on a later, unrelated resync.
+    _resyncActiveProbe = false;
+    _resyncProbeAfterSilence = false;
+  }
+
+  /// Accounts for an answered probe, if one was outstanding: records it,
+  /// holds the next write, and says whether this was one answer too many.
+  ///
+  /// One probe can earn two prompts: the owed reply's late `>` and the
+  /// probe's own, or `STOPPED` from a chip it interrupted and then `?` for the
+  /// rest of the line. Whatever took the first, the next write waits out the
+  /// adapter window so the second is discarded as leftover rather than read
+  /// as that command's answer.
+  ///
+  /// [canDrop] is false where nothing could act on "too many" — a prompt
+  /// arriving with no command or resync waiting. That answer still counts,
+  /// so the next answered probe with no reply in between ends the session.
+  bool _accountProbeAnswer({bool canDrop = true}) {
+    if (!_probeOutstanding) return false;
+    _probeOutstanding = false;
+    _probeAnswersSinceReply++;
+    if (canDrop &&
+        _probeAnswersSinceReply >= maxProbeAnswersWithoutReply) {
+      transcript.recordNote(
+        'Probe answered $maxProbeAnswersWithoutReply times with no reply to '
+        'any command in between; the link is not carrying replies',
+      );
+      return true;
+    }
+    transcript.recordNote('Probe answered; the link is back in step');
+    _armTrailingPromptHold();
+    return false;
+  }
+
+  /// Holds the watchdog off for at least [window] from now.
+  ///
+  /// On the watchdog's own clock. The watchdog compares against
+  /// `DateTime.now()`, so a grace computed from an injected clock could land
+  /// in its past, and only ever extends: a shorter grace must not cut a
+  /// longer one that is still owed.
+  void _extendResyncGrace(Duration window) {
+    final end = DateTime.now().add(window);
+    final open = _resyncGraceUntil;
+    if (open == null || open.isBefore(end)) _resyncGraceUntil = end;
   }
 
   /// How long to wait for the outstanding reply's prompt before giving up on
   /// resynchronising and simply carrying on.
   static const Duration resyncTimeout = Duration(seconds: 3);
+
+  /// How long a silent resync listens before probing, inside [resyncTimeout].
+  ///
+  /// Long enough for a reply that is only late to land and drain as one;
+  /// short enough to leave the probe most of the window.
+  static const Duration silentProbeDelay = Duration(seconds: 1);
+
+  /// Completes when [drain] does or [wait] passes, whichever is first, and
+  /// leaves no timer behind.
+  Future<void> _drainOrTimeout(Completer<bool> drain, Duration wait) {
+    if (drain.isCompleted || wait <= Duration.zero) return Future.value();
+    final done = Completer<void>();
+    final timer = Timer(wait, () {
+      if (!done.isCompleted) done.complete();
+    });
+    drain.future.whenComplete(() {
+      timer.cancel();
+      if (!done.isCompleted) done.complete();
+    });
+    return done.future;
+  }
 
   /// Until when a late prompt is still an ordinary recovery.
   ///
@@ -2045,6 +2522,7 @@ class Elm327Client {
     Duration? timeout,
     ElmWriteAudit? writeAudit,
     Object? owner,
+    String? noDataFallbackHeader,
   }) {
     _throwIfInsideTransaction();
     _claimWriteAudit(writeAudit);
@@ -2056,56 +2534,263 @@ class Elm327Client {
       var committed = false;
       try {
         if (_outOfSync) await _resync();
-        if (header != _currentHeader) {
-          // Unknown from the moment the write leaves, not from the moment the
-          // reply fails to arrive.
-          //
-          // This file's own doctrine is that a write whose reply is lost has
-          // an *unknown* outcome — and this was the one place that treated it
-          // as undone. The adapter may well have applied the header; if it
-          // did, `_currentHeader` went on naming the old one, the next query
-          // for that old header skipped `ATSH` as redundant, and the request
-          // was physically transmitted to a different controller. A
-          // transmission answering an engine query decodes into a plausible
-          // gauge reading with nothing to indicate it.
-          _currentHeader = null;
-          final ack = await _sendNow(
-            'ATSH $header',
-            commandTimeout,
-            writeAudit: writeAudit,
-            owner: owner,
-          );
-          // `?` is how an ELM327 refuses a header the current bus cannot take.
-          // Proceeding past that sends the query on whatever header the adapter
-          // really holds, and the answer comes back from the wrong ECU looking
-          // exactly like the right one.
-          final acknowledged =
-              ack.isSuccess &&
-              ack.rawLines.any((l) => l.trim().toUpperCase() == 'OK');
-          if (!acknowledged) {
-            throw TransportException(
-              'The adapter refused to switch header $header',
-              issue: TransportIssue.queryHeaderRefused,
-              issueDetail: header,
-            );
-          }
-          _currentHeader = header;
-          committed = true;
+        final mode01 = _isMode01HexCommand(command);
+        final engineResponseId = _iso15765EngineResponseId();
+        final functional = addressing.functionalHeader;
+        final requestingFunctional =
+            functional != null &&
+            BusAddressing.normaliseHeader(header) == functional;
+        committed = await _installHeader(
+          header,
+          writeAudit: writeAudit,
+          owner: owner,
+        );
+        // Functional fallback is a broadcast: more than one ECU may answer.
+        // Keep ATH1 so each line carries its ISO 15765-4 response ID, then
+        // keep only the engine's (request + 8, 7E8). ATCRA is not used here
+        // — clones often refuse it, and ordinary polling already omits it.
+        if (mode01 &&
+            engineResponseId != null &&
+            _enginePhysicalSilent &&
+            requestingFunctional) {
+          committed =
+              await _ensureMode01ResponseHeaders(
+                writeAudit: writeAudit,
+                owner: owner,
+              ) ||
+              committed;
         }
-        completer.complete(
-          await _sendNow(
+        var response = await _sendNow(
+          command,
+          timeout ?? commandTimeout,
+          completesCommittedTransaction: committed,
+          writeAudit: writeAudit,
+          owner: owner,
+        );
+        final fallback = _functionalFallbackIfPhysicalSilent(
+          requestedHeader: header,
+          fallbackHeader: noDataFallbackHeader,
+          response: response,
+        );
+        if (fallback != null) {
+          if (mode01 && engineResponseId != null) {
+            committed =
+                await _ensureMode01ResponseHeaders(
+                  writeAudit: writeAudit,
+                  owner: owner,
+                ) ||
+                committed;
+          }
+          committed =
+              await _installHeader(
+                fallback,
+                writeAudit: writeAudit,
+                owner: owner,
+              ) ||
+              committed;
+          response = await _sendNow(
             command,
             timeout ?? commandTimeout,
             completesCommittedTransaction: committed,
             writeAudit: writeAudit,
             owner: owner,
-          ),
-        );
+          );
+          if (mode01 && engineResponseId != null) {
+            response = _selectEngineMode01Response(response, engineResponseId);
+          }
+          // Remember the physical header as silent only after the documented
+          // functional ID has produced an engine reply. A second `NO DATA`
+          // is not a reason to invent an address, and it is not a reason to
+          // treat 7DF as proven. A 7E9-only reply is also not the engine.
+          if (_engineReplyProvesPhysicalSilent(response, engineResponseId)) {
+            _enginePhysicalSilent = true;
+          }
+        } else if (mode01 &&
+            _enginePhysicalSilent &&
+            engineResponseId != null) {
+          response = _selectEngineMode01Response(response, engineResponseId);
+        }
+        completer.complete(response);
       } on Object catch (e, st) {
         if (!completer.isCompleted) completer.completeError(e, st);
       }
     });
     return completer.future;
+  }
+
+  /// Installs [header] if it is not already the confirmed one.
+  ///
+  /// Returns true when this call wrote `ATSH`. A `?` is
+  /// [TransportIssue.queryHeaderRefused] and is not recovered from here —
+  /// falling through would send the query on whatever header the adapter
+  /// actually holds.
+  Future<bool> _installHeader(
+    String header, {
+    ElmWriteAudit? writeAudit,
+    Object? owner,
+  }) async {
+    if (header == _currentHeader) return false;
+    // Unknown from the moment the write leaves, not from the moment the
+    // reply fails to arrive.
+    //
+    // This file's own doctrine is that a write whose reply is lost has
+    // an *unknown* outcome — and treating it as undone was how
+    // `_currentHeader` went on naming the old one, the next query for
+    // that old header skipped `ATSH` as redundant, and the request was
+    // physically transmitted to a different controller. A transmission
+    // answering an engine query decodes into a plausible gauge reading
+    // with nothing to indicate it.
+    _currentHeader = null;
+    final ack = await _sendNow(
+      'ATSH $header',
+      commandTimeout,
+      writeAudit: writeAudit,
+      owner: owner,
+    );
+    // `?` is how an ELM327 refuses a header the current bus cannot take.
+    // Proceeding past that sends the query on whatever header the adapter
+    // really holds, and the answer comes back from the wrong ECU looking
+    // exactly like the right one.
+    final acknowledged =
+        ack.isSuccess &&
+        ack.rawLines.any((l) => l.trim().toUpperCase() == 'OK');
+    if (!acknowledged) {
+      throw TransportException(
+        'The adapter refused to switch header $header',
+        issue: TransportIssue.queryHeaderRefused,
+        issueDetail: header,
+      );
+    }
+    _currentHeader = header;
+    return true;
+  }
+
+  /// Functional addressing, and only that, after the physical engine header
+  /// produced `NO DATA`.
+  ///
+  /// The fallback is the bus's documented functional ID (`7DF` / `18DB33F1`),
+  /// never another physical address. An `ATSH` refusal still throws
+  /// [TransportIssue.queryHeaderRefused] from [_installHeader] and is not
+  /// turned into this recovery.
+  String? _functionalFallbackIfPhysicalSilent({
+    required String requestedHeader,
+    required String? fallbackHeader,
+    required ObdResponse response,
+  }) {
+    if (fallbackHeader == null) return null;
+    if (response.errorCode != Elm327ErrorCode.noData) return null;
+    final engine = addressing.engineHeader;
+    final functional = addressing.functionalHeader;
+    if (engine == null || functional == null) return null;
+    if (BusAddressing.normaliseHeader(requestedHeader) != engine) return null;
+    if (BusAddressing.normaliseHeader(fallbackHeader) != functional) {
+      return null;
+    }
+    if (BusAddressing.normaliseHeader(fallbackHeader) ==
+        BusAddressing.normaliseHeader(requestedHeader)) {
+      return null;
+    }
+    return functional;
+  }
+
+  /// The documented functional header, only when [requested] is an engine
+  /// poll — the stored app default or this bus's physical engine address.
+  ///
+  /// A custom `7E1` PID is a named controller. It must not inherit a
+  /// functional fallback: that would ask everyone and then present the first
+  /// answer as the transmission.
+  String? _functionalHeaderForEnginePoll(String requested) {
+    final engine = addressing.engineHeader;
+    final functional = addressing.functionalHeader;
+    if (engine == null || functional == null) return null;
+    final normalised = BusAddressing.normaliseHeader(requested);
+    if (!BusAddressing.isAppDefault(normalised) && normalised != engine) {
+      return null;
+    }
+    return functional;
+  }
+
+  /// Mode 01 service requests (`0100`, `010C`, `010C0D…`). AT commands
+  /// and other services are not attributed through this path.
+  static bool _isMode01HexCommand(String command) {
+    final n = command.toUpperCase().replaceAll(' ', '');
+    return n.length >= 2 &&
+        n.length.isEven &&
+        n.startsWith('01') &&
+        RegExp(r'^[0-9A-F]+$').hasMatch(n);
+  }
+
+  /// ISO 15765-4 11-bit: physical request `7E0`–`7E7` answers on
+  /// request + 8 (`7E8`–`7EF`). Null on 29-bit or unknown engine headers.
+  String? _iso15765EngineResponseId() {
+    final engine = addressing.engineHeader;
+    if (engine == null) return null;
+    final id = int.tryParse(BusAddressing.normaliseHeader(engine), radix: 16);
+    if (id == null || id < 0x7E0 || id > 0x7E7) return null;
+    return (id + 8).toRadixString(16).toUpperCase();
+  }
+
+  Future<bool> _ensureMode01ResponseHeaders({
+    ElmWriteAudit? writeAudit,
+    Object? owner,
+  }) async {
+    if (_headersOn) return false;
+    final ack = await _sendNow(
+      'ATH1',
+      commandTimeout,
+      writeAudit: writeAudit,
+      owner: owner,
+    );
+    return _saidOk(ack);
+  }
+
+  bool _engineReplyProvesPhysicalSilent(
+    ObdResponse response,
+    String? engineResponseId,
+  ) {
+    if (!response.isSuccess || response.frames.isEmpty) return false;
+    if (engineResponseId == null) return true;
+    return response.frames.any(
+      (frame) => frame.sourceId?.toUpperCase() == engineResponseId,
+    );
+  }
+
+  /// Keep the engine ECU's Mode 01 payload; drop other responders without
+  /// treating them as a duplicate PID. Missing 7E8 is `NO DATA`.
+  ObdResponse _selectEngineMode01Response(
+    ObdResponse response,
+    String engineResponseId,
+  ) {
+    if (!response.isSuccess) return response;
+    final engineFrames = [
+      for (final frame in response.frames)
+        if (frame.sourceId?.toUpperCase() == engineResponseId) frame,
+    ];
+    if (engineFrames.isEmpty) {
+      return ObdResponse(
+        rawLines: response.rawLines,
+        errorCode: Elm327ErrorCode.noData,
+        attributedSources: response.attributedSources,
+        observedFrames: response.observedFrames,
+        headersEnabled: _headersOn,
+        batteryVoltage: response.batteryVoltage,
+        pendingFrames: response.pendingFrames,
+      );
+    }
+    final primary = engineFrames.first.bytes;
+    return ObdResponse(
+      rawLines: response.rawLines,
+      hexPayload: primary
+          .map((b) => b.toRadixString(16).toUpperCase().padLeft(2, '0'))
+          .join(),
+      bytes: primary,
+      frames: List.unmodifiable(engineFrames),
+      attributedSources: response.attributedSources,
+      observedFrames: response.observedFrames,
+      headersEnabled: true,
+      batteryVoltage: response.batteryVoltage,
+      pendingFrames: response.pendingFrames,
+    );
   }
 
   static final RegExp _adapterInternalErrorRegex = RegExp(r'\bERR\d{2}\b');
@@ -2150,12 +2835,23 @@ class Elm327Client {
     Object? owner,
   }) {
     if (addressing.shouldTransmit(header)) {
+      final functional = _functionalHeaderForEnginePoll(header);
+      if (functional != null && _enginePhysicalSilent) {
+        return sendOnHeader(
+          functional,
+          command,
+          timeout: timeout,
+          writeAudit: writeAudit,
+          owner: owner,
+        );
+      }
       return sendOnHeader(
         header,
         command,
         timeout: timeout,
         writeAudit: writeAudit,
         owner: owner,
+        noDataFallbackHeader: functional,
       );
     }
 
@@ -2187,14 +2883,29 @@ class Elm327Client {
       // functional default and no known physical address — that is round 7's
       // F-2, and inventing one is what it was about — so they are left alone
       // and their replies are separated by frame instead.
+      //
+      // If that physical header has already answered `NO DATA` while
+      // functional addressing worked, do not keep installing it. Issue #109's
+      // clone ACK'd `ATSH 7E0` and then stayed silent; `7DF` still worked.
       final engine = addressing.engineHeader;
-      if (engine != null && addressing.functionalHeader != null) {
+      final functional = addressing.functionalHeader;
+      if (engine != null && functional != null) {
+        if (_enginePhysicalSilent) {
+          return sendOnHeader(
+            functional,
+            command,
+            timeout: timeout,
+            writeAudit: writeAudit,
+            owner: owner,
+          );
+        }
         return sendOnHeader(
           engine,
           command,
           timeout: timeout,
           writeAudit: writeAudit,
           owner: owner,
+          noDataFallbackHeader: functional,
         );
       }
       return send(
@@ -2205,7 +2916,9 @@ class Elm327Client {
       );
     }
 
-    final restore = addressing.restoreHeader;
+    final restore = _enginePhysicalSilent
+        ? (addressing.functionalHeader ?? addressing.restoreHeader)
+        : addressing.restoreHeader;
     if (restore == null) {
       // J1850: no physical engine address is defined and the family's two
       // protocols disagree about the functional one, so there is no known
@@ -5326,6 +6039,17 @@ class Elm327Client {
       const ElmCanReceiveFilterOff();
   bool _canReceiveFilterRestoreFailed = false;
   bool _headerRestoreFailed = false;
+
+  /// The physical engine header was installed and the vehicle still answered
+  /// `NO DATA`, while the documented functional header on this bus has
+  /// produced a reply.
+  ///
+  /// Restoring `ATSH 7E0` (or `18DA10F1`) after that is how issue #109's
+  /// clone spent the rest of the session polling silence: handshake `0100`
+  /// and the census `7DF` request both worked, then every Mode 01 poll went
+  /// out on the physical header that had already failed. Functional
+  /// addressing is the datasheet default, not a guessed controller.
+  bool _enginePhysicalSilent = false;
   bool _responseHeadersUncertain = false;
   bool _responseHeadersRestoreFailed = false;
 
@@ -5337,6 +6061,9 @@ class Elm327Client {
   /// Raw bytes of the prompt `_resync` drained, or 0 if the window expired.
   int _resyncDrainedWireBytes = 0;
 
+  /// Exposed for tests: what the last resync charged to a transaction budget.
+  int get resyncDrainedWireBytesForTest => _resyncDrainedWireBytes;
+
   ElmFlowControlState get flowControlState => _flowControlState;
 
   bool get flowControlRestoreFailed => _flowControlRestoreFailed;
@@ -5344,6 +6071,10 @@ class Elm327Client {
   bool get headerRestoreFailed => _headerRestoreFailed;
 
   bool get headersOn => _headersOn;
+
+  /// True once a functional retry produced an engine Mode 01 reply after
+  /// physical `7E0` was silent. Subsequent engine polls stay on `7DF`.
+  bool get enginePhysicalSilent => _enginePhysicalSilent;
 
   bool get responseHeadersUncertain => _responseHeadersUncertain;
 
@@ -5769,6 +6500,15 @@ class Elm327Client {
       // before that budget starts — the tick lands, the command timer is not
       // armed, and a caller who still has a recovery window never gets it.
       if (_pending != null && _pendingTimeout == null) return;
+      // A resync gives its own verdict when its window ends: the probe's
+      // answer, or "Probe got no answer" and the drop. Its grace is published
+      // at its start; its drain timer is armed after the pre-wait and the
+      // probe, for what is left of the window. Both read the same clock in
+      // production, but arming late put the timer's deadline about a
+      // millisecond past the grace, and a tick in that gap dropped the link
+      // first: the record lost the probe outcome #112's next export is for.
+      // Seen under load. The drain is bounded by its own timer.
+      if (isResyncing) return;
       // Silence only means something when the adapter owes us a reply. An idle
       // link — every active PID unsupported, or the app just resumed from the
       // background with a stale wall-clock timestamp — is not a dead one, and
@@ -5829,6 +6569,17 @@ class Elm327Client {
         silentFor = silentFor > prepaid ? silentFor - prepaid : Duration.zero;
       }
       if (silentFor <= limit) return;
+      // A command still owed a reply, with its reply timer still armed, gets
+      // what that timer would give it: a promptless complete, or the probe on
+      // the next resync. Normally the timer fires first. When the isolate
+      // stalls, both are overdue and Dart runs them in scheduled order, so a
+      // tick scheduled just before the timer runs first, reads a wall clock
+      // already past the limit, and used to drop the link with no probe ever
+      // written. Seen once on the #112 rig under heavy load.
+      if (_pending != null && _pendingTimeout != null) {
+        _onCommandTimeout();
+        return;
+      }
       isInitialized = false;
       _watchdog?.cancel();
       _watchdog = null;
@@ -5838,6 +6589,7 @@ class Elm327Client {
           issue: TransportIssue.linkStoppedResponding,
         ),
       );
+      _connectionLossCause = ConnectionLossCause.adapterSilent;
       onConnectionLost?.call();
     });
   }
@@ -7224,4 +7976,241 @@ class Elm327Client {
 
   /// Exposed for tests, which need to exercise the parser without a transport.
   ObdResponse parseFrameForTest(List<int> frame) => _parse(frame);
+
+  void _armQuietCompleteTimer() {
+    if (_pending == null || _draining != null) return;
+    final command = _pendingCommand;
+    if (command == null) return;
+    if (command.trim().toUpperCase().startsWith('AT')) return;
+    // First missing prompt waits for command timeout. Completing inside
+    // the ATST window and writing again aborts the adapter with STOPPED.
+    if (promptlessCompleteCount < 1) return;
+    _quietCompleteTimer?.cancel();
+    final generation = _connectionGeneration;
+    _quietCompleteTimer = Timer(ElmSessionProfile.quietCompleteTimeout, () {
+      if (_connectionGeneration != generation) return;
+      if (_pending == null || _draining != null) return;
+      if (_buffer.contains(_promptByte)) return;
+      _completeObdBufferIfConclusive(
+        promptless: true,
+        requireKnownResponders: true,
+      );
+    });
+  }
+
+  void _armTrailingPromptHold() {
+    _strayPromptExpected = true;
+    _trailingPromptTimer?.cancel();
+    final gate = Completer<void>();
+    _trailingPromptGate = gate;
+    var remaining =
+        ElmSessionProfile.adapterResponseWindow -
+        DateTime.now().difference(lastRxAt);
+    if (remaining.isNegative) remaining = Duration.zero;
+    if (remaining == Duration.zero) {
+      if (!gate.isCompleted) gate.complete();
+      return;
+    }
+    final generation = _connectionGeneration;
+    _trailingPromptTimer = Timer(remaining, () {
+      if (_connectionGeneration != generation) return;
+      _releaseTrailingPromptHold();
+    });
+  }
+
+  void _releaseTrailingPromptHold() {
+    _trailingPromptTimer?.cancel();
+    _trailingPromptTimer = null;
+    final gate = _trailingPromptGate;
+    _trailingPromptGate = null;
+    if (gate != null && !gate.isCompleted) gate.complete();
+  }
+
+  /// Null when there is nothing to wait for. Callers must not `await` a
+  /// no-op Future here: even `Future<void>.value()` yields a microtask,
+  /// which lets `sendGlobal`'s service completer resume before `ATH0`
+  /// is written.
+  Future<void>? _trailingPromptHoldIfPending() {
+    final gate = _trailingPromptGate;
+    if (gate == null || gate.isCompleted) return null;
+    return gate.future;
+  }
+
+  /// Completes the in-flight OBD command from [_buffer] when the parser
+  /// already has a conclusive reply. Returns false if the buffer is still
+  /// incomplete (truncated ISO-TP, SEARCHING, pending NRC, empty).
+  ///
+  /// [requireKnownResponders] is true for the quiet window: a second ECU
+  /// that already spoke this session may still be in flight. Command
+  /// timeout passes false so a silent sibling cannot drop the link.
+  bool _completeObdBufferIfConclusive({
+    required bool promptless,
+    bool requireKnownResponders = true,
+  }) {
+    if (_pending == null) return false;
+    final command = _pendingCommand;
+    if (command == null || command.trim().toUpperCase().startsWith('AT')) {
+      return false;
+    }
+    if (_buffer.isEmpty || _buffer.contains(_promptByte)) return false;
+    final parsed = _parse(List<int>.from(_buffer));
+    if (!_isConclusiveQuietReply(
+      parsed,
+      requireKnownResponders: requireKnownResponders,
+    )) {
+      return false;
+    }
+
+    _quietCompleteTimer?.cancel();
+    _quietCompleteTimer = null;
+    _buffer.clear();
+    _lastReplyWireBytes = _pendingWireBytes;
+    _pendingWireBytes = 0;
+    if (promptless) {
+      _armTrailingPromptHold();
+      promptlessCompleteCount++;
+      promptlessPenalty++;
+      promptedStreak = 0;
+      transcript.recordNote(
+        'Reply completed without a prompt; treating the assembled data as finished',
+      );
+      _noteResponders(parsed);
+      _completePending(parsed);
+      onPromptlessComplete?.call();
+    } else {
+      _noteResponders(parsed);
+      _completePending(parsed);
+    }
+    return true;
+  }
+
+  bool _isConclusiveQuietReply(
+    ObdResponse parsed, {
+    required bool requireKnownResponders,
+  }) {
+    if (_isResponsePendingPdu(parsed)) return false;
+    if (parsed.errorCode == Elm327ErrorCode.dataError) return false;
+    final preview = ascii.decode(_buffer, allowInvalid: true).toUpperCase();
+    if (preview.contains('SEARCHING') &&
+        parsed.bytes.isEmpty &&
+        parsed.frames.isEmpty) {
+      return false;
+    }
+    if (parsed.errorCode != Elm327ErrorCode.none) {
+      // Adapter status (`NO DATA`, `CAN ERROR`, …) is a finished sentence.
+      return _bufferHasCompleteLine();
+    }
+    final headeredIds = <String>{
+      ...parsed.attributedSources,
+      for (final frame in parsed.frames)
+        if (frame.sourceId != null && frame.sourceId!.isNotEmpty)
+          frame.sourceId!,
+    };
+    if (headeredIds.isNotEmpty) {
+      if (requireKnownResponders &&
+          lastResponderCount > 1 &&
+          headeredIds.length < lastResponderCount) {
+        return false;
+      }
+      return true;
+    }
+    if (parsed.bytes.isEmpty) return false;
+    // Unheadered payload: a BLE/UART chunk split mid-line is not a reply.
+    // Issue 106 M106-04 is this shape (`41 0C 1A` with no CR and no `>`).
+    if (!_bufferHasCompleteLine()) return false;
+    // Headers off: source ids are absent. [lastResponderCount] is derived
+    // from unheadered hex payload lines on earlier replies; count finished
+    // lines here so a late second-ECU line still joins.
+    if (requireKnownResponders &&
+        lastResponderCount > 1 &&
+        _completeNonEmptyLineCount() < lastResponderCount) {
+      return false;
+    }
+    return true;
+  }
+
+  int _completeNonEmptyLineCount() {
+    final text = ascii.decode(_buffer, allowInvalid: true);
+    var count = 0;
+    for (final line in text.split(RegExp(r'[\r\n]+'))) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      if (trimmed.toUpperCase().contains('SEARCHING')) continue;
+      count++;
+    }
+    return count;
+  }
+
+  bool _bufferHasCompleteLine() {
+    for (final byte in _buffer) {
+      if (byte == _crByte || byte == 0x0A) return true;
+    }
+    return false;
+  }
+
+  bool _isResponsePendingPdu(ObdResponse parsed) {
+    bool pendingPayload(List<int> bytes) =>
+        bytes.length >= 3 && bytes[0] == 0x7F && bytes[2] == 0x78;
+    if (pendingPayload(parsed.bytes)) return true;
+    if (parsed.frames.any((frame) => pendingPayload(frame.bytes))) return true;
+    if (parsed.pendingFrames.isNotEmpty && parsed.frames.isEmpty) return true;
+    return false;
+  }
+
+  bool _frameIsBlank(List<int> frame) {
+    for (final byte in frame) {
+      if (byte != _crByte && byte != 0x0A && byte != 0x20 && byte != 0x00) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _frameIsStopped(List<int> frame) {
+    final text = ascii.decode(frame, allowInvalid: true).toUpperCase();
+    return text.contains('STOPPED');
+  }
+
+  void _noteResponders(ObdResponse response) {
+    final ids = <String>{
+      ...response.attributedSources,
+      for (final frame in response.frames)
+        if (frame.sourceId != null && frame.sourceId!.isNotEmpty)
+          frame.sourceId!,
+    };
+    final count = ids.isNotEmpty
+        ? ids.length
+        : _unheaderedResponderHint(response);
+    if (count > lastResponderCount) lastResponderCount = count;
+  }
+
+  /// How many ECUs an unheadered reply implies.
+  ///
+  /// ATH0 strips CAN ids, so [lastResponderCount] would otherwise stay 0–1
+  /// and the second-ECU line-count guard would never arm. Count hex payload
+  /// lines; skip `SEARCHING...`, CAF1 total-length headers (`00F`), and
+  /// ISO-TP continuation segments after `0:` (those belong to the same ECU).
+  /// Over-count of a damaged envelope is conservative: command timeout still
+  /// completes with `requireKnownResponders: false`.
+  int _unheaderedResponderHint(ObdResponse response) {
+    var lines = 0;
+    for (final line in response.rawLines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final upper = trimmed.toUpperCase();
+      if (upper.contains('SEARCHING')) continue;
+      if (_lengthHeader.hasMatch(trimmed)) continue;
+      if (_seqPrefix.hasMatch(trimmed)) {
+        final seq = int.tryParse(trimmed.split(':').first.trim(), radix: 16);
+        if (seq == 0) lines++;
+        continue;
+      }
+      if (_hexLine.hasMatch(trimmed)) lines++;
+    }
+    var frames = 0;
+    for (final frame in response.frames) {
+      if (frame.bytes.isNotEmpty) frames++;
+    }
+    return lines > frames ? lines : frames;
+  }
 }

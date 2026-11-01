@@ -2,6 +2,8 @@
 
 # Telltale
 
+> Canonical repository and issues: https://gitlab.com/aa22396584/telltale. Releases and downloads: https://gitlab.com/aa22396584/telltale/-/releases
+
 > **Development home:** https://gitlab.com/aa22396584/telltale  
 > Please open issues and merge requests there.  
 > **Mirror:** [Codeberg](https://codeberg.org/ImL1s/telltale)  

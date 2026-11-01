@@ -13,8 +13,10 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../diagnostics/diagnostic_link.dart';
 import '../diagnostics/elm327_diagnostic_link.dart';
+import 'adapter_identity.dart';
 import 'addressing.dart';
 import 'dtc/dtc.dart';
+import 'elm_session_profile.dart';
 import 'elapsed_clock.dart';
 import 'freeze_frame.dart';
 import 'readiness.dart';
@@ -307,6 +309,7 @@ class PollingEngine {
   );
   final Map<String, Reading> _readings = {};
   final Map<String, PidFault> _faults = {};
+  final Set<String> _cadenceDiscontinuities = {};
 
   List<Pid> _active = const [];
 
@@ -541,6 +544,9 @@ class PollingEngine {
     _active = List.unmodifiable(merged.values);
     _syncDashboardLeases();
     final live = {for (final pid in _scheduledDefinitions()) pid.id: pid};
+    _cadenceDiscontinuities.addAll(
+      _readings.keys.where((id) => !live.containsKey(id)),
+    );
     _authorizedProfileDefinitions = Map.unmodifiable({
       for (final pid in live.values)
         if (pid.ownerProfileId != null) pid.id: pid,
@@ -1056,8 +1062,9 @@ class PollingEngine {
           query,
           owner: pollingOwner,
         );
-        final raw = response.bytes;
+        final raw = _mode01EnginePayload(response);
         if (response.isSuccess &&
+            raw != null &&
             raw.length == 6 &&
             raw[0] == 0x41 &&
             raw[1] == expectedBase) {
@@ -2427,6 +2434,39 @@ class PollingEngine {
     return (id - 8).toRadixString(16).toUpperCase();
   }
 
+  /// Inverse of [_physicalRequestFor]: `7E0`–`7E7` answers on request + 8.
+  static String? _physicalResponseFor(String? requestId) {
+    if (requestId == null) return null;
+    final id = int.tryParse(requestId.trim(), radix: 16);
+    if (id == null || id < 0x7E0 || id > 0x7E7) return null;
+    return (id + 8).toRadixString(16).toUpperCase();
+  }
+
+  /// Mode 01 payload from the engine ECU when headers named the responders.
+  ///
+  /// Other ECUs answering a 7DF broadcast are ignored. If headers are on and
+  /// 7E8 is missing, the payload is unknown — not the first other ECU.
+  List<int>? _mode01EnginePayload(ObdResponse response) {
+    final frames = _mode01EngineFrames(response);
+    if (frames != null) {
+      if (frames.isEmpty) return null;
+      return frames.first.bytes;
+    }
+    return response.bytes.isEmpty ? null : response.bytes;
+  }
+
+  /// Engine-only frames when the adapter printed ISO 15765-4 IDs; null when
+  /// the exchange cannot be attributed that way.
+  List<ObdFrame>? _mode01EngineFrames(ObdResponse response) {
+    final engineId = _physicalResponseFor(client.addressing.engineHeader);
+    if (engineId == null) return null;
+    if (!response.frames.any((frame) => frame.sourceId != null)) return null;
+    return [
+      for (final frame in response.frames)
+        if (frame.sourceId?.toUpperCase() == engineId) frame,
+    ];
+  }
+
   /// Asks named controllers for this category directly, and reports who
   /// answered.
   ///
@@ -3779,6 +3819,7 @@ class PollingEngine {
     interruptCapabilityDiscovery();
     if (!_running) return;
     _running = false;
+    _cadenceDiscontinuities.addAll(_readings.keys);
     final epoch = _epoch;
     // Retired here rather than when the next loop starts. The barrier below is
     // bounded at two seconds and a command may take longer, so a reply that
@@ -3796,6 +3837,7 @@ class PollingEngine {
       onTimeout: () {},
     );
     _loopDone.remove(epoch);
+    _cadenceDiscontinuities.addAll(_readings.keys);
     // The in-flight request was already popped. Retire the remainder so the
     // next start rebuilds the schedule and retries the interrupted PID.
     scheduler.retireQueuedRequests(const {});
@@ -4046,6 +4088,7 @@ class PollingEngine {
           rawBytes: bytes,
           timestamp: now,
           receivedElapsed: _nowElapsed(),
+          observedInterval: _observedInterval(sibling.id, _nowElapsed()),
         );
         _markDirectlyAnswered(sibling);
       } on FormulaException {
@@ -4061,6 +4104,13 @@ class PollingEngine {
           pid.id != source.id &&
           TelemetryDemand.wireKeyFor(pid.header, pid.modeAndPid) == key,
     );
+  }
+
+  void _interruptCadenceForSharedWire(Pid source) {
+    _cadenceDiscontinuities.add(source.id);
+    for (final sibling in _sharedWireSiblings(source)) {
+      _cadenceDiscontinuities.add(sibling.id);
+    }
   }
 
   void _invalidateSharedWire(
@@ -4082,6 +4132,7 @@ class PollingEngine {
   void _markDirectlyAnswered(Pid pid) {
     _faults.remove(pid.id);
     _noDataStrikes.remove(pid.id);
+    _timeoutStrikes.remove(pid.id);
     _formulaStrikes.remove(pid.id);
     _retryAfter.remove(pid.id);
     if (_answeredAtLeastOnce.add(pid.id)) {
@@ -4108,10 +4159,47 @@ class PollingEngine {
   /// has already decided the membership by then. Discovery can run beside
   /// the first cycles; once a support block has answered, the next drain
   /// must be allowed to group.
+  /// Smoothed answer-to-answer interval for [pidId] (#114).
+  ///
+  /// Exponential average (new sample weight 1/4) of the gap since the
+  /// previous reading. A gap far beyond the running average (a stall, a
+  /// fault rest) is clipped to twice the average so one outage does not
+  /// teach freshness to forgive the next one.
+  Duration? _observedInterval(String pidId, Duration nowElapsed) {
+    if (_cadenceDiscontinuities.remove(pidId)) return null;
+    final previous = _readings[pidId];
+    if (previous == null) return null;
+    final gap = nowElapsed - previous.receivedElapsed;
+    if (gap.isNegative || gap == Duration.zero) {
+      return previous.observedInterval;
+    }
+    final average = previous.observedInterval;
+    if (average == null) return gap;
+    final clipped = gap > average * 2 ? average * 2 : gap;
+    return Duration(
+      microseconds: (average.inMicroseconds * 3 + clipped.inMicroseconds) ~/ 4,
+    );
+  }
+
   void _applyBatchingGate() {
     scheduler.canBatch =
         client.addressing.isCan && _verifiedSupportBlocks.isNotEmpty;
     scheduler.isBatchable = _isBatchable;
+    final clone = client.adapterIdentity.concerns.any(
+      (c) => c.kind == AdapterConcernKind.firmwareNeverReleased,
+    );
+    scheduler.batchSizeCap = ElmSessionProfile.batchSizeCap(
+      cloneSelfInconsistent: clone,
+      multiEcuFunctional:
+          client.enginePhysicalSilent && client.lastResponderCount > 1,
+      promptlessPenalty: client.promptlessPenalty,
+    );
+    // No session-wide inter-command delay after a promptless complete
+    // (#114). The client already holds the one write that follows a
+    // promptless close until the late `>` or the adapter response window
+    // ends; a reply that closed on `>` has, by definition, finished its
+    // ATST window. Raising the delay to 450 ms for the rest of the session
+    // turned every later command into ~455 ms of dead air.
   }
 
   Future<void> _pollBatch(List<QueuedRequest> batch, [int? epoch]) async {
@@ -4267,19 +4355,42 @@ class PollingEngine {
       }
       _publish(epoch);
       return;
-    } on Object {
+    } on Object catch (error) {
+      for (final request in batch) {
+        _interruptCadenceForSharedWire(request.pid);
+      }
       // Timeout or dropped link after the PID query may already be on the
       // wire. `wroteSinceAudit` is the same fact Mode 04 uses: ATSH/ATH1
       // can fail without the service bytes ever leaving, and a flush
       // timeout can happen after they have. Count only the latter.
-      if (client.wroteSinceAudit(pollAudit, command)) {
+      final pidWritten = client.wroteSinceAudit(pollAudit, command);
+      if (pidWritten) {
         _noteMode01Packed(command);
+      }
+      // Only a read that reached the wire can have been swallowed. A header
+      // step that timed out first never asked this PID anything.
+      if (error is TimeoutException && batch.length == 1 && pidWritten) {
+        final id = batch.single.pid.id;
+        final strikes = (_timeoutStrikes[id] ?? 0) + 1;
+        _timeoutStrikes[id] = strikes;
+        if (strikes >= _timeoutStrikesBeforeRest) {
+          _timeoutStrikes.remove(id);
+          _invalidateSharedWire(
+            batch.single.pid,
+            PidFault.noAnswer,
+            retryAfter: DateTime.now().add(noAnswerBackoff),
+          );
+          _publish(epoch);
+        }
       }
       await Future<void>.delayed(const Duration(milliseconds: 200));
       return;
     }
 
     if (!response.isSuccess) {
+      for (final request in batch) {
+        _interruptCadenceForSharedWire(request.pid);
+      }
       _handleErrorResponse(batch, response, epoch);
       return;
     }
@@ -4314,6 +4425,7 @@ class PollingEngine {
         !_isProfileResponseBatch(batch)) {
       scheduler.handleCorruptionEvent();
       for (final request in batch) {
+        _interruptCadenceForSharedWire(request.pid);
         scheduler.enqueueRequest(request);
       }
       return;
@@ -4384,6 +4496,7 @@ class PollingEngine {
           rawBytes: bytes,
           timestamp: now,
           receivedElapsed: _nowElapsed(),
+          observedInterval: _observedInterval(request.pid.id, _nowElapsed()),
         );
         if (request.pid.id == PidLibrary.vehicleSpeed.id) {
           _trackAcceleration(value, now);
@@ -4442,6 +4555,17 @@ class PollingEngine {
   /// Consecutive `NO DATA` answers per PID, reset by any successful read.
   final Map<String, int> _noDataStrikes = {};
 
+  /// Consecutive reply timeouts per PID on single-PID reads.
+  ///
+  /// Since #112 a silent adapter is probed instead of dropped, so a PID the
+  /// adapter always swallows no longer ends the session: it costs a command
+  /// timeout plus the probe, every cycle. Two in a row rest it like
+  /// `NO DATA` does. One alone does not, because the #112 exports lost a
+  /// random reply every 40–140 s and that must not grey a working gauge.
+  final Map<String, int> _timeoutStrikes = {};
+
+  static const int _timeoutStrikesBeforeRest = 2;
+
   /// When a backed-off PID may be tried again.
   final Map<String, DateTime> _retryAfter = {};
 
@@ -4486,12 +4610,27 @@ class PollingEngine {
 
   final Map<String, int> _formulaStrikes = {};
 
-  /// How many in a row before a PID is written off as unsupported.
+  /// How many in a row before a PID is rested.
   ///
   /// Three rather than one: the ELM327 datasheet defines `NO DATA` as no
   /// accepted response before the timeout, which a slow or busy ECU can produce
-  /// on a PID it fully supports.
+  /// on a PID it fully supports. The default rest is [PidFault.noAnswer] for
+  /// [noAnswerBackoff]; see [_hotLoopNoDataBackoff] for the `015E` exception.
   static const int _noDataStrikesBeforeUnsupported = 3;
+
+  /// Whether three `NO DATA` strikes should use the five-minute unsupported
+  /// recheck instead of the one-minute [PidFault.noAnswer] rest.
+  ///
+  /// Only fuel rate (`015E`), and only after this session has already seen a
+  /// missing prompt or on a clone (`firmwareNeverReleased`). Every other PID
+  /// keeps the default: silence is not a capability claim.
+  bool _hotLoopNoDataBackoff(Pid pid) {
+    if (pid.modeAndPid.toUpperCase() != '015E') return false;
+    if (client.promptlessCompleteCount > 0) return true;
+    return client.adapterIdentity.concerns.any(
+      (c) => c.kind == AdapterConcernKind.firmwareNeverReleased,
+    );
+  }
 
   /// Marks a PID as faulted and drops its last reading.
   ///
@@ -4533,17 +4672,27 @@ class PollingEngine {
           _publish(epoch);
           return;
         }
-        // Repeated silence is still not the vehicle saying it lacks the
-        // sensor — only the support mask says that, and a PID the mask
-        // disclaimed never reaches this path because it is filtered out of the
-        // poll set. So this backs off rather than retiring the PID: a slow ECU
-        // or a receive filter used to grey a working gauge out for the rest of
-        // the session, with nothing on screen explaining why.
-        _invalidateSharedWire(
-          pid,
-          PidFault.noAnswer,
-          retryAfter: DateTime.now().add(noAnswerBackoff),
-        );
+        // `NO DATA` is the adapter's timeout, not a capability claim. Three
+        // misses rest the PID as `noAnswer` for a minute so an intermittent
+        // sensor on a working car does not go grey as "unsupported".
+        //
+        // Fuel rate (`015E`) is the #110 hot-loop exception: that log retried
+        // it every cycle. The five-minute `unsupported` recheck applies only
+        // to that PID, and only when this session already completed without
+        // a prompt or the adapter is a clone. A later real answer still wins.
+        if (_hotLoopNoDataBackoff(pid)) {
+          _invalidateSharedWire(
+            pid,
+            PidFault.unsupported,
+            retryAfter: DateTime.now().add(recheckInterval),
+          );
+        } else {
+          _invalidateSharedWire(
+            pid,
+            PidFault.noAnswer,
+            retryAfter: DateTime.now().add(noAnswerBackoff),
+          );
+        }
         _noDataStrikes.remove(id);
       } else {
         scheduler.handleCorruptionEvent();
@@ -4698,7 +4847,23 @@ class PollingEngine {
     ObdResponse response,
     List<QueuedRequest> batch,
   ) {
-    final bytes = response.bytes;
+    // After functional fallback, Mode 01 replies may include 7E8 and 7E9.
+    // Keep the engine ECU (request + 8). Other responders are not duplicates.
+    // Custom headers (7E1…) are a named controller and must not be forced
+    // onto 7E8.
+    final enginePoll = batch.every((request) {
+      if (!request.pid.isMode01) return false;
+      if (BusAddressing.isAppDefault(request.pid.header)) return true;
+      final engine = client.addressing.engineHeader;
+      return engine != null &&
+          BusAddressing.normaliseHeader(request.pid.header) == engine;
+    });
+    final engineFrames = enginePoll ? _mode01EngineFrames(response) : null;
+    if (engineFrames != null && engineFrames.isEmpty) return const {};
+    final frames = engineFrames ?? response.frames;
+    final bytes = engineFrames != null
+        ? [for (final frame in engineFrames) ...frame.bytes]
+        : response.bytes;
     if (bytes.isEmpty) return const {};
 
     final expected = <int, Pid>{};
@@ -4752,7 +4917,7 @@ class PollingEngine {
       // only the boundary can.
       final matching = <List<int>>[];
       var extra = 0;
-      for (final frame in response.frames) {
+      for (final frame in frames) {
         final data = frame.bytes;
         if (data.length >= 2 && data[0] == 0x41 && data[1] == code) {
           matching.add(data.sublist(2));

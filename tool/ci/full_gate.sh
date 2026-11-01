@@ -21,7 +21,21 @@ run_step source git rev-parse HEAD 'HEAD^{tree}'
 run_step flutter-config flutter config --no-analytics
 run_step sdk flutter --version --machine
 run_step sdk-pin python3 -c 'import json; from pathlib import Path; actual=json.loads(Path("ci-artifacts/sdk.stdout").read_text()); expected=json.loads(Path(".fvmrc").read_text())["flutter"]; assert actual["frameworkVersion"]==expected, (actual, expected); print("Pinned Flutter:", expected)'
-run_step pub-get flutter pub get
+# `pub get` clones flutter_classic_bluetooth from Codeberg. A TLS reset on that
+# clone failed the 1.0.23 main pipeline with nothing wrong in the tree (1 of the
+# last 40 failed pipelines). Three bounded attempts; the artifact keeps the last.
+for pub_get_attempt in 1 2 3; do
+  pub_get_rc=0
+  run_step pub-get flutter pub get || pub_get_rc=$?
+  if [ "$pub_get_rc" = 0 ]; then break; fi
+  # Keep each failed attempt's output; run_step overwrites pub-get.* each time.
+  for stream in stdout stderr exit; do
+    cp "ci-artifacts/pub-get.$stream" "ci-artifacts/pub-get.attempt$pub_get_attempt.$stream"
+  done
+  if [ "$pub_get_attempt" = 3 ]; then exit "$pub_get_rc"; fi
+  printf 'pub get attempt %s failed (exit %s); retrying\n' "$pub_get_attempt" "$pub_get_rc" >&2
+  sleep $((pub_get_attempt * 10))
+done
 run_step car-pigeon-codegen bash tool/ci/verify_car_pigeon_codegen.sh
 run_step analyze flutter analyze
 run_step python-tools python3 -m unittest discover -s test/tool -p 'test_*.py'

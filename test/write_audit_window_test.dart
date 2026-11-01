@@ -59,7 +59,6 @@ void main() {
     () async {
       final transport = FakeElm327(
         protocol: BusProtocol.can11,
-        faults: const AdapterFaults(swallowPromptFor: {'04'}),
         ecus: [
           FakeEcu(
             name: 'ECM',
@@ -72,6 +71,7 @@ void main() {
           ),
         ],
       );
+      transport.silenceFor.add('04');
       final client = Elm327Client(
         transport,
         commandTimeout: const Duration(milliseconds: 400),

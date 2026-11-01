@@ -110,7 +110,15 @@ class PriorityScheduler {
 
   /// Max PIDs the ELM327 will answer in a single Mode 01 batch. Above this the
   /// reply overruns the adapter's buffer and comes back truncated.
+  ///
+  /// This is the hardware ceiling. The live limit is [batchSizeCap], which
+  /// the session profile may lower for clones, multi-ECU functional
+  /// addressing, or after a promptless recovery. See
+  /// `docs/architecture/elm-session-pipeline.md`.
   static const int maxBatchSize = 6;
+
+  /// Live Mode 01 grouping limit for this session. Never above [maxBatchSize].
+  int batchSizeCap = maxBatchSize;
 
   int get length => _queue.length;
   bool get isEmpty => _queue.isEmpty;
@@ -146,7 +154,7 @@ class PriorityScheduler {
 
   QueuedRequest? popNext() => _queue.isEmpty ? null : _queue.removeAt(0);
 
-  /// Drains up to [maxBatchSize] requests that can legally share one frame:
+  /// Drains up to [batchSizeCap] requests that can legally share one frame:
   /// Mode 01 PIDs on the same header as the head of the queue.
   ///
   /// When fastMode is off this returns exactly one request, so the caller's
@@ -172,7 +180,10 @@ class PriorityScheduler {
     final batch = [head];
     final seen = {head.pid.modeAndPid};
     var i = 0;
-    while (i < _queue.length && batch.length < maxBatchSize) {
+    final cap = batchSizeCap < 1
+        ? 1
+        : (batchSizeCap > maxBatchSize ? maxBatchSize : batchSizeCap);
+    while (i < _queue.length && batch.length < cap) {
       final candidate = _queue[i];
       final fitsBatch =
           candidate.pid.isMode01 &&
@@ -296,6 +307,23 @@ class PriorityScheduler {
     fastModeEnabled = true;
     corruptionCount = 0;
     interCommandDelay = const Duration(milliseconds: 10);
+    batchSizeCap = maxBatchSize;
+  }
+
+  /// After a promptless recovery: smaller batches, more space between writes.
+  ///
+  /// Distinct from [handleCorruptionEvent], which turns fast mode off for
+  /// the rest of the session. Adaptive demotion keeps grouping until the
+  /// cap reaches 1.
+  void demoteAfterPromptlessComplete() {
+    if (batchSizeCap > 3) {
+      batchSizeCap = 3;
+    } else {
+      batchSizeCap = 1;
+    }
+    if (interCommandDelay < const Duration(milliseconds: 100)) {
+      interCommandDelay = const Duration(milliseconds: 100);
+    }
   }
 
   /// Records that [count] PIDs finished, for the throughput readout.

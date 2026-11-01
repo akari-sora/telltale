@@ -163,6 +163,43 @@ class ChaosProxyTest(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(reader.read(1), 0.03)
         await self._close_client(writer)
 
+    async def test_swallow_reply_drops_one_reply_and_answers_the_next_line(self) -> None:
+        await self._restart(swallow_reply_on_command=1)
+        reader, writer = await self.connect()
+        writer.write(b"011F\r")
+        await writer.drain()
+        with self.assertRaises(asyncio.TimeoutError):
+            await asyncio.wait_for(reader.read(1), 0.05)
+        writer.write(b"ATI\r")
+        await writer.drain()
+        self.assertEqual(b"ATI\rOK\r>", await self.read_until(reader, b">"))
+        self.assertEqual([b"011F\r", b"ATI\r"], self.elm.commands)
+        faults = [r for r in self.logger.records if r["fault"] == "swallow_reply"]
+        self.assertEqual(1, len(faults))
+        self.assertEqual(1, faults[0]["command"])
+        self.assertEqual(b"011F\rOK\r>", bytes.fromhex(faults[0]["data_hex"]))
+        await self._close_client(writer)
+
+    async def test_deaf_connection_answers_nothing_until_reconnect(self) -> None:
+        await self._restart(deaf_from_command=2)
+        reader, writer = await self.connect()
+        writer.write(b"ATZ\r")
+        await writer.drain()
+        self.assertEqual(b"ATZ\rOK\r>", await self.read_until(reader, b">"))
+        for command in (b"011F\r", b"ATI\r"):
+            writer.write(command)
+            await writer.drain()
+            with self.assertRaises(asyncio.TimeoutError):
+                await asyncio.wait_for(reader.read(1), 0.05)
+        self.assertEqual([b"ATZ\r"], self.elm.commands)
+        await self._close_client(writer)
+        reader2, writer2 = await self.connect()
+        writer2.write(b"ATI\r")
+        await writer2.drain()
+        self.assertEqual(b"ATI\rOK\r>", await self.read_until(reader2, b">"))
+        self.assertEqual([b"ATZ\r", b"ATI\r"], self.elm.commands)
+        await self._close_client(writer2)
+
     async def test_close_fault_accepts_reconnect_and_does_not_replay_fault(self) -> None:
         await self._restart(close_on_command=1)
         reader, writer = await self.connect()
@@ -475,6 +512,8 @@ class ConfigTest(unittest.TestCase):
             ["--close-on-command", "3", "--no-prompt-on-command", "3"],
             ["--close-on-command", "2", "--corrupt-on-command", "7"],
             ["--close-on-command", "2", "--arm-next-command", "close"],
+            ["--swallow-reply-on-command", "2", "--no-prompt-on-command", "5"],
+            ["--deaf-from-command", "4", "--corrupt-on-command", "1"],
         ):
             with self.subTest(arguments=arguments):
                 with mock.patch("sys.stderr", io.StringIO()), self.assertRaises(
@@ -490,6 +529,8 @@ class ConfigTest(unittest.TestCase):
                 close_on_command=2,
                 no_prompt_on_command=7,
             )
+        with self.assertRaisesRegex(ValueError, "at most one fault"):
+            config(35000, swallow_reply_on_command=2, deaf_from_command=9)
 
     def test_rejects_empty_host_and_non_finite_delay(self) -> None:
         for arguments in (["--listen-host", ""], ["--delay-ms", "nan"]):

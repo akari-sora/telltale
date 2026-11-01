@@ -28,7 +28,18 @@ class Reading {
     required this.rawBytes,
     required this.timestamp,
     this.receivedElapsed = Duration.zero,
+    this.observedInterval,
   });
+
+  /// Smoothed time between this PID's last answers on the live link (#114).
+  ///
+  /// Null until the PID has answered twice. The poll loop measures it, so
+  /// freshness follows how often the value can actually arrive rather than
+  /// only how often its priority tier hopes it will.
+  final Duration? observedInterval;
+
+  /// Missed refreshes tolerated before a value stops looking live.
+  static const int missedRoundsBeforeStale = 3;
 
   String get formatted {
     final magnitude = value.abs();
@@ -57,7 +68,15 @@ class Reading {
   /// null`, so a sensor that stopped answering kept its last believable number
   /// on screen, styled exactly like a live one.
   Duration get maxAge {
-    final slack = pid.priority.targetInterval * 8;
+    var slack = pid.priority.targetInterval * 8;
+    // Aligned with the real round (#114). A value that arrives every round
+    // on a slow link is still live; one that misses three rounds is not.
+    // Without this a 2 s floor against a 3.6 s single-PID round marked every
+    // gauge stale between updates and it flashed 「過期」 forever.
+    final cadence = observedInterval;
+    if (cadence != null && cadence * missedRoundsBeforeStale > slack) {
+      slack = cadence * missedRoundsBeforeStale;
+    }
     if (slack < const Duration(seconds: 2)) return const Duration(seconds: 2);
     if (slack > const Duration(seconds: 10)) return const Duration(seconds: 10);
     return slack;

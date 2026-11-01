@@ -31,15 +31,12 @@ Bluetooth Classic (RFCOMM/SPP), Bluetooth LE (GATT UART), Wi-Fi (TCP), and a bui
 
 〇Open source
 
-The source is on Codeberg under GPL-3.0, and you can build it yourself:
-https://codeberg.org/ImL1s/telltale
-Mirrors are also on GitLab and GitHub:
-https://gitlab.com/aa22396584/telltale
+The source is on GitLab under GPL-3.0, and you can build it yourself:
 https://gitlab.com/aa22396584/telltale
 
 The paid Play edition has exactly the same features — nothing is held back. It is for people who would rather not build it themselves, and for those willing to support continued development.
 
-F-Droid, community (GitHub/Codeberg/GitLab release) and Google Play builds use three different signing keys. They cannot update each other in place; that is intentional.
+F-Droid, GitLab release and Google Play builds use three different signing keys. They cannot update each other in place; that is intentional.
 
 〇What you need
 
