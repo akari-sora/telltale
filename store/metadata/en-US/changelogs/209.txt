@@ -1,0 +1,1 @@
+Larger Android Auto gauges with day/night colors. Speed now displays as an integer. Tap a dashboard gauge’s info icon to understand its status. Slow PIDs stay fresh between normal updates. Vehicles without 7E8 learn support from all responders; unsupported PIDs stop polling. Tested with Demo/DHU only; reporter vehicles, adapters and real head units remain unverified.
