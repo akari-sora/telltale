@@ -144,7 +144,14 @@ class CarGridDashboardTest {
         val items = template.items()
         assertEquals(expectedTitles, items.map { it.title?.toString() })
         assertEquals(listOf("42 km/h", "1800 RPM", "90 °C", "14.1 V"), items.map { it.text?.toString() })
-        assertEquals(listOf(42.0, 1800.0, 90.0, 14.1), screen.buildDisplayModel(repo.state.value).rows.map { it.graphicValue })
+        val rows = screen.buildDisplayModel(repo.state.value).rows
+        assertEquals(listOf(42.0, 1800.0, 90.0, 14.1), rows.map { it.graphicValue })
+        // The gauge numeral is the native reading without its unit, from the same formatting.
+        assertEquals(listOf("42", "1800", "90", "14.1"), rows.map { it.graphicText })
+        rows.zip(items).forEach { (row, item) ->
+            assertTrue(item.text.toString().startsWith(row.graphicText!!))
+            assertEquals(CarGaugeState.LIVE, row.gaugeState)
+        }
         assertFalse(template.isLoading)
         assertEquals(Action.APP_ICON, template.header!!.startHeaderAction)
         assertEquals("Health", template.header!!.endHeaderActions.single().title?.toString())
@@ -160,6 +167,24 @@ class CarGridDashboardTest {
     }
 
     @Test
+    fun carApi8HostsGetLargeGridItemsAndOlderOrUnknownHostsKeepTheDefaultSize() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput())
+        // Unknown host level (no handshake yet) keeps the default size.
+        assertEquals(GridTemplate.ITEM_SIZE_SMALL, (graphicalScreen(repo).onGetTemplate() as GridTemplate).itemSize)
+        carContext.updateHandshakeInfo(androidx.car.app.HandshakeInfo("test.host", 7))
+        assertEquals(GridTemplate.ITEM_SIZE_SMALL, (graphicalScreen(repo).onGetTemplate() as GridTemplate).itemSize)
+        carContext.updateHandshakeInfo(androidx.car.app.HandshakeInfo("test.host", 8))
+        val screen = graphicalScreen(repo)
+        val large = screen.onGetTemplate() as GridTemplate
+        assertEquals(GridTemplate.ITEM_SIZE_LARGE, large.itemSize)
+        // Same titles and count as before: the size does not change the refresh contract.
+        assertEquals(expectedTitles, large.items().map { it.title?.toString() })
+        repo.submit(frameInput(sequence = 2, speed = live(80.0)))
+        assertEquals(GridTemplate.ITEM_SIZE_LARGE, (screen.onGetTemplate() as GridTemplate).itemSize)
+    }
+
+    @Test
     fun missingUnsupportedCorruptAndStaleSignalsKeepAllFourTilesWithoutGraphicValues() = runTest {
         val repo = createRepository()
         val screen = graphicalScreen(repo)
@@ -169,10 +194,16 @@ class CarGridDashboardTest {
             assertEquals(expectedTitles, items.map { it.title?.toString() })
             assertEquals(4, items.size)
             assertEquals(List(4) { text }, items.map { it.text?.toString() })
-            screen.buildDisplayModel(repo.state.value).rows.forEach { assertNull(it.graphicValue) }
+            screen.buildDisplayModel(repo.state.value).rows.forEach {
+                assertNull(it.graphicValue)
+                assertNull(it.graphicText)
+                assertTrue(it.gaugeState != CarGaugeState.LIVE)
+            }
         }
+        fun states() = screen.buildDisplayModel(repo.state.value).rows.map { it.gaugeState }
 
         assertUnavailableTiles("--") // No frame was received.
+        assertEquals(List(4) { CarGaugeState.NO_DATA }, states())
         val unavailableInputs = listOf(
             CarSignalInput(CarSignalStatus.UNSUPPORTED, 0.0),
             CarSignalInput(CarSignalStatus.UNAVAILABLE, 0.0),
@@ -184,10 +215,18 @@ class CarGridDashboardTest {
         unavailableInputs.forEachIndexed { index, signal ->
             repo.submit(frameInput(sequence = index + 1L, speed = signal, rpm = signal, coolant = signal, voltage = signal))
             assertUnavailableTiles("--")
+            // Speed follows the OBD/host speed resolver, which reports no source rather than unsupported.
+            val expected = if (signal.status == CarSignalStatus.UNSUPPORTED) {
+                listOf(CarGaugeState.NO_DATA) + List(3) { CarGaugeState.UNSUPPORTED }
+            } else {
+                List(4) { CarGaugeState.NO_DATA }
+            }
+            assertEquals(expected, states())
         }
         val stale = CarSignalInput(CarSignalStatus.STALE, 0.0)
         repo.submit(frameInput(sequence = 10, speed = stale, rpm = stale, coolant = stale, voltage = stale))
         assertUnavailableTiles("Stale")
+        assertEquals(List(4) { CarGaugeState.STALE }, states())
     }
 
     @Test
@@ -202,7 +241,11 @@ class CarGridDashboardTest {
 
         assertTrue(repo.state.value is CarTelemetryState.Stale)
         assertEquals(List(4) { "Stale" }, (screen.onGetTemplate() as GridTemplate).items().map { it.text?.toString() })
-        screen.buildDisplayModel(repo.state.value).rows.forEach { assertNull(it.graphicValue) }
+        screen.buildDisplayModel(repo.state.value).rows.forEach {
+            assertNull(it.graphicValue)
+            assertNull(it.graphicText)
+            assertEquals(CarGaugeState.STALE, it.gaugeState)
+        }
     }
 
     @Test
@@ -299,6 +342,7 @@ class CarGridDashboardTest {
         assertTrue(active.warning)
         assertEquals(108.0, active.graphicValue!!, 0.0)
         assertEquals("108 °C · High", activeItem.text?.toString())
+        assertEquals("108", active.graphicText)
         assertNotSame(normalImage, activeItem.image)
 
         repo.submit(frameInput(sequence = 2, coolant = CarSignalInput(CarSignalStatus.STALE, null)))
@@ -306,6 +350,8 @@ class CarGridDashboardTest {
         val unknown = screen.buildDisplayModel(repo.state.value).rows[2]
         assertTrue(unknown.warning)
         assertNull(unknown.graphicValue)
+        assertNull(unknown.graphicText)
+        assertEquals(CarGaugeState.STALE, unknown.gaugeState)
         assertEquals("Stale", (screen.onGetTemplate() as GridTemplate).items()[2].text?.toString())
     }
 
