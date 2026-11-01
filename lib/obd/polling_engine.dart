@@ -233,15 +233,26 @@ final class ObdCapabilitySummary {
     return unknown;
   }
 
+  /// Whether the block after [query] is claimed, by the engine's mask when
+  /// [query] is engine-verified and by the accounting responders' otherwise.
+  bool _continuationClaimed(String query) {
+    final base = int.parse(query.substring(2), radix: 16);
+    final continuation =
+        '01${(base + 0x20).toRadixString(16).toUpperCase().padLeft(2, '0')}';
+    return verifiedBlockIds.contains(query)
+        ? _supportedMode01Requests.contains(continuation)
+        : _responderClaimedMode01Requests.contains(continuation);
+  }
+
   List<String> get contiguousVerifiedBlockIds {
     final result = <String>[];
     for (final query in PidLibrary.supportQueries) {
-      if (!verifiedBlockIds.contains(query)) break;
+      if (!verifiedBlockIds.contains(query) &&
+          !responderAccountedBlockIds.contains(query)) {
+        break;
+      }
       result.add(query);
-      final base = int.parse(query.substring(2), radix: 16);
-      final continuation =
-          '01${(base + 0x20).toRadixString(16).toUpperCase().padLeft(2, '0')}';
-      if (!_supportedMode01Requests.contains(continuation)) break;
+      if (!_continuationClaimed(query)) break;
     }
     return List<String>.unmodifiable(result);
   }
@@ -255,10 +266,7 @@ final class ObdCapabilitySummary {
   bool get contiguousCoverageReachedVerifiedTerminal {
     final blocks = contiguousVerifiedBlockIds;
     if (blocks.isEmpty) return false;
-    final base = int.parse(blocks.last.substring(2), radix: 16);
-    final continuation =
-        '01${(base + 0x20).toRadixString(16).toUpperCase().padLeft(2, '0')}';
-    return !_supportedMode01Requests.contains(continuation);
+    return !_continuationClaimed(blocks.last);
   }
 
   PidCapabilityStatus statusFor(Pid pid) {
@@ -1025,12 +1033,15 @@ class PollingEngine {
         }
         break;
       }
-      final raw = await _readSupportBlock(query);
+      final raw = await _readSupportBlock(query, attemptEpoch);
       if (attemptEpoch != _capabilityDiscoveryEpoch) {
         completed = false;
         break;
       }
       if (raw == null) {
+        // Every controller that could have claimed a later block has
+        // answered, and none claims one: there is nothing left to ask.
+        if (_responderSupportAccounting().chainEnded) break;
         // One transient timeout used to `break`, storing whatever partial set
         // existed as though it were the vehicle's full capability — every PID
         // from the failed block upward greyed out as "此車輛不支援". An
@@ -1090,38 +1101,64 @@ class PollingEngine {
   /// exact positive answer to the block that was asked.
   final Map<String, Map<String, List<int>>> _responderSupportMasks = {};
 
-  void _recordResponderSupportMasks(
+  /// Whether anything on this connection has shown that an engine controller
+  /// exists: its mask in a support reply, or a built-in Mode 01 value (those
+  /// come from the engine only).
+  ///
+  /// The census is a lower bound. A `7E8` that missed the connect-time
+  /// `0100` is still the engine, and treating its car as engine-less would
+  /// label the ECM's own PIDs 此車輛不支援 and lose batching for the session.
+  bool _engineEvidenceSeen = false;
+
+  /// Records each legislated controller's mask from an accepted reply, and
+  /// returns the engine's own mask if it is in there.
+  ///
+  /// Only a reply the parser accepted. A refused one keeps its raw lines in
+  /// `observedFrames`, PCI byte included, where a damaged line can look like a
+  /// mask from a controller that never sent one.
+  List<int>? _recordResponderSupportMasks(
     String query,
     int expectedBase,
     ObdResponse response,
   ) {
-    if (client.addressing.family != ObdBusFamily.can11) return;
-    final frames = response.isSuccess
-        ? response.frames
-        : response.observedFrames;
-    for (final frame in frames) {
+    if (client.addressing.family != ObdBusFamily.can11) return null;
+    if (!response.isSuccess) return null;
+    final engineId = _physicalResponseFor(client.addressing.engineHeader);
+    List<int>? engineRaw;
+    for (final frame in response.frames) {
       final source = frame.sourceId?.toUpperCase();
       if (source == null || !_isLegislated11BitResponse(source)) continue;
       final bytes = frame.bytes;
       if (bytes.length != 6 || bytes[0] != 0x41 || bytes[1] != expectedBase) {
         continue;
       }
+      if (source == engineId) {
+        _engineEvidenceSeen = true;
+        engineRaw ??= List<int>.unmodifiable(bytes);
+        continue;
+      }
       (_responderSupportMasks[query] ??= {})[source] = List<int>.unmodifiable(
         bytes.sublist(2),
       );
     }
+    return engineRaw;
   }
 
-  /// Whether an 11-bit census heard legislated responders and the engine
-  /// controller was not among them.
-  bool get _censusHasNoEngineController {
+  /// Whether an 11-bit census heard legislated responders, the engine
+  /// controller was not among them, and nothing since has shown one.
+  bool get _noEngineControllerOnBus {
     if (client.addressing.family != ObdBusFamily.can11) return false;
+    if (_engineEvidenceSeen || client.enginePhysicalSilent) return false;
     final census = _responders;
     if (census == null) return false;
     final engineId = _physicalResponseFor(client.addressing.engineHeader);
     if (engineId == null) return false;
-    final upper = {for (final id in census) id.toUpperCase()};
-    return !upper.contains(engineId) && upper.any(_isLegislated11BitResponse);
+    final heard = {
+      for (final id in census) id.toUpperCase(),
+      for (final id in _observedResponders) id.toUpperCase(),
+    };
+    return !heard.contains(engineId) &&
+        census.any((id) => _isLegislated11BitResponse(id.toUpperCase()));
   }
 
   static bool _isLegislated11BitResponse(String id) {
@@ -1132,24 +1169,36 @@ class PollingEngine {
   /// Which blocks the non-engine responders have fully accounted for, and
   /// which requests they claim in them.
   ///
-  /// Only on 11-bit CAN, only after a census, and only when the census has no
-  /// engine controller — a vehicle with a `7E8` keeps the engine rule
-  /// unchanged. A block is accounted for when every responder that claims it
-  /// answered it: for `0100` that is every legislated census member, and for
-  /// each later block it is the responders whose previous mask sets the
-  /// continuation bit. One claimer missing leaves that block and every later
-  /// one undecided, because its answer could have claimed anything.
+  /// Only on 11-bit CAN, only after a census, and only while nothing has
+  /// shown an engine controller — once one is heard, the engine rule applies
+  /// as it always did. A block is accounted for when every responder that
+  /// claims it answered it: for `0100` that is every legislated controller
+  /// the census or the `0100` support reply heard, and for each later block
+  /// it is the responders whose previous mask sets the continuation bit. One
+  /// claimer missing leaves that block and every later one undecided, because
+  /// its answer could have claimed anything.
+  ///
+  /// When the last accounted block is claimed by no one, every later block is
+  /// accounted for too, with nothing claimed in it: each controller's own
+  /// mask says it does not implement the support request that would describe
+  /// those PIDs. The engine rule is more cautious about its own chain end, but
+  /// it can lose a value by it; here nothing could be shown either way, so
+  /// leaving those PIDs unknown would only keep them costing dead round trips.
   ///
   /// Nothing is ever positive here. A request a responder does claim is left
   /// unknown, since the value path still takes Mode 01 values from the engine
   /// only.
-  ({Set<String> blocks, Set<String> claimed}) _responderSupportAccounting() {
-    const none = (blocks: <String>{}, claimed: <String>{});
-    if (!_censusHasNoEngineController) return none;
-    final census = _responders!;
+  ///
+  /// [chainEnded] is true when at least one block was accounted for and no
+  /// accounting responder claims the block after the last one.
+  ({Set<String> blocks, Set<String> claimed, bool chainEnded})
+  _responderSupportAccounting() {
+    const none = (blocks: <String>{}, claimed: <String>{}, chainEnded: false);
+    if (!_noEngineControllerOnBus) return none;
     var expected = {
-      for (final id in census)
+      for (final id in _responders!)
         if (_isLegislated11BitResponse(id.toUpperCase())) id.toUpperCase(),
+      ...?_responderSupportMasks['0100']?.keys,
     };
     final blocks = <String>{};
     final claimed = <String>{};
@@ -1166,7 +1215,9 @@ class PollingEngine {
           if ((masks[id]![3] & 0x01) != 0) id,
       };
     }
-    return (blocks: blocks, claimed: claimed);
+    final chainEnded = blocks.isNotEmpty && expected.isEmpty;
+    if (chainEnded) blocks.addAll(PidLibrary.supportQueries);
+    return (blocks: blocks, claimed: claimed, chainEnded: chainEnded);
   }
 
   /// Reads one support block, retrying once, and only accepting a reply that
@@ -1176,7 +1227,7 @@ class PollingEngine {
   /// previous block satisfies: `0120` receiving a stale `41 00 BE 1F A8 13`
   /// decoded the `0100` mask as the `0120` block and produced a plausible,
   /// entirely false support map.
-  Future<List<int>?> _readSupportBlock(String query) async {
+  Future<List<int>?> _readSupportBlock(String query, int attemptEpoch) async {
     final expectedBase = int.tryParse(query.substring(2), radix: 16);
     if (expectedBase == null) return null;
 
@@ -1184,12 +1235,23 @@ class PollingEngine {
       try {
         // The census found no engine controller, so `7E0` has nobody to
         // answer it and the engine-only fallback would drop every reply. Ask
-        // the vehicle as a whole, keep each controller's mask apart, and
-        // return no engine mask — there is none.
-        if (_censusHasNoEngineController) {
+        // the vehicle as a whole and keep each controller's mask apart. If
+        // the engine answers after all, its mask is the engine mask, and the
+        // rest of discovery goes back to addressing it.
+        if (_noEngineControllerOnBus) {
           client.knownResponders = _knownResponders ?? const {};
           final response = await client.sendGlobal(query, owner: pollingOwner);
-          _recordResponderSupportMasks(query, expectedBase, response);
+          // The engine branch returns its mask for the caller to commit after
+          // its own epoch check. These masks are committed here, so a retired
+          // discovery must not get that far.
+          if (attemptEpoch != _capabilityDiscoveryEpoch) return null;
+          final engineRaw = _recordResponderSupportMasks(
+            query,
+            expectedBase,
+            response,
+          );
+          if (engineRaw != null) return engineRaw;
+          _publishCapabilitySummary();
           if (_responderSupportAccounting().blocks.contains(query)) return null;
         } else {
           // Explicitly addressed to the engine rather than to whatever header
@@ -4286,6 +4348,11 @@ class PollingEngine {
     _timeoutStrikes.remove(pid.id);
     _formulaStrikes.remove(pid.id);
     _retryAfter.remove(pid.id);
+    // Built-in Mode 01 values are taken from the engine controller only, so
+    // one of them answering proves there is one, whatever the census missed.
+    if (pid.isMode01 && BusAddressing.isAppDefault(pid.header)) {
+      _engineEvidenceSeen = true;
+    }
     if (_answeredAtLeastOnce.add(pid.id)) {
       _publishCapabilitySummary();
     }

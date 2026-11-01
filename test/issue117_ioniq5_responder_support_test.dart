@@ -4,8 +4,8 @@
 /// Offline replay of the reporter's exported session (app 1.0.25 (2082),
 /// Samsung SM-S9480, Bluetooth Classic `OBDBLE`, adapter `ELM327 v1.5` /
 /// `ICSolution`, ISO 15765-4 CAN 11/500, ATDPN `A6`). The masked copy of that
-/// export is in the #117 internal note; line numbers below are lines of that
-/// export.
+/// export is in the #117 internal note; line numbers below count the export's
+/// own first line (`# [MASKED COPY] ...`) as line 1, not lines of the note.
 ///
 /// Mode 01 replies are verbatim from the export:
 ///
@@ -36,6 +36,7 @@ import 'package:torque_obd/obd/pid/pid_library.dart';
 import 'package:torque_obd/obd/polling_engine.dart';
 import 'package:torque_obd/obd/telemetry.dart';
 import 'package:torque_obd/obd/transport/obd_transport.dart';
+import 'package:torque_obd/ui/screens/pids/pid_manager_screen.dart';
 
 const _noData = 'NO DATA\r\r>';
 const _ok = 'OK\r\r>';
@@ -101,12 +102,31 @@ const _polledInExport = {
 /// The adapter from the #117 export: physical `7E0` is never answered, the
 /// functional `7DF` reaches four modules, none of them `7E8`.
 class _Ioniq5Transport extends BaseObdTransport {
-  _Ioniq5Transport({this.mcuMissesFunctional0120 = false});
+  _Ioniq5Transport({
+    this.mcuMissesFunctional0120 = false,
+    this.census0100,
+    this.later0100,
+    this.physical = const {},
+  });
 
   /// When true, `7EB` does not answer the functional `0120` although its
   /// `0100` mask says the block exists. Not in the export; used to show that
   /// an unaccounted claimer leaves the block undecided.
   final bool mcuMissesFunctional0120;
+
+  /// Synthetic replies for the first headered functional `0100` (the
+  /// census) and every later one. Default: the export's line 131.
+  final String? census0100;
+  final String? later0100;
+
+  /// Synthetic headerless replies on physical `7E0`. Default: `NO DATA`, as
+  /// in the export. Pass a mutable map to make the engine answer later.
+  final Map<String, String> physical;
+
+  /// While set, a headered functional `0100` after the census is held until
+  /// it completes.
+  Completer<void>? holdLater0100;
+  bool laterHeld = false;
 
   final List<String> sent = [];
 
@@ -114,6 +134,7 @@ class _Ioniq5Transport extends BaseObdTransport {
   bool _headersOn = false;
   bool _searchPending = true;
   String? _header;
+  int _headered0100Count = 0;
 
   String get activeHeader => _header ?? '7DF';
 
@@ -136,9 +157,16 @@ class _Ioniq5Transport extends BaseObdTransport {
     final raw = ascii.decode(data, allowInvalid: true).trim();
     final key = raw.toUpperCase().replaceAll(' ', '');
     sent.add(key);
+    final heldBefore = _headered0100Count;
     final body = _respond(key);
     final reply = _echo && raw.isNotEmpty ? '$raw\r$body' : body;
     if (key == 'ATE0') _echo = false;
+    final hold = holdLater0100;
+    if (hold != null && heldBefore >= 1 && _headered0100Count > heldBefore) {
+      laterHeld = true;
+      unawaited(hold.future.then((_) => emitBytes(ascii.encode(reply))));
+      return;
+    }
     scheduleMicrotask(() => emitBytes(ascii.encode(reply)));
   }
 
@@ -193,14 +221,20 @@ class _Ioniq5Transport extends BaseObdTransport {
     }
     if (command.startsWith('AT')) return '?\r>';
 
-    if (_physical) return _noData;
+    if (_physical) {
+      final reply = physical[command];
+      return reply == null ? _noData : '$reply\r\r>';
+    }
     switch (command) {
       case '0100':
         if (_searchPending) {
           _searchPending = false;
           return _searching0100;
         }
-        return _headersOn ? _headered0100 : _headerless0100;
+        if (!_headersOn) return _headerless0100;
+        _headered0100Count++;
+        if (_headered0100Count == 1 && census0100 != null) return census0100!;
+        return later0100 ?? _headered0100;
       case '0120':
         if (mcuMissesFunctional0120) {
           return _headersOn ? _headered0120WithoutMcu : '412080018001\r\r>';
@@ -249,13 +283,17 @@ void main() {
       expect(engine.responders, {'7EA', '7EB', '7EC', '7EE'});
     });
 
+    test('the export covers 22 distinct requests, all in the library', () {
+      expect({
+        for (final pid in _exportPolledPids) pid.modeAndPid.toUpperCase(),
+      }, _polledInExport);
+    });
+
     test(
       'a PID no responder claims is known unsupported in every block',
       () async {
         final engine = await _discovered(_Ioniq5Transport());
-        final pids = _exportPolledPids.toList();
-        expect(pids, isNotEmpty);
-        for (final pid in pids) {
+        for (final pid in _exportPolledPids) {
           expect(
             engine.isKnownUnsupported(pid),
             isTrue,
@@ -265,15 +303,28 @@ void main() {
       },
     );
 
-    test('a PID another module claims is not called unsupported, and its value '
-        'is not taken from any of the three modules that answer it', () async {
-      final engine = await _discovered(_Ioniq5Transport());
+    test('a PID other modules claim stays unknown, and none of their three '
+        'answers becomes a reading', () async {
+      final transport = _Ioniq5Transport();
+      final engine = await _discovered(transport);
       const pid = PidLibrary.distanceWithMil;
       expect(engine.isKnownUnsupported(pid), isFalse);
       expect(
         engine.capabilitySummary.statusFor(pid),
-        isNot(PidCapabilityStatus.unsupported),
+        PidCapabilityStatus.unknown,
       );
+      final sentBefore = transport.sent.length;
+      engine.setActivePids(const [pid]);
+      engine.start();
+      final deadline = DateTime.now().add(const Duration(seconds: 3));
+      while (!engine.current.faults.containsKey(pid.id) &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      await engine.stop();
+      expect(transport.sent.sublist(sentBefore), contains('0121'));
+      expect(engine.current.faults.containsKey(pid.id), isTrue);
+      expect(engine.current.readings.containsKey(pid.id), isFalse);
     });
 
     test('the PID manager status agrees with the poll loop', () async {
@@ -289,10 +340,22 @@ void main() {
       // The engine-scoped evidence is unchanged: nothing claims to be the
       // engine, so no block is engine-verified and nothing is positive.
       expect(summary.verifiedBlockIds, isEmpty);
+      expect(summary.positivelyConfirmedShippedDirectPids, isEmpty);
+      // Every block is accounted for, so the bulk action says nothing is
+      // confirmed rather than that the scan is incomplete.
+      expect(summary.unknownOrUnverifiedBlockCount, 0);
       expect(
-        summary.statusFor(PidLibrary.engineRpm),
-        isNot(PidCapabilityStatus.positive),
+        supportedPidBulkPresentation(
+          summary: summary,
+          active: const <Pid>[],
+          mutationLocked: false,
+        ).state,
+        SupportedPidBulkUiState.zero,
       );
+      // 7EC's 0160 mask claims the 0180 block, which is never asked: the
+      // panel reads 連續涵蓋 01–80（後續未知）, not 連續涵蓋尚未建立.
+      expect(summary.contiguousCoverageThroughPid, 0x80);
+      expect(summary.contiguousCoverageReachedVerifiedTerminal, isFalse);
     });
 
     test('the dashboard gauges read 此車輛不支援 and are not polled again '
@@ -341,5 +404,138 @@ void main() {
         expect(engine.isKnownUnsupported(pid), isFalse, reason: pid.modeAndPid);
       }
     });
+
+    test('a responder chain that ends at 0100 is not asked again', () async {
+      // Synthetic: one controller whose 0100 mask is empty.
+      const onlyBms = '7EC06410000000000\r\r>';
+      final transport = _Ioniq5Transport(
+        census0100: onlyBms,
+        later0100: onlyBms,
+      );
+      final engine = await _discovered(transport);
+      expect(engine.isKnownUnsupported(PidLibrary.engineRpm), isTrue);
+      expect(transport.sent, isNot(contains('0120')));
+      // Nobody claims 0120, so the later blocks are settled too.
+      expect(engine.isKnownUnsupported(PidLibrary.fuelLevel), isTrue);
+      expect(engine.isKnownUnsupported(PidLibrary.engineFuelRate), isTrue);
+      final summary = engine.capabilitySummary;
+      expect(summary.unknownOrUnverifiedBlockCount, 0);
+      expect(summary.contiguousCoverageThroughPid, 0x20);
+      expect(summary.contiguousCoverageReachedVerifiedTerminal, isTrue);
+    });
+
+    test(
+      'polling that starts before discovery stops asking once it lands',
+      () async {
+        // ObdSession starts polling and then runs discovery after the census.
+        final transport = _Ioniq5Transport();
+        final client = await _connect(transport);
+        final engine = PollingEngine(client);
+        addTearDown(engine.dispose);
+        await engine.discoverResponders();
+        const gauges = [PidLibrary.engineRpm, PidLibrary.vehicleSpeed];
+        engine.setActivePids(gauges);
+        engine.start();
+        await engine.discoverSupportedPids();
+        // Let whatever was already queued drain, then watch.
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        final settled = transport.sent.length;
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        await engine.stop();
+        final later = transport.sent.sublist(settled);
+        expect(later, isNot(contains('010C')));
+        expect(later, isNot(contains('010D')));
+        for (final pid in gauges) {
+          expect(engine.current.faults[pid.id], PidFault.unsupported);
+        }
+      },
+    );
+
+    test('a refused reply records nothing', () async {
+      // Synthetic: the census heard only 7EC; its later 0100 line has no PCI
+      // byte, so the parser refuses it, and those six raw bytes must not
+      // become an empty mask.
+      final transport = _Ioniq5Transport(
+        census0100: '7EC06410080000001\r\r>',
+        later0100: '7EC410000000000\r\r>',
+      );
+      final engine = await _discovered(transport);
+      expect(engine.capabilitySummary.responderAccountedBlockIds, isEmpty);
+      expect(engine.isKnownUnsupported(PidLibrary.engineRpm), isFalse);
+      expect(
+        engine.capabilitySummary.statusFor(PidLibrary.engineRpm),
+        PidCapabilityStatus.unknown,
+      );
+    });
+
+    test('an interrupted discovery commits nothing', () async {
+      final transport = _Ioniq5Transport();
+      final client = await _connect(transport);
+      final engine = PollingEngine(client);
+      addTearDown(engine.dispose);
+      await engine.discoverResponders();
+      final hold = transport.holdLater0100 = Completer<void>();
+      final discovery = engine.discoverSupportedPids();
+      final deadline = DateTime.now().add(const Duration(seconds: 2));
+      while (!transport.laterHeld && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(transport.laterHeld, isTrue);
+      engine.interruptCapabilityDiscovery();
+      hold.complete();
+      await discovery;
+      expect(engine.capabilitySummary.responderAccountedBlockIds, isEmpty);
+      expect(engine.isKnownUnsupported(PidLibrary.engineRpm), isFalse);
+    });
+  });
+
+  group('an engine the census missed is still the engine', () {
+    // Synthetic. The engine masks are the issue #109 export's 7E8 masks
+    // (0100 BE3FA813, 0120 A007B011, 0140 FED08410); 7EB is this export's.
+    test('its mask in the discovery reply restores the engine rule', () async {
+      final transport = _Ioniq5Transport(
+        census0100: '7EB06410080000001\r\r>',
+        later0100: '7E8064100BE3FA813\r7EB06410080000001\r\r>',
+        physical: const {'0120': '4120A007B011', '0140': '4140FED08410'},
+      );
+      final engine = await _discovered(transport);
+      final summary = engine.capabilitySummary;
+      expect(summary.verifiedBlockIds, containsAll(['0100', '0120', '0140']));
+      expect(summary.responderAccountedBlockIds, isEmpty);
+      expect(
+        summary.statusFor(PidLibrary.engineRpm),
+        PidCapabilityStatus.positive,
+      );
+      expect(
+        summary.statusFor(PidLibrary.mafRate),
+        PidCapabilityStatus.positive,
+      );
+      expect(engine.isKnownUnsupported(PidLibrary.mafRate), isFalse);
+    });
+
+    test(
+      'a direct answer at recheck wins and ends the no-engine reading',
+      () async {
+        final physical = <String, String>{};
+        final transport = _Ioniq5Transport(physical: physical);
+        final engine = await _discovered(transport);
+        const rpm = PidLibrary.engineRpm;
+        expect(engine.isKnownUnsupported(rpm), isTrue);
+        engine.recheckInterval = const Duration(milliseconds: 200);
+        // Standard J1979 encoding, 1726 rpm, as in the issue #109 test.
+        physical['010C'] = '410C1AF8';
+        engine.setActivePids(const [rpm]);
+        engine.start();
+        final deadline = DateTime.now().add(const Duration(seconds: 4));
+        while (!engine.current.readings.containsKey(rpm.id) &&
+            DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        await engine.stop();
+        expect(engine.current.readings[rpm.id]?.value, closeTo(1726, 0.5));
+        expect(engine.capabilitySummary.responderAccountedBlockIds, isEmpty);
+        expect(engine.isKnownUnsupported(PidLibrary.vehicleSpeed), isFalse);
+      },
+    );
   });
 }
