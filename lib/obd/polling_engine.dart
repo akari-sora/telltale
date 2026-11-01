@@ -2013,23 +2013,34 @@ class PollingEngine {
   /// Whether the no-engine reading was in force the last time it was checked.
   bool _noEngineReadingInForce = false;
 
+  /// PIDs the no-engine reading demoted to unsupported.
+  ///
+  /// Kept apart because a `7F 01 12` refusal and the `015E` rest set the same
+  /// fault, and their backoff has nothing to do with whether there is an
+  /// engine.
+  final Set<String> _restedByNoEngineReading = {};
+
+  /// Marks [pid] unsupported because the masks say no controller has it.
+  void _demoteUnsupported(Pid pid, DateTime now) {
+    _invalidate(pid.id, PidFault.unsupported);
+    _retryAfter[pid.id] = now.add(recheckInterval);
+    if (_noEngineControllerOnBus) _restedByNoEngineReading.add(pid.id);
+  }
+
   /// Notices the no-engine reading ending, whatever ended it.
   ///
   /// Called wherever engine evidence can arrive, and once per poll cycle as a
   /// backstop. When the reading goes, what it called unsupported is unknown
   /// again: those PIDs stop resting until the recheck and are asked next
   /// cycle, and subscribers get a summary without the responder accounting.
-  /// On a no-engine reading there were no engine masks, so nearly every
-  /// `unsupported` fault came from it; a `7F 01 12` refusal or the `015E`
-  /// rest can also set one, and those are asked once more at worst.
+  /// Unsupported faults from anything else keep their backoff.
   void _reconcileEngineEvidence() {
     final inForce = _noEngineControllerOnBus;
     if (_noEngineReadingInForce && !inForce) {
-      for (final entry in _faults.entries) {
-        if (entry.value == PidFault.unsupported) {
-          _retryAfter.remove(entry.key);
-        }
+      for (final id in _restedByNoEngineReading) {
+        if (_faults[id] == PidFault.unsupported) _retryAfter.remove(id);
       }
+      _restedByNoEngineReading.clear();
       _publishCapabilitySummary();
     }
     _noEngineReadingInForce = inForce;
@@ -4266,8 +4277,7 @@ class PollingEngine {
       // to cost nothing — and if the vehicle answers, the answer wins.
       if (_knownUnsupported(pid)) {
         if (_faults[pid.id] != PidFault.unsupported) {
-          _invalidate(pid.id, PidFault.unsupported);
-          _retryAfter[pid.id] = now.add(recheckInterval);
+          _demoteUnsupported(pid, now);
           demoted = true;
           continue;
         }
@@ -4309,14 +4319,16 @@ class PollingEngine {
   ({List<QueuedRequest> batch, bool demoted}) _dropNewlyUnsupported(
     List<QueuedRequest> batch,
   ) {
+    // Only under the no-engine reading. On a car with an engine a queued PID
+    // still gets its send, which a clone with a wrong engine mask can answer.
+    if (!_noEngineControllerOnBus) return (batch: batch, demoted: false);
     final now = DateTime.now();
     var demoted = false;
     final kept = <QueuedRequest>[];
     for (final request in batch) {
       final pid = request.pid;
       if (_knownUnsupported(pid) && _faults[pid.id] != PidFault.unsupported) {
-        _invalidate(pid.id, PidFault.unsupported);
-        _retryAfter[pid.id] = now.add(recheckInterval);
+        _demoteUnsupported(pid, now);
         demoted = true;
         continue;
       }

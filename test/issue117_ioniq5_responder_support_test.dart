@@ -522,6 +522,35 @@ void main() {
   group('an engine the census missed is still the engine', () {
     // Synthetic. The engine masks are the issue #109 export's 7E8 masks
     // (0100 BE3FA813, 0120 A007B011, 0140 FED08410); 7EB is this export's.
+    test('a refusal keeps its backoff when an engine shows', () async {
+      // Synthetic, from the Codex round-4 review: with no engine in the
+      // census, 0121 is refused with 7F 01 12, then a MIL read is answered by
+      // 7E8. The refusal has nothing to do with the no-engine reading and
+      // keeps its backoff.
+      final transport = _Ioniq5Transport(
+        physical: const {'0100': '410080000000', '0121': '7F0112'},
+        functional0101: '7E806410100000000\r\r>',
+      );
+      final engine = await _discovered(transport);
+      const pid = PidLibrary.distanceWithMil;
+      expect(engine.isKnownUnsupported(pid), isFalse);
+      engine.setActivePids(const [pid]);
+      engine.start();
+      final deadline = DateTime.now().add(const Duration(seconds: 4));
+      while (engine.current.faults[pid.id] != PidFault.unsupported &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await engine.stop();
+      expect(engine.current.faults[pid.id], PidFault.unsupported);
+      final before = transport.sent.where((c) => c == '0121').length;
+      expect(await engine.readMilStatus(), isNotNull);
+      engine.start();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await engine.stop();
+      expect(transport.sent.where((c) => c == '0121').length, before);
+    });
+
     test('a 7E8 heard by a MIL read reaches capability subscribers', () async {
       // Synthetic: discovery heard no engine, then a MIL read is answered by
       // 7E8 (06 41 01 00 00 00 00).
