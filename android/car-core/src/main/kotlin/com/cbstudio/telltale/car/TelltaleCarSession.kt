@@ -19,7 +19,7 @@ class TelltaleCarSession(
 ) : Session(), DefaultLifecycleObserver {
 
     private var projectionLease: CarProjectionSessionLeaseRuntime.Token? = null
-    private var renderedAppearance: Pair<Boolean, Int>? = null
+    private var renderedAppearance: Pair<Boolean, Float>? = null
     internal var invalidateTopScreen: () -> Unit = {
         carContext.getCarService(ScreenManager::class.java).top.invalidate()
     }
@@ -53,16 +53,16 @@ class TelltaleCarSession(
     override fun onCarConfigurationChanged(newConfiguration: Configuration) {
         val current = appearance()
         if (current == renderedAppearance) return
-        renderedAppearance = current
         try {
             invalidateTopScreen()
+            renderedAppearance = current
         } catch (_: RuntimeException) {
-            // No screen yet, or the host is not accepting invalidations; the next template uses it.
+            // Keep the previous appearance so the same configuration can retry the invalidation.
         }
     }
 
-    private fun appearance(): Pair<Boolean, Int> =
-        carContext.isDarkMode to carContext.resources.configuration.densityDpi
+    private fun appearance(): Pair<Boolean, Float> =
+        carContext.isDarkMode to carContext.resources.displayMetrics.density
 
     override fun onStart(owner: LifecycleOwner) {
         if (::sessionRuntime.isInitialized) {

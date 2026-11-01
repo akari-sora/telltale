@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.util.DisplayMetrics
 import androidx.annotation.ColorInt
 import androidx.car.app.CarContext
 import androidx.car.app.model.CarIcon
@@ -47,7 +48,7 @@ internal data class CarGaugeReadout(
  * coolant alert region from [CarAlertPolicy].
  *
  * The bitmap targets [BOX_DP] at the car screen's density (CarContext resources describe the car
- * display), capped at [MAX_DENSITY]. Android Auto 17.9 drew Pane images at 185–289 dp.
+ * display), capped at [MAX_DENSITY]. Android Auto 17.9 drew Pane images at 187–289 dp.
  */
 internal class CarGaugeGraphic(private val carContext: CarContext) {
 
@@ -134,14 +135,16 @@ internal class CarGaugeGraphic(private val carContext: CarContext) {
     private fun palette(dark: Boolean): Palette = if (dark) {
         // Night: lower luminance so the image does not glare in a dark cabin.
         Palette(
-            panel = rgb(0x0B, 0x0F, 0x14), track = rgb(0x2A, 0x33, 0x3F),
+            // Track/panel contrast is 4.09:1, including the stale dotted track.
+            panel = rgb(0x0B, 0x0F, 0x14), track = rgb(0x66, 0x75, 0x88),
             primary = rgb(0xDC, 0xE3, 0xEB), secondary = rgb(0x8C, 0x9A, 0xAB),
             accent = rgb(0x2B, 0xC2, 0xAD), warning = rgb(0xF0, 0x4A, 0x5A),
         )
     } else {
         // Day: projected templates keep a dark background, so keep a dark panel with white numerals.
         Palette(
-            panel = rgb(0x15, 0x1B, 0x23), track = rgb(0x34, 0x40, 0x4E),
+            // Track/panel contrast is 4.35:1; text colours stay unchanged.
+            panel = rgb(0x15, 0x1B, 0x23), track = rgb(0x71, 0x81, 0x95),
             primary = rgb(0xFF, 0xFF, 0xFF), secondary = rgb(0xB4, 0xC0, 0xCE),
             accent = rgb(0x35, 0xE0, 0xC8), warning = rgb(0xFF, 0x4D, 0x5E),
         )
@@ -149,7 +152,9 @@ internal class CarGaugeGraphic(private val carContext: CarContext) {
 
     private fun draw(key: Key): Bitmap {
         val bitmap = Bitmap.createBitmap(key.sizePx, key.sizePx, Bitmap.Config.ARGB_8888)
-        bitmap.density = carContext.resources.displayMetrics.densityDpi
+        // Derive metadata from the same capped size as the cache key. Using the uncapped host
+        // density here would shrink the intrinsic image below BOX_DP on hosts above MAX_DENSITY.
+        bitmap.density = (key.sizePx * DisplayMetrics.DENSITY_DEFAULT.toFloat() / BOX_DP).roundToInt()
         val canvas = Canvas(bitmap)
         // Draw in a fixed 480-unit space; scaling keeps strokes and numerals crisp at host density.
         canvas.scale(key.sizePx / UNITS, key.sizePx / UNITS)

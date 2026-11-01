@@ -3,10 +3,12 @@ package com.cbstudio.telltale.car
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.Icon
+import android.util.DisplayMetrics
 import androidx.car.app.model.CarIcon
 import androidx.car.app.model.Pane
 import androidx.car.app.model.Row
 import androidx.car.app.testing.TestCarContext
+import androidx.core.graphics.ColorUtils
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.util.Locale
@@ -100,10 +102,46 @@ class CarGaugeGraphicTest {
         assertEquals(480, image(pair(live(CarMetricIcon.SPEED, 120.0))).width)
     }
 
+    private fun assertCappedImageKeepsItsIntrinsicSize() {
+        val bitmap = image(pair(live(CarMetricIcon.SPEED, 120.0)))
+        assertEquals(640, bitmap.width)
+        assertEquals(640, bitmap.height)
+        val intrinsicDp = bitmap.width * DisplayMetrics.DENSITY_DEFAULT.toFloat() / bitmap.density
+        assertEquals(320f, intrinsicDp, 0.01f)
+    }
+
+    @Test
+    @Config(qualifiers = "xxhdpi")
+    fun imageAtThreeTimesHostDensityKeepsItsIntrinsicSize() {
+        assertCappedImageKeepsItsIntrinsicSize()
+    }
+
     @Test
     @Config(qualifiers = "xxxhdpi")
-    fun imageSizeIsCappedForHighDensityScreens() {
-        assertEquals(640, image(pair(live(CarMetricIcon.SPEED, 120.0))).width)
+    fun imageAtFourTimesHostDensityKeepsItsIntrinsicSize() {
+        assertCappedImageKeepsItsIntrinsicSize()
+    }
+
+    @Test
+    @Config(qualifiers = "xxhdpi")
+    fun cacheReusesTheSameCappedDrawingAcrossHigherHostDensities() {
+        val context = TestCarContext.createCarContext(ApplicationProvider.getApplicationContext())
+        val renderer = CarGaugeGraphic(context)
+        val metrics = context.resources.displayMetrics
+        val originalDensity = metrics.density
+        val originalDpi = metrics.densityDpi
+        try {
+            val readouts = pair(live(CarMetricIcon.SPEED, 120.0))
+            val first = requireNotNull(renderer.dashboard(readouts, false))
+            metrics.density = 4f
+            metrics.densityDpi = 640
+            val second = requireNotNull(renderer.dashboard(readouts, false))
+            assertSame(first, second)
+            assertEquals(320, second.bitmap().density)
+        } finally {
+            metrics.density = originalDensity
+            metrics.densityDpi = originalDpi
+        }
     }
 
     @Test
@@ -196,6 +234,27 @@ class CarGaugeGraphicTest {
         val panel = ((240 * s).toInt() to (228 * s).toInt()) // Inside the panel, below the numeral.
         assertTrue(luma(night.getPixel(panel.first, panel.second)) < luma(day.getPixel(panel.first, panel.second)))
         assertTrue(luma(day.getPixel(panel.first, panel.second)) < 64) // Dark panel in both modes.
+    }
+
+    @Test
+    fun staleDottedTrackHasAtLeastThreeToOneContrastAgainstThePanel() {
+        listOf(false, true).forEach { dark ->
+            val bitmap = image(pair(empty(CarMetricIcon.SPEED, CarGaugeState.STALE)), dark)
+            val s = bitmap.width / 480f
+            val panel = bitmap.getPixel((240 * s).toInt(), (228 * s).toInt())
+            // The top of the half-circle contains only the dotted track and panel, no text.
+            var trackPixels = 0
+            var panelPixels = 0
+            for (y in (14 * s).toInt() until (24 * s).toInt()) {
+                for (x in (200 * s).toInt() until (280 * s).toInt()) {
+                    val pixel = bitmap.getPixel(x, y)
+                    if (pixel == panel) panelPixels++
+                    if (ColorUtils.calculateContrast(pixel, panel) >= 3.0) trackPixels++
+                }
+            }
+            assertTrue("Expected visible stale dots in dark=$dark", trackPixels > 20)
+            assertTrue("Expected gaps between stale dots in dark=$dark", panelPixels > 20)
+        }
     }
 
     @Test

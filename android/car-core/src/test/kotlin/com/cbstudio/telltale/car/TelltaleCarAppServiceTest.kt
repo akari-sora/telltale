@@ -206,6 +206,33 @@ class TelltaleCarAppServiceTest {
         // A host that is not accepting invalidations must not crash the session.
         session.invalidateTopScreen = { throw IllegalStateException("No screen") }
         applyConfiguration(night = startedDark)
+        session.invalidateTopScreen = { invalidations++ }
+        applyConfiguration(night = startedDark) // Failed invalidation is retried for the same appearance.
+        assertEquals(3, invalidations)
+        applyConfiguration(night = startedDark)
+        assertEquals(3, invalidations)
+    }
+
+    @Test
+    fun session_tracksTheDisplayDensityUsedByTheGaugeEvenWhenConfigurationDpiIsUnchanged() {
+        val session = TelltaleCarSession()
+        var invalidations = 0
+        session.invalidateTopScreen = { invalidations++ }
+        SessionController(session, carContext, Intent()).moveToState(Lifecycle.State.CREATED)
+        session.onCreateScreen(Intent())
+
+        val metrics = carContext.resources.displayMetrics
+        val originalDensity = metrics.density
+        val configuration = android.content.res.Configuration(carContext.resources.configuration)
+        try {
+            metrics.density = originalDensity * 1.5f
+            session.onCarConfigurationChanged(configuration)
+            assertEquals(1, invalidations)
+            session.onCarConfigurationChanged(configuration)
+            assertEquals(1, invalidations)
+        } finally {
+            metrics.density = originalDensity
+        }
     }
 
     @Test

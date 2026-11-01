@@ -10,7 +10,7 @@ partial (DHU, demo data); it does not establish Google Play category eligibility
 
 Evidence reviewed: `lib/core/theme/app_colors.dart`, `app_theme.dart`, the
 Home/Health/Powertrain screens and tests in `android/car-core`,
-`docs/android-auto/aa-00-eligibility.md`, the Grid implementation in
+`docs/android-auto/aa-00-eligibility.md`, the Pane implementation in
 `CarHomeScreen.kt` / `CarGaugeGraphic.kt`, and the historical October 11–12
 host evidence recorded in AA-09. Those Pane captures are historical evidence,
 not acceptance of the Pane dashboard. See AA-11 for the current verification
@@ -128,7 +128,7 @@ Day/night contrast and focus/readability need physical head-unit verification.
 Support the host's small landscape, wide and portrait layouts, plus AAOS.
 The host chooses image size, row placement and input behavior. Query
 `CONTENT_LIMIT_TYPE_PANE` once per Home screen (capped at six) and keep that row
-count for its lifetime. Android Auto 17.9 drew the Pane image at 185–289 dp; on
+count for its lifetime. Android Auto 17.9 drew the Pane image at 187–289 dp; on
 800 × 480 the rows scroll beside it. Check scaling, scrolling and rotary/touch
 navigation using the actual host.
 
@@ -168,8 +168,8 @@ repair documented in AA-09; do not create a second OBD/Flutter session.
 
 - Google Play eligibility for OBD telemetry under IoT remains unresolved; owner:
   product/release. See AA-00. This does not block local prototype improvements.
-- Pane Home acceptance on AAOS and physical head units, and image-policy review,
-  remain pending; owner: car UI/release. Only the DHU with demo data was checked
-  (AA-11). No physical vehicle/head-unit acceptance is claimed.
+- Pane Home acceptance on AAOS and physical head units remains NOT_RUN, and
+  image-policy review remains pending; owner: car UI/release. Only the DHU with
+  demo data was checked (AA-11). No physical vehicle/head-unit acceptance is claimed.
 - Richer charts require category/API support and host evidence. Full curves
   remain on the phone.
