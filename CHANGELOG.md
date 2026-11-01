@@ -13,13 +13,14 @@ Dates are the date the build was made, not the date it reached anyone.
   vehicle”; give battery profile commands more of the polling budget. (#117)
 - Android Auto home uses host-rendered rows and one large speed/RPM gauge
   image with day/night palettes. Missing, stale and unsupported readings are
-  never drawn as numbers. Demo-data DHU verification measured 39–61 dp
+  never drawn as numbers. Earlier Demo-data DHU checks measured 39–61 dp
   numerals; real head units and vehicles remain unverified. (!131)
 - Show vehicle speed as an integer on the dashboard, performance page and
   watch dial; other PID formats are unchanged. (#119)
 - Tap each dashboard gauge’s info icon to explain its status. “Unverified”
   means no on-car comparison record for that decode, not an incorrect value.
-  Slow PIDs stay fresh for three missed rounds (90–120 seconds). (#115)
+  Very-low-priority PIDs use a cadence-based stale threshold of about
+  90–120 seconds. (#115)
 - Internally remove unused active-test snapshot aliases and fetch the
   Robolectric runtime from Google’s Maven Central mirror. (!146, !131)
 - Reporter vehicle and adapter validation for #117 and #115 remains pending.
@@ -33,7 +34,7 @@ Dates are the date the build was made, not the date it reached anyone.
   尚未於實體車機或車輛驗證。（!131）
 - 儀表板、效能頁與手錶面盤的車速改為整數，其他 PID 格式維持原樣。（#119）
 - 儀表資訊圖示可解釋狀態；「尚未驗證」表示該解碼尚無實車比對紀錄，
-  不代表數值錯誤。低頻 PID 在漏失三輪（90–120 秒）後才視為過期。（#115）
+  不代表數值錯誤。極低優先級 PID 依更新頻率約 90–120 秒後才視為過期。（#115）
 - 內部移除未使用的主動測試快照別名，並改從 Google Maven Central 鏡像下載
   Robolectric 執行環境。尚未於回報者車輛與轉接器驗證。（!146、!131）
 
