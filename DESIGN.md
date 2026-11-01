@@ -3,9 +3,10 @@
 ## Source of truth
 
 Status: Active for the existing phone design and Android for Cars prototype.
-Last refreshed: 2026-10-13. This change adds a GridTemplate dashboard with
-supplementary gauge images and retains the numerical Pane dashboard. New branch
-host acceptance is pending; it does not establish Google Play category eligibility.
+Last refreshed: 2026-11-01 (Grid gauge visual pass). The 2026-10-13 change added
+a GridTemplate dashboard with supplementary gauge images and retains the numerical
+Pane dashboard. Host acceptance is partial (DHU, demo data); it does not establish
+Google Play category eligibility.
 
 Evidence reviewed: `lib/core/theme/app_colors.dart`, `app_theme.dart`, the
 Home/Health/Powertrain screens and tests in `android/car-core`,
@@ -32,7 +33,8 @@ Telltale is a calm, precise vehicle diagnostic instrument. Trust comes from
 explicit units, data freshness, and the distinction between observed and
 unavailable readings. The phone uses aqua accents, amber caution, and red faults.
 Car displays use the host's typography and native text. Pane icons use semantic
-host colors; Grid images provide separate light/dark palettes. Avoid decorative
+host colors; Grid images use the phone's aqua and red hues on a dark instrument
+face, with separate day and night palettes. Avoid decorative
 imagery, fabricated readings, flashing alerts, and unverified safety claims.
 
 ## Product goals
@@ -43,8 +45,8 @@ This pass adds a grid of static gauge snapshots and redundant warning cues. It
 does not add chart history, pairing, custom driving surfaces, or new navigation.
 Success requires preserved telemetry semantics, passing native template,
 localization, lifecycle and boundary tests, and actual host evidence. Unit/model
-or bitmap tests alone do not establish head-unit acceptance. DHU is NOT_RUN for
-this branch because the installed phone image has only an Android Auto stub.
+or bitmap tests alone do not establish head-unit acceptance. The 2026-11-01 DHU
+run (Android Auto 17.9, demo data) is partial evidence; see AA-10.
 
 ## Personas and jobs
 
@@ -82,14 +84,20 @@ and displayed image size, so a specific four-circle or 2 × 2 layout is not prom
 
 ## Visual language
 
-Grid images are 128 × 128 pixel Bitmap snapshots containing a metric symbol,
-an arc and labelled scale endpoints. Their light/dark palette follows
-`CarContext.isDarkMode`; native title, reading, unit and freshness remain outside
-the bitmap. Display scales are 0–240 km/h, 0–8000 RPM, −40–215 °C and 0–24 V.
-These are visual scales, not redlines, supported PID limits or health thresholds.
-Out-of-scale values clamp only the arc; native formatted readings remain intact.
-Absent or stale values draw no value arc and never substitute zero. Established
-coolant warnings add a warning shape and color while retaining existing text.
+Grid images are 128 dp Bitmap snapshots at the car screen's density (capped at
+2.5×). The reading is the dominant element: a bold numeral with its unit, a value
+arc with a pointer, ticks, and a small metric symbol. The numeral repeats the
+native text's formatted reading from the same model; native title, reading, unit
+and freshness text stay authoritative. Endpoint labels are not drawn because
+Android Auto 17.9 shows Grid images at 64 dp. Day and night palettes follow
+`CarContext.isDarkMode`; both use a dark face, and night is dimmer. Display scales
+are 0–240 km/h, 0–8000 RPM, −40–215 °C and 0–24 V. These are visual scales, not
+redlines, supported PID limits or health thresholds. The only zone is the existing
+coolant alert region (105 °C upward), drawn as a hatched band. Out-of-scale values
+clamp only the arc. Absent, unsupported or stale values draw `--`, no value arc
+and never zero; stale adds a clock and dotted track, unsupported a prohibition
+glyph. Established coolant warnings add a triangle, red rim and red numeral while
+retaining existing text.
 
 Numerical Home, Health and Powertrain retain monochrome vector Row icons with
 `CarColor.DEFAULT` or an established semantic warning tint. The host may override
@@ -123,8 +131,10 @@ The host chooses image size, grid columns, row placement and input behavior.
 Query `CONTENT_LIMIT_TYPE_GRID` once per graphical screen, use a positive limit
 capped at four, and retain that count for its lifetime. A failed query or nonpositive
 limit selects the original Pane fallback; the Pane path still queries its own
-content limit. No item-size/shape API is required. The official 128 × 128 dp image
-guidance is not a guarantee that these 128-pixel sources appear at that size.
+content limit. Large Grid items are requested only on Car API 8 hosts; Android
+Auto 17.9 still drew 64 dp images. At that size the in-image numeral is about a
+23 dp font, below the 24 dp minimum in the Android for Cars visual principles, so
+a Pane with one large composite image is the open alternative (AA-10).
 Check scaling, scrolling and rotary/touch navigation using the actual host.
 
 ## Interaction states
@@ -164,7 +174,9 @@ repair documented in AA-09; do not create a second OBD/Flutter session.
 - Google Play eligibility for OBD telemetry under IoT remains unresolved; owner:
   product/release. See AA-00. This does not block local prototype improvements.
 - New Grid host acceptance, screenshot readability and image-policy review remain
-  pending; owner: car UI/release. AAOS validation is limited to owned read-only
+  pending; owner: car UI/release. Owner decision pending on whether Home should
+  become a Pane with a large 2 × 2 gauge image (measured 185–289 dp on the DHU)
+  to reach readable numeral sizes. AAOS validation is limited to owned read-only
   simulation. No physical vehicle/head-unit acceptance is claimed.
 - Richer charts require category/API support and host evidence. Full curves
   remain on the phone.

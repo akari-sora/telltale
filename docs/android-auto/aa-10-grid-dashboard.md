@@ -1,6 +1,8 @@
 # AA-10 — Grid dashboard prototype
 
-Status: **PARTIAL** (2026-10-13). Local native/Flutter regressions, protected
+Status: **PARTIAL** (2026-10-13; visual pass 2026-11-01, see
+[Visual pass and projected DHU measurements](#visual-pass-and-projected-dhu-measurements)).
+Local native/Flutter regressions, protected
 contracts and three debug builds passed. AAOS lint remains **FAIL_FATAL** with
 one reproduced baseline error; host acceptance and feature CI remain incomplete.
 Google production category review remains **CATEGORY_FIT_UNRESOLVED**.
@@ -76,10 +78,14 @@ that every head unit supports the same layout.
 
 [GridItem](https://developer.android.com/reference/androidx/car/app/model/GridItem)
 recommends a 128 × 128 **dp** image bounding box, with proportional downscaling
-when needed. This implementation supplies 128 × 128 **pixel** Bitmap sources;
-the host controls their displayed size and column count. A specific 2 × 2 layout,
-four large circles, fixed labels or full phone-gauge styling is not guaranteed.
-`setItemSize` / image-shape APIs require Car API 8 and are not required here.
+when needed. Since the 2026-11-01 visual pass the Bitmap is 128 dp at the car
+screen's density (`CarContext` resources describe the car display), capped at
+2.5× (320 px). The host still controls displayed size and column count; on
+Android Auto 17.9 it drew 64 × 64 dp (see the measurements below). A specific
+2 × 2 layout, four large circles or full phone-gauge styling is not guaranteed.
+`GridTemplate.Builder.setItemSize(ITEM_SIZE_LARGE)` (Car API 8) is requested only
+when the negotiated Car API level is at least 8; it is resolved once per screen
+and does not change titles, item count or order. Image-shape APIs are not used.
 `CarProgressBar` requires Car API 9, is experimental and excludes secondary text;
 it is not used.
 
@@ -91,29 +97,44 @@ within the existing dependency and host API contract.
 
 ## Graphics and data truth
 
-`CarGaugeGraphic` draws one static snapshot for a formatted current value, with
-a metric symbol, labelled endpoints and an arc. A bounded eight-entry CarIcon
-cache avoids unbounded retained images. Light/dark pixel palettes follow
-`CarContext.isDarkMode`. A warning includes a redundant shape as well as color;
-native metric/reading/status text remains the accessible source of information.
+`CarGaugeGraphic` draws one static snapshot per tile: a dark instrument face, a
+track with evenly spaced ticks, a value arc with a pointer, and the tile's
+formatted reading as a large numeral with its unit. The numeral is the same
+string the native GridItem text shows, from the same `MetricRow`; the native
+text remains the authoritative, accessible reading, including localized `--`,
+`Stale` and `High`. Endpoint labels and minor ticks were removed in the
+2026-11-01 pass because they were illegible at the host's 64 dp image size.
+A bounded eight-entry CarIcon cache (key: metric, state, reading, arc, warning,
+day/night, pixel size) avoids unbounded retained images; at the 2.5× cap it holds
+at most about 3.3 MB. Day and night palettes follow `CarContext.isDarkMode`
+and use the phone theme's aqua accent and red fault hues. Both keep a dark face,
+because the projected host's template background stayed dark in day mode; night
+lowers luminance. `TelltaleCarSession` invalidates the top screen once when
+day/night or density changes, because the library does not request a new
+template on a configuration change. A warning adds a triangle and a red rim as
+well as color.
 
-| Metric | Labelled display scale | Meaning |
+| Metric | Display scale (ticks only; endpoints unlabelled in the image) | Meaning |
 | --- | --- | --- |
 | Speed | 0–240 km/h | Visual scale only; not a speed limit or vehicle capability claim |
 | RPM | 0–8000 RPM | Visual scale only; not a redline or engine health threshold |
 | Coolant | −40–215 °C | Visual scale only; warning decisions remain with the existing alert repository |
 | Module Voltage | 0–24 V | Visual scale only; not an inferred charging-system normal range |
 
-Values outside these scales clamp only the arc; native formatted readings are
-not clamped to image endpoints. Images do not create telemetry, interpolate
+Values outside these scales clamp only the arc; the native text and the image
+numeral keep the real formatted reading. The only zone drawn is the coolant alert
+region from `CarAlertPolicy.DEFAULT_COOLANT.enterThreshold` (105 °C) to the scale
+end, as a hatched band; no RPM redline, voltage band or speed zone is drawn. Images do not create telemetry, interpolate
 between samples, infer history, or label a vehicle healthy. The existing speed
 resolver remains responsible for OBD/host source arbitration. A valid host speed
 can still appear when an OBD signal is absent; its source follows the existing
 resolver contract, not a guessed substitute.
 
 Missing, unavailable, unsupported, awaiting and incompatible data keep the
-existing `--` native text and no value arc. Stale readings keep explicit `Stale`
-text and no current-value arc. Zero remains a valid value only when it is an
+existing `--` native text and no value arc; the image draws `--`, plus a
+prohibition glyph for unsupported signals. Stale readings keep explicit `Stale`
+text and no current-value arc; the image draws `--`, a clock glyph and a dotted
+track. Only a LIVE, finite reading draws a numeral, arc or pointer. Zero remains a valid value only when it is an
 actual finite live reading. A live minimum gets an endpoint marker; missing
 readings get neither an arc nor a marker. Native text is always retained. Existing
 coolant warning lifecycle, including unknown-after-warning state, is preserved.
@@ -170,7 +191,7 @@ Auto or physical head-unit acceptance. No protected gate was relaxed.
 | Host text and day/night | One bounded change to the documented host GPU produced complete day frames. Night still lost static native/system text while dark gauges remained visible; final portrait night was not repeated | PARTIAL — night readability NOT_VERIFIED; portrait night NOT_RUN |
 | Host task quota | Verify actual steps for non-loading DTC Summary item-count changes, loading/refresh transitions and Back operations; static path depth alone does not establish quota acceptance | PENDING — existing dynamic DTC-list behavior remains a host-validation gap |
 | Feature CI execution | Project configuration is valid; no feature pipeline result has been created/claimed in this receipt | PENDING |
-| Projected DHU | Installed phone image exposes only an Android Auto stub; no functioning projection host is available | NOT_RUN |
+| Projected DHU | 2026-11-01: DHU 2.0 with a Galaxy Note9 (Android 10, Android Auto 17.9.664044), carProto debug build. Grid, Values and Health rendered; demo-simulator readings, day and night. No warning, stale or unsupported lane on the host. See the visual-pass section | PARTIAL — no-data and demo-live lanes only |
 | Physical vehicle/head unit | No real vehicle operation or compatibility acceptance in this task | NOT_RUN |
 | Google category/image-policy review | Formal IoT/OBD eligibility and dashboard image review remain unresolved; production promotion is outside this task | NOT_RUN — CATEGORY_FIT_UNRESOLVED |
 
@@ -186,12 +207,15 @@ host evidence remain PARTIAL/PENDING or NOT_RUN, not a pass inferred from UI tes
 - AAOS candidate v3 APK SHA-256: `45e38320d45ff09edbd66a19d7764bd1e9fa2c818e425ea93f2ae9df149feb70`
 - Published code branch: `feature/aa-grid-instruments-20261013`; code push/readback matched `4aea4710f98c18afe89855e9c6a615d599b2dfb2`. Final documentation-tip readback is retained in the task completion receipt.
 - Simulator evidence and raw image hashes: [AAOS receipt](aa-10/evidence/aaos/receipt.json). Owned processes, private ADB and runtime data were removed; original AVDs/global ADB were not changed.
-- Projected DHU: NOT_RUN (Android Auto stub only)
+- Projected DHU: PARTIAL on 2026-11-01 (see the visual-pass section); the original
+  v3 candidate above was not run on the DHU
 - Production category review: CATEGORY_FIT_UNRESOLVED
 
 
 ## Actual AAOS host captures
 
+These images show the superseded 2026-10-13 gauge design (light discs, endpoint
+labels); host evidence for the 2026-11-01 design is in the visual-pass section.
 These unmodified images come from the owned API33 Automotive simulator and the
 exact APK above. They do not establish Android Auto or physical vehicle acceptance.
 The host chose four tiles in a single row at both tested sizes.
@@ -213,3 +237,49 @@ was rejected and was not escalated to new permissions or root.
 shows the dark gauge palette while native/system text is absent. It is retained
 as a failure observation, not a night-readability pass. Host OBD warning, stale
 and unsupported-PID lanes were NOT_RUN; their native/model tests are separate.
+
+
+## Visual pass and projected DHU measurements
+
+Date 2026-11-01. Source: branch `aa-visual-polish` (MR !131 merged with main
+`d182c5be`). No GitLab issue, MR note or repository document recording a
+complaint about the Android Auto look was found; the request came from the owner.
+
+Setup: Desktop Head Unit 2.0 (mac-arm64) over ADB to a Galaxy Note9, Android 10,
+Android Auto 17.9.664044. The carProto debug APK was installed under its own
+`.carproto` package. Readings come from the app's built-in Demo simulator, not a
+vehicle. HostConfig logged library 1.8.0-rc01, host max Car API 8.
+
+| DHU configuration | Car display passed to the app | Grid image on screen | Grid columns |
+| --- | --- | --- | --- |
+| 800 × 480, 160 dpi | density 160 | 64 × 64 px = 64 dp | 3 (list scrolls) |
+| 1280 × 720, 160 dpi | 770 × 700 dp, density 160 | 64 × 64 px = 64 dp | 3 |
+| 1920 × 1080, 160 dpi | density 160 | 64 × 64 px = 64 dp | 4 |
+| 1920 × 1080, 240 dpi | 770 × 700 dp, density 240 | 96 × 96 px = 64 dp | 3 |
+
+`setItemSize(ITEM_SIZE_LARGE)` was sent with negotiated Car API 8 and made no
+visible difference on this host. At 64 dp the in-image numeral measured about
+16 px cap height for two digits and 13 px for four digits at 160 dpi, roughly a
+23 dp font, while the host's own secondary reading text ("80 km/h") measured
+17 px. That is below the 24 dp minimum and 32 dp primary size in the
+[Android for Cars visual principles](https://developers.google.com/cars/design/design-foundations/visual-principles)
+(written for Android Automotive OS; the closest official guidance for projection).
+The same page requires 4.5:1 contrast. The redesigned image makes the reading the
+dominant element of the tile, but the Grid template cannot make it larger on this host.
+
+A throwaway experiment (not committed) placed the same four gauges in one 2 × 2
+image on a `PaneTemplate` (`Pane.Builder.setImage`, Car API 4, 480 × 480 dp box),
+with the native rows beside it. The host drew that image at 186–192 dp
+(800 × 480 and 1280 × 720), 289 dp (1920 × 1080 at 160 dpi) and 185 dp
+(1920 × 1080 at 240 dpi): about 94, 144 and 93 dp per gauge. At 1280 × 720 the
+two-digit numeral measured 24 px cap height instead of 16 px. Adopting that
+layout would replace the Grid home and its per-tile actions, and needs an owner
+decision, refresh/quota checks and its own image-policy review.
+
+On the DHU night capture the gauge faces used the night palette (#0B0F14) and the
+day capture the day palette (#151B23). The demo's 1 Hz refresh would also repaint
+them, so the configuration-change hook itself has unit-test evidence only.
+
+Not covered on the host: warning, stale and unsupported lanes, a physical head
+unit, and any vehicle. Unit tests and the review PNGs cover those image states.
+
