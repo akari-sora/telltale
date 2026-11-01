@@ -9,7 +9,11 @@
       "scope": "production-package",
       "role": "runtime",
       "title": "Powertrain Battery Catalog & Bundled Third-Party Notices/Licences",
-      "owning_issues": [11, 69, 96],
+      "owning_issues": [
+        11,
+        69,
+        96
+      ],
       "source_of_truth_paths": {
         "catalog": "assets/powertrain_battery/powertrain_battery_catalog.json",
         "manifest": "assets/powertrain_battery/powertrain_battery_catalog.manifest.json",
@@ -19,8 +23,8 @@
       "catalog_manifest": {
         "manifest_file": "assets/powertrain_battery/powertrain_battery_catalog.manifest.json",
         "target_file": "assets/powertrain_battery/powertrain_battery_catalog.json",
-        "expected_sha256": "93d9b2f873b8dec349f77cdccef14201c9b0f85f873c53a67d318b5665c1fc01",
-        "expected_size_bytes": 454033,
+        "expected_sha256": "bafcc7e6a1bccce54ae55cedc934abd813757f13a89dbddd1d0dd3bd0fcda118",
+        "expected_size_bytes": 447580,
         "expected_schema_version": 3,
         "profile_count": 221
       },
@@ -71,7 +75,9 @@
       "title": "Ircama ELM327 Emulator Independent Test Oracle",
       "ownership": "third-party",
       "independence": "independent-third-party-oracle",
-      "owning_issues": [11],
+      "owning_issues": [
+        11
+      ],
       "distribution_channel": "external-fetch-only",
       "distribution_decision": "not_distributed",
       "commercial_use_decision": "restricted",
@@ -119,7 +125,9 @@
       "title": "Telltale Chaos Proxy Fault Injector Test Reference",
       "ownership": "project-owned",
       "independence": "project-owned-fault-injector",
-      "owning_issues": [11],
+      "owning_issues": [
+        11
+      ],
       "distribution_channel": "source-repository",
       "distribution_decision": "approved",
       "commercial_use_decision": "allowed",
@@ -157,7 +165,9 @@
       "title": "Telltale Freeze-Frame Reference Oracle",
       "ownership": "project-owned",
       "independence": "project-owned-reference",
-      "owning_issues": [11],
+      "owning_issues": [
+        11
+      ],
       "distribution_channel": "source-repository",
       "distribution_decision": "approved",
       "commercial_use_decision": "allowed",
@@ -195,7 +205,9 @@
       "title": "Telltale Mode 08 Replay Reference Server & Fixtures",
       "ownership": "project-owned",
       "independence": "project-owned-reference",
-      "owning_issues": [11],
+      "owning_issues": [
+        11
+      ],
       "distribution_channel": "source-repository",
       "distribution_decision": "approved",
       "commercial_use_decision": "allowed",
@@ -241,7 +253,9 @@
       "title": "python-udsoncan Independent Read-Only UDS Reference Library",
       "ownership": "third-party",
       "independence": "independent-third-party-reference",
-      "owning_issues": [13],
+      "owning_issues": [
+        13
+      ],
       "distribution_channel": "external-fetch-only",
       "distribution_decision": "not_distributed",
       "commercial_use_decision": "allowed",

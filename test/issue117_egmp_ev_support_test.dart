@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:torque_obd/diagnostics/uds/uds_read_codec.dart';
 import 'package:torque_obd/diagnostics/uds/uds_read_types.dart';
 import 'package:torque_obd/obd/addressing.dart';
@@ -15,6 +17,8 @@ import 'package:torque_obd/obd/powertrain_battery/powertrain_battery_probe.dart'
 import 'package:torque_obd/obd/powertrain_battery/powertrain_battery_profile.dart';
 import 'package:torque_obd/obd/powertrain_battery/profile_pid_installer.dart';
 import 'package:torque_obd/obd/transport/ble_transport.dart';
+import 'package:torque_obd/state/pid_registry.dart';
+import 'package:torque_obd/state/powertrain_battery_profiles.dart';
 import 'package:universal_ble/universal_ble.dart';
 
 import 'support/fake_elm327.dart';
@@ -318,11 +322,61 @@ void main() {
         expect(fakeBle.writes[0].length, 20);
         expect(fakeBle.writes[1].length, 6);
 
-        // Verify expanded e-GMP profile installs cleanly.
+        // Verify expanded e-GMP profile installs cleanly and resolves aliases.
         final snapshot = await PowertrainBatteryCatalogAsset.load(rootBundle);
         final egmp = snapshot.byId('hyundai_kia_egmp')!;
         final pids = PowertrainProfilePidInstaller.build(egmp);
-        expect(pids.length, greaterThanOrEqualTo(40));
+        expect(pids, hasLength(27));
+
+        SharedPreferences.setMockInitialValues(const {
+          'powertrain_battery_experiments_enabled_v1': true,
+        });
+        final prefs = await SharedPreferences.getInstance();
+        final container = ProviderContainer(
+          overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+        );
+        addTearDown(container.dispose);
+        final authNotifier = container.read(
+          powertrainProfileAuthorizationsProvider.notifier,
+        );
+        final validation = authNotifier.authorize(
+          snapshot: snapshot,
+          profileId: 'hyundai_kia_egmp',
+          vehicleYear: 2023,
+          connectionGeneration: 1,
+        );
+        expect(validation?.canInstall, isTrue);
+        expect(authNotifier.isAuthorized('hyundai_kia_egmp'), isTrue);
+        expect(
+          authNotifier.isAuthorized('hyundai-ioniq5-egmp-2021-2024-community'),
+          isTrue,
+        );
+
+        final consents = container.read(
+          powertrainExperimentalProbeConsentsProvider.notifier,
+        );
+        final cmdKey = egmp.commands.first.wireKey;
+        expect(
+          consents
+              .authorize(
+                snapshot: snapshot,
+                profileId: 'hyundai_kia_egmp',
+                commandKey: cmdKey,
+                vehicleYear: 2023,
+                connectionGeneration: 1,
+              )
+              .accepted,
+          isTrue,
+        );
+        final lease = consents.take(
+          snapshot: snapshot,
+          profileId: 'hyundai_kia_egmp',
+          commandKey: cmdKey,
+          vehicleYear: 2023,
+          connectionGeneration: 1,
+        );
+        expect(lease, isNotNull);
+        consents.complete(lease!);
       },
     );
   });

@@ -1880,7 +1880,23 @@ class ObdSession extends Notifier<ObdConnectionState> {
             !_awaitingResumeValidation) {
           syncActivePids(ref.read(activePidsProvider));
           if (!authorityEngine.supportDiscoveryComplete) {
-            unawaited(authorityEngine.discoverSupportedPids());
+            unawaited(
+              authorityEngine.discoverSupportedPids().then((_) async {
+                await _probeAndConfigurePowertrainBatteryProfile(
+                  generation: authorityGeneration,
+                  client: authorityClient,
+                  engine: authorityEngine,
+                );
+              }),
+            );
+          } else {
+            unawaited(
+              _probeAndConfigurePowertrainBatteryProfile(
+                generation: authorityGeneration,
+                client: authorityClient,
+                engine: authorityEngine,
+              ),
+            );
           }
         }
       },
@@ -1946,7 +1962,23 @@ class ObdSession extends Notifier<ObdConnectionState> {
             !_awaitingResumeValidation) {
           syncActivePids(ref.read(activePidsProvider));
           if (!engine.supportDiscoveryComplete) {
-            unawaited(engine.discoverSupportedPids());
+            unawaited(
+              engine.discoverSupportedPids().then((_) async {
+                await _probeAndConfigurePowertrainBatteryProfile(
+                  generation: generation,
+                  client: client,
+                  engine: engine,
+                );
+              }),
+            );
+          } else {
+            unawaited(
+              _probeAndConfigurePowertrainBatteryProfile(
+                generation: generation,
+                client: client,
+                engine: engine,
+              ),
+            );
           }
         }
       },
@@ -2838,11 +2870,54 @@ class ObdSession extends Notifier<ObdConnectionState> {
   /// [_automaticReconnectTarget].
   int? _clearAttemptedGeneration;
 
+  String? _probedPowertrainProfileId;
+
   /// Canonical Powertrain/Battery catalog profile ID auto-detected on the
   /// current connection (such as `hyundai-ioniq5-egmp-2021-2024-community`),
   /// or `null` if none was matched.
   String? get detectedPowertrainProfileId =>
-      _engine?.detectedPowertrainProfileId;
+      _probedPowertrainProfileId ?? _engine?.detectedPowertrainProfileId;
+
+  Future<String?> _probeAndConfigurePowertrainBatteryProfile({
+    required int generation,
+    required Elm327Client client,
+    required PollingEngine engine,
+  }) async {
+    if (_generation != generation ||
+        !identical(_client, client) ||
+        !identical(_engine, engine) ||
+        !state.isConnected ||
+        !_foreground ||
+        _pausedByLifecycle ||
+        _awaitingResumeValidation) {
+      return null;
+    }
+    final detected = engine.detectedPowertrainProfileId;
+    if (detected == null) return null;
+    if (!ref.read(powertrainBatteryExperimentalAccessProvider)) {
+      return detected;
+    }
+    final wireOwner = _PowertrainProbeWireOwner(
+      pauseEpoch: _pauseEpoch,
+      connectionGeneration: generation,
+      experimentalAccessEpoch: _experimentalAccessEpoch,
+    );
+    final bmsConfirmed = await _runDiagnosticOneShot<bool>(
+      operationName: 'probeEgmpBms',
+      action: () => PowertrainBatteryProbe.probeEgmpBms(
+        client,
+        owner: wireOwner,
+      ),
+    );
+    if (bmsConfirmed &&
+        _generation == generation &&
+        identical(_client, client) &&
+        identical(_engine, engine)) {
+      _probedPowertrainProfileId = detected;
+      syncActivePids(ref.read(activePidsProvider));
+    }
+    return detected;
+  }
 
   Future<String?> readVin({DateTime? deadline}) async {
     final engine = _engine;
@@ -2960,6 +3035,7 @@ class ObdSession extends Notifier<ObdConnectionState> {
     // deliberate disconnect, a link that dropped, the provider being disposed.
     // The recording is worth keeping in all of them, and this is the one place
     // that does not have to enumerate them.
+    _probedPowertrainProfileId = null;
     _stopPeriodicSnapshots();
     unawaited(_saveTranscriptSnapshot());
     final chained = _drainTeardown(_teardownDraining);

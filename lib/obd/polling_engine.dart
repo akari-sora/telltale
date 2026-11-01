@@ -26,6 +26,8 @@ import 'pid/formula_engine.dart';
 import 'pid/pid.dart';
 import 'pid/pid_library.dart';
 import 'pid/priority_scheduler.dart';
+import 'powertrain_battery/powertrain_battery_probe.dart';
+import 'powertrain_battery/powertrain_battery_profile.dart';
 import 'telemetry.dart';
 import 'telemetry_demand.dart';
 import 'transport/obd_transport.dart';
@@ -5238,9 +5240,11 @@ class PollingEngine {
   bool get isEvOrEgmpDetected {
     if (_vcuAnsweredUdsVin) return true;
     final resp = _responders;
-    if (resp != null &&
-        !resp.contains('7E8') &&
-        (resp.contains('7EA') || resp.contains('7EC'))) {
+    if (PowertrainBatteryProbe.isEgmpMode01Signature(
+      responders: resp ?? const {},
+      supportedMode01Pids: _supported ?? const {},
+      mode0100Mask: _lastMode0100Mask,
+    )) {
       return true;
     }
     for (final entry in _mode0100MasksByResponder.entries) {
@@ -5248,10 +5252,6 @@ class PollingEngine {
           _isEgmpMode0100Mask(entry.value)) {
         return true;
       }
-    }
-    final mask = _lastMode0100Mask;
-    if (mask != null && _isEgmpMode0100Mask(mask)) {
-      return true;
     }
     final vin = _lastDetectedVin;
     if (vin != null &&
@@ -5265,8 +5265,9 @@ class PollingEngine {
 
   /// Canonical Powertrain/Battery catalog profile ID auto-detected for this
   /// vehicle, or `null` when no specific EV profile signature was matched.
-  String? get detectedPowertrainProfileId =>
-      isEvOrEgmpDetected ? 'hyundai-ioniq5-egmp-2021-2024-community' : null;
+  String? get detectedPowertrainProfileId => isEvOrEgmpDetected
+      ? PowertrainBatteryCatalog.hyundaiKiaEgmpProfileId
+      : null;
 
   static bool _isEgmpMode0100Mask(List<int> mask) {
     if (mask.length != 4) return false;

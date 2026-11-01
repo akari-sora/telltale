@@ -43,6 +43,21 @@ AUTHORIZED_OBD_EXACT_FILES = {
     # blob so future telemetry changes still need a new contract review.
     "lib/obd/telemetry.dart":
         "b69f7c3692d2441227ae18606736ab0a5f0bd6de11a24d16161536031ae76f21",
+    # #117 E-GMP UDS VIN / BMS multi-frame addressing, flow control, ISO-TP
+    # reassembly, probe helpers, and BLE line accumulator. Content-bound so
+    # subsequent edits to these shared OBD primitives require a new review.
+    "lib/obd/elm_can_addressing.dart":
+        "ed3083acb582019ea04468d1cb44c36e14596dce6441e2a6457968cf057d67a8",
+    "lib/obd/elm_flow_control.dart":
+        "ba4a3cc4a4c020150e52b59c14e1368332a83ec199b5326a727cde4653559688",
+    "lib/obd/iso_tp_assembler.dart":
+        "917c1a69fc0e1ce8ec2b70c4fba0e4efae79fb2c8dbfff2a80fb17dac19fd47a",
+    "lib/obd/powertrain_battery/powertrain_battery_probe.dart":
+        "5712bbb65903a5beecdac355c4fd4df53ea9c227020c356379f0bc7c7a010ad8",
+    "lib/obd/powertrain_battery/powertrain_battery_profile.dart":
+        "ec455026e2e75965e20f7c09db7eec67a5566dfd7d6d43f05a44721fc1b712b3",
+    "lib/obd/transport/ble_transport.dart":
+        "9a0cbda467323782beebb4e671695f0910eca949d68e8165edae3a06a4de39af",
 }
 
 
