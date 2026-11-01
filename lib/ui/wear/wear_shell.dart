@@ -449,6 +449,7 @@ class _WearDialPageState extends ConsumerState<_WearDialPage> {
               hue: hue,
               redlineFrom: pid.redlineFrom,
               isStale: snapshot.isStale(pid),
+              decimalPlaces: pid.id == PidLibrary.vehicleSpeed.id ? 0 : null,
             ),
           ),
         ),

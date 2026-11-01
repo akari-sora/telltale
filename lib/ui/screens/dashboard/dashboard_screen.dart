@@ -670,6 +670,7 @@ class _GaugeTile extends StatelessWidget {
                 maxValue: pid.maxValue,
                 label: pid.shortName.isEmpty ? pid.name : pid.shortName,
                 units: pid.units,
+                decimalPlaces: pid.id == PidLibrary.vehicleSpeed.id ? 0 : null,
                 hue: hue,
                 redlineFrom: pid.redlineFrom,
                 // A value older than its PID's own refresh target is not live,
