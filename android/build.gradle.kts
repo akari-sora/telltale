@@ -1,7 +1,29 @@
 allprojects {
     repositories {
         google()
+        // Central repeatedly rate-limits this 152 MiB Robolectric runtime on CI.
+        // Use Google's Central mirror for this exact artifact, including its POM;
+        // Gradle requires a module's metadata and artifacts from the same repository.
+        exclusiveContent {
+            forRepository {
+                maven {
+                    url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
+                }
+            }
+            filter {
+                includeVersion("org.robolectric", "nativeruntime-dist-compat", "1.0.19")
+            }
+        }
         mavenCentral()
+    }
+}
+
+// Robolectric downloads instrumented Android SDKs inside the test JVM, separately
+// from Gradle's repositories. Use the same Central mirror for those downloads.
+subprojects {
+    tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+        systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2/")
+        systemProperty("robolectric.dependency.repo.id", "google-maven-central")
     }
 }
 

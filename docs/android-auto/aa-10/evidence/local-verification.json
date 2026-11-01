@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "record_date": "2026-10-13",
+  "overall_status": "PARTIAL",
+  "scope": "Local engineering evidence, not feature CI or head-unit acceptance",
+  "raw_logs_location": "Task sibling evidence directory: ../evidence/ from repository root",
+  "sources": {
+    "earlier_tool_baseline": "7edc00761886efe092d85a668c5a75b13e14e2b8",
+    "integrated_main": "75bc622a0d4e5aa6cc7837b58ae7cfbe69c3bbf1",
+    "grid_implementation": "2a70ed15e5952b6c5d67fb482b703f7429fb5e6b",
+    "short_grid_voltage_title": "89acccfbbb914774fd38f49250906b4498e1038c",
+    "ci_configuration": "4aea4710f98c18afe89855e9c6a615d599b2dfb2"
+  },
+  "local_checks": {
+    "integrated_flutter": {
+      "status": "PASS",
+      "passed": 4386,
+      "opt_in_skips": 23,
+      "analyzer_issues": 0,
+      "logs": [
+        "merged-flutter-tests.log",
+        "merged-flutter-analyze.log"
+      ]
+    },
+    "required_localization": {
+      "status": "PASS",
+      "source_sha": "2a70ed15e5952b6c5d67fb482b703f7429fb5e6b",
+      "passed": 12,
+      "total": 12,
+      "logs": [
+        "merged-l10n-required.log",
+        "merged-l10n-required/receipt.json"
+      ]
+    },
+    "feature_native": {
+      "status": "PASS",
+      "car_core": {
+        "tests": 260,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "field": {
+        "tests": 66,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "car_proto": {
+        "tests": 66,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "logs": [
+        "android-final-summary.json",
+        "merged-android-final.log",
+        "short-title-final.log",
+        "final-head-app-tests.log"
+      ]
+    },
+    "native_lint": {
+      "car_core": {
+        "status": "PASS",
+        "errors": 0,
+        "warnings": 6
+      },
+      "field": {
+        "status": "PASS",
+        "errors": 0,
+        "warnings": 12
+      },
+      "car_proto": {
+        "status": "PASS",
+        "errors": 0,
+        "warnings": 12
+      },
+      "logs": [
+        "android-final-summary.json",
+        "merged-android-final.log"
+      ]
+    },
+    "debug_builds": {
+      "status": "PASS",
+      "variants": [
+        "field",
+        "carProto",
+        "automotive"
+      ],
+      "logs": [
+        "merged-android-final.log",
+        "short-title-final.log"
+      ]
+    },
+    "aaos_lint": {
+      "status": "FAIL_FATAL",
+      "errors": 1,
+      "warnings": 3,
+      "issue": "Instantiatable: CarAppActivity must extend Activity",
+      "baseline_reproduced": true,
+      "baseline_source_sha": "7edc00761886efe092d85a668c5a75b13e14e2b8",
+      "integration_android_sources_unchanged": true,
+      "gate_relaxed": false,
+      "logs": [
+        "aaos-lint-final.log",
+        "baseline-aaos-lint.log"
+      ]
+    },
+    "integrated_car_contracts": {
+      "status": "PASS",
+      "tests": 32,
+      "manifest_isolation": "PASS",
+      "pigeon_drift": 0,
+      "logs": [
+        "final-car-contracts.log",
+        "merged-manifest-isolation.log",
+        "merged-pigeon-codegen.log"
+      ]
+    },
+    "earlier_baseline_tooling": {
+      "status": "PASS",
+      "source_sha": "7edc00761886efe092d85a668c5a75b13e14e2b8",
+      "python_tool_tests": 914,
+      "aa08_pytest_passed": 20,
+      "mode08_unit_tests": 17,
+      "mode08_required": "PASS",
+      "ws10_s1_required": "PASS",
+      "ws10_s2_debug_passed": 11,
+      "ws10_s2_release_passed": 11,
+      "latest_feature_ci_result": false,
+      "logs": [
+        "python-tools.log",
+        "python-aa08-pytest.log",
+        "python-mode08.log",
+        "mode08-required.log",
+        "ws10-s1-required.log",
+        "ws10-s2-native/summary.json"
+      ]
+    }
+  },
+  "ci_configuration": {
+    "source_sha": "4aea4710f98c18afe89855e9c6a615d599b2dfb2",
+    "project_lint_valid": true,
+    "project_lint_warnings": 0,
+    "runner_id": 57287642,
+    "runner_name": "r9700x-docker",
+    "runner_type": "project_type",
+    "runner_status": "online",
+    "tags": [
+      "r9700x",
+      "grok-box",
+      "ondemand",
+      "telltale"
+    ],
+    "main_executor_evidence": {
+      "pipeline_id": 2941350409,
+      "job_id": 17131555614,
+      "executor": "Docker",
+      "feature_acceptance": false
+    },
+    "feature_pipeline_result": "PENDING",
+    "logs": [
+      "ci-lint-result.json",
+      "runner-9700x.json",
+      "main-pipeline-jobs.json",
+      "main-9700x-job-trace.log"
+    ]
+  },
+  "aaos_candidate": {
+    "source_sha": "89acccfbbb914774fd38f49250906b4498e1038c",
+    "native_file_manifest_sha256": "683fdb118e9fc9f6c19b458438bb42ecffca1db28ad40729d0000dabee334e2d",
+    "apk_sha256": "45e38320d45ff09edbd66a19d7764bd1e9fa2c818e425ea93f2ae9df149feb70",
+    "host_status": "PARTIAL",
+    "observed_layout": "Four tiles in one row; circular gauge graphics visible",
+    "remaining": [
+      "Night native/system-text readability NOT_VERIFIED",
+      "Steady moving-entry and synchronized speed/capture timing NOT_VERIFIED",
+      "Dynamic DTC task quota NOT_VERIFIED",
+      "Host OBD warning/stale/unsupported scenarios NOT_RUN",
+      "Portrait final night NOT_RUN"
+    ],
+    "text_renderer_limitation": "Completed one bounded switch from SwiftShader to the official host GPU. Complete day frames obtained; night still loses static native/system text. Night readability NOT_VERIFIED.",
+    "observed_cases": [
+      "Complete landscape 1024x768 and portrait 800x1280 day Grid",
+      "Live simulated host 0 km/h and minimum marker",
+      "Tile -> numerical Pane -> Powertrain, direct Health",
+      "Unknown speed blocked diagnostic entry; fresh zero allowed unavailable diagnostic page",
+      "Transient 48 km/h and proportional arc observed, with incomplete static text and unverified timing"
+    ],
+    "authoritative_host_receipt": "aaos/receipt.json"
+  },
+  "not_run": {
+    "projected_dhu": "Installed phone image only provides an Android Auto stub",
+    "physical_vehicle_head_unit": "No real vehicle operation or physical acceptance in task scope",
+    "google_category_image_review": "CATEGORY_FIT_UNRESOLVED"
+  },
+  "remote_sha": null,
+  "earlier_tooling_scope": "Initial uncommitted Grid feature working tree based on 7edc0076; not a clean-baseline or final-snapshot attestation.",
+  "aaos_host_receipt": "aaos/receipt.json"
+}
