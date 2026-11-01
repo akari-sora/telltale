@@ -207,10 +207,13 @@ void main() {
     // rendered text.
     DialGauge gauge() => tester.widget<DialGauge>(find.byType(DialGauge));
     expect(gauge().label, 'Speed');
+    // #119: road speed is integer-resolution; no fixed ".0" on the watch.
+    expect(gauge().decimalPlaces, 0);
 
     await tester.tap(find.byKey(const Key('wear_dial')));
     await tester.pump(const Duration(milliseconds: 400));
     expect(gauge().label, 'RPM');
+    expect(gauge().decimalPlaces, isNull);
 
     await tester.tap(find.byKey(const Key('wear_dial')));
     await tester.pump(const Duration(milliseconds: 400));
