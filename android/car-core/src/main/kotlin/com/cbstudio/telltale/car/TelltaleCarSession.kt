@@ -47,8 +47,8 @@ class TelltaleCarSession(
 
     /**
      * The library updates CarContext resources on a host configuration change but does not ask for
-     * a new template. Grid gauge bitmaps depend on day/night mode and density, so re-render the top
-     * screen once when either changes. Same template, titles and item count: a refresh, not a step.
+     * a new template. The Home gauge image depends on day/night mode and density, so re-render the top
+     * screen once when either changes. Same template, row count and titles: a refresh, not a step.
      */
     override fun onCarConfigurationChanged(newConfiguration: Configuration) {
         val current = appearance()

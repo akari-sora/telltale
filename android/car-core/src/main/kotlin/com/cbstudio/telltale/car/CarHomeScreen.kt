@@ -5,10 +5,8 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
+import androidx.car.app.model.CarIcon
 import androidx.car.app.model.Header
-import androidx.car.app.model.GridItem
-import androidx.car.app.model.GridTemplate
-import androidx.car.app.model.ItemList
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
@@ -40,11 +38,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Read-only live telemetry dashboard using host-owned templates (AA-03, AA-05, AA-10).
+ * Read-only live telemetry dashboard using host-owned templates (AA-03, AA-05, AA-10, AA-11).
  *
  * Implements:
- * - Optional four-metric Grid dashboard, with item clicks opening the numerical Pane.
- * - Dynamic row limit adaptation via [ConstraintManager.CONTENT_LIMIT_TYPE_PANE] (4 to 6 rows).
+ * - A PaneTemplate whose rows carry the native readings. With [graphicalDashboard] on a Car API 4+
+ *   host it adds one large gauge image beside the rows (AA-11); without it, rows only.
+ * - Row limit from [ConstraintManager.CONTENT_LIMIT_TYPE_PANE] (capped at 6), resolved once per
+ *   screen so row count and titles never change between refreshes.
  * - Prioritized metric presentation: Speed, RPM, Coolant, Voltage, MAP, Engine Load.
  * - Multi-source speed arbitration (AA-05): OBD-first with host CarInfo fallback (display/raw).
  * - In-template alert presentation for coolant temperature (AA-05).
@@ -65,13 +65,10 @@ class CarHomeScreen(
     private val hostSpeedRepository: CarHostSpeedRepository = sessionRuntime?.hostSpeedRepository ?: CarHostSpeedRepository(),
     private val alertRepository: CarAlertRepository = sessionRuntime?.alertRepository ?: CarAlertRepository(),
     private val graphicalDashboard: Boolean = false,
-    private val gridContentLimitProvider: (() -> Int)? = null,
-    private val numericBackAction: Boolean = false,
 ) : Screen(carContext), DefaultLifecycleObserver {
 
     companion object {
         const val MAX_PANE_ROWS = 6
-        const val MAX_GRID_ITEMS = 4
         const val DEFAULT_PANE_LIMIT = 4
         const val THROTTLE_INTERVAL_MS = 1_000L
     }
@@ -82,7 +79,7 @@ class CarHomeScreen(
         val icon: CarMetricIcon,
         val warning: Boolean = false,
         val graphicValue: Double? = null,
-        // Grid only: the formatted number the native text shows, and what the gauge may claim.
+        // Gauge image only: the formatted number the native text shows, and what the image may claim.
         val graphicText: String? = null,
         val gaugeState: CarGaugeState = CarGaugeState.NO_DATA,
     )
@@ -91,29 +88,25 @@ class CarHomeScreen(
         val rows: List<MetricRow>,
     )
 
-    // Resolve once per screen: data support/connection changes must never alter
-    // Grid item count or titles (the host's task-step refresh contract).
-    private val gridLimit: Int? by lazy {
-        if (!graphicalDashboard) null else try {
-            val limit = gridContentLimitProvider?.invoke()
-                ?: (constraintManager ?: carContext.getCarService(ConstraintManager::class.java))
-                    .getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_GRID)
-            if (limit > 0) minOf(limit, MAX_GRID_ITEMS) else null
-        } catch (_: Exception) {
-            null // Keep the existing numerical Pane when host constraints are unavailable.
-        }
-    }
+    // Resolve once per screen: PaneTemplate refreshes require the same row count and row titles.
+    private val rowLimit: Int by lazy { resolveContentLimit() }
     private val gaugeGraphic by lazy { CarGaugeGraphic(carContext) }
 
-    // Car API 8 hosts may draw larger Grid items (bigger images, fewer per row). Resolved once so
-    // the template never changes shape between refreshes; older hosts keep the default size.
-    // Observed 2026-11-01: Android Auto 17.9 on the DHU negotiated API 8 but still drew 64 dp images.
-    private val largeGridItems: Boolean by lazy {
-        try {
-            carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_8
+    // Pane.Builder.setImage requires Car API 4. Resolved once; an unknown level means rows only.
+    private val paneImageSupported: Boolean by lazy {
+        graphicalDashboard && try {
+            carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_4
         } catch (_: Exception) {
             false
         }
+    }
+
+    /** Builds the Pane image; a failure leaves the Pane with its rows only. Replaceable in tests. */
+    internal var dashboardImage: (List<MetricRow>, Boolean) -> CarIcon? = { rows, dark ->
+        gaugeGraphic.dashboard(
+            rows.map { CarGaugeReadout(it.icon, it.graphicValue, it.graphicText, it.gaugeState, it.warning) },
+            dark,
+        )
     }
 
     private var internalScope: CoroutineScope? = null
@@ -275,9 +268,7 @@ class CarHomeScreen(
         }
 
     internal fun buildDisplayModel(state: CarTelemetryState): DisplayModel {
-        val candidates = buildCandidateRows(state)
-        val limit = gridLimit ?: resolveContentLimit()
-        return DisplayModel(candidates.take(limit))
+        return DisplayModel(buildCandidateRows(state).take(rowLimit))
     }
 
     private fun buildCandidateRows(state: CarTelemetryState): List<MetricRow> {
@@ -319,7 +310,7 @@ class CarHomeScreen(
 
         val frame = (state as? CarTelemetryState.Current)?.frame
         fun graphicNumber(value: Double?, format: String): Double? {
-            if (gridLimit == null || value == null || !value.isFinite()) return null
+            if (!graphicalDashboard || value == null || !value.isFinite()) return null
             // Match the visible native reading, so invisible precision changes stay quiet.
             val rounded = format.format(Locale.US, value).toDouble()
             return if (rounded == 0.0) 0.0 else rounded
@@ -338,7 +329,7 @@ class CarHomeScreen(
             CarSignalStatus.UNSUPPORTED -> CarGaugeState.UNSUPPORTED
         }
         fun signalState(signal: CarSignalValue?): CarGaugeState {
-            if (gridLimit == null) return CarGaugeState.NO_DATA
+            if (!graphicalDashboard) return CarGaugeState.NO_DATA
             return when (state) {
                 is CarTelemetryState.Stale ->
                     if (state.lastReceivedAtElapsedMs != null) CarGaugeState.STALE else CarGaugeState.NO_DATA
@@ -391,7 +382,7 @@ class CarHomeScreen(
         }
         // An unknown-after-warning coolant without a reading is shown as Stale by the native text.
         val coolantState = signalState(frame?.coolantC).let {
-            if (gridLimit != null && alertSnapshot?.coolant == CarAlertPhase.UNKNOWN_AFTER_WARNING &&
+            if (graphicalDashboard && alertSnapshot?.coolant == CarAlertPhase.UNKNOWN_AFTER_WARNING &&
                 (coolantBase == missingText || coolantBase == staleText)
             ) CarGaugeState.STALE else it
         }
@@ -406,7 +397,7 @@ class CarHomeScreen(
                 carContext.getString(R.string.car_home_speed_title), speedText, CarMetricIcon.SPEED,
                 graphicValue = if (speedLive) graphicNumber(resolvedSpeed.speedKmh, "%.0f") else null,
                 graphicText = if (speedLive) graphicText(resolvedSpeed.speedKmh, "%.0f") else null,
-                gaugeState = if (gridLimit == null) {
+                gaugeState = if (!graphicalDashboard) {
                     CarGaugeState.NO_DATA
                 } else {
                     statusState(resolvedSpeed.status, resolvedSpeed.speedKmh)
@@ -428,7 +419,7 @@ class CarHomeScreen(
                 gaugeState = coolantState,
             ),
             MetricRow(
-                carContext.getString(if (gridLimit != null) R.string.car_grid_voltage_title else R.string.car_home_voltage_title),
+                carContext.getString(R.string.car_home_voltage_title),
                 voltageText, CarMetricIcon.VOLTAGE,
                 graphicValue = graphicValue(frame?.controlModuleVoltageV, "%.1f"),
                 graphicText = liveText(frame?.controlModuleVoltageV, "%.1f"),
@@ -443,8 +434,6 @@ class CarHomeScreen(
         val model = buildDisplayModel(repository.state.value)
         lastRenderedModel = model
 
-        if (gridLimit != null) return gridTemplate(model)
-
         val paneBuilder = Pane.Builder()
         for (row in model.rows) {
             paneBuilder.addRow(
@@ -455,34 +444,25 @@ class CarHomeScreen(
                     .build(),
             )
         }
-
-        val secondaryAction = Action.Builder()
-            .setTitle(carContext.getString(
-                if (numericBackAction) R.string.car_action_powertrain else R.string.car_action_health,
-            ))
-            .setOnClickListener {
-                if (numericBackAction) {
-                    screenManager.push(
-                        CarPowertrainScreen(
-                            carContext = carContext,
-                            repository = repository,
-                            constraintManager = constraintManager,
-                            contentLimitProvider = contentLimitProvider,
-                            clock = clock,
-                            sessionRuntime = sessionRuntime,
-                            speedResolver = speedResolver,
-                            hostSpeedRepository = hostSpeedRepository,
-                            alertRepository = alertRepository,
-                        ),
-                    )
-                } else openHealth()
+        // The image only repeats what the rows say, so any failure simply leaves it out.
+        if (paneImageSupported) {
+            val image = try {
+                dashboardImage(model.rows, carContext.isDarkMode)
+            } catch (_: Exception) {
+                null
             }
+            image?.let(paneBuilder::setImage)
+        }
+
+        val healthAction = Action.Builder()
+            .setTitle(carContext.getString(R.string.car_action_health))
+            .setOnClickListener { openHealth() }
             .build()
 
         val header = Header.Builder()
             .setTitle(carContext.getString(R.string.car_app_name))
-            .setStartHeaderAction(if (numericBackAction) Action.BACK else Action.APP_ICON)
-            .addEndHeaderAction(secondaryAction)
+            .setStartHeaderAction(Action.APP_ICON)
+            .addEndHeaderAction(healthAction)
             .build()
 
         return PaneTemplate.Builder(paneBuilder.build())
@@ -505,60 +485,5 @@ class CarHomeScreen(
                 alertRepository = alertRepository,
             ),
         )
-    }
-
-    private fun openNumericDashboard() {
-        screenManager.push(
-            CarHomeScreen(
-                carContext = carContext,
-                repository = repository,
-                constraintManager = constraintManager,
-                contentLimitProvider = contentLimitProvider,
-                clock = clock,
-                sessionRuntime = sessionRuntime,
-                speedResolver = speedResolver,
-                hostSpeedRepository = hostSpeedRepository,
-                alertRepository = alertRepository,
-                numericBackAction = true,
-            ),
-        )
-    }
-
-    private fun gridTemplate(model: DisplayModel): GridTemplate {
-        val list = ItemList.Builder()
-        for (metric in model.rows) {
-            list.addItem(
-                GridItem.Builder()
-                    .setTitle(metric.title)
-                    .setText(metric.text)
-                    .setImage(
-                        gaugeGraphic.icon(
-                            metric.icon,
-                            metric.graphicValue,
-                            metric.graphicText,
-                            metric.gaugeState,
-                            metric.warning,
-                            carContext.isDarkMode,
-                        ),
-                        GridItem.IMAGE_TYPE_LARGE,
-                    )
-                    .setOnClickListener { openNumericDashboard() }
-                    .build(),
-            )
-        }
-        val healthAction = Action.Builder()
-            .setTitle(carContext.getString(R.string.car_action_health))
-            .setOnClickListener { openHealth() }
-            .build()
-        val header = Header.Builder()
-            .setTitle(carContext.getString(R.string.car_app_name))
-            .setStartHeaderAction(Action.APP_ICON)
-            .addEndHeaderAction(healthAction)
-            .build()
-        val builder = GridTemplate.Builder()
-            .setHeader(header)
-            .setSingleList(list.build())
-        if (largeGridItems) builder.setItemSize(GridTemplate.ITEM_SIZE_LARGE)
-        return builder.build()
     }
 }

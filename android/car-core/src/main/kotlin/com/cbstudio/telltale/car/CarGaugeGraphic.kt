@@ -16,7 +16,7 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-/** What a Grid gauge may claim about its signal. Only [LIVE] may draw a reading or value arc. */
+/** What a gauge may claim about its signal. Only [LIVE] may draw a reading or value arc. */
 internal enum class CarGaugeState {
     LIVE,
     STALE,
@@ -24,52 +24,52 @@ internal enum class CarGaugeState {
     UNSUPPORTED,
 }
 
+/** One reading for the dashboard image, built from the same model row as its native Pane text. */
+internal data class CarGaugeReadout(
+    val metric: CarMetricIcon,
+    val value: Double?,
+    /** The formatted number without its unit, exactly as the native row text shows it. */
+    val reading: String?,
+    val state: CarGaugeState,
+    val warning: Boolean,
+)
+
 /**
- * Supplementary instrument image for a GridItem (IMAGE_TYPE_LARGE).
+ * The single large image beside the Home Pane rows (Pane.Builder.setImage, Car API 4).
  *
- * The bitmap repeats the tile's formatted reading as a large numeral so the value is the most
- * prominent element of the tile. The native GridItem text is still built from the same
- * [CarHomeScreen.MetricRow] and remains the authoritative, accessible reading, including the
- * localized `--`, `Stale` and `High` copy. Only a [CarGaugeState.LIVE] reading with a finite value
- * draws a number or a value arc; every other state draws `--`, never zero or a remembered value.
+ * The image exists for glanceability: Home passes Speed and RPM, each drawn as a large numeral
+ * with its unit under a thin arc. Coolant and voltage stay as Pane rows, where a coolant warning
+ * keeps its red row icon and `High` text. The native rows, built from the same model, remain the
+ * authoritative and accessible readings, including the localized `--`, `Stale` and `High` text.
+ * Only a [CarGaugeState.LIVE] reading with a finite value draws a number or value arc; every other
+ * state draws `--` and, for stale or unsupported signals, a marker that reads without colour. Arc
+ * ranges are unlabelled visual scales, not thresholds; the only zone the renderer can draw is the
+ * coolant alert region from [CarAlertPolicy].
  *
- * Labelled ranges are visual scales, not warning thresholds. The only zone drawn is the coolant
- * alert region, read from [CarAlertPolicy.DEFAULT_COOLANT] so the image cannot invent a threshold.
- * Warning state comes from the alert repository and is shown by shape as well as colour.
- *
- * The image targets GridItem's 128 x 128 dp box at the car screen's density (CarContext resources
- * describe the car display), capped so that the bounded cache stays small.
+ * The bitmap targets [BOX_DP] at the car screen's density (CarContext resources describe the car
+ * display), capped at [MAX_DENSITY]. Android Auto 17.9 drew Pane images at 185–289 dp.
  */
 internal class CarGaugeGraphic(private val carContext: CarContext) {
 
     private data class Scale(
         val min: Double,
         val max: Double,
-        val tickStep: Double,
         val unit: String,
         /** Start of the existing alert region, or null when the app has no alert for the metric. */
         val alertFrom: Double? = null,
     )
 
     private data class Key(
-        val metric: CarMetricIcon,
-        val state: CarGaugeState,
-        val reading: String?,
-        val sweep: Float?,
-        val warning: Boolean,
+        val readouts: List<CarGaugeReadout>,
         val dark: Boolean,
         val sizePx: Int,
     )
 
     private class Palette(
-        @ColorInt val face: Int,
-        @ColorInt val rim: Int,
+        @ColorInt val panel: Int,
         @ColorInt val track: Int,
-        @ColorInt val majorTick: Int,
-        @ColorInt val minorTick: Int,
         @ColorInt val primary: Int,
         @ColorInt val secondary: Int,
-        @ColorInt val muted: Int,
         @ColorInt val accent: Int,
         @ColorInt val warning: Int,
     )
@@ -80,33 +80,36 @@ internal class CarGaugeGraphic(private val carContext: CarContext) {
     }
 
     /**
-     * @param reading the tile's formatted number without its unit, exactly as the native text shows it.
+     * Returns the dashboard image for the first [READOUTS] readouts, stacked as wide panels, or null
+     * when it cannot be drawn (the Pane then shows its rows only). A 2 × 2 layout was measured on the
+     * DHU and rejected: four-digit RPM reached only 24 dp cap height at 1280 × 720 (AA-11).
      */
-    fun icon(
-        metric: CarMetricIcon,
-        value: Double?,
-        reading: String?,
-        state: CarGaugeState,
-        warning: Boolean,
-        dark: Boolean,
-    ): CarIcon {
-        val scale = scale(metric)
-        val live = state == CarGaugeState.LIVE && value != null && value.isFinite() && !reading.isNullOrBlank()
-        val sweep = if (live) {
-            (((value!!.coerceIn(scale.min, scale.max) - scale.min) / (scale.max - scale.min)) * SWEEP).toFloat()
-        } else null
-        val key = Key(
-            metric = metric,
-            // A LIVE state without a finite reading is drawn exactly like missing data.
-            state = if (state == CarGaugeState.LIVE && !live) CarGaugeState.NO_DATA else state,
-            reading = if (live) reading else null,
-            sweep = sweep,
-            warning = warning,
-            dark = dark,
-            sizePx = sizePx(),
-        )
-        return cache.getOrPut(key) {
-            CarIcon.Builder(IconCompat.createWithBitmap(draw(key, scale))).build()
+    fun dashboard(readouts: List<CarGaugeReadout>, dark: Boolean): CarIcon? {
+        val shown = readouts.take(READOUTS).map(::normalized)
+        if (shown.isEmpty()) return null
+        val key = Key(shown, dark, sizePx())
+        cache[key]?.let { return it }
+        return try {
+            CarIcon.Builder(IconCompat.createWithBitmap(draw(key))).build().also { cache[key] = it }
+        } catch (_: Exception) {
+            null
+        } catch (_: OutOfMemoryError) {
+            null
+        }
+    }
+
+    /** A LIVE state without a finite value and reading is drawn exactly like missing data. */
+    private fun normalized(r: CarGaugeReadout): CarGaugeReadout {
+        scale(r.metric) // Unsupported metrics fail before anything is drawn.
+        val live = r.state == CarGaugeState.LIVE && r.value != null && r.value.isFinite() && !r.reading.isNullOrBlank()
+        return if (live) {
+            r
+        } else {
+            r.copy(
+                value = null,
+                reading = null,
+                state = if (r.state == CarGaugeState.LIVE) CarGaugeState.NO_DATA else r.state,
+            )
         }
     }
 
@@ -117,199 +120,213 @@ internal class CarGaugeGraphic(private val carContext: CarContext) {
     }
 
     private fun scale(metric: CarMetricIcon): Scale = when (metric) {
-        CarMetricIcon.SPEED -> Scale(0.0, 240.0, 40.0, "km/h")
-        CarMetricIcon.RPM -> Scale(0.0, 8_000.0, 1_000.0, "RPM")
+        CarMetricIcon.SPEED -> Scale(0.0, 240.0, "km/h")
+        CarMetricIcon.RPM -> Scale(0.0, 8_000.0, "RPM")
         CarMetricIcon.TEMPERATURE -> Scale(
-            -40.0, 215.0, 40.0, "°C",
+            -40.0, 215.0, "°C",
             alertFrom = CarAlertPolicy.DEFAULT_COOLANT.enterThreshold,
         )
-        CarMetricIcon.VOLTAGE -> Scale(0.0, 24.0, 4.0, "V")
+        CarMetricIcon.VOLTAGE -> Scale(0.0, 24.0, "V")
         else -> throw IllegalArgumentException("No graphic scale for $metric")
     }
 
     // Hues follow the phone theme (lib/core/theme/app_colors.dart): aqua accent, red fault.
     private fun palette(dark: Boolean): Palette = if (dark) {
-        // Night: lower luminance everywhere so the tiles do not glare in a dark cabin.
+        // Night: lower luminance so the image does not glare in a dark cabin.
         Palette(
-            face = rgb(0x0B, 0x0F, 0x14), rim = rgb(0x25, 0x2E, 0x3A),
-            track = rgb(0x1F, 0x28, 0x33), majorTick = rgb(0x63, 0x6F, 0x7D), minorTick = rgb(0x3B, 0x45, 0x51),
-            primary = rgb(0xDC, 0xE3, 0xEB), secondary = rgb(0x87, 0x96, 0xA8), muted = rgb(0x56, 0x61, 0x6E),
+            panel = rgb(0x0B, 0x0F, 0x14), track = rgb(0x2A, 0x33, 0x3F),
+            primary = rgb(0xDC, 0xE3, 0xEB), secondary = rgb(0x8C, 0x9A, 0xAB),
             accent = rgb(0x2B, 0xC2, 0xAD), warning = rgb(0xF0, 0x4A, 0x5A),
         )
     } else {
-        // Day: still a dark instrument face (projected templates keep a dark background), with
-        // brighter strokes and white numerals for contrast in sunlight.
+        // Day: projected templates keep a dark background, so keep a dark panel with white numerals.
         Palette(
-            face = rgb(0x15, 0x1B, 0x23), rim = rgb(0x2E, 0x39, 0x47),
-            track = rgb(0x2A, 0x35, 0x44), majorTick = rgb(0x9C, 0xA9, 0xB8), minorTick = rgb(0x5E, 0x6A, 0x78),
-            primary = rgb(0xFF, 0xFF, 0xFF), secondary = rgb(0xB4, 0xC0, 0xCE), muted = rgb(0x7C, 0x87, 0x94),
+            panel = rgb(0x15, 0x1B, 0x23), track = rgb(0x34, 0x40, 0x4E),
+            primary = rgb(0xFF, 0xFF, 0xFF), secondary = rgb(0xB4, 0xC0, 0xCE),
             accent = rgb(0x35, 0xE0, 0xC8), warning = rgb(0xFF, 0x4D, 0x5E),
         )
     }
 
-    private fun draw(key: Key, scale: Scale): Bitmap {
+    private fun draw(key: Key): Bitmap {
         val bitmap = Bitmap.createBitmap(key.sizePx, key.sizePx, Bitmap.Config.ARGB_8888)
         bitmap.density = carContext.resources.displayMetrics.densityDpi
         val canvas = Canvas(bitmap)
-        // Draw in a fixed 128-unit space; scaling keeps every stroke and glyph crisp at host density.
-        canvas.scale(key.sizePx / BOX_DP.toFloat(), key.sizePx / BOX_DP.toFloat())
+        // Draw in a fixed 480-unit space; scaling keeps strokes and numerals crisp at host density.
+        canvas.scale(key.sizePx / UNITS, key.sizePx / UNITS)
         val p = palette(key.dark)
-        val ink = if (key.warning) p.warning else p.accent
-        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-
-        // Instrument face. Its own background keeps contrast independent of the host's template colour.
-        fill.color = p.face
-        canvas.drawCircle(C, C, FACE_R, fill)
-        stroke.color = if (key.warning) p.warning else p.rim
-        stroke.strokeWidth = if (key.warning) 3f else 1.5f
-        canvas.drawCircle(C, C, FACE_R - stroke.strokeWidth / 2f, stroke)
-
-        drawAlertZone(canvas, scale, p)
-
-        // Track: solid normally, dotted when the reading is stale.
-        val arc = RectF(C - ARC_R, C - ARC_R, C + ARC_R, C + ARC_R)
-        val stale = key.state == CarGaugeState.STALE
-        stroke.apply {
-            strokeWidth = if (stale) STALE_W else ARC_W
-            strokeCap = if (stale) Paint.Cap.BUTT else Paint.Cap.ROUND
-            color = if (stale) p.minorTick else p.track
-            pathEffect = if (stale) DashPathEffect(floatArrayOf(3.5f, 4.5f), 0f) else null
+        key.readouts.forEachIndexed { i, r ->
+            drawWide(canvas, RectF(0f, i * 244f, UNITS, i * 244f + 236f), r, p)
         }
-        canvas.drawArc(arc, START, SWEEP, false, stroke)
-        stroke.pathEffect = null
-        stroke.strokeCap = Paint.Cap.ROUND
-        stroke.strokeWidth = ARC_W
-
-        drawTicks(canvas, scale, p)
-
-        key.sweep?.let { sweep ->
-            stroke.color = ink
-            if (sweep > 0f) canvas.drawArc(arc, START, sweep, false, stroke)
-            // Pointer: also marks a live minimum, so a real zero is never confused with missing data.
-            val angle = Math.toRadians((START + sweep).toDouble())
-            val x = C + ARC_R * cos(angle).toFloat()
-            val y = C + ARC_R * sin(angle).toFloat()
-            fill.color = ink
-            canvas.drawCircle(x, y, 8f, fill)
-            fill.color = p.face
-            canvas.drawCircle(x, y, 3f, fill)
-        }
-
-        drawStatusGlyph(canvas, key, p)
-        drawReading(canvas, key, scale, p)
         return bitmap
     }
 
-    private fun drawAlertZone(canvas: Canvas, scale: Scale, p: Palette) {
-        val from = scale.alertFrom ?: return
-        val start = START + fraction(scale, from) * SWEEP
-        val end = START + SWEEP
-        // A hatched band: the region reads by pattern, not only by its warm colour.
-        val band = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 2f
-            color = p.warning
-            alpha = 210
+    /**
+     * A wide readout: thin half-circle arc, the unit (or a state marker) at the top inside it, and
+     * the numeral using the full width underneath.
+     */
+    private fun drawWide(canvas: Canvas, cell: RectF, r: CarGaugeReadout, p: Palette) {
+        val scale = scale(r.metric)
+        drawPanel(canvas, cell, r, p)
+        val cx = cell.centerX()
+        val cy = cell.top + 214f
+        drawArc(canvas, cx, cy, 196f, 180f, 180f, 9f, r, scale, p)
+        val unitPaint = unitPaint(44f, p)
+        val unit = if (r.reading != null) scale.unit else null
+        val markerSize = if (hasMarker(r)) 22f else 0f
+        val unitWidth = unit?.let(unitPaint::measureText) ?: 0f
+        val gap = if (markerSize > 0f && unit != null) 18f else 0f
+        var x = cx - (markerSize * 2.3f + gap + unitWidth) / 2f
+        if (markerSize > 0f) {
+            drawMarker(canvas, x + markerSize * 1.15f, cell.top + 74f, markerSize, r, p)
+            x += markerSize * 2.3f + gap
         }
-        val r = ZONE_R
-        canvas.drawArc(RectF(C - r, C - r, C + r, C + r), start, end - start, false, band)
-        var a = start
-        while (a <= end + 0.01f) {
-            radial(canvas, a, r - 1f, r + 2f, band)
-            a += 7f
+        unit?.let { canvas.drawText(it, x, cell.top + 90f, unitPaint) }
+        drawNumeral(canvas, cx, cell.top + 210f, maxWidth = 344f, size = 140f, r, p)
+    }
+
+    private fun hasMarker(r: CarGaugeReadout): Boolean =
+        r.warning || r.state == CarGaugeState.STALE || r.state == CarGaugeState.UNSUPPORTED
+
+    private fun unitPaint(size: Float, p: Palette) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = UNIT_TYPEFACE
+        textSize = size
+        color = p.secondary
+        textAlign = Paint.Align.LEFT
+    }
+
+    private fun drawPanel(canvas: Canvas, cell: RectF, r: CarGaugeReadout, p: Palette) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = p.panel }
+        canvas.drawRoundRect(cell, 28f, 28f, paint)
+        if (r.warning) {
+            // Thick warning frame: a shape cue in addition to colour.
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 8f
+            paint.color = p.warning
+            canvas.drawRoundRect(RectF(cell.left + 4f, cell.top + 4f, cell.right - 4f, cell.bottom - 4f), 24f, 24f, paint)
         }
     }
 
-    /** Evenly spaced scale ticks plus both ends; the host may show the image at about 64 dp. */
-    private fun drawTicks(canvas: Canvas, scale: Scale, p: Palette) {
-        val tick = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private fun drawArc(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        radius: Float,
+        start: Float,
+        sweep: Float,
+        width: Float,
+        r: CarGaugeReadout,
+        scale: Scale,
+        p: Palette,
+    ) {
+        val oval = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
+        val stale = r.state == CarGaugeState.STALE
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeCap = Paint.Cap.ROUND
-            strokeWidth = 2.2f
-            color = p.majorTick
+            strokeWidth = width
+            strokeCap = if (stale) Paint.Cap.BUTT else Paint.Cap.ROUND
+            color = p.track
+            // Dotted track for stale data: a pattern, not only a colour.
+            pathEffect = if (stale) DashPathEffect(floatArrayOf(6f, 9f), 0f) else null
         }
-        var v = scale.min
-        while (v < scale.max - 1e-9) {
-            radial(canvas, START + fraction(scale, v) * SWEEP, TICK_IN, TICK_OUT, tick)
-            v += scale.tickStep
+        canvas.drawArc(oval, start, sweep, false, stroke)
+        stroke.pathEffect = null
+        stroke.strokeCap = Paint.Cap.ROUND
+
+        scale.alertFrom?.let { from ->
+            // Hatched band outside the arc for the existing coolant alert region only.
+            val a0 = start + fraction(scale, from) * sweep
+            val band = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 3f
+                color = p.warning
+            }
+            val rb = radius + width / 2f + 7f
+            canvas.drawArc(RectF(cx - rb, cy - rb, cx + rb, cy + rb), a0, start + sweep - a0, false, band)
+            var a = a0
+            while (a <= start + sweep + 0.01f) {
+                radial(canvas, cx, cy, a, rb, rb + 7f, band)
+                a += 8f
+            }
         }
-        radial(canvas, START + SWEEP, TICK_IN, TICK_OUT, tick)
+
+        if (r.state != CarGaugeState.LIVE || r.value == null) return
+        val ink = if (r.warning) p.warning else p.accent
+        val valueSweep = fraction(scale, r.value) * sweep
+        stroke.color = ink
+        if (valueSweep > 0f) canvas.drawArc(oval, start, valueSweep, false, stroke)
+        // Pointer: also marks a live minimum, so a real zero never looks like missing data.
+        val angle = Math.toRadians((start + valueSweep).toDouble())
+        val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = ink }
+        canvas.drawCircle(cx + radius * cos(angle).toFloat(), cy + radius * sin(angle).toFloat(), width * 1.4f, dot)
     }
 
-    private fun drawStatusGlyph(canvas: Canvas, key: Key, p: Palette) {
-        val cx = C
-        val cy = GLYPH_CY
+    private fun drawMarker(canvas: Canvas, cx: Float, cy: Float, size: Float, r: CarGaugeReadout, p: Palette) {
         val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = 2.6f
+            strokeWidth = size * 0.22f
             strokeCap = Paint.Cap.ROUND
             color = p.secondary
         }
         when {
-            key.warning -> {
-                // Filled warning triangle with a cut-out exclamation mark: readable without colour.
+            r.warning -> {
+                // Filled triangle with a cut-out exclamation mark: readable without colour.
                 val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = p.warning }
-                val tri = Path().apply {
-                    moveTo(cx, cy - 10.5f)
-                    lineTo(cx + 12f, cy + 9.5f)
-                    lineTo(cx - 12f, cy + 9.5f)
-                    close()
-                }
-                canvas.drawPath(tri, fill)
-                fill.color = p.face
-                canvas.drawRoundRect(cx - 1.7f, cy - 4.5f, cx + 1.7f, cy + 3f, 1.4f, 1.4f, fill)
-                canvas.drawCircle(cx, cy + 6f, 1.8f, fill)
+                canvas.drawPath(
+                    Path().apply {
+                        moveTo(cx, cy - size)
+                        lineTo(cx + size * 1.15f, cy + size * 0.95f)
+                        lineTo(cx - size * 1.15f, cy + size * 0.95f)
+                        close()
+                    },
+                    fill,
+                )
+                fill.color = p.panel
+                canvas.drawRoundRect(cx - size * 0.15f, cy - size * 0.45f, cx + size * 0.15f, cy + size * 0.3f, 2f, 2f, fill)
+                canvas.drawCircle(cx, cy + size * 0.6f, size * 0.17f, fill)
             }
-            key.state == CarGaugeState.STALE -> {
+            r.state == CarGaugeState.STALE -> {
                 // Clock: the last reading is too old to show.
-                canvas.drawCircle(cx, cy, 9f, line)
-                canvas.drawLine(cx, cy, cx, cy - 5.5f, line)
-                canvas.drawLine(cx, cy, cx + 4f, cy + 2f, line)
+                canvas.drawCircle(cx, cy, size, line)
+                canvas.drawLine(cx, cy, cx, cy - size * 0.6f, line)
+                canvas.drawLine(cx, cy, cx + size * 0.45f, cy + size * 0.25f, line)
             }
-            key.state == CarGaugeState.UNSUPPORTED -> {
+            r.state == CarGaugeState.UNSUPPORTED -> {
                 // Prohibition sign: the vehicle does not report this signal.
-                canvas.drawCircle(cx, cy, 9f, line)
-                radial(canvas, cx, cy, 225f, -9f, 9f, line)
-            }
-            else -> {
-                carContext.getDrawable(key.metric.drawableRes)?.mutate()?.apply {
-                    setTint(if (key.state == CarGaugeState.LIVE) p.secondary else p.muted)
-                    setBounds((cx - 10f).toInt(), (cy - 10f).toInt(), (cx + 10f).toInt(), (cy + 10f).toInt())
-                    draw(canvas)
-                }
+                canvas.drawCircle(cx, cy, size, line)
+                radial(canvas, cx, cy, 225f, -size, size, line)
             }
         }
     }
 
-    private fun drawReading(canvas: Canvas, key: Key, scale: Scale, p: Palette) {
+    private fun drawNumeral(
+        canvas: Canvas,
+        cx: Float,
+        baseline: Float,
+        maxWidth: Float,
+        size: Float,
+        r: CarGaugeReadout,
+        p: Palette,
+    ) {
         val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textAlign = Paint.Align.CENTER
+            typeface = NUMERAL_TYPEFACE
             fontFeatureSettings = "tnum"
+            textAlign = Paint.Align.LEFT
         }
-        val reading = key.reading
-        if (reading != null) {
-            text.typeface = NUMERAL_TYPEFACE
-            text.color = if (key.warning) p.warning else p.primary
-            text.textSize = NUMERAL_SIZE
-            val width = text.measureText(reading)
-            if (width > NUMERAL_MAX_WIDTH) text.textSize = NUMERAL_SIZE * NUMERAL_MAX_WIDTH / width
-            canvas.drawText(reading, C, NUMERAL_BASELINE, text)
-            text.typeface = UNIT_TYPEFACE
-            text.textSize = UNIT_SIZE
-            text.color = p.secondary
-            canvas.drawText(scale.unit, C, UNIT_BASELINE, text)
-        } else {
+        val reading = r.reading
+        if (reading == null) {
             // Never a number: missing, unsupported and stale data all read as a placeholder.
-            text.typeface = NUMERAL_TYPEFACE
+            text.textSize = size * 0.8f
             text.color = p.secondary
-            text.textSize = NUMERAL_SIZE * 0.85f
-            canvas.drawText(PLACEHOLDER, C, NUMERAL_BASELINE - 2f, text)
+            val w = text.measureText(PLACEHOLDER)
+            canvas.drawText(PLACEHOLDER, cx - w / 2f, baseline - size * 0.08f, text)
+            return
         }
+        text.color = if (r.warning) p.warning else p.primary
+        text.textSize = size
+        val numeralWidth = text.measureText(reading)
+        if (numeralWidth > maxWidth) text.textSize = size * maxWidth / numeralWidth
+        canvas.drawText(reading, cx - text.measureText(reading) / 2f, baseline, text)
     }
-
-    private fun radial(canvas: Canvas, degrees: Float, from: Float, to: Float, paint: Paint) =
-        radial(canvas, C, C, degrees, from, to, paint)
 
     private fun radial(canvas: Canvas, cx: Float, cy: Float, degrees: Float, from: Float, to: Float, paint: Paint) {
         val a = Math.toRadians(degrees.toDouble())
@@ -322,25 +339,11 @@ internal class CarGaugeGraphic(private val carContext: CarContext) {
         ((v.coerceIn(scale.min, scale.max) - scale.min) / (scale.max - scale.min)).toFloat()
 
     private companion object {
-        const val BOX_DP = 128
-        const val MAX_DENSITY = 2.5f
-        const val CACHE_SIZE = 8
-        const val START = 150f
-        const val SWEEP = 240f
-        const val C = 64f
-        const val FACE_R = 63.5f
-        const val ARC_R = 53f
-        const val ARC_W = 10f
-        const val STALE_W = 5f
-        const val ZONE_R = 60.2f
-        const val TICK_IN = 41f
-        const val TICK_OUT = 46f
-        const val GLYPH_CY = 30f
-        const val NUMERAL_SIZE = 46f
-        const val NUMERAL_MAX_WIDTH = 72f
-        const val NUMERAL_BASELINE = 80f
-        const val UNIT_SIZE = 17f
-        const val UNIT_BASELINE = 104f
+        const val BOX_DP = 320
+        const val MAX_DENSITY = 2f
+        const val CACHE_SIZE = 2
+        const val READOUTS = 2
+        const val UNITS = 480f
         const val PLACEHOLDER = "--"
         val NUMERAL_TYPEFACE: Typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
         val UNIT_TYPEFACE: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)

@@ -1,5 +1,9 @@
 # AA-10 — Grid dashboard prototype
 
+**Superseded 2026-11-01:** Home is now a PaneTemplate with one large gauge image; see
+[AA-11](aa-11-pane-dashboard.md). This record keeps the Grid history and the Grid
+size measurements that led to the change.
+
 Status: **PARTIAL** (2026-10-13; visual pass 2026-11-01, see
 [Visual pass and projected DHU measurements](#visual-pass-and-projected-dhu-measurements)).
 Local native/Flutter regressions, protected

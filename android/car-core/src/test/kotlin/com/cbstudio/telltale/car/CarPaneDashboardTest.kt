@@ -1,11 +1,12 @@
 package com.cbstudio.telltale.car
 
 import android.graphics.drawable.Icon
+import androidx.car.app.HandshakeInfo
 import androidx.car.app.OnDoneCallback
 import androidx.car.app.ScreenManager
 import androidx.car.app.model.Action
-import androidx.car.app.model.GridItem
-import androidx.car.app.model.GridTemplate
+import androidx.car.app.model.CarColor
+import androidx.car.app.model.CarIcon
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
@@ -48,7 +49,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -56,20 +56,26 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
-/** Template and refresh contracts; actual host layout still requires DHU/device acceptance. */
+/**
+ * Graphical Home (AA-11): PaneTemplate rows plus one large gauge image. Template and refresh
+ * contracts only; actual host layout still requires DHU/device acceptance.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-class CarGridDashboardTest {
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class CarPaneDashboardTest {
 
     private lateinit var carContext: TestCarContext
-    private val expectedTitles = listOf("Speed", "RPM", "Coolant", "Voltage")
+    private val expectedTitles = listOf("Speed", "RPM", "Coolant", "Module Voltage", "MAP", "Engine Load")
 
     @Before
     fun setUp() {
         Dispatchers.setMain(StandardTestDispatcher())
         carContext = TestCarContext.createCarContext(ApplicationProvider.getApplicationContext())
+        carContext.updateHandshakeInfo(HandshakeInfo("test.host", 8))
     }
 
     @After
@@ -114,7 +120,6 @@ class CarGridDashboardTest {
 
     private fun TestScope.graphicalScreen(
         repository: CarTelemetryRepository,
-        gridLimit: () -> Int = { 4 },
         paneLimit: () -> Int = { 6 },
         alerts: CarAlertRepository = CarAlertRepository(),
         hostSpeed: CarHostSpeedRepository = CarHostSpeedRepository(),
@@ -123,7 +128,6 @@ class CarGridDashboardTest {
         carContext = carContext,
         repository = repository,
         contentLimitProvider = paneLimit,
-        gridContentLimitProvider = gridLimit,
         graphicalDashboard = true,
         alertRepository = alerts,
         hostSpeedRepository = hostSpeed,
@@ -132,77 +136,85 @@ class CarGridDashboardTest {
         coroutineScope = backgroundScope,
     )
 
-    private fun GridTemplate.items(): List<GridItem> = singleList!!.items.map { it as GridItem }
+    private fun CarHomeScreen.pane(): PaneTemplate = onGetTemplate() as PaneTemplate
+    private fun PaneTemplate.titles() = pane.rows.map { it.title?.toString() }
+    private fun PaneTemplate.texts() = pane.rows.map { it.texts.single().toString() }
 
     @Test
-    fun gridUsesFixedMetricTitlesAndNativeValuesWithClickableBitmapImages() = runTest {
+    fun homeIsAPaneWithFixedTitlesNativeReadingsAndOneBitmapImage() = runTest {
         val repo = createRepository()
         repo.submit(frameInput())
         val screen = graphicalScreen(repo)
 
-        val template = screen.onGetTemplate() as GridTemplate
-        val items = template.items()
-        assertEquals(expectedTitles, items.map { it.title?.toString() })
-        assertEquals(listOf("42 km/h", "1800 RPM", "90 °C", "14.1 V"), items.map { it.text?.toString() })
+        val template = screen.pane()
+        assertEquals(expectedTitles, template.titles())
+        assertEquals(listOf("42 km/h", "1800 RPM", "90 °C", "14.1 V", "35 kPa", "68 %"), template.texts())
         val rows = screen.buildDisplayModel(repo.state.value).rows
-        assertEquals(listOf(42.0, 1800.0, 90.0, 14.1), rows.map { it.graphicValue })
-        // The gauge numeral is the native reading without its unit, from the same formatting.
-        assertEquals(listOf("42", "1800", "90", "14.1"), rows.map { it.graphicText })
-        rows.zip(items).forEach { (row, item) ->
-            assertTrue(item.text.toString().startsWith(row.graphicText!!))
+        assertEquals(listOf(42.0, 1800.0, 90.0, 14.1), rows.take(4).map { it.graphicValue })
+        // The image numeral is the native reading without its unit, from the same formatting.
+        assertEquals(listOf("42", "1800", "90", "14.1"), rows.take(4).map { it.graphicText })
+        rows.take(4).zip(template.texts()).forEach { (row, text) ->
+            assertTrue(text.startsWith(row.graphicText!!))
             assertEquals(CarGaugeState.LIVE, row.gaugeState)
         }
-        assertFalse(template.isLoading)
+        assertFalse(template.pane.isLoading)
         assertEquals(Action.APP_ICON, template.header!!.startHeaderAction)
         assertEquals("Health", template.header!!.endHeaderActions.single().title?.toString())
-        items.forEach { item ->
-            assertFalse(item.isLoading)
-            assertEquals(GridItem.IMAGE_TYPE_LARGE, item.imageType)
-            assertNotNull(item.onClickDelegate)
-            val icon = item.image!!.icon!!
-            assertEquals(Icon.TYPE_BITMAP, icon.type)
-            assertEquals(128, requireNotNull(icon.bitmap).width)
-            assertEquals(128, requireNotNull(icon.bitmap).height)
+        val image = requireNotNull(template.pane.image).icon!!
+        assertEquals(Icon.TYPE_BITMAP, image.type)
+        assertEquals(320, requireNotNull(image.bitmap).width)
+    }
+
+    @Test
+    fun refreshesKeepRowCountTitlesAndHeaderAcrossEveryDataState() = runTest {
+        val repo = createRepository()
+        val screen = graphicalScreen(repo)
+        val reference = screen.pane()
+        fun assertSameShape() {
+            val t = screen.pane()
+            // PaneTemplate refresh rule: same title, row count and row titles.
+            assertEquals(reference.header!!.title.toString(), t.header!!.title.toString())
+            assertEquals(reference.titles(), t.titles())
+            assertEquals(expectedTitles, t.titles())
         }
+        val stale = CarSignalInput(CarSignalStatus.STALE, 1.0)
+        val unsupported = CarSignalInput(CarSignalStatus.UNSUPPORTED, 0.0)
+        listOf(
+            frameInput(sequence = 1),
+            frameInput(sequence = 2, speed = unavailable(), rpm = unavailable()),
+            frameInput(sequence = 3, speed = stale, rpm = stale, coolant = stale, voltage = stale),
+            frameInput(sequence = 4, speed = unsupported, rpm = unsupported, coolant = unsupported, voltage = unsupported),
+            frameInput(sequence = 5, phase = CarConnectionPhase.DISCONNECTED, speed = stale, rpm = stale),
+        ).forEach {
+            repo.submit(it)
+            assertSameShape()
+        }
+        runCurrent()
+        advanceTimeBy(CarTelemetryRepository.DEFAULT_STALE_AFTER_MS + 1)
+        runCurrent()
+        assertTrue(repo.state.value is CarTelemetryState.Stale)
+        assertSameShape()
     }
 
     @Test
-    fun carApi8HostsGetLargeGridItemsAndOlderOrUnknownHostsKeepTheDefaultSize() = runTest {
-        val repo = createRepository()
-        repo.submit(frameInput())
-        // Unknown host level (no handshake yet) keeps the default size.
-        assertEquals(GridTemplate.ITEM_SIZE_SMALL, (graphicalScreen(repo).onGetTemplate() as GridTemplate).itemSize)
-        carContext.updateHandshakeInfo(androidx.car.app.HandshakeInfo("test.host", 7))
-        assertEquals(GridTemplate.ITEM_SIZE_SMALL, (graphicalScreen(repo).onGetTemplate() as GridTemplate).itemSize)
-        carContext.updateHandshakeInfo(androidx.car.app.HandshakeInfo("test.host", 8))
-        val screen = graphicalScreen(repo)
-        val large = screen.onGetTemplate() as GridTemplate
-        assertEquals(GridTemplate.ITEM_SIZE_LARGE, large.itemSize)
-        // Same titles and count as before: the size does not change the refresh contract.
-        assertEquals(expectedTitles, large.items().map { it.title?.toString() })
-        repo.submit(frameInput(sequence = 2, speed = live(80.0)))
-        assertEquals(GridTemplate.ITEM_SIZE_LARGE, (screen.onGetTemplate() as GridTemplate).itemSize)
-    }
-
-    @Test
-    fun missingUnsupportedCorruptAndStaleSignalsKeepAllFourTilesWithoutGraphicValues() = runTest {
+    fun missingUnsupportedCorruptAndStaleSignalsKeepRowsWithoutGraphicReadings() = runTest {
         val repo = createRepository()
         val screen = graphicalScreen(repo)
 
-        fun assertUnavailableTiles(text: String) {
-            val items = (screen.onGetTemplate() as GridTemplate).items()
-            assertEquals(expectedTitles, items.map { it.title?.toString() })
-            assertEquals(4, items.size)
-            assertEquals(List(4) { text }, items.map { it.text?.toString() })
-            screen.buildDisplayModel(repo.state.value).rows.forEach {
+        fun assertUnavailable(text: String) {
+            val template = screen.pane()
+            assertEquals(expectedTitles, template.titles())
+            assertEquals(List(4) { text }, template.texts().take(4))
+            assertNotNull(template.pane.image)
+            screen.buildDisplayModel(repo.state.value).rows.take(4).forEach {
                 assertNull(it.graphicValue)
                 assertNull(it.graphicText)
                 assertTrue(it.gaugeState != CarGaugeState.LIVE)
             }
         }
-        fun states() = screen.buildDisplayModel(repo.state.value).rows.map { it.gaugeState }
+        fun states() = screen.buildDisplayModel(repo.state.value).rows.take(4).map { it.gaugeState }
 
-        assertUnavailableTiles("--") // No frame was received.
+        assertUnavailable("--") // No frame was received.
         assertEquals(List(4) { CarGaugeState.NO_DATA }, states())
         val unavailableInputs = listOf(
             CarSignalInput(CarSignalStatus.UNSUPPORTED, 0.0),
@@ -214,7 +226,7 @@ class CarGridDashboardTest {
         )
         unavailableInputs.forEachIndexed { index, signal ->
             repo.submit(frameInput(sequence = index + 1L, speed = signal, rpm = signal, coolant = signal, voltage = signal))
-            assertUnavailableTiles("--")
+            assertUnavailable("--")
             // Speed follows the OBD/host speed resolver, which reports no source rather than unsupported.
             val expected = if (signal.status == CarSignalStatus.UNSUPPORTED) {
                 listOf(CarGaugeState.NO_DATA) + List(3) { CarGaugeState.UNSUPPORTED }
@@ -225,23 +237,23 @@ class CarGridDashboardTest {
         }
         val stale = CarSignalInput(CarSignalStatus.STALE, 0.0)
         repo.submit(frameInput(sequence = 10, speed = stale, rpm = stale, coolant = stale, voltage = stale))
-        assertUnavailableTiles("Stale")
+        assertUnavailable("Stale")
         assertEquals(List(4) { CarGaugeState.STALE }, states())
     }
 
     @Test
-    fun expiredFrameRemovesGraphicValuesInsteadOfRetainingItsLastReading() = runTest {
+    fun expiredFrameRemovesGraphicReadingsInsteadOfRetainingTheLastOne() = runTest {
         val repo = createRepository()
         repo.submit(frameInput())
         val screen = graphicalScreen(repo)
-        assertTrue(screen.buildDisplayModel(repo.state.value).rows.all { it.graphicValue != null })
+        assertTrue(screen.buildDisplayModel(repo.state.value).rows.take(4).all { it.graphicValue != null })
         runCurrent()
         advanceTimeBy(CarTelemetryRepository.DEFAULT_STALE_AFTER_MS + 1)
         runCurrent()
 
         assertTrue(repo.state.value is CarTelemetryState.Stale)
-        assertEquals(List(4) { "Stale" }, (screen.onGetTemplate() as GridTemplate).items().map { it.text?.toString() })
-        screen.buildDisplayModel(repo.state.value).rows.forEach {
+        assertEquals(List(4) { "Stale" }, screen.pane().texts().take(4))
+        screen.buildDisplayModel(repo.state.value).rows.take(4).forEach {
             assertNull(it.graphicValue)
             assertNull(it.graphicText)
             assertEquals(CarGaugeState.STALE, it.gaugeState)
@@ -254,21 +266,14 @@ class CarGridDashboardTest {
         repo.submit(frameInput())
         val screen = graphicalScreen(repo)
         screen.onGetTemplate()
-        // The producer retains observed readings as STALE when its OBD connection closes.
         val stale = CarSignalInput(CarSignalStatus.STALE, 42.0)
         repo.submit(frameInput(sequence = 2, phase = CarConnectionPhase.DISCONNECTED, speed = stale, rpm = stale, coolant = stale, voltage = stale))
-        val staleItems = (screen.onGetTemplate() as GridTemplate).items()
-        assertEquals(expectedTitles, staleItems.map { it.title?.toString() })
-        assertEquals(List(4) { "Stale" }, staleItems.map { it.text?.toString() })
-        screen.buildDisplayModel(repo.state.value).rows.forEach { assertNull(it.graphicValue) }
+        assertEquals(List(4) { "Stale" }, screen.pane().texts().take(4))
+        screen.buildDisplayModel(repo.state.value).rows.take(4).forEach { assertNull(it.graphicValue) }
 
-        // A signal never observed by the producer is UNAVAILABLE after disconnect.
         repo.submit(frameInput(sequence = 3, phase = CarConnectionPhase.DISCONNECTED, speed = unavailable(), rpm = unavailable(), coolant = unavailable(), voltage = unavailable()))
-
-        val items = (screen.onGetTemplate() as GridTemplate).items()
-        assertEquals(expectedTitles, items.map { it.title?.toString() })
-        assertEquals(List(4) { "--" }, items.map { it.text?.toString() })
-        screen.buildDisplayModel(repo.state.value).rows.forEach { assertNull(it.graphicValue) }
+        assertEquals(List(4) { "--" }, screen.pane().texts().take(4))
+        screen.buildDisplayModel(repo.state.value).rows.take(4).forEach { assertNull(it.graphicValue) }
     }
 
     @Test
@@ -280,70 +285,104 @@ class CarGridDashboardTest {
         }
         val screen = graphicalScreen(repo, hostSpeed = hostSpeed)
 
-        assertEquals("54 km/h", (screen.onGetTemplate() as GridTemplate).items()[0].text?.toString())
-        assertEquals(54.0, screen.buildDisplayModel(repo.state.value).rows[0].graphicValue!!, 0.0)
+        assertEquals("54 km/h", screen.pane().texts()[0])
+        assertEquals("54", screen.buildDisplayModel(repo.state.value).rows[0].graphicText)
     }
 
     @Test
-    fun gridRespectsSmallHostLimitsAndCapsLargerLimitsAtFour() = runTest {
+    fun paneRowLimitIsResolvedOnceAndRespectsSmallHostLimits() = runTest {
         val repo = createRepository()
-        listOf(1, 2, 6).forEach { limit ->
-            val screen = graphicalScreen(repo, gridLimit = { limit })
-            val items = (screen.onGetTemplate() as GridTemplate).items()
-            assertEquals(minOf(limit, 4), items.size)
-            assertEquals(expectedTitles.take(minOf(limit, 4)), items.map { it.title?.toString() })
-        }
-    }
-
-    @Test
-    fun gridConstraintIsResolvedOnceAndNeverUsesThePaneLimit() = runTest {
-        val repo = createRepository()
-        var gridCalls = 0
-        var paneCalls = 0
+        var calls = 0
         var hostLimit = 2
-        val screen = graphicalScreen(repo, gridLimit = { gridCalls++; hostLimit }, paneLimit = { paneCalls++; 1 })
-        assertEquals(1, gridCalls)
-
-        hostLimit = 1
+        val screen = graphicalScreen(repo, paneLimit = { calls++; hostLimit })
+        hostLimit = 6
         repeat(3) { index ->
             repo.submit(frameInput(sequence = index + 1L, speed = live(index * 10.0)))
-            assertEquals(expectedTitles.take(2), (screen.onGetTemplate() as GridTemplate).items().map { it.title?.toString() })
+            assertEquals(expectedTitles.take(2), screen.pane().titles())
         }
-        assertEquals(1, gridCalls)
-        assertEquals(0, paneCalls)
+        assertEquals(1, calls)
+        listOf(1, 4, 10).forEach { limit ->
+            assertEquals(minOf(limit, 6), graphicalScreen(repo, paneLimit = { limit }).pane().pane.rows.size)
+        }
     }
 
     @Test
-    fun invalidOrUnavailableGridConstraintsFallBackToTheExistingNumericPane() = runTest {
+    fun imageNeedsCarApi4AndUnknownOrOlderHostsGetTheSameRowsWithoutIt() = runTest {
         val repo = createRepository()
         repo.submit(frameInput())
-        val providers = listOf<() -> Int>({ 0 }, { -1 }, { throw IllegalStateException("Host unavailable") })
-        providers.forEach { provider ->
-            val screen = graphicalScreen(repo, gridLimit = provider, paneLimit = { 6 })
-            val template = screen.onGetTemplate() as PaneTemplate
-            assertEquals(6, template.pane.rows.size)
-            assertEquals("42 km/h", template.pane.rows[0].texts[0].toString())
-            assertEquals(Action.APP_ICON, template.header!!.startHeaderAction)
+        assertNotNull(graphicalScreen(repo).pane().pane.image)
+
+        carContext = TestCarContext.createCarContext(ApplicationProvider.getApplicationContext())
+        val unknown = graphicalScreen(repo).pane() // No handshake yet.
+        assertNull(unknown.pane.image)
+        assertEquals(expectedTitles, unknown.titles())
+
+        carContext.updateHandshakeInfo(HandshakeInfo("test.host", 3))
+        val older = graphicalScreen(repo).pane()
+        assertNull(older.pane.image)
+        assertEquals(expectedTitles, older.titles())
+        carContext.updateHandshakeInfo(HandshakeInfo("test.host", 4))
+        assertNotNull(graphicalScreen(repo).pane().pane.image)
+    }
+
+    @Test
+    fun imageFailureLeavesTheRowsAndActionsIntact() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput())
+        listOf<(List<CarHomeScreen.MetricRow>, Boolean) -> CarIcon?>(
+            { _, _ -> throw IllegalStateException("Bitmap unavailable") },
+            { _, _ -> null },
+        ).forEach { failing ->
+            val screen = graphicalScreen(repo).apply { dashboardImage = failing }
+            val template = screen.pane()
+            assertNull(template.pane.image)
+            assertEquals(expectedTitles, template.titles())
+            assertEquals("42 km/h", template.texts()[0])
             assertEquals("Health", template.header!!.endHeaderActions.single().title?.toString())
         }
     }
 
     @Test
-    fun activeAndUnknownCoolantWarningsKeepTextAndGraphicStateConsistent() = runTest {
+    fun numericalHomeKeepsRowsOnlyAndNoGaugeFields() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput())
+        val screen = CarHomeScreen(carContext = carContext, repository = repo, contentLimitProvider = { 6 })
+        val template = screen.pane()
+        assertNull(template.pane.image)
+        screen.buildDisplayModel(repo.state.value).rows.forEach {
+            assertNull(it.graphicValue)
+            assertNull(it.graphicText)
+            assertEquals(CarGaugeState.NO_DATA, it.gaugeState)
+        }
+    }
+
+    @Test
+    fun dayAndNightImagesDifferAndFollowCarContext() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput())
+        val screen = graphicalScreen(repo)
+        val day = screen.pane().pane.image!!.icon!!.bitmap!!
+        val night = graphicalScreen(repo).let { s ->
+            s.dashboardImage(s.buildDisplayModel(repo.state.value).rows, true)!!.icon!!.bitmap!!
+        }
+        assertFalse(carContext.isDarkMode)
+        assertFalse(day.sameAs(night))
+    }
+
+    @Test
+    fun activeAndUnknownCoolantWarningsKeepTextIconAndGraphicStateConsistent() = runTest {
         val repo = createRepository()
         repo.submit(frameInput(coolant = live(108.0)))
         val alerts = CarAlertRepository()
         val screen = graphicalScreen(repo, alerts = alerts)
-        val normalImage = (screen.onGetTemplate() as GridTemplate).items()[2].image
 
         alerts.updateSnapshot(CarAlertSnapshot(level = CarAlertLevel.ATTENTION, coolant = CarAlertPhase.ACTIVE, connectionEpoch = 1))
         val active = screen.buildDisplayModel(repo.state.value).rows[2]
-        val activeItem = (screen.onGetTemplate() as GridTemplate).items()[2]
+        val activeRow = screen.pane().pane.rows[2]
         assertTrue(active.warning)
-        assertEquals(108.0, active.graphicValue!!, 0.0)
-        assertEquals("108 °C · High", activeItem.text?.toString())
         assertEquals("108", active.graphicText)
-        assertNotSame(normalImage, activeItem.image)
+        assertEquals("108 °C · High", activeRow.texts.single().toString())
+        assertEquals(CarColor.RED, activeRow.image!!.tint)
 
         repo.submit(frameInput(sequence = 2, coolant = CarSignalInput(CarSignalStatus.STALE, null)))
         alerts.updateSnapshot(CarAlertSnapshot(level = CarAlertLevel.UNKNOWN, coolant = CarAlertPhase.UNKNOWN_AFTER_WARNING, connectionEpoch = 1))
@@ -352,11 +391,11 @@ class CarGridDashboardTest {
         assertNull(unknown.graphicValue)
         assertNull(unknown.graphicText)
         assertEquals(CarGaugeState.STALE, unknown.gaugeState)
-        assertEquals("Stale", (screen.onGetTemplate() as GridTemplate).items()[2].text?.toString())
+        assertEquals("Stale", screen.pane().texts()[2])
     }
 
     @Test
-    fun gridHeaderOpensHealthDirectlyWithoutAnIntermediateValuesPage() = runTest {
+    fun headerOpensHealthAndHealthStillReachesPowertrain() = runTest {
         val repo = createRepository()
         repo.submit(frameInput())
         val screen = graphicalScreen(repo)
@@ -364,55 +403,24 @@ class CarGridDashboardTest {
         val screenManager = carContext.getCarService(ScreenManager::class.java)
         screenManager.push(screen)
 
-        val healthAction = (screen.onGetTemplate() as GridTemplate).header!!.endHeaderActions.single()
+        val healthAction = screen.pane().header!!.endHeaderActions.single()
         assertEquals("Health", healthAction.title?.toString())
         healthAction.onClickDelegate!!.sendClick(object : OnDoneCallback {})
         assertTrue(screenManager.top is CarHealthScreen)
         assertEquals(2, screenManager.stackSize)
-        assertEquals(Action.BACK, (screenManager.top.onGetTemplate() as PaneTemplate).header!!.startHeaderAction)
-    }
-
-    @Test
-    fun everyMetricTileOpensNumericPaneWithBackAndPowertrainAndHealthRemainsOnTheGrid() = runTest {
-        val repo = createRepository()
-        repo.submit(frameInput())
-        val screen = graphicalScreen(repo)
-        carContext.lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
-        val screenManager = carContext.getCarService(ScreenManager::class.java)
-        screenManager.push(screen)
-        val items = (screen.onGetTemplate() as GridTemplate).items()
-
-        items.forEach { item ->
-            item.onClickDelegate!!.sendClick(object : OnDoneCallback {})
-            assertNumericPaneAndReachablePowertrain(screenManager)
-            screenManager.pop() // Powertrain -> numerical values.
-            screenManager.pop() // Numerical values -> graphical dashboard.
-            assertEquals(screen, screenManager.top)
-            assertEquals(1, screenManager.stackSize)
-        }
-
-        val healthAction = (screen.onGetTemplate() as GridTemplate).header!!.endHeaderActions.single()
-        healthAction.onClickDelegate!!.sendClick(object : OnDoneCallback {})
-        assertTrue(screenManager.top is CarHealthScreen)
-        assertEquals(2, screenManager.stackSize)
-    }
-
-    private fun assertNumericPaneAndReachablePowertrain(screenManager: ScreenManager) {
-        assertTrue(screenManager.top is CarHomeScreen)
-        assertEquals(2, screenManager.stackSize)
-        val template = screenManager.top.onGetTemplate() as PaneTemplate
-        assertEquals(Action.BACK, template.header!!.startHeaderAction)
-        assertEquals(6, template.pane.rows.size)
-        assertEquals("42 km/h", template.pane.rows[0].texts[0].toString())
-        val powertrain = template.header!!.endHeaderActions.single()
-        assertEquals("Powertrain", powertrain.title?.toString())
-        powertrain.onClickDelegate!!.sendClick(object : OnDoneCallback {})
+        val health = screenManager.top.onGetTemplate() as PaneTemplate
+        assertEquals(Action.BACK, health.header!!.startHeaderAction)
+        health.pane.actions.single { it.title?.toString() == "Powertrain" }
+            .onClickDelegate!!.sendClick(object : OnDoneCallback {})
         assertTrue(screenManager.top is CarPowertrainScreen)
         assertEquals(3, screenManager.stackSize)
+        screenManager.pop()
+        screenManager.pop()
+        assertEquals(screen, screenManager.top)
     }
 
     @Test
-    fun gridToHealthToFaultSummaryToDetailUsesFourScreensWithTheSessionDtcRepository() = runTest {
+    fun homeToHealthToFaultSummaryToDetailUsesFourScreensWithTheSessionDtcRepository() = runTest {
         val dtcRepo = DefaultCarDtcRepository()
         val repo = CarTelemetryRepository(
             scope = backgroundScope,
@@ -460,7 +468,7 @@ class CarGridDashboardTest {
         screenManager.push(screen)
         assertEquals(1, screenManager.stackSize)
 
-        (screen.onGetTemplate() as GridTemplate).header!!.endHeaderActions.single()
+        screen.pane().header!!.endHeaderActions.single()
             .onClickDelegate!!.sendClick(object : OnDoneCallback {})
         assertTrue(screenManager.top is CarHealthScreen)
         assertEquals(2, screenManager.stackSize)
@@ -503,7 +511,7 @@ class CarGridDashboardTest {
         runCurrent()
         assertEquals(CarAlertPhase.ACTIVE, coordinator.repository.snapshot.value.coolant)
         val screen = graphicalScreen(repo, alerts = coordinator.repository)
-        assertEquals("108 °C · High", (screen.onGetTemplate() as GridTemplate).items()[2].text?.toString())
+        assertEquals("108 °C · High", screen.pane().texts()[2])
 
         advanceTimeBy(CarTelemetryRepository.DEFAULT_STALE_AFTER_MS + 1)
         runCurrent()
@@ -513,12 +521,12 @@ class CarGridDashboardTest {
         assertTrue(row.warning)
         assertNull(row.graphicValue)
         assertEquals("Stale", row.text)
-        assertEquals("Stale", (screen.onGetTemplate() as GridTemplate).items()[2].text?.toString())
+        assertEquals("Stale", screen.pane().texts()[2])
         coordinator.destroy()
     }
 
     @Test
-    fun warningFromAnOlderEpochDoesNotAppearInCurrentOrTimedOutGridData() = runTest {
+    fun warningFromAnOlderEpochDoesNotAppearInCurrentOrTimedOutData() = runTest {
         val repo = createRepository()
         repo.submit(frameInput(epoch = 2, coolant = live(90.0)))
         val alerts = CarAlertRepository().apply {
@@ -557,7 +565,7 @@ class CarGridDashboardTest {
         advanceTimeBy(100)
         runCurrent()
         assertEquals(2, invalidations)
-        assertEquals("100 km/h", (screen.onGetTemplate() as GridTemplate).items()[0].text?.toString())
+        assertEquals("100 km/h", screen.pane().texts()[0])
         advanceTimeBy(1_500)
         runCurrent()
         assertEquals("A rendered model must not create a refresh loop", 2, invalidations)
@@ -581,7 +589,7 @@ class CarGridDashboardTest {
         assertEquals(firstModel, screen.buildDisplayModel(repo.state.value))
         advanceTimeBy(1_100)
         runCurrent()
-        assertEquals("Bitmap values must use the same precision as native text", 1, invalidations)
+        assertEquals("Image readings must use the same precision as native text", 1, invalidations)
     }
 
     @Test
