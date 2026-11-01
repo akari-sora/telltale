@@ -534,6 +534,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get datumStatusFollowsData => 'Status follows the data';
 
   @override
+  String get datumStatusDetailsHint => 'Tap for data status details';
+
+  @override
+  String get datumStatusUnverifiedExplanation =>
+      'Unverified means no real-vehicle comparison for this decoder on your vehicle is documented here. It does not mean the reading is wrong, and it does not certify its accuracy. Freshness and faults are shown separately.';
+
+  @override
   String get datumStatusFormula => 'Formula';
 
   @override

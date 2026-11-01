@@ -148,6 +148,8 @@
   "datumStatusAssumptions": "Annahmen",
   "datumStatusClose": "Schließen",
   "datumStatusFollowsData": "Der Status richtet sich nach den Daten",
+  "datumStatusDetailsHint": "Für Details zum Datenstatus tippen",
+  "datumStatusUnverifiedExplanation": "Unverifiziert bedeutet, dass hier kein Abgleich dieser Dekodierung mit Ihrem Fahrzeug dokumentiert ist. Das bedeutet weder, dass der Messwert falsch ist, noch bestätigt es seine Genauigkeit. Aktualität und Fehler werden separat angezeigt.",
   "datumStatusFormula": "Formel",
   "derivedAirflow": "Luftstrom",
   "derivedEcuFuelTitle": "ECU-Kraftstoffdaten",

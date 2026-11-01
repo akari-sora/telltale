@@ -497,6 +497,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get datumStatusFollowsData => '狀態隨資料';
 
   @override
+  String get datumStatusDetailsHint => '點按查看讀值狀態說明';
+
+  @override
+  String get datumStatusUnverifiedExplanation =>
+      '未驗證表示此處沒有這個解碼與本車實際比對的驗證紀錄，不代表讀值錯誤，也不保證讀值準確。更新狀態與異常會另外標示。';
+
+  @override
   String get datumStatusFormula => '公式';
 
   @override
@@ -4773,6 +4780,13 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get datumStatusFollowsData => '狀態隨資料';
+
+  @override
+  String get datumStatusDetailsHint => '點按查看讀值狀態說明';
+
+  @override
+  String get datumStatusUnverifiedExplanation =>
+      '未驗證表示此處沒有這個解碼與本車實際比對的驗證紀錄，不代表讀值錯誤，也不保證讀值準確。更新狀態與異常會另外標示。';
 
   @override
   String get datumStatusFormula => '公式';

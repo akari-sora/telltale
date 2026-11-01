@@ -659,28 +659,50 @@ class _GaugeTile extends StatelessWidget {
 
     return _FadeInUp(
       delay: delay,
-      child: Panel(
-        accent: accent,
-        padding: const EdgeInsets.all(Spacing.sm),
-        child: isUnsupported
-            ? _UnsupportedTile(pid: pid, status: status)
-            : DialGauge(
-                value: reading?.value,
-                minValue: pid.minValue,
-                maxValue: pid.maxValue,
-                label: pid.shortName.isEmpty ? pid.name : pid.shortName,
-                units: pid.units,
-                hue: hue,
-                redlineFrom: pid.redlineFrom,
-                // A value older than its PID's own refresh target is not live,
-                // however plausible it looks.
-                isStale: isStale,
-                footnote: _gaugeFootnote(
-                  AppLocalizations.of(context),
-                  fault,
-                  status,
+      child: Tooltip(
+        message: AppLocalizations.of(context).datumStatusDetailsHint,
+        child: Panel(
+          onTap: () => showDatumStatusDetails(
+            context,
+            title: pid.shortName.isEmpty ? pid.name : pid.shortName,
+            status: status,
+          ),
+          accent: accent,
+          padding: const EdgeInsets.all(Spacing.sm),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              isUnsupported
+                  ? _UnsupportedTile(pid: pid, status: status)
+                  : DialGauge(
+                      value: reading?.value,
+                      minValue: pid.minValue,
+                      maxValue: pid.maxValue,
+                      label: pid.shortName.isEmpty ? pid.name : pid.shortName,
+                      units: pid.units,
+                      hue: hue,
+                      redlineFrom: pid.redlineFrom,
+                      // A value older than its PID's own refresh target is not live,
+                      // however plausible it looks.
+                      isStale: isStale,
+                      footnote: _gaugeFootnote(
+                        AppLocalizations.of(context),
+                        fault,
+                        status,
+                      ),
+                    ),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: context.palette.textTertiary,
                 ),
               ),
+            ],
+          ),
+        ),
       ),
     );
   }

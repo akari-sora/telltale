@@ -2,6 +2,7 @@
 library;
 
 import 'pid/pid.dart';
+import 'pid/priority_tier.dart';
 
 /// One evaluated reading.
 class Reading {
@@ -68,6 +69,19 @@ class Reading {
   /// null`, so a sensor that stopped answering kept its last believable number
   /// on screen, styled exactly like a live one.
   Duration get maxAge {
+    if (pid.priority == PriorityTier.veryLow) {
+      final target = pid.priority.targetInterval;
+      final cadence = observedInterval;
+      // Bound learned cadence so an outage cannot make a later outage look
+      // live indefinitely. Allow modest scheduling drift beyond the target.
+      final maxCadence = target + target ~/ 3;
+      final effectiveCadence = cadence == null || cadence < target
+          ? target
+          : cadence > maxCadence
+          ? maxCadence
+          : cadence;
+      return effectiveCadence * missedRoundsBeforeStale;
+    }
     var slack = pid.priority.targetInterval * 8;
     // Aligned with the real round (#114). A value that arrives every round
     // on a slow link is still live; one that misses three rounds is not.
