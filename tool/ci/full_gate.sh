@@ -41,7 +41,19 @@ run_step analyze flutter analyze
 run_step python-tools python3 -m unittest discover -s test/tool -p 'test_*.py'
 run_step python-aa08-pytest python3 -m pytest -q test/tool/test_challenger_empirical_r3.py test/tool/test_run_targeted_mutations.py
 run_step python-mode08 python3 -m unittest discover -s tool/obd_test_rig -p 'test_mode08_replay_reference.py'
-run_step car-core-unit ./android/gradlew -p android :car-core:testDebugUnitTest
+car_core_rc=0
+run_step car-core-unit ./android/gradlew -p android :car-core:testDebugUnitTest || car_core_rc=$?
+# Gradle redirects this module's build directory to build/car-core. Keep the
+# detailed reports even when the test task fails and the gate exits early.
+report_rc=0
+for report in test-results/testDebugUnitTest reports/tests/testDebugUnitTest; do
+  if [ -d "build/car-core/$report" ]; then
+    mkdir -p "ci-artifacts/car-core/$report" &&
+      cp -R "build/car-core/$report/." "ci-artifacts/car-core/$report/" || report_rc=$?
+  fi
+done
+if [ "$car_core_rc" != 0 ]; then exit "$car_core_rc"; fi
+if [ "$report_rc" != 0 ]; then exit "$report_rc"; fi
 run_step car-field-unit ./android/gradlew -p android :app:testFieldDebugUnitTest
 run_step car-proto-unit ./android/gradlew -p android :app:testCarProtoDebugUnitTest
 run_step car-field-projected-build ./android/gradlew -p android :app:assembleFieldDebug
