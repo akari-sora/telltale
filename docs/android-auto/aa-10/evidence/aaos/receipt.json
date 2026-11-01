@@ -1,0 +1,64 @@
+{
+  "scope": "Owned AAOS simulation only; not Android Auto DHU or physical head unit acceptance",
+  "apk_sha256": "45e38320d45ff09edbd66a19d7764bd1e9fa2c818e425ea93f2ae9df149feb70",
+  "native_source_commit": "89acccfbbb914774fd38f49250906b4498e1038c",
+  "native_source_file_manifest_sha256": "683fdb118e9fc9f6c19b458438bb42ecffca1db28ad40729d0000dabee334e2d",
+  "screenshots": [
+    {
+      "file": "landscape-day-missing.png",
+      "raw_original_filename": "landscape-hostgpu-final-grid-day-missing.png",
+      "sha256": "fa0a78d200c5b01f331d3e93497ad2abffb7a5a49aba08dc57fcc45b7ebecde1",
+      "observation": "Complete day host, four fixed tiles, missing OBD and speed readings."
+    },
+    {
+      "file": "portrait-day-missing.png",
+      "raw_original_filename": "portrait-hostgpu-final-grid-day-missing.png",
+      "sha256": "e6a0d3e2e3693ec1a2fe27e5bff8fbd7eac702f1486021658b89964404936833",
+      "observation": "Complete 800x1280 day host, four fixed tiles in one row."
+    },
+    {
+      "file": "landscape-day-live-zero.png",
+      "raw_original_filename": "landscape-hostgpu-final-zero-after-relaunch.png",
+      "sha256": "a04344bd3a09c56705bcb10eecf32ffcc579816e51e57e945e14108912a7cea8",
+      "observation": "Complete day host, simulated host speed 0 km/h and live minimum marker; OBD readings remain absent."
+    },
+    {
+      "file": "landscape-transient-48-diagnostic.png",
+      "raw_original_filename": "landscape-hostgpu-grid-zero-restored.png",
+      "sha256": "250f61ef66e12fb41c29e172703ac4377c828da046a9829ef67e15af2376bf30",
+      "observation": "ACTUAL native reading is transient simulated 48 km/h with blue arc. Partial static text, original filename was intended phase only; not a synchronized speed sequence."
+    },
+    {
+      "file": "landscape-night-diagnostic.png",
+      "raw_original_filename": "landscape-hostgpu-final-grid-night-missing.png",
+      "sha256": "b77811c40a6688bf70b69b7e37c5ed7272bf391e2f67a9c7e10db93a753f17ee",
+      "observation": "Dark gauge palette visible, native/system text missing. Night readability NOT_VERIFIED."
+    }
+  ],
+  "cleanup": {
+    "owned_emulator_pids_gone": true,
+    "private_adb_pid_gone": true,
+    "ports_without_listeners": [
+      15051,
+      5584,
+      5585,
+      5586,
+      5587
+    ],
+    "original_avd_userdata_snapshots_or_configs_modified": false,
+    "global_5037_or_foreign_5590_targeted": false
+  },
+  "not_verified": [
+    "night native-text readability",
+    "synchronized 0->48->0 source/capture timing",
+    "steady moving-entry rejection",
+    "dynamic DTC task quota"
+  ],
+  "not_run": [
+    "Android Auto DHU",
+    "physical vehicle/head unit",
+    "host OBD warning/stale/unsupported scenarios",
+    "portrait night final lane",
+    "Google category/image-policy review"
+  ]
+}
