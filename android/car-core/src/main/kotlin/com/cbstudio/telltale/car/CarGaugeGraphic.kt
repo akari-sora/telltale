@@ -86,11 +86,11 @@ internal class CarGaugeGraphic(private val carContext: CarContext) {
      * DHU and rejected: four-digit RPM reached only 24 dp cap height at 1280 × 720 (AA-11).
      */
     fun dashboard(readouts: List<CarGaugeReadout>, dark: Boolean): CarIcon? {
-        val shown = readouts.take(READOUTS).map(::normalized)
-        if (shown.isEmpty()) return null
-        val key = Key(shown, dark, sizePx())
-        cache[key]?.let { return it }
         return try {
+            val shown = readouts.take(READOUTS).map(::normalized)
+            if (shown.isEmpty()) return null
+            val key = Key(shown, dark, sizePx())
+            cache[key]?.let { return it }
             CarIcon.Builder(IconCompat.createWithBitmap(draw(key))).build().also { cache[key] = it }
         } catch (_: Exception) {
             null

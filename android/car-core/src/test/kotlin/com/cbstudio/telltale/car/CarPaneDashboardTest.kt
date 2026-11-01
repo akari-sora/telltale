@@ -331,6 +331,7 @@ class CarPaneDashboardTest {
         repo.submit(frameInput())
         listOf<(List<CarHomeScreen.MetricRow>, Boolean) -> CarIcon?>(
             { _, _ -> throw IllegalStateException("Bitmap unavailable") },
+            { _, _ -> throw OutOfMemoryError("Image preparation unavailable") },
             { _, _ -> null },
         ).forEach { failing ->
             val screen = graphicalScreen(repo).apply { dashboardImage = failing }
@@ -367,6 +368,28 @@ class CarPaneDashboardTest {
         }
         assertFalse(carContext.isDarkMode)
         assertFalse(day.sameAs(night))
+    }
+
+    @Test
+    fun pendingClearCoolantKeepsWarningTextAndRedIconUntilNormal() = runTest {
+        val repo = createRepository()
+        repo.submit(frameInput(coolant = live(99.0)))
+        val alerts = CarAlertRepository()
+        val screen = graphicalScreen(repo, alerts = alerts)
+
+        alerts.updateSnapshot(CarAlertSnapshot(level = CarAlertLevel.ATTENTION, coolant = CarAlertPhase.PENDING_CLEAR, connectionEpoch = 1))
+        val pending = screen.buildDisplayModel(repo.state.value).rows[2]
+        val pendingRow = screen.pane().pane.rows[2]
+        assertTrue(pending.warning)
+        assertEquals("99", pending.graphicText)
+        assertEquals("99 °C · High", pendingRow.texts.single().toString())
+        assertEquals(CarColor.RED, pendingRow.image!!.tint)
+
+        alerts.updateSnapshot(CarAlertSnapshot(level = CarAlertLevel.NORMAL, coolant = CarAlertPhase.NORMAL, connectionEpoch = 1))
+        assertFalse(screen.buildDisplayModel(repo.state.value).rows[2].warning)
+        val normalRow = screen.pane().pane.rows[2]
+        assertEquals("99 °C", normalRow.texts.single().toString())
+        assertFalse(CarColor.RED == normalRow.image!!.tint)
     }
 
     @Test

@@ -362,9 +362,11 @@ class CarHomeScreen(
         val coolantBase = formatSignal(frame?.coolantC, "°C", "%.0f")
         val alertSnapshot = matchingAlertSnapshot(state, alertRepository.snapshot.value)
         val coolantWarning = alertSnapshot?.coolant == CarAlertPhase.ACTIVE ||
+                alertSnapshot?.coolant == CarAlertPhase.PENDING_CLEAR ||
                 alertSnapshot?.coolant == CarAlertPhase.UNKNOWN_AFTER_WARNING
         val coolantText = when {
-            alertSnapshot?.coolant == CarAlertPhase.ACTIVE -> {
+            alertSnapshot?.coolant == CarAlertPhase.ACTIVE ||
+                    alertSnapshot?.coolant == CarAlertPhase.PENDING_CLEAR -> {
                 if (coolantBase != missingText && coolantBase != staleText) {
                     "$coolantBase · ${carContext.getString(R.string.car_alert_high)}"
                 } else {
@@ -444,11 +446,13 @@ class CarHomeScreen(
                     .build(),
             )
         }
-        // The image only repeats what the rows say, so any failure simply leaves it out.
+        // Image preparation/rendering exceptions and OOM leave the authoritative rows intact.
         if (paneImageSupported) {
             val image = try {
                 dashboardImage(model.rows, carContext.isDarkMode)
             } catch (_: Exception) {
+                null
+            } catch (_: OutOfMemoryError) {
                 null
             }
             image?.let(paneBuilder::setImage)

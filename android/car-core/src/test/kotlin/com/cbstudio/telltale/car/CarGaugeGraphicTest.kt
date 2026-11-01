@@ -82,6 +82,17 @@ class CarGaugeGraphicTest {
     private fun Bitmap.diffIn(other: Bitmap, box: IntArray) = diff(other, box[0], box[1], box[2], box[3])
 
     @Test
+    fun readoutPreparationOutOfMemoryReturnsNoImage() {
+        val readouts = object : AbstractList<CarGaugeReadout>() {
+            override val size: Int = 1
+            override fun get(index: Int): CarGaugeReadout =
+                throw OutOfMemoryError("Readout copy unavailable")
+        }
+        assertNull(graphic.dashboard(readouts, dark = false))
+        assertNotNull(graphic.dashboard(pair(live(CarMetricIcon.SPEED, 42.0)), dark = false))
+    }
+
+    @Test
     fun imageIsASquareArgbBitmapAtMdpiThatAPaneAccepts() {
         val icon = requireNotNull(graphic.dashboard(pair(live(CarMetricIcon.SPEED, 120.0)), dark = false))
         val bitmap = icon.bitmap()
@@ -291,9 +302,9 @@ class CarGaugeGraphicTest {
         assertNotNull(graphic.dashboard(listOf(live(CarMetricIcon.SPEED, 10.0)), false))
     }
 
-    @Test(expected = IllegalArgumentException::class)
+    @Test
     fun unsupportedMetricsDoNotInventAGaugeScale() {
-        graphic.dashboard(listOf(live(CarMetricIcon.PRESSURE, 50.0)), false)
+        assertNull(graphic.dashboard(listOf(live(CarMetricIcon.PRESSURE, 50.0)), false))
     }
 
     /**
