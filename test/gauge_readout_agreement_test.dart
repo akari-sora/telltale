@@ -22,7 +22,11 @@ import 'package:torque_obd/obd/telemetry.dart';
 import 'package:torque_obd/ui/widgets/gauges/dial_gauge.dart';
 import 'support/localized_app.dart';
 
-Future<String> _spoken(WidgetTester tester, double value) async {
+Future<String> _spoken(
+  WidgetTester tester,
+  double value, {
+  int? decimalPlaces,
+}) async {
   await tester.pumpWidget(localizedMaterialApp(
     theme: AppTheme.dark(),
     home: Scaffold(
@@ -32,6 +36,7 @@ Future<String> _spoken(WidgetTester tester, double value) async {
           height: 300,
           child: DialGauge(
             value: value,
+            decimalPlaces: decimalPlaces,
             minValue: 0,
             maxValue: 10,
             label: 'LAMBDA',
@@ -72,6 +77,18 @@ void main() {
   test('a non-finite value is not printed as a number', () {
     expect(formatGaugeReadout(double.nan), '--');
     expect(formatGaugeReadout(double.infinity), '--');
+    expect(formatGaugeReadout(double.nan, decimalPlaces: 0), '--');
+    expect(formatGaugeReadout(double.infinity, decimalPlaces: 0), '--');
+  });
+
+  testWidgets('integer precision agrees in visible and spoken readouts',
+      (tester) async {
+    for (final value in [0.0, 62.0, 99.0, 100.0, 255.0]) {
+      final spoken = await _spoken(tester, value, decimalPlaces: 0);
+      expect(spoken, value.toStringAsFixed(0));
+      expect(find.text(value.toStringAsFixed(0)), findsWidgets);
+      expect(find.text(value.toStringAsFixed(1)), findsNothing);
+    }
   });
 
   test('the list may be finer than the dial, and that is a decision', () {
