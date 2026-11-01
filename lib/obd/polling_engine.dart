@@ -26,8 +26,6 @@ import 'pid/formula_engine.dart';
 import 'pid/pid.dart';
 import 'pid/pid_library.dart';
 import 'pid/priority_scheduler.dart';
-import 'powertrain_battery/powertrain_battery_probe.dart';
-import 'powertrain_battery/powertrain_battery_profile.dart';
 import 'telemetry.dart';
 import 'telemetry_demand.dart';
 import 'transport/obd_transport.dart';
@@ -911,7 +909,6 @@ class PollingEngine {
             message.pdu.bytes[1] == 0x00)
           message.sourceAddress!.value,
     };
-    _recordMode0100MasksFromCensus(response.messages);
     // Never narrowed by a later, worse probe: a controller that answered once
     // exists, and a reply that missed it is evidence about the reply.
     if (seen.isNotEmpty) {
@@ -1009,7 +1006,6 @@ class PollingEngine {
         continue;
       }
       _verifiedSupportBlocks.add(query);
-      _recordMode0100MaskFromQuery(query, raw);
       supported.addAll(PidLibrary.decodeSupportMask(query, raw.sublist(2)));
       _publishCapabilitySummary();
       // Bit 0 of the mask says whether a further block exists.
@@ -2465,7 +2461,10 @@ class PollingEngine {
     final engineId = _physicalResponseFor(client.addressing.engineHeader);
     if (engineId == null) return null;
     if (!response.frames.any((frame) => frame.sourceId != null)) return null;
-    return _selectMode01EngineOrEvFrames(response.frames, engineId);
+    return [
+      for (final frame in response.frames)
+        if (frame.sourceId?.toUpperCase() == engineId) frame,
+    ];
   }
 
   /// Asks named controllers for this category directly, and reports who
@@ -3644,12 +3643,7 @@ class PollingEngine {
       owner: owner,
       deadline: deadline,
     );
-    if (!response.isSuccess) {
-      if (client.addressing.family == ObdBusFamily.can11) {
-        return _readVinViaUds22F190(owner: owner, deadline: deadline);
-      }
-      return null;
-    }
+    if (!response.isSuccess) return null;
     // `0902` is a global request like any other, and was the one consumer left
     // outside the attribution gate.
     //
@@ -3672,29 +3666,20 @@ class PollingEngine {
       // happens — resolved the vehicle's identity by bus ordering. A conflict
       // is the moment identity becomes unknown, not the moment to pick one.
       final decoded = <String>{};
-      var sawMode09Pid02Envelope = false;
       for (final frame in response.frames) {
         final bytes = frame.bytes;
         if (bytes.length < 4) continue;
         if (bytes[0] != 0x49 || bytes[1] != 0x02) continue;
-        sawMode09Pid02Envelope = true;
         final vin = _vinFromData(bytes.sublist(3));
         if (vin != null) decoded.add(vin);
       }
-      if (decoded.isEmpty) {
-        if (!sawMode09Pid02Envelope &&
-            client.addressing.family == ObdBusFamily.can11) {
-          return _readVinViaUds22F190(owner: owner, deadline: deadline);
-        }
-        return null;
-      }
+      if (decoded.isEmpty) return null;
       if (decoded.length > 1) {
         throw VinIdentityConflictException(
           '${decoded.length} controller(s) reported different vehicle identification numbers (VIN), '
           'so this vehicle\'s identity cannot be confirmed. A module may have been replaced or configured wrongly.',
         );
       }
-      _lastDetectedVin = decoded.first;
       return decoded.first;
     } else {
       // Legacy: every line carries its own `49 02 <seq>` envelope and four
@@ -3780,83 +3765,8 @@ class PollingEngine {
           'so this vehicle\'s identity cannot be confirmed. A module may have been replaced or configured wrongly.',
         );
       }
-      _lastDetectedVin = decoded.first;
       return decoded.first;
     }
-  }
-
-  /// UDS Service `0x22` DID `0xF190` (`22F190`) VIN fallback on 11-bit CAN.
-  ///
-  /// Many EVs (such as Hyundai/Kia e-GMP vehicles in Issue #117) do not answer
-  /// J1979 Mode 09 `0902` on functional broadcast `7DF`, and instead expose the
-  /// 17-character ASCII VIN via ISO 14229 ReadDataByIdentifier `22F190` on VCU
-  /// (`7E2` -> `7EA`) or ECM (`7E0` -> `7E8`).
-  Future<String?> _readVinViaUds22F190({
-    required int? owner,
-    required DateTime? deadline,
-  }) async {
-    if (_isConfirmedIceMapOnlyCensus) {
-      return null;
-    }
-    const targets = <(String, String)>[
-      ('7E2', '7EA'), // VCU / E-GMP Vehicle Control Unit
-      ('7E0', '7E8'), // ECM / Engine or Primary Powertrain Control Module
-    ];
-    final decoded = <String>{};
-    var vcuAnswered = false;
-    for (final (reqHeader, rxHeader) in targets) {
-      _requireStillOwned(owner);
-      if (deadline != null && !deadline.isAfter(DateTime.now())) break;
-      final ObdResponse udsResp;
-      try {
-        udsResp = await client.sendPhysicalCanQuery(
-          reqHeader,
-          '22F190',
-          expectedResponseHeader: rxHeader,
-          configureReceiveFilter: true,
-          configureFlowControl: true,
-          owner: owner,
-          deadline: deadline,
-        );
-      } on TransportException {
-        continue;
-      }
-      if (!udsResp.isSuccess) continue;
-      for (final frame in udsResp.frames) {
-        if (frame.sourceId != null &&
-            frame.sourceId!.toUpperCase() != rxHeader) {
-          continue;
-        }
-        var bytes = frame.bytes;
-        while (bytes.length >= 6 &&
-            bytes[0] == 0x7F &&
-            bytes[1] == 0x22 &&
-            bytes[2] == 0x78) {
-          bytes = bytes.sublist(3);
-        }
-        if (bytes.length < 20) continue;
-        if (bytes[0] != 0x62 || bytes[1] != 0xF1 || bytes[2] != 0x90) continue;
-        final vin = _vinFromData(bytes.sublist(3));
-        if (vin != null) {
-          decoded.add(vin);
-          if (reqHeader == '7E2') {
-            vcuAnswered = true;
-          }
-        }
-      }
-    }
-    if (decoded.isEmpty) return null;
-    if (decoded.length > 1) {
-      throw VinIdentityConflictException(
-        '${decoded.length} controller(s) reported different vehicle identification numbers (VIN), '
-        'so this vehicle\'s identity cannot be confirmed. A module may have been replaced or configured wrongly.',
-      );
-    }
-    if (vcuAnswered) {
-      _vcuAnsweredUdsVin = true;
-    }
-    _lastDetectedVin = decoded.first;
-    return decoded.first;
   }
 
   /// Turns one responder's `49 02` payload into a VIN, or null if it is not one.
@@ -4917,17 +4827,11 @@ class PollingEngine {
       if (frame.sourceId?.toUpperCase() != expected) return null;
       final data = _dataForNonMode01(pid.modeAndPid, frame.bytes);
       final declaredLength = pid.responseDataLengthBytes;
-      if (data == null || declaredLength == null || declaredLength <= 0) {
+      if (data == null ||
+          declaredLength == null ||
+          declaredLength <= 0 ||
+          data.length != declaredLength) {
         return null;
-      }
-      if (data.length != declaredLength) {
-        final expectedTotalPayload =
-            (pid.modeAndPid.length ~/ 2) + declaredLength;
-        if (!frame.isPartialPrefix ||
-            frame.declaredPayloadLength != expectedTotalPayload ||
-            data.length > declaredLength) {
-          return null;
-        }
       }
       matches.add(data);
     }
@@ -5181,131 +5085,5 @@ class PollingEngine {
   void _publishNow() {
     if (_snapshots.isClosed) return;
     _snapshots.add(current);
-  }
-
-  final Map<String, List<int>> _mode0100MasksByResponder = {};
-  List<int>? _lastMode0100Mask;
-  String? _lastDetectedVin;
-  bool _vcuAnsweredUdsVin = false;
-
-  /// The 4-byte Mode 01 PID 00 support bitmap (`[A, B, C, D]`) most recently
-  /// observed on this connection, if any.
-  List<int>? get lastMode0100Mask => _lastMode0100Mask;
-
-  void _recordMode0100MasksFromCensus(Iterable<DiagnosticMessage> messages) {
-    for (final message in messages) {
-      if (message.sourceAddress != null &&
-          message.pdu.bytes.length >= 6 &&
-          message.pdu.bytes[0] == 0x41 &&
-          message.pdu.bytes[1] == 0x00) {
-        final addr = message.sourceAddress!.value;
-        final mask = List<int>.unmodifiable(message.pdu.bytes.sublist(2, 6));
-        _mode0100MasksByResponder[addr.toUpperCase()] = mask;
-        _lastMode0100Mask ??= mask;
-      }
-    }
-  }
-
-  void _recordMode0100MaskFromQuery(String query, List<int> raw) {
-    if (query == '0100' && raw.length >= 6) {
-      _lastMode0100Mask = List<int>.unmodifiable(raw.sublist(2, 6));
-    }
-  }
-
-  List<ObdFrame> _selectMode01EngineOrEvFrames(
-    List<ObdFrame> frames,
-    String engineId,
-  ) {
-    final primary = [
-      for (final frame in frames)
-        if (frame.sourceId?.toUpperCase() == engineId) frame,
-    ];
-    if (primary.isNotEmpty) return primary;
-    if (!(_responders?.contains(engineId) ?? false)) {
-      for (final evId in const ['7EA', '7EC']) {
-        final evFrames = [
-          for (final frame in frames)
-            if (frame.sourceId?.toUpperCase() == evId) frame,
-        ];
-        if (evFrames.isNotEmpty) return evFrames;
-      }
-    }
-    return const [];
-  }
-
-  /// Whether this connection exhibits a Hyundai/Kia e-GMP or pure-BEV Mode 01
-  /// / UDS signature (such as `7EA` VCU / `7EC` BMS responding on Mode 01,
-  /// the e-GMP minimal Mode 01 PID 00 mask `98 18 00 01`, or VCU `7E2` -> `7EA`
-  /// answering UDS `22F190`).
-  bool get isEvOrEgmpDetected {
-    if (_vcuAnsweredUdsVin) return true;
-    final resp = _responders;
-    if (PowertrainBatteryProbe.isEgmpMode01Signature(
-      responders: resp ?? const {},
-      supportedMode01Pids: _supported ?? const {},
-      mode0100Mask: _lastMode0100Mask,
-    )) {
-      return true;
-    }
-    for (final entry in _mode0100MasksByResponder.entries) {
-      if ((entry.key == '7EA' || entry.key == '7EC') &&
-          _isEgmpMode0100Mask(entry.value)) {
-        return true;
-      }
-    }
-    final vin = _lastDetectedVin;
-    if (vin != null &&
-        _isHyundaiKiaVin(vin) &&
-        resp != null &&
-        resp.contains('7EA')) {
-      return true;
-    }
-    return false;
-  }
-
-  /// Canonical Powertrain/Battery catalog profile ID auto-detected for this
-  /// vehicle, or `null` when no specific EV profile signature was matched.
-  String? get detectedPowertrainProfileId => isEvOrEgmpDetected
-      ? PowertrainBatteryCatalog.hyundaiKiaEgmpProfileId
-      : null;
-
-  static bool _isEgmpMode0100Mask(List<int> mask) {
-    if (mask.length != 4) return false;
-    // Issue #117 e-GMP VCU 7EA Mode 01 PID 00 mask: 98 18 00 01 (or 98 18 00 00)
-    if (mask[0] == 0x98 &&
-        mask[1] == 0x18 &&
-        mask[2] == 0x00 &&
-        (mask[3] == 0x01 || mask[3] == 0x00)) {
-      return true;
-    }
-    return false;
-  }
-
-  static bool _isHyundaiKiaVin(String vin) {
-    if (vin.length != 17) return false;
-    final wmi = vin.substring(0, 3).toUpperCase();
-    return const {
-      'KM8',
-      'KMH',
-      'KNA',
-      'KND',
-      'KNM',
-      'KNC',
-      '5NM',
-      '5XY',
-      '7YA',
-    }.contains(wmi);
-  }
-
-  bool get _isConfirmedIceMapOnlyCensus {
-    final resp = _responders;
-    if (resp == null || resp.length != 1 || !resp.contains('7E8')) {
-      return false;
-    }
-    final mask = _mode0100MasksByResponder['7E8'];
-    if (mask == null || mask.length < 4) return false;
-    // PID 010B (Intake Manifold Absolute Pressure, bit 5 of byte B) is an ICE
-    // intake vacuum sensor never present on e-GMP VCU/BMS masks.
-    return (mask[1] & 0x20) != 0;
   }
 }

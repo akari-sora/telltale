@@ -142,12 +142,13 @@ abstract final class PowertrainBatteryProbe {
     required String commandKey,
     Object? lifecycleOwner,
     DateTime? deadline,
-    bool allowPartialPrefix = false,
     PowertrainBatteryProbeDiagnosticSink? diagnosticSink,
   }) async {
     final now = DateTime.now().toUtc();
     final catalogSha256 = snapshot.catalogSha256;
-    final profile = snapshot.catalog.byId(profileId);
+    final profile = snapshot.catalog.profiles
+        .where((candidate) => candidate.id == profileId)
+        .firstOrNull;
     final command = profile?.commands
         .where((candidate) => candidate.wireKey == commandKey)
         .firstOrNull;
@@ -339,24 +340,17 @@ abstract final class PowertrainBatteryProbe {
       catalogSha256: catalogSha256,
       response: normalized,
       capturedAt: DateTime.now().toUtc(),
-      allowPartialPrefix: allowPartialPrefix,
       diagnosticSink: diagnosticSink,
     );
   }
 
   /// Validates attribution, envelope, exact payload length, formula and range.
-  ///
-  /// When [allowPartialPrefix] is true and a multi-frame ISO-TP response was
-  /// truncated after a valid First Frame and contiguous initial Consecutive
-  /// Frames, signals whose byte slices lie completely within the received
-  /// prefix are decoded instead of rejecting the entire frame.
   static PowertrainBatteryProbeResult decode({
     required PowertrainBatteryProfile profile,
     required PowertrainBatteryCommand command,
     required String catalogSha256,
     required ObdResponse response,
     DateTime? capturedAt,
-    bool allowPartialPrefix = false,
     PowertrainBatteryProbeDiagnosticSink? diagnosticSink,
   }) {
     final at = (capturedAt ?? DateTime.now()).toUtc();
@@ -377,7 +371,6 @@ abstract final class PowertrainBatteryProbe {
         catalogSha256: catalogSha256,
         response: normalized,
         capturedAt: at,
-        allowPartialPrefix: allowPartialPrefix,
       );
     } on Object catch (error, stackTrace) {
       _reportDiagnostic(diagnosticSink, error, stackTrace, 'decode');
@@ -400,7 +393,6 @@ abstract final class PowertrainBatteryProbe {
     required String catalogSha256,
     required _NormalizedProbeResponse response,
     required DateTime capturedAt,
-    bool allowPartialPrefix = false,
     PowertrainBatteryProbeDiagnosticSink? diagnosticSink,
   }) {
     try {
@@ -410,7 +402,6 @@ abstract final class PowertrainBatteryProbe {
         catalogSha256: catalogSha256,
         response: response,
         capturedAt: capturedAt,
-        allowPartialPrefix: allowPartialPrefix,
       );
     } on Object catch (error, stackTrace) {
       _reportDiagnostic(diagnosticSink, error, stackTrace, 'decode');
@@ -459,7 +450,6 @@ abstract final class PowertrainBatteryProbe {
     required String catalogSha256,
     required _NormalizedProbeResponse response,
     required DateTime capturedAt,
-    bool allowPartialPrefix = false,
   }) {
     final at = capturedAt;
     PowertrainBatteryProbeResult failed(
@@ -521,13 +511,7 @@ abstract final class PowertrainBatteryProbe {
       );
     }
     final expectedPrefix = [requestService + 0x40, ...identifier];
-    var bytes = frame.bytes;
-    while (bytes.length >= 3 + expectedPrefix.length &&
-        bytes[0] == 0x7F &&
-        bytes[1] == requestService &&
-        bytes[2] == 0x78) {
-      bytes = bytes.sublist(3);
-    }
+    final bytes = frame.bytes;
     if (bytes.length < expectedPrefix.length ||
         !_startsWith(bytes, expectedPrefix)) {
       return failed(
@@ -538,11 +522,7 @@ abstract final class PowertrainBatteryProbe {
       );
     }
     final payload = bytes.sublist(expectedPrefix.length);
-    final isPartialPrefix =
-        allowPartialPrefix &&
-        payload.isNotEmpty &&
-        payload.length < command.payloadLength;
-    if (!isPartialPrefix && payload.length != command.payloadLength) {
+    if (payload.length != command.payloadLength) {
       return failed(
         PowertrainBatteryProbeFailure.payloadLengthMismatch,
         'expected ${command.payloadLength} payload bytes, received ${payload.length}',
@@ -555,18 +535,7 @@ abstract final class PowertrainBatteryProbe {
     final readings = <PowertrainBatteryProbeSignalReading>[];
     for (final signal in command.signals) {
       final end = signal.offset + signal.width;
-      if (signal.offset < 0 || signal.width <= 0) {
-        return failed(
-          PowertrainBatteryProbeFailure.payloadLengthMismatch,
-          '${signal.id} byte window is invalid',
-          responder: responder,
-          raw: bytes,
-        );
-      }
-      if (end > payload.length) {
-        if (isPartialPrefix && end <= command.payloadLength) {
-          continue;
-        }
+      if (signal.offset < 0 || signal.width <= 0 || end > payload.length) {
         return failed(
           PowertrainBatteryProbeFailure.payloadLengthMismatch,
           '${signal.id} byte window is outside the validated payload',
@@ -606,15 +575,6 @@ abstract final class PowertrainBatteryProbe {
       );
     }
 
-    if (readings.isEmpty) {
-      return failed(
-        PowertrainBatteryProbeFailure.payloadLengthMismatch,
-        'expected ${command.payloadLength} payload bytes, received ${payload.length}',
-        responder: responder,
-        raw: bytes,
-      );
-    }
-
     return PowertrainBatteryProbeResult.success(
       profileId: profile.id,
       catalogSha256: catalogSha256,
@@ -626,110 +586,6 @@ abstract final class PowertrainBatteryProbe {
       readings: readings,
       capturedAt: at,
     );
-  }
-
-  /// Recognizes the Hyundai/Kia e-GMP EV Mode 01 signature (Issue #117):
-  /// - VCU (`7EA`) or BMS (`7EC`) responds to Mode 01 `0100` without an ICE ECM
-  ///   (`7E8`), or
-  /// - `0100` bitmap is `98 18 00 01` (or `98 18 00 00`), or
-  /// - Supported Mode 01 PIDs in block `0100` expose only the minimal EV subset
-  ///   (`0101`, `0105`, `010C`, optionally `0104`, `010D`, `011C`, `0120`) with
-  ///   no ICE intake/fuel/O2 sensors.
-  static bool isEgmpMode01Signature({
-    Set<String> responders = const {},
-    Set<String> supportedMode01Pids = const {},
-    List<int>? mode0100Mask,
-  }) {
-    final upperResponders = {
-      for (final r in responders) r.trim().toUpperCase(),
-    };
-    if (!upperResponders.contains('7E8') &&
-        (upperResponders.contains('7EA') || upperResponders.contains('7EC'))) {
-      return true;
-    }
-    if (mode0100Mask != null &&
-        mode0100Mask.length == 4 &&
-        mode0100Mask[0] == 0x98 &&
-        mode0100Mask[1] == 0x18 &&
-        mode0100Mask[2] == 0x00 &&
-        (mode0100Mask[3] == 0x01 || mode0100Mask[3] == 0x00)) {
-      return true;
-    }
-    if (supportedMode01Pids.isNotEmpty) {
-      final upperPids = {
-        for (final p in supportedMode01Pids) p.trim().toUpperCase(),
-      };
-      const allowedEvBlock00 = {
-        '0101',
-        '0104',
-        '0105',
-        '010C',
-        '010D',
-        '011C',
-        '0120',
-      };
-      final block00 = {
-        for (final p in upperPids)
-          if (p.startsWith('01') &&
-              p.length == 4 &&
-              (int.tryParse(p.substring(2), radix: 16) ?? 99) <= 0x20)
-            p,
-      };
-      if (block00.contains('0101') &&
-          block00.contains('0105') &&
-          block00.contains('010C') &&
-          block00.every(allowedEvBlock00.contains)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /// Probes the Hyundai/Kia e-GMP BMS (`7E4` -> `7EC`) with UDS `220101` using
-  /// hardware receive filtering (`ATCRA 7EC`) and ISO-TP flow control, restoring
-  /// default functional addressing (`7DF`) afterward.
-  static Future<bool> probeEgmpBms(
-    Elm327Client client, {
-    Object? owner,
-    DateTime? deadline,
-  }) async {
-    if (!client.addressing.isCan || !client.addressing.supportsObd2) {
-      return false;
-    }
-    try {
-      final response = await client.sendPhysicalCanQuery(
-        '7E4',
-        '220101',
-        expectedResponseHeader: '7EC',
-        configureReceiveFilter: true,
-        configureFlowControl: true,
-        owner: owner,
-        deadline: deadline,
-      );
-      if (!response.isSuccess) return false;
-      for (final frame in response.frames) {
-        if (frame.sourceId != null &&
-            frame.sourceId!.toUpperCase() != '7EC') {
-          continue;
-        }
-        var bytes = frame.bytes;
-        while (bytes.length >= 6 &&
-            bytes[0] == 0x7F &&
-            bytes[1] == 0x22 &&
-            bytes[2] == 0x78) {
-          bytes = bytes.sublist(3);
-        }
-        if (bytes.length >= 10 &&
-            bytes[0] == 0x62 &&
-            bytes[1] == 0x01 &&
-            bytes[2] == 0x01) {
-          return true;
-        }
-      }
-      return false;
-    } on Object {
-      return false;
-    }
   }
 
   static List<int>? _hexBytes(String value) {

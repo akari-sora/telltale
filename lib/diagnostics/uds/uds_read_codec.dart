@@ -39,16 +39,10 @@ final class UdsReadCodec {
   ///
   /// If a [definition] is provided, validates exact/min/max data record lengths
   /// and applies typed decoding.
-  ///
-  /// Leading UDS `7F 22 78` (`requestCorrectlyReceived-ResponsePending`) frames
-  /// that precede a subsequent response in the same buffer are stripped so
-  /// slow ECUs that emit `7F 22 78` before `62 <DID>` decode cleanly.
   static UdsReadParseResult parseResponseBytes({
     required UdsDid requestedDid,
     required List<int> responseBytes,
     UdsDidDefinition<Object?>? definition,
-    bool allowPartialPrefix = false,
-    int? minPrefixDataBytes,
   }) {
     if (responseBytes.isEmpty) {
       return const UdsReadMalformed(
@@ -58,46 +52,37 @@ final class UdsReadCodec {
       );
     }
 
-    var effectiveBytes = responseBytes;
-    while (effectiveBytes.length > 3 &&
-        effectiveBytes[0] == 0x7F &&
-        effectiveBytes[1] == 0x22 &&
-        effectiveBytes[2] == 0x78 &&
-        (effectiveBytes[3] == 0x62 || effectiveBytes[3] == 0x7F)) {
-      effectiveBytes = effectiveBytes.sublist(3);
-    }
-
-    final firstByte = effectiveBytes[0];
+    final firstByte = responseBytes[0];
 
     // 1. Negative Response Handling (0x7F)
     if (firstByte == 0x7F) {
-      if (effectiveBytes.length < 2) {
+      if (responseBytes.length < 2) {
         return UdsReadMalformed(
           reason: UdsReadMalformedReason.truncated,
           message: 'Negative response truncated before original SID byte',
-          rawBytes: effectiveBytes,
+          rawBytes: responseBytes,
         );
       }
 
-      final originalSid = effectiveBytes[1];
+      final originalSid = responseBytes[1];
       if (originalSid != 0x22) {
         return UdsReadMalformed(
           reason: UdsReadMalformedReason.wrongNegativeOriginalSid,
           message:
               'Negative response echoed original SID 0x${originalSid.toRadixString(16).padLeft(2, '0').toUpperCase()}, expected 0x22',
-          rawBytes: effectiveBytes,
+          rawBytes: responseBytes,
         );
       }
 
-      if (effectiveBytes.length < 3) {
+      if (responseBytes.length < 3) {
         return UdsReadMalformed(
           reason: UdsReadMalformedReason.missingNrc,
           message: 'Negative response truncated before NRC byte',
-          rawBytes: effectiveBytes,
+          rawBytes: responseBytes,
         );
       }
 
-      final nrcByte = effectiveBytes[2];
+      final nrcByte = responseBytes[2];
       final nrc = UdsNrc.fromCode(nrcByte);
       return UdsReadNegative(
         did: requestedDid,
@@ -112,20 +97,20 @@ final class UdsReadCodec {
         reason: UdsReadMalformedReason.wrongPositiveSid,
         message:
             'Expected positive SID 0x62, got 0x${firstByte.toRadixString(16).padLeft(2, '0').toUpperCase()}',
-        rawBytes: effectiveBytes,
+        rawBytes: responseBytes,
       );
     }
 
-    if (effectiveBytes.length < 3) {
+    if (responseBytes.length < 3) {
       return UdsReadMalformed(
         reason: UdsReadMalformedReason.truncated,
         message:
-            'Positive response truncated before full 16-bit DID echo: got ${effectiveBytes.length} bytes',
-        rawBytes: effectiveBytes,
+            'Positive response truncated before full 16-bit DID echo: got ${responseBytes.length} bytes',
+        rawBytes: responseBytes,
       );
     }
 
-    final echoedDidValue = (effectiveBytes[1] << 8) | effectiveBytes[2];
+    final echoedDidValue = (responseBytes[1] << 8) | responseBytes[2];
     if (echoedDidValue != requestedDid.value) {
       final echoedHex =
           '0x${echoedDidValue.toRadixString(16).padLeft(4, '0').toUpperCase()}';
@@ -133,28 +118,20 @@ final class UdsReadCodec {
         reason: UdsReadMalformedReason.wrongDidEcho,
         message:
             'Echoed DID $echoedHex does not match requested DID ${requestedDid.toHex()}',
-        rawBytes: effectiveBytes,
+        rawBytes: responseBytes,
       );
     }
 
-    final dataRecord = effectiveBytes.sublist(3);
+    final dataRecord = responseBytes.sublist(3);
 
     // 3. Length Constraint Verification
     if (definition != null && !definition.isValidLength(dataRecord.length)) {
-      final minRequired = minPrefixDataBytes ?? definition.minByteLength ?? 1;
-      final canUsePartialPrefix =
-          allowPartialPrefix &&
-          dataRecord.length >= minRequired &&
-          (definition.exactByteLength == null ||
-              dataRecord.length <= definition.exactByteLength!);
-      if (!canUsePartialPrefix) {
-        return UdsReadMalformed(
-          reason: UdsReadMalformedReason.unexpectedLength,
-          message:
-              'Data record length (${dataRecord.length} bytes) does not satisfy definition constraints for ${requestedDid.toHex()}',
-          rawBytes: effectiveBytes,
-        );
-      }
+      return UdsReadMalformed(
+        reason: UdsReadMalformedReason.unexpectedLength,
+        message:
+            'Data record length (${dataRecord.length} bytes) does not satisfy definition constraints for ${requestedDid.toHex()}',
+        rawBytes: responseBytes,
+      );
     }
 
     // 4. Data Record Decoding
@@ -254,8 +231,6 @@ final class UdsReadCodec {
     required UdsDid requestedDid,
     required String rawHex,
     UdsDidDefinition<Object?>? definition,
-    bool allowPartialPrefix = false,
-    int? minPrefixDataBytes,
   }) {
     final bytes = _parseHex(rawHex);
     if (bytes == null) {
@@ -269,8 +244,6 @@ final class UdsReadCodec {
       requestedDid: requestedDid,
       responseBytes: bytes,
       definition: definition,
-      allowPartialPrefix: allowPartialPrefix,
-      minPrefixDataBytes: minPrefixDataBytes,
     );
   }
 

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../obd/pid/pid.dart';
 import '../obd/powertrain_battery/powertrain_battery_catalog.dart';
-import '../obd/powertrain_battery/powertrain_battery_profile.dart';
 import '../obd/powertrain_battery/profile_catalog_validator.dart';
 import '../obd/powertrain_battery/profile_wire_contract.dart';
 import 'pid_registry.dart';
@@ -67,14 +66,15 @@ class PowertrainProfileAuthorizations
     required int vehicleYear,
     required int connectionGeneration,
   }) {
-    final resolvedId = PowertrainBatteryCatalog.resolveProfileId(profileId);
     if (!isPowertrainCatalogSha256(snapshot.catalogSha256)) {
-      revoke(resolvedId);
+      revoke(profileId);
       return null;
     }
-    final profile = snapshot.catalog.byId(resolvedId);
+    final profile = snapshot.catalog.profiles
+        .where((candidate) => candidate.id == profileId)
+        .firstOrNull;
     if (profile == null) {
-      revoke(resolvedId);
+      revoke(profileId);
       return null;
     }
     final validation = const PowertrainBatteryProfileCatalogValidator()
@@ -89,15 +89,14 @@ class PowertrainProfileAuthorizations
         ),
       });
     } else {
-      revoke(profile.id);
+      revoke(profileId);
     }
     return validation;
   }
 
   void revoke(String profileId) {
-    final resolvedId = PowertrainBatteryCatalog.resolveProfileId(profileId);
-    if (!state.containsKey(resolvedId)) return;
-    final next = {...state}..remove(resolvedId);
+    if (!state.containsKey(profileId)) return;
+    final next = {...state}..remove(profileId);
     state = Map.unmodifiable(next);
   }
 
@@ -106,8 +105,7 @@ class PowertrainProfileAuthorizations
     state = const {};
   }
 
-  bool isAuthorized(String profileId) =>
-      state.containsKey(PowertrainBatteryCatalog.resolveProfileId(profileId));
+  bool isAuthorized(String profileId) => state.containsKey(profileId);
 }
 
 final powertrainProfileAuthorizationsProvider =
@@ -313,7 +311,9 @@ class PowertrainExperimentalProbeConsents
         PowertrainProbeRefusal.catalogHashInvalid,
       );
     }
-    final profile = snapshot.catalog.byId(profileId);
+    final profile = snapshot.catalog.profiles
+        .where((candidate) => candidate.id == profileId)
+        .firstOrNull;
     if (profile == null) {
       return const PowertrainExperimentalConsentDecision.refused(
         PowertrainProbeRefusal.profileNotInCatalog,
@@ -339,7 +339,7 @@ class PowertrainExperimentalProbeConsents
         PowertrainProbeRefusal.commandNotInProfile,
       );
     }
-    final quarantine = _quarantines[profile.id];
+    final quarantine = _quarantines[profileId];
     if (quarantine != null) {
       return PowertrainExperimentalConsentDecision.refused(quarantine);
     }
@@ -367,17 +367,18 @@ class PowertrainExperimentalProbeConsents
     required int connectionGeneration,
     DateTime? now,
   }) {
-    final resolvedId = PowertrainBatteryCatalog.resolveProfileId(profileId);
     if (!ref.read(powertrainBatteryExperimentalAccessProvider) ||
         _inFlightLease != null ||
-        _quarantines.containsKey(resolvedId)) {
+        _quarantines.containsKey(profileId)) {
       return null;
     }
-    final key = '$resolvedId\u0000$commandKey';
+    final key = '$profileId\u0000$commandKey';
     final consent = state[key];
     if (consent == null) return null;
     final takenAt = (now ?? DateTime.now()).toUtc();
-    final canonical = snapshot.catalog.byId(resolvedId);
+    final canonical = snapshot.catalog.profiles
+        .where((profile) => profile.id == profileId)
+        .firstOrNull;
     final canonicalCommand = canonical?.commands
         .where((command) => command.wireKey == commandKey)
         .firstOrNull;
@@ -397,7 +398,7 @@ class PowertrainExperimentalProbeConsents
     }
     final attempts = _attempts[key] ?? 0;
     if (attempts >= maxAttemptsPerCommand) {
-      quarantine(resolvedId, PowertrainProbeRefusal.quarantinedAtAttemptCap);
+      quarantine(profileId, PowertrainProbeRefusal.quarantinedAtAttemptCap);
       return null;
     }
     final last = _lastAttemptAt[key];
@@ -441,16 +442,15 @@ class PowertrainExperimentalProbeConsents
       'a quarantine outlives the tap that caused it, so only the two '
       'quarantine refusals may be recorded as one',
     );
-    final resolvedId = PowertrainBatteryCatalog.resolveProfileId(profileId);
-    _quarantines[resolvedId] = cause;
+    _quarantines[profileId] = cause;
     final next = {...state}
-      ..removeWhere((_, consent) => consent.profileId == resolvedId);
+      ..removeWhere((_, consent) => consent.profileId == profileId);
     state = Map.unmodifiable(next);
   }
 
   /// Why this profile is quarantined for this connection, or null.
   PowertrainProbeRefusal? quarantineReason(String profileId) =>
-      _quarantines[PowertrainBatteryCatalog.resolveProfileId(profileId)];
+      _quarantines[profileId];
 
   void invalidateForVehicleBoundary() {
     state = const {};
@@ -498,10 +498,7 @@ List<Pid> filterAuthorizedPowertrainPids(
     if (pid.ownerProfileId == null)
       pid
     else if (isLivePowertrainAuthorization(
-      authorizations[pid.ownerProfileId] ??
-          authorizations[PowertrainBatteryCatalog.resolveProfileId(
-            pid.ownerProfileId!,
-          )],
+      authorizations[pid.ownerProfileId],
       connectionGeneration: connectionGeneration,
       sourceRevision: pid.sourceRevision,
     ))

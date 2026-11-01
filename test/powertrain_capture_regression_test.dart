@@ -47,14 +47,8 @@ const _expected = <String, double>{
   'soc_bms': 71.0,
   'pack_current': 1.5,
   'pack_voltage': 748.6,
-  'pack_power': 1.1229,
   'batt_temp_max': 33.0,
   'batt_temp_min': 30.0,
-  'batt_temp_1': 32.0,
-  'batt_temp_2': 31.0,
-  'batt_temp_3': 32.0,
-  'batt_temp_4': 30.0,
-  'batt_temp_5': 30.0,
   'cell_volt_max': 3.9,
   'cell_volt_max_no': 17.0,
   'cell_volt_min': 3.88,
@@ -64,13 +58,8 @@ const _expected = <String, double>{
   'cum_discharge_ah': 36338.4,
   'cum_energy_charged': 27424.1,
   'cum_energy_discharged': 26435.4,
-  'cum_operating_time': 12611.7511,
-  'isolation_resistance': 3000.0,
   'soh': 96.8,
   'soc_display': 72.0,
-  'max_regen_power': 269.25,
-  'max_discharge_power': 277.0,
-  'batt_heater_temp_1': 32.0,
 };
 
 Future<Map<String, Reading>> _pollProfile(

@@ -264,28 +264,6 @@ final class ElmCanReceiveFilterConfig {
     return ElmCanReceiveFilterConfig._(normalised);
   }
 
-  /// Derives the receive filter for a physical 11-bit CAN ECU request header
-  /// (`7xx` -> `7xx + 0x08`, e.g. `7E4` -> `7EC`, `7E2` -> `7EA`, `744` -> `74C`,
-  /// `770` -> `778`, `7A0` -> `7A8`, `7C6` -> `7CE`, `7D1` -> `7D9`, `7B3` -> `7BB`).
-  factory ElmCanReceiveFilterConfig.forPhysical11Bit({
-    required String requestHeader,
-    required BusAddressing addressing,
-    String? expectedResponseHeader,
-  }) {
-    final rx = expectedResponseHeader != null &&
-            expectedResponseHeader.trim().isNotEmpty
-        ? BusAddressing.normaliseHeader(expectedResponseHeader)
-        : ElmPhysicalCanAddressing.responseFor11BitRequest(requestHeader);
-    if (rx == null) {
-      throw ArgumentError.value(
-        requestHeader,
-        'requestHeader',
-        'does not map to a physical 11-bit CAN response identifier',
-      );
-    }
-    return ElmCanReceiveFilterConfig(address: rx, addressing: addressing);
-  }
-
   static const restoreCommand = 'ATCRA';
   static const maxApplyCommands = 1;
   static const maxRestoreCommands = 1;
@@ -302,51 +280,6 @@ final class ElmCanReceiveFilterConfig {
 
   @override
   int get hashCode => address.hashCode;
-}
-
-/// Clean-room 11-bit CAN physical ECU request/response pairing (`+0x08`).
-///
-/// Covers standard ISO 15765-4 (`7E0`..`7E7` <-> `7E8`..`7EF`) as well as
-/// manufacturer physical 11-bit CAN diagnostic pairs in the `0x700`..`0x7FF`
-/// diagnostic window where bit 3 (`0x008`) separates request (`0`) from
-/// response (`1`) and `7DF` is reserved for functional broadcast:
-/// e.g. `7E4`->`7EC` (BMS), `7E2`->`7EA` (VCU), `744`->`74C` (ICCU/OBC),
-/// `770`->`778` (IGPM), `7A0`->`7A8` (BCM/TPMS), `7C6`->`7CE` (CLU),
-/// `7D1`->`7D9` (IEB), `7B3`->`7BB` (A/C).
-abstract final class ElmPhysicalCanAddressing {
-  /// Returns the 11-bit CAN response ID (`request + 0x08`) for a physical
-  /// request header in `700`..`7F7` (excluding functional `7DF`), or null.
-  static String? responseFor11BitRequest(String? requestHeader) {
-    if (requestHeader == null) return null;
-    final normalised = BusAddressing.normaliseHeader(requestHeader);
-    if (normalised.length != 3 || normalised == '7DF') return null;
-    final id = int.tryParse(normalised, radix: 16);
-    if (id == null || id < 0x700 || id > 0x7F7) return null;
-    if ((id & 0x008) != 0) return null;
-    return (id + 0x008).toRadixString(16).toUpperCase().padLeft(3, '0');
-  }
-
-  /// Returns the 11-bit CAN physical request ID (`response - 0x08`) for a
-  /// response header in `708`..`7FF` (excluding functional `7DF`), or null.
-  static String? requestFor11BitResponse(String? responseHeader) {
-    if (responseHeader == null) return null;
-    final normalised = BusAddressing.normaliseHeader(responseHeader);
-    if (normalised.length != 3 || normalised == '7DF') return null;
-    final id = int.tryParse(normalised, radix: 16);
-    if (id == null || id < 0x708 || id > 0x7FF) return null;
-    if ((id & 0x008) == 0) return null;
-    final req = id - 0x008;
-    if (req == 0x7DF) return null;
-    return req.toRadixString(16).toUpperCase().padLeft(3, '0');
-  }
-
-  /// Whether [requestHeader] is a physical 11-bit CAN diagnostic request ID.
-  static bool isPhysical11BitRequest(String? requestHeader) =>
-      responseFor11BitRequest(requestHeader) != null;
-
-  /// Whether [responseHeader] is a physical 11-bit CAN diagnostic response ID.
-  static bool isPhysical11BitResponse(String? responseHeader) =>
-      requestFor11BitResponse(responseHeader) != null;
 }
 
 abstract final class ElmCanReceiveFilterMessages {

@@ -74,7 +74,9 @@ class PowertrainProfileConfirmBanner extends ConsumerWidget {
               _ConfirmRow(
                 profileId: profileId,
                 snapshot: snapshot,
-                profile: snapshot?.catalog.byId(profileId),
+                profile: snapshot?.catalog.profiles
+                    .where((profile) => profile.id == profileId)
+                    .firstOrNull,
               ),
           ],
         ),

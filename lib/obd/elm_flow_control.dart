@@ -154,23 +154,6 @@ final class ElmFlowControlConfig {
         addressing: addressing,
       );
 
-  /// Standard 11-bit CAN ISO 15765-2 Flow Control frame (`30 00 00`: Clear To
-  /// Send, BlockSize = 0, STmin = 0 ms) for physical request [header] (e.g.
-  /// `7E4` BMS, `7E2` VCU, `744` ICCU, `770` IGPM, `7A0` BCM/TPMS, `7C6` CLU,
-  /// `7D1` IEB, `7B3` A/C).
-  factory ElmFlowControlConfig.standard11Bit({
-    required String header,
-    required BusAddressing addressing,
-    int blockSize = 0x00,
-    int stMin = 0x00,
-  }) =>
-      ElmFlowControlConfig(
-        mode: ElmFlowControlMode.customHeaderAndData,
-        header: header,
-        data: <int>[0x30, blockSize & 0xFF, stMin & 0xFF],
-        addressing: addressing,
-      );
-
   /// SM2: user data only. Still CAN-only; [addressing] must name an 11- or
   /// 29-bit ISO 15765-4 bus.
   factory ElmFlowControlConfig.customDataKeepId({

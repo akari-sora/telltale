@@ -6664,7 +6664,7 @@
         "Exact-length contract: the profile accepts only a 59-byte 220101 and 43-byte 220105 payload from responder 7EC. A firmware answering with a different shape fails closed - a dark gauge, never a guessed number.",
         "Responses are multi-frame ISO 15765-2; an adapter or clone that mishandles flow control will time out rather than corrupt values.",
         "Pack current is signed: positive while discharging, negative while charging or regenerating.",
-        "Bit-packed status flags (charging, relay, ignition) are not imported; the formula engine installs numeric gauges only.",
+        "Bit-packed status flags (charging, relay, ignition) and cumulative operating time are not imported; the formula engine installs numeric gauges only.",
         "Pack voltage bounds are derived from cell-count physics (2.8 V x 144s to 4.2 V x 192s) so both the 58 kWh and 77.4 kWh packs stay in range; an out-of-range reading is refused, not shown.",
         "Battery inlet temperature is excluded on E-GMP: OVMS and OBDb disagree on its decode (signed vs offset-40), and a disagreement means exclusion."
       ],
@@ -6887,90 +6887,6 @@
               "max_value": 1000000,
               "semantic_kind": "cumulativeDischargeEnergy",
               "recommended": false
-            },
-            {
-              "id": "pack_power",
-              "name": "Battery pack power",
-              "offset": 10,
-              "width": 4,
-              "equation": "((SIGNED(A)*256+B)/10)*((C*256+D)/10)/1000",
-              "unit": "kW",
-              "min_value": -400,
-              "max_value": 400,
-              "semantic_kind": "packPower",
-              "recommended": true
-            },
-            {
-              "id": "batt_temp_1",
-              "name": "Battery module temperature 1",
-              "offset": 16,
-              "width": 1,
-              "equation": "SIGNED(A)",
-              "unit": "C",
-              "min_value": -40,
-              "max_value": 80,
-              "semantic_kind": "batteryTemperature",
-              "recommended": false
-            },
-            {
-              "id": "batt_temp_2",
-              "name": "Battery module temperature 2",
-              "offset": 17,
-              "width": 1,
-              "equation": "SIGNED(A)",
-              "unit": "C",
-              "min_value": -40,
-              "max_value": 80,
-              "semantic_kind": "batteryTemperature",
-              "recommended": false
-            },
-            {
-              "id": "batt_temp_3",
-              "name": "Battery module temperature 3",
-              "offset": 18,
-              "width": 1,
-              "equation": "SIGNED(A)",
-              "unit": "C",
-              "min_value": -40,
-              "max_value": 80,
-              "semantic_kind": "batteryTemperature",
-              "recommended": false
-            },
-            {
-              "id": "batt_temp_4",
-              "name": "Battery module temperature 4",
-              "offset": 19,
-              "width": 1,
-              "equation": "SIGNED(A)",
-              "unit": "C",
-              "min_value": -40,
-              "max_value": 80,
-              "semantic_kind": "batteryTemperature",
-              "recommended": false
-            },
-            {
-              "id": "cum_operating_time",
-              "name": "Cumulative BMS operating time",
-              "offset": 46,
-              "width": 4,
-              "equation": "(A*16777216+B*65536+C*256+D)/3600",
-              "unit": "h",
-              "min_value": 0,
-              "max_value": 200000,
-              "semantic_kind": "operatingTime",
-              "recommended": false
-            },
-            {
-              "id": "isolation_resistance",
-              "name": "HV isolation resistance",
-              "offset": 57,
-              "width": 2,
-              "equation": "A*256+B",
-              "unit": "kOhm",
-              "min_value": 0,
-              "max_value": 65535,
-              "semantic_kind": "isolationResistance",
-              "recommended": true
             }
           ]
         },
@@ -7004,54 +6920,6 @@
               "max_value": 100,
               "semantic_kind": "stateOfCharge",
               "recommended": true
-            },
-            {
-              "id": "max_regen_power",
-              "name": "Available regenerative power",
-              "offset": 16,
-              "width": 2,
-              "equation": "(A*256+B)/100",
-              "unit": "kW",
-              "min_value": 0,
-              "max_value": 655.35,
-              "semantic_kind": "maxRegenPower",
-              "recommended": true
-            },
-            {
-              "id": "max_discharge_power",
-              "name": "Available discharge power",
-              "offset": 18,
-              "width": 2,
-              "equation": "(A*256+B)/100",
-              "unit": "kW",
-              "min_value": 0,
-              "max_value": 655.35,
-              "semantic_kind": "maxDischargePower",
-              "recommended": true
-            },
-            {
-              "id": "batt_heater_temp_1",
-              "name": "Battery heater temperature 1",
-              "offset": 23,
-              "width": 1,
-              "equation": "SIGNED(A)",
-              "unit": "C",
-              "min_value": -40,
-              "max_value": 100,
-              "semantic_kind": "batteryTemperature",
-              "recommended": false
-            },
-            {
-              "id": "batt_temp_5",
-              "name": "Battery module temperature 5",
-              "offset": 9,
-              "width": 1,
-              "equation": "SIGNED(A)",
-              "unit": "C",
-              "min_value": -40,
-              "max_value": 80,
-              "semantic_kind": "batteryTemperature",
-              "recommended": false
             }
           ]
         }

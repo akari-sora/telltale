@@ -18,7 +18,7 @@ void main() {
       expect(profiles.length, greaterThanOrEqualTo(60));
       expect(snapshot.profileCount, profiles.length);
       expect(snapshot.profileCount, 221);
-      expect(snapshot.signalCount, 168);
+      expect(snapshot.signalCount, 157);
       expect(snapshot.countsByPowertrain, {
         'BEV': 89,
         'FCEV': 5,

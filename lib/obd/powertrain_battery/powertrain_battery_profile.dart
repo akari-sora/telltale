@@ -311,20 +311,6 @@ final class PowertrainBatteryProfile {
 final class PowertrainBatteryCatalog {
   static const int supportedSchemaVersion = 3;
 
-  static const String hyundaiKiaEgmpProfileId =
-      'hyundai-ioniq5-egmp-2021-2024-community';
-
-  static const Map<String, String> _profileIdAliases = {
-    'hyundai_kia_egmp': hyundaiKiaEgmpProfileId,
-    'hyundai-kia-egmp': hyundaiKiaEgmpProfileId,
-    'kia-ev6-egmp-2021-2024-community': hyundaiKiaEgmpProfileId,
-  };
-
-  /// Resolves known profile ID aliases (such as `hyundai_kia_egmp`) to their
-  /// canonical bundled catalog ID.
-  static String resolveProfileId(String id) =>
-      _profileIdAliases[id.trim()] ?? id.trim();
-
   PowertrainBatteryCatalog({
     required this.schemaVersion,
     required List<PowertrainBatteryProfile> profiles,
@@ -332,15 +318,6 @@ final class PowertrainBatteryCatalog {
 
   final int schemaVersion;
   final List<PowertrainBatteryProfile> profiles;
-
-  /// Looks up a profile by canonical ID or known alias (e.g. `hyundai_kia_egmp`).
-  PowertrainBatteryProfile? byId(String id) {
-    final resolved = resolveProfileId(id);
-    for (final profile in profiles) {
-      if (profile.id == resolved) return profile;
-    }
-    return null;
-  }
 
   factory PowertrainBatteryCatalog.fromJsonString(String source) {
     Object? decoded;

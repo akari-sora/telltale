@@ -155,8 +155,6 @@ class ObdFrame {
     this.payload,
     this.operand,
     this.evidence = ObservedEvidence.answered,
-    this.isPartialPrefix = false,
-    this.declaredPayloadLength,
   });
 
   /// What this line establishes about its source. Only meaningful on observed
@@ -165,8 +163,6 @@ class ObdFrame {
 
   final List<int> bytes;
   final String? sourceId;
-  final bool isPartialPrefix;
-  final int? declaredPayloadLength;
 
   /// The service this frame is about, when it can be told.
   ///
@@ -2754,7 +2750,9 @@ class Elm327Client {
   ) {
     if (!response.isSuccess || response.frames.isEmpty) return false;
     if (engineResponseId == null) return true;
-    return _matchesEngineOrEvResponder(response.frames, engineResponseId);
+    return response.frames.any(
+      (frame) => frame.sourceId?.toUpperCase() == engineResponseId,
+    );
   }
 
   /// Keep the engine ECU's Mode 01 payload; drop other responders without
@@ -2764,10 +2762,10 @@ class Elm327Client {
     String engineResponseId,
   ) {
     if (!response.isSuccess) return response;
-    final engineFrames = _selectEngineOrEvFrames(
-      response.frames,
-      engineResponseId,
-    );
+    final engineFrames = [
+      for (final frame in response.frames)
+        if (frame.sourceId?.toUpperCase() == engineResponseId) frame,
+    ];
     if (engineFrames.isEmpty) {
       return ObdResponse(
         rawLines: response.rawLines,
@@ -7102,8 +7100,6 @@ class Elm327Client {
 
     final hex = StringBuffer();
     final frames = <ObdFrame>[];
-    final pendingFrames = <ObdFrame>[];
-    final rawBodies = <List<int>>[];
     for (final line in lines) {
       final stripped = line.trim();
       if (stripped.isEmpty) continue;
@@ -7129,25 +7125,8 @@ class Elm327Client {
         continue;
       }
       final clean = stripped.replaceAll(' ', '');
-      rawBodies.add(_hexToBytes(clean));
-    }
-    for (var i = 0; i < rawBodies.length; i++) {
-      final body = rawBodies[i];
-      final isIntermediatePending =
-          i + 1 < rawBodies.length &&
-          ((body.length == 3 && body[0] == 0x7F && body[2] == 0x78) ||
-              IsoTpAssembler.isResponsePendingSingleFrame(body));
-      if (isIntermediatePending) {
-        final pendingPayload =
-            body.length == 4 && body[0] == 0x03 ? body.sublist(1, 4) : body;
-        pendingFrames.add(
-          ObdFrame(pendingPayload, service: _serviceOfPayload(pendingPayload)),
-        );
-        continue;
-      }
-      for (final b in body) {
-        hex.write(b.toRadixString(16).toUpperCase().padLeft(2, '0'));
-      }
+      hex.write(clean);
+      final body = _hexToBytes(clean);
       // Set here for uniformity, not because anything reads it yet.
       //
       // agy round 32 demonstrated that deleting `service:` from this site and
@@ -7167,7 +7146,6 @@ class Elm327Client {
       bytes: _hexToBytes(hexPayload),
       frames: frames,
       batteryVoltage: volts,
-      pendingFrames: pendingFrames,
     );
   }
 
@@ -7190,43 +7168,20 @@ class Elm327Client {
 
     int? declared;
     final segments = <List<int>>[];
-    final pendingFrames = <ObdFrame>[];
     var expectedSeq = 0;
-    var onlyPendingBeforeHeader = true;
 
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
       final match = _seqPrefix.firstMatch(line);
 
       if (match == null) {
-        final stripped = line.trim();
-        if (segments.isEmpty && declared == null && _hexLine.hasMatch(stripped)) {
-          final preBytes = _hexToBytes(stripped.replaceAll(' ', ''));
-          if ((preBytes.length == 3 &&
-                  preBytes[0] == 0x7F &&
-                  preBytes[2] == 0x78) ||
-              IsoTpAssembler.isResponsePendingSingleFrame(preBytes)) {
-            final pendingPayload = preBytes.length == 4 && preBytes[0] == 0x03
-                ? preBytes.sublist(1, 4)
-                : preBytes;
-            pendingFrames.add(
-              ObdFrame(
-                pendingPayload,
-                service: _serviceOfPayload(pendingPayload),
-              ),
-            );
-            continue;
-          }
-        }
         // The one non-sequenced line an ISO-TP reply carries is the total
         // length, printed above the first segment.
-        if ((i == 0 || (segments.isEmpty && declared == null && onlyPendingBeforeHeader && pendingFrames.isNotEmpty)) &&
-            _lengthHeader.hasMatch(stripped)) {
-          declared = int.tryParse(stripped, radix: 16);
+        if (i == 0 && _lengthHeader.hasMatch(line.trim())) {
+          declared = int.tryParse(line.trim(), radix: 16);
           if (declared == null) return reject();
           continue;
         }
-        onlyPendingBeforeHeader = false;
         // Anything else that is hex-shaped is damage, and dropping it here
         // was the last place this defect had left to hide. Once one `N:`
         // segment exists this parser owns the whole reply, so a truncated peer
@@ -7241,6 +7196,7 @@ class Elm327Client {
         // 1726 rpm is published beside evidence that something arrived
         // damaged. Prose is still skipped — `SEARCHING...` inside an envelope
         // is the adapter talking about itself.
+        final stripped = line.trim();
         if (stripped.isNotEmpty && _hexishLine.hasMatch(stripped)) {
           return reject();
         }
@@ -7266,32 +7222,7 @@ class Elm327Client {
 
     final assembled = [for (final s in segments) ...s];
     // Short of what the header promised: frames went missing.
-    if (assembled.length < declared) {
-      // Allow contiguous prefix recovery for UDS ReadDataByIdentifier (0x62)
-      // multi-frame responses when a trailing Consecutive Frame was dropped by
-      // a slow BLE UART bridge, while keeping Mode 01/03/07/09/0A fail-closed.
-      if (assembled.length >= 4 && assembled[0] == 0x62) {
-        final hexPayload = assembled
-            .map((b) => b.toRadixString(16).toUpperCase().padLeft(2, '0'))
-            .join();
-        return ObdResponse(
-          rawLines: lines,
-          hexPayload: hexPayload,
-          bytes: assembled,
-          frames: [
-            ObdFrame(
-              assembled,
-              service: _serviceOfPayload(assembled),
-              isPartialPrefix: true,
-              declaredPayloadLength: declared,
-            ),
-          ],
-          batteryVoltage: volts,
-          pendingFrames: pendingFrames,
-        );
-      }
-      return reject();
-    }
+    if (assembled.length < declared) return reject();
 
     // Longer is normal — the final CAN frame is zero-padded to eight bytes —
     // but only the declared length is payload.
@@ -7306,7 +7237,6 @@ class Elm327Client {
       bytes: payload,
       frames: [ObdFrame(payload, service: _serviceOfPayload(payload))],
       batteryVoltage: volts,
-      pendingFrames: pendingFrames,
     );
   }
 
@@ -7321,7 +7251,7 @@ class Elm327Client {
       batteryVoltage: volts,
     );
 
-    final rawFrames = <List<int>>[];
+    final frames = <List<int>>[];
     for (final line in lines) {
       final stripped = line.trim();
       if (stripped.isEmpty) continue;
@@ -7329,9 +7259,8 @@ class Elm327Client {
         if (_hexishLine.hasMatch(stripped)) return reject();
         continue;
       }
-      rawFrames.add(_hexToBytes(stripped.replaceAll(' ', '')));
+      frames.add(_hexToBytes(stripped.replaceAll(' ', '')));
     }
-    final frames = IsoTpAssembler.stripIntermediateResponsePending(rawFrames);
     if (frames.isEmpty) return reject();
     // Headers off: responders are indistinguishable. A First Frame plus
     // another controller's matching Consecutive Frame would assemble as one
@@ -7953,40 +7882,15 @@ class Elm327Client {
 
     final frames = <ObdFrame>[];
     for (final id in order) {
-      final groupBodies = groups[id]!;
-      final assembled = _reassembleIsoTp(groupBodies);
-      if (assembled != null) {
-        frames.add(
-          ObdFrame(
-            assembled,
-            sourceId: id,
-            service: _serviceOfPayload(assembled),
-          ),
-        );
-        continue;
-      }
-      final partial = IsoTpAssembler.reassembleWithMetadata(
-        groupBodies,
-        maxPduBytes: ElmHostIsoTpConfig.maxPduBytes,
-        allowPartialPrefix: true,
-        minPayloadBytes: 4,
+      final assembled = _reassembleIsoTp(groups[id]!);
+      if (assembled == null) return reject();
+      frames.add(
+        ObdFrame(
+          assembled,
+          sourceId: id,
+          service: _serviceOfPayload(assembled),
+        ),
       );
-      if (partial != null &&
-          partial.isPartialPrefix &&
-          partial.bytes.length >= 4 &&
-          partial.bytes[0] == 0x62) {
-        frames.add(
-          ObdFrame(
-            partial.bytes,
-            sourceId: id,
-            service: _serviceOfPayload(partial.bytes),
-            isPartialPrefix: true,
-            declaredPayloadLength: partial.declaredLength,
-          ),
-        );
-        continue;
-      }
-      return reject();
     }
 
     // `bytes` is the first responder's message. Anything that must cope with
@@ -8308,271 +8212,5 @@ class Elm327Client {
       if (frame.bytes.isNotEmpty) frames++;
     }
     return lines > frames ? lines : frames;
-  }
-
-  static const List<String> _evPowertrainResponseIds = ['7EA', '7EC'];
-
-  bool _matchesEngineOrEvResponder(
-    List<ObdFrame> frames,
-    String engineResponseId,
-  ) {
-    if (frames.any(
-      (frame) => frame.sourceId?.toUpperCase() == engineResponseId,
-    )) {
-      return true;
-    }
-    if (!knownResponders.contains(engineResponseId)) {
-      return frames.any(
-        (frame) =>
-            _evPowertrainResponseIds.contains(frame.sourceId?.toUpperCase()),
-      );
-    }
-    return false;
-  }
-
-  List<ObdFrame> _selectEngineOrEvFrames(
-    List<ObdFrame> frames,
-    String engineResponseId,
-  ) {
-    final engineFrames = [
-      for (final frame in frames)
-        if (frame.sourceId?.toUpperCase() == engineResponseId) frame,
-    ];
-    if (engineFrames.isNotEmpty || knownResponders.contains(engineResponseId)) {
-      return engineFrames;
-    }
-    for (final evId in _evPowertrainResponseIds) {
-      final evFrames = [
-        for (final frame in frames)
-          if (frame.sourceId?.toUpperCase() == evId) frame,
-      ];
-      if (evFrames.isNotEmpty) {
-        return evFrames;
-      }
-    }
-    return engineFrames;
-  }
-
-  /// Sends [command] to a physical 11-bit CAN request header (such as `7E2`
-  /// VCU, `7E4` BMS, `7E0` ECM, `744` ICCU, `770` IGPM, `7A0` BCM/TPMS,
-  /// `7C6` CLU, `7D1` IEB, or `7B3` A/C), optionally configuring the paired
-  /// `ATCRA` hardware receive filter (`header + 0x08`) and ISO 15765-2 flow
-  /// control (`ATFCSH`, `ATFCSD300000`, `ATFCSM1`), and cleanly restoring
-  /// default functional addressing (`7DF`, clearing `ATCRA` and `ATFCSM0`)
-  /// afterward.
-  Future<ObdResponse> sendPhysicalCanQuery(
-    String header,
-    String command, {
-    String? expectedResponseHeader,
-    bool configureReceiveFilter = true,
-    bool configureFlowControl = true,
-    String? restoreHeader,
-    Duration? timeout,
-    ElmWriteAudit? writeAudit,
-    Object? owner,
-    DateTime? deadline,
-  }) {
-    _throwIfInsideTransaction();
-    _claimWriteAudit(writeAudit);
-    final normHeader = BusAddressing.normaliseHeader(header);
-    final rxHeader = expectedResponseHeader != null
-        ? BusAddressing.normaliseHeader(expectedResponseHeader)
-        : ElmPhysicalCanAddressing.responseFor11BitRequest(normHeader);
-    final targetRestore = BusAddressing.normaliseHeader(
-      restoreHeader ?? addressing.functionalHeader ?? '7DF',
-    );
-    final completer = Completer<ObdResponse>();
-    _commandChain = _commandChain.then((_) async {
-      try {
-        if (!(mayTransmit?.call(owner) ?? true)) {
-          throw const OperationRetiredException(
-            'This session has ended or gone to the background, so the command was not sent.',
-          );
-        }
-        if (deadline != null && !deadline.isAfter(_clock())) {
-          throw TimeoutException(
-            'The time limit for this operation has passed, so $command was not sent.',
-          );
-        }
-        if (_outOfSync) await _resync(deadline: deadline);
-
-        final headersWereOn = _headersOn;
-        final headersOn =
-            _saidOk(
-              await _sendNow(
-                'ATH1',
-                commandTimeout,
-                owner: owner,
-                deadline: deadline,
-                writeAudit: writeAudit,
-              ),
-            ) ||
-            headersWereOn;
-        var craApplied = false;
-        var fcApplied = false;
-        late final ObdResponse resolvedResponse;
-
-        try {
-          _currentHeader = null;
-          final shAck = await _sendNow(
-            'ATSH $normHeader',
-            commandTimeout,
-            owner: owner,
-            deadline: deadline,
-            writeAudit: writeAudit,
-          );
-          if (!_saidOk(shAck)) {
-            throw TransportException(
-              'The adapter refused to switch to physical header $normHeader',
-              issue: TransportIssue.queryHeaderRefused,
-              issueDetail: normHeader,
-            );
-          }
-          _currentHeader = normHeader;
-
-          if (configureReceiveFilter && rxHeader != null) {
-            craApplied = true;
-            final craAck = await _sendNow(
-              'ATCRA$rxHeader',
-              commandTimeout,
-              owner: owner,
-              deadline: deadline,
-              writeAudit: writeAudit,
-            );
-            if (_saidRefused(craAck)) {
-              craApplied = false;
-            }
-          }
-
-          if (configureFlowControl &&
-              ElmPhysicalCanAddressing.isPhysical11BitRequest(normHeader)) {
-            fcApplied = true;
-            final fcshAck = await _sendNow(
-              'ATFCSH$normHeader',
-              commandTimeout,
-              owner: owner,
-              deadline: deadline,
-              writeAudit: writeAudit,
-            );
-            if (_saidOk(fcshAck)) {
-              await _sendNow(
-                'ATFCSD300000',
-                commandTimeout,
-                owner: owner,
-                deadline: deadline,
-                writeAudit: writeAudit,
-              );
-              await _sendNow(
-                'ATFCSM1',
-                commandTimeout,
-                owner: owner,
-                deadline: deadline,
-                writeAudit: writeAudit,
-              );
-            } else if (_saidRefused(fcshAck)) {
-              fcApplied = false;
-            }
-          }
-
-          var response = (await _sendNow(
-            command,
-            timeout ?? globalTimeout,
-            owner: owner,
-            deadline: deadline,
-            writeAudit: writeAudit,
-          )).withHeadersEnabled(headersOn);
-
-          if (rxHeader != null &&
-              headersOn &&
-              response.isSuccess &&
-              response.frames.isNotEmpty) {
-            final matching = [
-              for (final f in response.frames)
-                if (f.sourceId == null || f.sourceId!.toUpperCase() == rxHeader)
-                  f,
-            ];
-            if (matching.isEmpty) {
-              response = ObdResponse(
-                rawLines: response.rawLines,
-                errorCode: Elm327ErrorCode.noData,
-                attributedSources: response.attributedSources,
-                observedFrames: response.observedFrames,
-                headersEnabled: headersOn,
-                batteryVoltage: response.batteryVoltage,
-                pendingFrames: response.pendingFrames,
-              );
-            } else if (matching.length != response.frames.length) {
-              final primary = matching.first.bytes;
-              response = ObdResponse(
-                rawLines: response.rawLines,
-                hexPayload: primary
-                    .map((b) => b.toRadixString(16).toUpperCase().padLeft(2, '0'))
-                    .join(),
-                bytes: primary,
-                frames: List.unmodifiable(matching),
-                attributedSources: response.attributedSources,
-                observedFrames: response.observedFrames,
-                headersEnabled: headersOn,
-                batteryVoltage: response.batteryVoltage,
-                pendingFrames: response.pendingFrames,
-              );
-            }
-          }
-
-          resolvedResponse = response;
-        } finally {
-          _currentHeader = null;
-          var canRestore = true;
-          if (_outOfSync) {
-            try {
-              await _resync();
-            } on Object {
-              canRestore = false;
-            }
-          }
-          if (canRestore) {
-            if (fcApplied) {
-              await _sendNow(
-                'ATFCSM0',
-                commandTimeout,
-                completesCommittedTransaction: true,
-                writeAudit: writeAudit,
-              );
-            }
-            if (craApplied) {
-              await _sendNow(
-                'ATCRA',
-                commandTimeout,
-                completesCommittedTransaction: true,
-                writeAudit: writeAudit,
-              );
-            }
-            final restoreAck = await _sendNow(
-              'ATSH $targetRestore',
-              commandTimeout,
-              completesCommittedTransaction: true,
-              writeAudit: writeAudit,
-            );
-            if (_saidOk(restoreAck)) {
-              _currentHeader = targetRestore;
-            }
-            if (headersOn && !headersWereOn) {
-              await _sendNow(
-                'ATH0',
-                commandTimeout,
-                completesCommittedTransaction: true,
-                writeAudit: writeAudit,
-              );
-            }
-          }
-        }
-        if (!completer.isCompleted) {
-          completer.complete(resolvedResponse);
-        }
-      } on Object catch (e, st) {
-        if (!completer.isCompleted) completer.completeError(e, st);
-      }
-    });
-    return completer.future;
   }
 }
