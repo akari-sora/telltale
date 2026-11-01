@@ -173,6 +173,8 @@ final class ObdCapabilitySummary {
     required Iterable<String> verifiedBlockIds,
     required Iterable<String> supportedMode01Requests,
     required Iterable<String> directlyAnsweredDefinitionIds,
+    Iterable<String> responderAccountedBlockIds = const <String>{},
+    Iterable<String> responderClaimedMode01Requests = const <String>{},
   }) : verifiedBlockIds = Set<String>.unmodifiable(
          verifiedBlockIds.map((value) => value.toUpperCase()),
        ),
@@ -181,6 +183,12 @@ final class ObdCapabilitySummary {
        ),
        _directlyAnsweredDefinitionIds = Set<String>.unmodifiable(
          directlyAnsweredDefinitionIds.map(Pid.canonicalId),
+       ),
+       responderAccountedBlockIds = Set<String>.unmodifiable(
+         responderAccountedBlockIds.map((value) => value.toUpperCase()),
+       ),
+       _responderClaimedMode01Requests = Set<String>.unmodifiable(
+         responderClaimedMode01Requests.map((value) => value.toUpperCase()),
        );
 
   factory ObdCapabilitySummary.notStarted() => ObdCapabilitySummary(
@@ -195,17 +203,32 @@ final class ObdCapabilitySummary {
   final Set<String> _supportedMode01Requests;
   final Set<String> _directlyAnsweredDefinitionIds;
 
+  /// Blocks that every non-engine responder claiming them has answered, on a
+  /// vehicle whose census has no engine controller (issue #117).
+  ///
+  /// Separate from [verifiedBlockIds] on purpose: those masks describe the
+  /// engine and license batching and positive status. These only say which
+  /// requests *no* responder claims; a request one of them does claim stays
+  /// unknown, because no value is taken from a controller that is not the
+  /// engine.
+  final Set<String> responderAccountedBlockIds;
+  final Set<String> _responderClaimedMode01Requests;
+
   int get unknownOrUnverifiedBlockCount {
     var unknown = 0;
     for (final query in PidLibrary.supportQueries) {
-      if (!verifiedBlockIds.contains(query)) {
-        unknown++;
-        continue;
-      }
       final base = int.parse(query.substring(2), radix: 16);
       final continuation =
           '01${(base + 0x20).toRadixString(16).toUpperCase().padLeft(2, '0')}';
-      if (!_supportedMode01Requests.contains(continuation)) break;
+      if (verifiedBlockIds.contains(query)) {
+        if (!_supportedMode01Requests.contains(continuation)) break;
+        continue;
+      }
+      if (responderAccountedBlockIds.contains(query)) {
+        if (!_responderClaimedMode01Requests.contains(continuation)) break;
+        continue;
+      }
+      unknown++;
     }
     return unknown;
   }
@@ -246,12 +269,18 @@ final class ObdCapabilitySummary {
       return PidCapabilityStatus.unknown;
     }
     final block = PidLibrary.supportBlockFor(pid.modeAndPid);
-    if (block == null || !verifiedBlockIds.contains(block)) {
-      return PidCapabilityStatus.unknown;
+    if (block == null) return PidCapabilityStatus.unknown;
+    final request = pid.modeAndPid.toUpperCase();
+    if (verifiedBlockIds.contains(block)) {
+      return _supportedMode01Requests.contains(request)
+          ? PidCapabilityStatus.positive
+          : PidCapabilityStatus.unsupported;
     }
-    return _supportedMode01Requests.contains(pid.modeAndPid.toUpperCase())
-        ? PidCapabilityStatus.positive
-        : PidCapabilityStatus.unsupported;
+    if (responderAccountedBlockIds.contains(block) &&
+        !_responderClaimedMode01Requests.contains(request)) {
+      return PidCapabilityStatus.unsupported;
+    }
+    return PidCapabilityStatus.unknown;
   }
 
   List<Pid> get positivelyConfirmedShippedDirectPids => List<Pid>.unmodifiable(
@@ -452,12 +481,17 @@ class PollingEngine {
   /// PIDs the ECU reported as supported, or null before discovery has run.
   Set<String>? get supportedPids => _supported;
 
-  ObdCapabilitySummary get capabilitySummary => ObdCapabilitySummary(
-    phase: _capabilityPhase,
-    verifiedBlockIds: _verifiedSupportBlocks,
-    supportedMode01Requests: _supported ?? const <String>{},
-    directlyAnsweredDefinitionIds: _answeredAtLeastOnce,
-  );
+  ObdCapabilitySummary get capabilitySummary {
+    final accounting = _responderSupportAccounting();
+    return ObdCapabilitySummary(
+      phase: _capabilityPhase,
+      verifiedBlockIds: _verifiedSupportBlocks,
+      supportedMode01Requests: _supported ?? const <String>{},
+      directlyAnsweredDefinitionIds: _answeredAtLeastOnce,
+      responderAccountedBlockIds: accounting.blocks,
+      responderClaimedMode01Requests: accounting.claimed,
+    );
+  }
 
   Stream<ObdCapabilitySummary> get capabilitySummaries =>
       _capabilitySummaries.stream;
@@ -1040,6 +1074,101 @@ class PollingEngine {
   /// claim and must not be rendered as the vehicle lacking the sensor.
   final Set<String> _verifiedSupportBlocks = {};
 
+  /// Support masks from legislated 11-bit responders other than the engine,
+  /// by block and then by responder (`0120` → `7EC` → four mask bytes).
+  ///
+  /// Issue #117: a 2022 IONIQ 5 has no `7E8`. Four modules answer `0100` on
+  /// `7DF`, and the engine-only rule discarded all of them, so no block was
+  /// ever verified, nothing could be called unsupported, and every gauge PID
+  /// went on costing two `NO DATA` round trips a cycle — about 83% of the
+  /// foreground time in the reporter's export. Each controller's mask
+  /// describes that controller only (J1979 PID 00 is per ECU), so they are
+  /// kept apart rather than merged into [_supported], which describes the
+  /// engine and licenses batching.
+  ///
+  /// Capability claims, never values: a frame is kept only when it is an
+  /// exact positive answer to the block that was asked.
+  final Map<String, Map<String, List<int>>> _responderSupportMasks = {};
+
+  void _recordResponderSupportMasks(
+    String query,
+    int expectedBase,
+    ObdResponse response,
+  ) {
+    if (client.addressing.family != ObdBusFamily.can11) return;
+    final frames = response.isSuccess
+        ? response.frames
+        : response.observedFrames;
+    for (final frame in frames) {
+      final source = frame.sourceId?.toUpperCase();
+      if (source == null || !_isLegislated11BitResponse(source)) continue;
+      final bytes = frame.bytes;
+      if (bytes.length != 6 || bytes[0] != 0x41 || bytes[1] != expectedBase) {
+        continue;
+      }
+      (_responderSupportMasks[query] ??= {})[source] = List<int>.unmodifiable(
+        bytes.sublist(2),
+      );
+    }
+  }
+
+  /// Whether an 11-bit census heard legislated responders and the engine
+  /// controller was not among them.
+  bool get _censusHasNoEngineController {
+    if (client.addressing.family != ObdBusFamily.can11) return false;
+    final census = _responders;
+    if (census == null) return false;
+    final engineId = _physicalResponseFor(client.addressing.engineHeader);
+    if (engineId == null) return false;
+    final upper = {for (final id in census) id.toUpperCase()};
+    return !upper.contains(engineId) && upper.any(_isLegislated11BitResponse);
+  }
+
+  static bool _isLegislated11BitResponse(String id) {
+    final value = int.tryParse(id, radix: 16);
+    return id.length == 3 && value != null && value >= 0x7E8 && value <= 0x7EF;
+  }
+
+  /// Which blocks the non-engine responders have fully accounted for, and
+  /// which requests they claim in them.
+  ///
+  /// Only on 11-bit CAN, only after a census, and only when the census has no
+  /// engine controller — a vehicle with a `7E8` keeps the engine rule
+  /// unchanged. A block is accounted for when every responder that claims it
+  /// answered it: for `0100` that is every legislated census member, and for
+  /// each later block it is the responders whose previous mask sets the
+  /// continuation bit. One claimer missing leaves that block and every later
+  /// one undecided, because its answer could have claimed anything.
+  ///
+  /// Nothing is ever positive here. A request a responder does claim is left
+  /// unknown, since the value path still takes Mode 01 values from the engine
+  /// only.
+  ({Set<String> blocks, Set<String> claimed}) _responderSupportAccounting() {
+    const none = (blocks: <String>{}, claimed: <String>{});
+    if (!_censusHasNoEngineController) return none;
+    final census = _responders!;
+    var expected = {
+      for (final id in census)
+        if (_isLegislated11BitResponse(id.toUpperCase())) id.toUpperCase(),
+    };
+    final blocks = <String>{};
+    final claimed = <String>{};
+    for (final query in PidLibrary.supportQueries) {
+      if (expected.isEmpty) break;
+      final masks = _responderSupportMasks[query] ?? const {};
+      if (!expected.every(masks.containsKey)) break;
+      blocks.add(query);
+      for (final id in expected) {
+        claimed.addAll(PidLibrary.decodeSupportMask(query, masks[id]!));
+      }
+      expected = {
+        for (final id in expected)
+          if ((masks[id]![3] & 0x01) != 0) id,
+      };
+    }
+    return (blocks: blocks, claimed: claimed);
+  }
+
   /// Reads one support block, retrying once, and only accepting a reply that
   /// is unmistakably the answer to *this* query.
   ///
@@ -1053,22 +1182,33 @@ class PollingEngine {
 
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        // Explicitly addressed to the engine rather than to whatever header
-        // the previous request left selected. A support mask attributed to the
-        // wrong controller marks PIDs the vehicle has as unsupported, and the
-        // gauges then stay grey with no explanation.
-        final response = await client.sendAddressed(
-          kDefaultHeader,
-          query,
-          owner: pollingOwner,
-        );
-        final raw = _mode01EnginePayload(response);
-        if (response.isSuccess &&
-            raw != null &&
-            raw.length == 6 &&
-            raw[0] == 0x41 &&
-            raw[1] == expectedBase) {
-          return raw;
+        // The census found no engine controller, so `7E0` has nobody to
+        // answer it and the engine-only fallback would drop every reply. Ask
+        // the vehicle as a whole, keep each controller's mask apart, and
+        // return no engine mask — there is none.
+        if (_censusHasNoEngineController) {
+          client.knownResponders = _knownResponders ?? const {};
+          final response = await client.sendGlobal(query, owner: pollingOwner);
+          _recordResponderSupportMasks(query, expectedBase, response);
+          if (_responderSupportAccounting().blocks.contains(query)) return null;
+        } else {
+          // Explicitly addressed to the engine rather than to whatever header
+          // the previous request left selected. A support mask attributed to
+          // the wrong controller marks PIDs the vehicle has as unsupported,
+          // and the gauges then stay grey with no explanation.
+          final response = await client.sendAddressed(
+            kDefaultHeader,
+            query,
+            owner: pollingOwner,
+          );
+          final raw = _mode01EnginePayload(response);
+          if (response.isSuccess &&
+              raw != null &&
+              raw.length == 6 &&
+              raw[0] == 0x41 &&
+              raw[1] == expectedBase) {
+            return raw;
+          }
         }
       } on Object {
         // Retried below. `NO DATA` here is the adapter's timeout, not the
@@ -1116,8 +1256,19 @@ class PollingEngine {
     if (_answeredAtLeastOnce.contains(pid.id)) return false;
 
     final block = PidLibrary.supportBlockFor(pid.modeAndPid);
-    if (block == null || !_verifiedSupportBlocks.contains(block)) return false;
-    return !supported.contains(pid.modeAndPid.toUpperCase());
+    if (block == null) return false;
+    final request = pid.modeAndPid.toUpperCase();
+    if (_verifiedSupportBlocks.contains(block)) {
+      return !supported.contains(request);
+    }
+    // No engine on the bus: every responder that could have claimed this PID
+    // answered and none did. A module that answers outside its own masks
+    // (the export has `7ED` answering `0121` without answering `0100`) is
+    // still asked again after `recheckInterval`, and a direct answer above
+    // outranks this.
+    final accounting = _responderSupportAccounting();
+    return accounting.blocks.contains(block) &&
+        !accounting.claimed.contains(request);
   }
 
   /// Whether the vehicle has *confirmed* it answers [pid].
