@@ -1,0 +1,47 @@
+Leggi la tua auto con un adattatore ELM327: giri motore, velocità, refrigerante, carico e temperatura di aspirazione in tempo reale, codici guasto e stato completo del veicolo registrato al verificarsi di un guasto.
+
+Questa app ruota attorno a una frase:
+
+Un numero errato ma plausibile è peggio di nessun numero.
+
+I risultati diagnostici guidano gli interventi: una lettura del refrigerante di −40 °C fa sostituire un sensore; «nessun codice guasto» fa ripartire qualcuno con un'auto ancora guasta. Ogni regola serve a mostrare l'incertezza come tale, anziché come una risposta.
+
+〇Cosa fa
+
+• Sei indicatori disegnati a mano in cinque stili: cambiano forma, lancetta e movimento, non solo i colori. Sfondi chiari e scuri
+• Codici guasto: Mode 03 memorizzati, Mode 07 in attesa di conferma, Mode 0A permanenti, ciascuno con il controller che lo ha segnalato
+• Fermo immagine: stato del veicolo alla conferma del guasto, con giri, refrigerante, carico e correzioni carburante. È l'unica registrazione nell'app delle condizioni durante il guasto; cancellare i codici la distrugge per sempre, quindi l'app chiede prima
+• Stato dei monitor emissioni: verifica quali monitor sono stati completati prima della revisione
+• Valori derivati: potenza, coppia, consumo, portata d'aria. L'OBD generico funziona anche senza VIN né corrispondenza nel catalogo; le stime riportano formula e ipotesi sul veicolo su cui si basano e non sono misure
+• PID personalizzati: scrivi formule, con importazione ed esportazione CSV
+• Prova di accelerazione: tempo da fermo a una velocità obiettivo
+• Resoconto diagnostico: conserva ogni byte scambiato con l'adattatore, esportabile se la connessione fallisce; registrazione ed esportazione mantengono le etichette di stato
+• English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano e Nederlands: cambia lingua nella schermata di connessione e nelle impostazioni oppure segui la lingua di sistema. Alcuni messaggi sono ancora disponibili solo in cinese tradizionale
+
+〇Quattro modi per connettersi
+
+Bluetooth Classic (RFCOMM/SPP), Bluetooth LE (GATT UART), Wi-Fi (TCP) e simulatore Demo integrato: ogni schermata funziona senza adattatore né veicolo.
+
+〇Cosa si rifiuta di fare
+
+• Non trasforma «i controller che hanno risposto non hanno segnalato codici» in «questo veicolo non ha codici guasto»
+• Se due controller danno risposte diverse alla stessa domanda, non ne usa nessuna: sceglierne una sarebbe casuale
+• Le letture non verificate restano utilizzabili e contrassegnate con fonte e stato (non verificato / stimato / anomalo); un pacchetto malformato non diventa mai un numero dall'aspetto plausibile
+• Nessuna pubblicità, nessun tracciamento, nessuna raccolta di dati personali
+
+〇Open source
+
+Il codice è su GitLab con licenza GPL-3.0; puoi compilarlo:
+https://gitlab.com/aa22396584/telltale
+
+L'edizione Play a pagamento ha esattamente le stesse funzioni, senza esclusioni. È per chi preferisce non compilare l'app e per chi vuole sostenerne lo sviluppo continuo.
+
+Le build F-Droid, delle release GitLab e di Google Play usano tre chiavi di firma diverse. Non possono aggiornarsi a vicenda mantenendo l'installazione: è voluto.
+
+〇Cosa serve
+
+Un adattatore ELM327 OBD2 (Bluetooth o Wi-Fi) e un veicolo conforme a OBD2. Si connette e legge anche senza una voce nel catalogo o dati del veicolo.
+
+〇Avviso
+
+Questa app non è affiliata a Torque o Torque Pro di Ian Hawkins, non è da essi approvata e non ne deriva. L'implementazione OBD2 segue standard pubblici, fra cui SAE J1979 e la scheda tecnica ELM327.

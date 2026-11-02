@@ -40,6 +40,14 @@ List<String> tagsForStoredId(String storedId) {
     'en' => const ['en'],
     'zh_Hant' => const ['zh-Hant'],
     'de' => const ['de'],
+    'ja' => const ['ja'],
+    'ko' => const ['ko'],
+    'es' => const ['es'],
+    'fr' => const ['fr'],
+    'pt' => const ['pt-BR'],
+    'zh_Hans' => const ['zh-Hans'],
+    'it' => const ['it'],
+    'nl' => const ['nl'],
     _ => const [],
   };
 }
@@ -53,6 +61,14 @@ String storedIdFromSupportedTag(String tag) {
     'en' => 'en',
     'zh-Hant' => 'zh_Hant',
     'de' => 'de',
+    'ja' => 'ja',
+    'ko' => 'ko',
+    'es' => 'es',
+    'fr' => 'fr',
+    'pt-BR' => 'pt',
+    'zh-Hans' => 'zh_Hans',
+    'it' => 'it',
+    'nl' => 'nl',
     _ => 'system',
   };
 }
@@ -66,18 +82,32 @@ String? mapTagToSupported(String raw) {
   final language = parts.first.toLowerCase();
   if (language == 'en') return 'en';
   if (language == 'de') return 'de';
+  if (language == 'ja') return 'ja';
+  if (language == 'ko') return 'ko';
+  if (language == 'es') return 'es';
+  if (language == 'fr') return 'fr';
+  if (language == 'pt') return 'pt-BR';
+  if (language == 'it') return 'it';
+  if (language == 'nl') return 'nl';
   if (language != 'zh') return null;
-  final subtags = parts.skip(1).toList();
+  // Extension and private-use subtags cannot supply a script or region.
+  final subtags = parts.skip(1).takeWhile((part) => part.length != 1).toList();
   String? script;
   String? region;
   for (final part in subtags) {
-    if (part.length == 4) script ??= part.toLowerCase();
-    if (part.length == 2) region ??= part.toUpperCase();
+    if (RegExp(r'^[A-Za-z]{4}$').hasMatch(part)) {
+      script ??= part.toLowerCase();
+    }
+    if (RegExp(r'^(?:[A-Za-z]{2}|[0-9]{3})$').hasMatch(part)) {
+      region ??= part.toUpperCase();
+    }
   }
-  if (script == 'hans') return null;
+  if (script == 'hans') return 'zh-Hans';
   if (script == 'hant') return 'zh-Hant';
+  if (region == 'CN' || region == 'SG') return 'zh-Hans';
   if (region == 'TW' || region == 'HK' || region == 'MO') return 'zh-Hant';
-  if (subtags.isEmpty) return 'zh-Hant';
+  // An unrecognized script has no effect when no region is specified.
+  if (subtags.isEmpty || (script != null && region == null)) return 'zh-Hant';
   return null;
 }
 

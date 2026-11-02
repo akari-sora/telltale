@@ -210,6 +210,9 @@ def check_files(paths: list[Path]) -> list[str]:
     if not reference_keys:
         errors.append(f"{reference_path.name}: template contains no messages")
         return errors
+    template = loaded[0][1]
+    if not any(f"@{key}" in template for key in reference_keys):
+        errors.append(f"{reference_path.name}: template has no @key metadata")
     for path, keys in key_sets[1:]:
         missing = sorted(reference_keys - keys)
         extra = sorted(keys - reference_keys)

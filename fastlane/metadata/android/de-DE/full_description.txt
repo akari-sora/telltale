@@ -16,7 +16,7 @@ Diagnoseergebnisse führen zu Reparaturen. Bei −40 °C Kühlmitteltemperatur w
 • Eigene PIDs: eigene Formeln schreiben, mit CSV-Import und -Export
 • Beschleunigungstest: Zeitmessung aus dem Stand bis zu einer Zielgeschwindigkeit
 • Diagnoseprotokoll: Jedes mit dem Adapter ausgetauschte Byte wird gespeichert und kann bei einem Verbindungsfehler exportiert werden; Aufzeichnung und Export behalten ihre Statuskennzeichnungen
-• Deutsch, Englisch und traditionelles Chinesisch, umschaltbar auf dem Verbindungsbildschirm und in den Einstellungen oder gemäß Systemsprache. Einige Meldungen gibt es weiterhin nur auf traditionellem Chinesisch
+• English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano und Nederlands: auf dem Verbindungsbildschirm und in den Einstellungen umschalten oder der Systemsprache folgen. Einige Meldungen sind weiterhin nur auf traditionellem Chinesisch verfügbar
 
 〇Vier Verbindungsmöglichkeiten
 

@@ -44,6 +44,20 @@ void main() {
       hasLength(LocalePreference.values.length),
       reason: 'two options share a label: ${labels.values.join(", ")}',
     );
+    expect(labels.values.toList(), [
+      'System default / 跟隨系統',
+      'English',
+      '繁體中文',
+      'Deutsch',
+      '日本語',
+      '한국어',
+      'Español',
+      'Français',
+      'Português (Brasil)',
+      '简体中文',
+      'Italiano',
+      'Nederlands',
+    ]);
   });
 
   Future<SharedPreferences> prefsWith(Map<String, Object> values) async {
@@ -130,6 +144,26 @@ void main() {
 
     expect(prefs.getString(kLocalePreferenceKey), 'en');
     expect(find.text('English'), findsOneWidget);
+  });
+
+  testWidgets('a new language remains selectable below the fold', (
+    tester,
+  ) async {
+    final prefs = await prefsWith({});
+    await tester.pumpWidget(
+      host(
+        prefs: prefs,
+        home: const Scaffold(body: LanguagePicker()),
+        session: _IdleSession(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final choice = find.byKey(const Key('locale_simplifiedChinese'));
+    await tester.scrollUntilVisible(choice, 300);
+    await tester.tap(choice);
+    await tester.pumpAndSettle();
+    expect(prefs.getString(kLocalePreferenceKey), 'zh_Hans');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('switching language does not start an OBD session', (

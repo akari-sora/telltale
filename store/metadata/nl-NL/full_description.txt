@@ -1,0 +1,47 @@
+Lees je auto uit via een ELM327-adapter: live toerental, snelheid, koelvloeistof, motorbelasting en inlaattemperatuur, storingscodes en de volledige voertuigstatus die werd vastgelegd op het moment dat er een storing optrad.
+
+Deze app is opgebouwd rond één zin:
+
+Een plausibel maar fout getal is erger dan geen getal.
+
+Op basis van diagnoseresultaten wordt er gesleuteld. Een koelvloeistoftemperatuur van −40 °C leidt tot het vervangen van een sensor; "geen storingscodes" stuurt iemand op pad met een auto die nog steeds een probleem heeft. Elke regel hier bestaat dan ook om onzekerheid eruit te laten zien als onzekerheid, in plaats van als een antwoord.
+
+〇Wat de app doet
+
+• Zes handgetekende meters in vijf stijlen — niet alleen andere kleuren: de vorm van de wijzerplaat, de naald en de beweging verschillen. Zowel donkere als lichte achtergronden
+• Storingscodes: Mode 03 opgeslagen, Mode 07 in afwachting, Mode 0A permanent, elk voorzien van het label van de regeleenheid die de code heeft gemeld
+• Freeze-frame: de voertuigstatus op het moment dat de storing werd bevestigd — toerental, koelvloeistof, motorbelasting, brandstofcorrectie. Dit is de enige registratie in de app van de omstandigheden terwijl de storing optrad, en het wissen van de codes vernietigt deze definitief, dus de app vraagt eerst om bevestiging
+• Emissiegereedheid: bekijk vóór een keuring welke monitors zijn voltooid
+• Afgeleide waarden: vermogen, koppel, brandstofverbruik, luchtstroom. Algemene OBD werkt nog steeds zonder VIN en zonder catalogusmatch; schattingen worden gelabeld met de formule en de voertuigaannames waarop ze berusten, en zijn geen metingen
+• Aangepaste PID's: schrijf je eigen formules, met CSV-import en -export
+• Acceleratietest: getimed vanuit stilstand tot een doelsnelheid
+• Diagnoselogboek: elke byte die met de adapter wordt uitgewisseld blijft bewaard en kan worden geëxporteerd wanneer een verbinding mislukt; opname en export behouden hun statuslabels
+• English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano en Nederlands: wissel op het verbindingsscherm en in Instellingen, of volg de systeemtaal. Enkele berichten zijn nog alleen in traditioneel Chinees
+
+〇Vier manieren om te verbinden
+
+Bluetooth Classic (RFCOMM/SPP), Bluetooth LE (GATT UART), Wi-Fi (TCP) en een ingebouwde Demo-simulator — elk scherm werkt ook zonder adapter en zonder voertuig.
+
+〇Wat de app bewust weigert te doen
+
+• De app maakt van "de regeleenheden die antwoordden meldden geen codes" nooit "dit voertuig heeft geen storingscodes"
+• Wanneer twee regeleenheden dezelfde vraag verschillend beantwoorden, gebruikt de app geen van beide — er één kiezen is willekeurig gokken
+• Ongeverifieerde uitlezingen blijven bruikbaar en blijven gelabeld met hun bron en status (ongeverifieerd / geschat / afwijkend); een misvormd pakket wordt nooit een plausibel ogend getal
+• Geen advertenties, geen tracking, geen verzameling van persoonsgegevens
+
+〇Open source
+
+De broncode staat op GitLab onder GPL-3.0 en je kunt de app zelf bouwen:
+https://gitlab.com/aa22396584/telltale
+
+De betaalde Play-editie heeft precies dezelfde functies — er wordt niets achtergehouden. Deze is bedoeld voor mensen die de app liever niet zelf bouwen, en voor mensen die de verdere ontwikkeling willen steunen.
+
+F-Droid-, GitLab-release- en Google Play-builds gebruiken drie verschillende ondertekeningssleutels. Ze kunnen elkaar niet rechtstreeks overschrijven bij een update; dat is opzettelijk.
+
+〇Wat je nodig hebt
+
+Een ELM327 OBD2-adapter (Bluetooth of Wi-Fi) en een OBD2-compatibel voertuig. De app maakt ook zonder catalogusvermelding of voertuiggegevens gewoon verbinding en leest gegevens uit.
+
+〇Kennisgeving
+
+Deze app is niet gelieerd aan, goedgekeurd door of afgeleid van Torque of Torque Pro van Ian Hawkins. De OBD2-implementatie volgt openbare standaarden, waaronder SAE J1979 en het ELM327-datablad.

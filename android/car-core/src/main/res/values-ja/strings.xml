@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="car_app_name">Telltale</string>
+    <string name="car_home_status_title">車両モニター</string>
+    <string name="car_home_status_body">Android for Cars の基本画面が動作中です</string>
+    <string name="car_home_data_title">車両データ</string>
+    <string name="car_home_data_body">AA-01 ではテレメトリーブリッジが接続されていません</string>
+    <string name="car_home_safety_title">読み取り専用投影</string>
+    <string name="car_home_safety_body">車両コマンドや破壊的な操作は利用できません</string>
+    <string name="car_home_speed_title">車速</string>
+    <string name="car_home_rpm_title">回転数</string>
+    <string name="car_home_coolant_title">水温</string>
+    <string name="car_home_voltage_title">モジュール電圧</string>
+    <string name="car_home_boost_title">過給圧</string>
+    <string name="car_home_load_title">エンジン負荷</string>
+    <string name="car_signal_missing">--</string>
+    <string name="car_signal_stale">更新停止</string>
+
+    <!-- AA-04 Actions -->
+    <string name="car_action_health">車両状態</string>
+    <string name="car_action_powertrain">パワートレイン</string>
+    <string name="car_action_fault_codes">故障コード</string>
+
+    <!-- AA-04 Health Screen -->
+    <string name="car_health_title">車両状態</string>
+    <string name="car_health_status_row">観測状態</string>
+    <string name="car_health_mil_row">MIL</string>
+    <string name="car_health_dtc_row">故障コード</string>
+    <string name="car_health_coolant_row">水温</string>
+    <string name="car_health_voltage_row">モジュール電圧</string>
+    <string name="car_health_status_attention">要注意</string>
+    <string name="car_health_status_no_warnings">観測された警告なし</string>
+    <string name="car_health_status_unknown">不明</string>
+    <string name="car_mil_on">点灯</string>
+    <string name="car_mil_off">消灯</string>
+    <string name="car_dtc_count_format">%d 件のコード</string>
+    <string name="car_dtc_none">0 件のコード</string>
+
+    <!-- AA-04 Powertrain Screen -->
+    <string name="car_powertrain_title">パワートレイン</string>
+    <string name="car_powertrain_rpm_title">回転数</string>
+    <string name="car_powertrain_coolant_title">水温</string>
+    <string name="car_powertrain_iat_title">吸気温度</string>
+    <string name="car_powertrain_map_title">MAP</string>
+    <string name="car_powertrain_voltage_title">モジュール電圧</string>
+    <string name="car_powertrain_speed_title">車速</string>
+
+    <!-- AA-04 DTC Screens -->
+    <string name="car_dtc_summary_title">診断コード</string>
+    <string name="car_dtc_no_codes">観測された診断コードなし</string>
+    <string name="car_dtc_status_not_scanned">未スキャン</string>
+    <string name="car_dtc_status_scanning">スキャン中</string>
+    <string name="car_dtc_status_partial_clean">対象範囲不完全 / 完了範囲では故障の観測なし</string>
+    <string name="car_dtc_status_unavailable">診断利用不可 / 不完全</string>
+    <string name="car_dtc_more_items_format">他 %d 件の診断コードは表示されていません</string>
+    <string name="car_dtc_parked_only_notice">駐車時のみ</string>
+    <string name="car_dtc_speed_unavailable">車速を取得できません。駐車中にテレメトリーを接続するか、車速権限を有効にしてください。</string>
+    <string name="car_dtc_detail_title">コード詳細</string>
+    <string name="car_dtc_detail_class">分類</string>
+    <string name="car_dtc_detail_controller">コントローラー</string>
+    <string name="car_dtc_detail_coverage">対象範囲</string>
+    <string name="car_dtc_coverage_complete">完全</string>
+    <string name="car_dtc_coverage_partial">一部</string>
+    <string name="car_dtc_kind_stored">保存済み</string>
+    <string name="car_dtc_kind_pending">保留中</string>
+    <string name="car_dtc_kind_permanent">永久</string>
+    <string name="car_freeze_frame_section">フリーズフレーム</string>
+    <string name="car_freeze_frame_none">利用可能なフリーズフレームなし</string>
+    <string name="car_freeze_frame_unknown">フリーズフレームの内容を読み取れません</string>
+    <string name="car_freeze_frame_omitted">他 %d 件の信号を省略</string>
+    <string name="car_freeze_frame_incomplete_summary">データ不完全 · %d 件の信号が未読み取りまたは省略</string>
+    <string name="car_freeze_frame_read_incomplete">データ不完全 · 読み取り中断</string>
+
+    <!-- AA-05 In-Template Alert & Host Speed Strings -->
+    <string name="car_alert_high">高</string>
+    <string name="car_alert_attention">要注意</string>
+    <string name="car_action_enable_speed">車速を有効化</string>
+    <string name="car_speed_permission_phone_handoff">駐車中にスマートフォンで車速権限の設定を完了してください。</string>
+    <string name="car_speed_permission_handoff">駐車中に車速権限の設定を完了してください。</string>
+</resources>

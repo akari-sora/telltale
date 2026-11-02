@@ -7,6 +7,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppLocalePolicyTest {
+    private val shippedIds = linkedMapOf(
+        "en" to "en", "zh_Hant" to "zh-Hant", "de" to "de", "ja" to "ja",
+        "ko" to "ko", "es" to "es", "fr" to "fr", "pt" to "pt-BR",
+        "zh_Hans" to "zh-Hans", "it" to "it", "nl" to "nl",
+    )
+
     @Test
     fun `API 33 is the LocaleManager floor`() {
         assertEquals(33, AppLocalePolicy.MIN_API)
@@ -17,7 +23,7 @@ class AppLocalePolicyTest {
 
     @Test
     fun `supported tags are the shipped UI locales, not every ARB filename`() {
-        assertEquals(listOf("en", "zh-Hant", "de"), AppLocalePolicy.supportedTags)
+        assertEquals(shippedIds.values.toList(), AppLocalePolicy.supportedTags)
     }
 
     @Test
@@ -44,9 +50,9 @@ class AppLocalePolicyTest {
 
     @Test
     fun `an unknown request is rejected rather than stored as a pretend locale`() {
-        assertNull(AppLocalePolicy.overrideFromRequestedTags(listOf("ja")))
-        assertNull(AppLocalePolicy.overrideFromRequestedTags(listOf("zh-Hans")))
-        assertNull(AppLocalePolicy.overrideFromRequestedTags(listOf("en", "ja")))
+        assertNull(AppLocalePolicy.overrideFromRequestedTags(listOf("sv")))
+        assertNull(AppLocalePolicy.overrideFromRequestedTags(listOf("zh-US")))
+        assertNull(AppLocalePolicy.overrideFromRequestedTags(listOf("en", "sv")))
     }
 
     @Test
@@ -58,9 +64,9 @@ class AppLocalePolicyTest {
 
     @Test
     fun `a nonempty LocaleManager list is an override even when we do not ship it`() {
-        val override = AppLocalePolicy.overrideFromLocaleListTags(listOf("ja-JP"))
+        val override = AppLocalePolicy.overrideFromLocaleListTags(listOf("sv-SE"))
         assertFalse(override.followsSystem)
-        assertEquals(listOf("ja-JP"), override.tags)
+        assertEquals(listOf("sv-SE"), override.tags)
     }
 
     @Test
@@ -93,9 +99,62 @@ class AppLocalePolicyTest {
     fun `stored ids map to BCP47 tags the way Dart writes them`() {
         assertEquals(emptyList<String>(), AppLocalePolicy.tagsFromStoredId("system"))
         assertEquals(emptyList<String>(), AppLocalePolicy.tagsFromStoredId("nope"))
-        assertEquals(listOf("en"), AppLocalePolicy.tagsFromStoredId("en"))
-        assertEquals(listOf("zh-Hant"), AppLocalePolicy.tagsFromStoredId("zh_Hant"))
-        assertEquals(listOf("de"), AppLocalePolicy.tagsFromStoredId("de"))
+        for ((id, tag) in shippedIds) {
+            assertEquals(listOf(tag), AppLocalePolicy.tagsFromStoredId(id))
+            assertEquals(id, AppLocalePolicy.storedIdFromSupportedTag(tag))
+            assertEquals(AppLocaleOverride(false, listOf(tag)), AppLocalePolicy.overrideFromRequestedTags(listOf(tag)))
+            val migration = AppLocalePolicy.migrate(emptyList(), id)
+            assertEquals(AppLocalePolicy.MigrationAction.HANDOFF_STORED_ONCE, migration.action)
+            assertEquals(listOf(tag), migration.tagsToApply)
+            assertEquals(id, migration.storedIdToKeep)
+            assertTrue(migration.writeToOs)
+        }
+        assertEquals("system", AppLocalePolicy.storedIdFromSupportedTag("sv"))
+    }
+
+    @Test
+    fun `regional tags and Chinese scripts map to shipped locales`() {
+        val mappings = mapOf(
+            "ja-JP" to "ja", "ko-KR" to "ko", "es-MX" to "es", "fr-CA" to "fr",
+            "it-CH" to "it", "nl-BE" to "nl", "pt" to "pt-BR", "pt-PT" to "pt-BR",
+            "pt-BR" to "pt-BR", "zh" to "zh-Hant", "zh-CN" to "zh-Hans",
+            "zh-SG" to "zh-Hans", "zh-TW" to "zh-Hant", "zh-HK" to "zh-Hant",
+            "zh-MO" to "zh-Hant", "zh_Hans_TW" to "zh-Hans", "zh-Hant-CN" to "zh-Hant",
+            "zh-Latn" to "zh-Hant", "zh-Latn-CN" to "zh-Hans", "zh-Latn-SG" to "zh-Hans",
+            "zh-Latn-TW" to "zh-Hant", "zh-Latn-HK" to "zh-Hant", "zh-Latn-MO" to "zh-Hant",
+        )
+        for ((input, expected) in mappings) {
+            assertEquals(input, expected, AppLocalePolicy.mapToSupported(input))
+        }
+        assertNull(AppLocalePolicy.mapToSupported("zh-Latn-US"))
+        assertEquals(
+            AppLocaleOverride(false, listOf("pt-BR", "zh-Hans")),
+            AppLocalePolicy.overrideFromRequestedTags(listOf("pt-PT", "pt-BR", "zh-Hans-TW")),
+        )
+    }
+
+    @Test
+    fun `unknown Chinese script preserves numeric region`() {
+        assertNull(AppLocalePolicy.mapToSupported("zh-Latn-419"))
+    }
+
+    @Test
+    fun `Chinese extensions do not supply a region or script`() {
+        assertEquals("zh-Hant", AppLocalePolicy.mapToSupported("zh-Latn-u-nu-hanidec"))
+        assertEquals("zh-Hans", AppLocalePolicy.mapToSupported("zh-Latn-CN-u-nu-hanidec"))
+        assertEquals("zh-Hans", AppLocalePolicy.mapToSupported("zh-Hans-TW-u-nu-hanidec"))
+        assertEquals("zh-Hant", AppLocalePolicy.mapToSupported("zh-u-nu-hanidec"))
+    }
+
+    @Test
+    fun `new OS locale overrides remain authoritative without rewriting`() {
+        for ((tag, id) in mapOf("pt-PT" to "pt", "zh-Hans-TW" to "zh_Hans")) {
+            val migration = AppLocalePolicy.migrate(listOf(tag), "en")
+            assertEquals(AppLocalePolicy.MigrationAction.USE_OS_OVERRIDE, migration.action)
+            assertEquals(listOf(tag), migration.tagsToApply)
+            assertEquals(id, migration.storedIdToKeep)
+            assertFalse(migration.writeToOs)
+        }
     }
 
     @Test
@@ -136,7 +195,7 @@ class AppLocalePolicyTest {
     @Test
     fun `an OS override we do not ship still wins and does not take the stored id`() {
         val m = AppLocalePolicy.migrate(
-            osOverrideTags = listOf("ja"),
+            osOverrideTags = listOf("sv"),
             storedId = "en",
         )
         assertEquals(AppLocalePolicy.MigrationAction.USE_OS_OVERRIDE, m.action)

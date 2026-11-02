@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projection_notification_channel_name">OBDアダプター接続</string>
+    <string name="projection_notification_title">Telltale が OBDアダプターに接続中</string>
+    <string name="projection_notification_live_body">Android Auto 用の車両リアルタイムテレメトリーを継続しています</string>
+    <string name="projection_notification_waiting_body">Android Auto を待機しています</string>
+</resources>

@@ -7,6 +7,13 @@ import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_de.dart';
 import 'app_localizations_en.dart';
+import 'app_localizations_es.dart';
+import 'app_localizations_fr.dart';
+import 'app_localizations_it.dart';
+import 'app_localizations_ja.dart';
+import 'app_localizations_ko.dart';
+import 'app_localizations_nl.dart';
+import 'app_localizations_pt.dart';
 import 'app_localizations_zh.dart';
 
 // ignore_for_file: type=lint
@@ -97,7 +104,15 @@ abstract class AppLocalizations {
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
     Locale('de'),
+    Locale('es'),
+    Locale('fr'),
+    Locale('it'),
+    Locale('ja'),
+    Locale('ko'),
+    Locale('nl'),
+    Locale('pt'),
     Locale('zh'),
+    Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
     Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
   ];
 
@@ -7529,8 +7544,18 @@ class _AppLocalizationsDelegate
   }
 
   @override
-  bool isSupported(Locale locale) =>
-      <String>['de', 'en', 'zh'].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>[
+    'de',
+    'en',
+    'es',
+    'fr',
+    'it',
+    'ja',
+    'ko',
+    'nl',
+    'pt',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -7542,6 +7567,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
     case 'zh':
       {
         switch (locale.scriptCode) {
+          case 'Hans':
+            return AppLocalizationsZhHans();
           case 'Hant':
             return AppLocalizationsZhHant();
         }
@@ -7555,6 +7582,20 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsDe();
     case 'en':
       return AppLocalizationsEn();
+    case 'es':
+      return AppLocalizationsEs();
+    case 'fr':
+      return AppLocalizationsFr();
+    case 'it':
+      return AppLocalizationsIt();
+    case 'ja':
+      return AppLocalizationsJa();
+    case 'ko':
+      return AppLocalizationsKo();
+    case 'nl':
+      return AppLocalizationsNl();
+    case 'pt':
+      return AppLocalizationsPt();
     case 'zh':
       return AppLocalizationsZh();
   }

@@ -255,3 +255,8 @@ sources retain separate
 [third-party notices](THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md). Use the app at
 your own risk; no diagnostic result guarantees that a vehicle is safe to
 operate.
+
+
+## Interface languages
+
+English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano, Nederlands. Change the language on the connect screen or in Settings, or follow the system. A few messages remain in Traditional Chinese only.

@@ -34,8 +34,8 @@ would only be agreeing with itself.
 `README.zh-TW.md`. `T2` means the same table row. `T3` means a Dart identifier sitting
 next to its Chinese label in `lib/`. Anything else names the file directly.
 
-**Traditional Chinese only.** Simplified Chinese is not shipped
-(`lib/l10n/locale_resolution.dart`), so no entry here has a zh-Hans form and none should
+**Traditional Chinese glossary.** Simplified Chinese uses a separate ARB
+(`lib/l10n/app_zh_Hans.arb`); no entry here defines a zh-Hans form, so none should
 be added.
 
 

@@ -90,31 +90,22 @@ class CarLocalizationTest {
     fun stringsResourceParity_allKeysPresentInLocales() {
         val resDir = findResDir()
         val defaultStrings = loadStringsXml(File(resDir, "values/strings.xml"))
-        val zhTwStrings = loadStringsXml(File(resDir, "values-zh-rTW/strings.xml"))
-        val zhCnStrings = loadStringsXml(File(resDir, "values-zh-rCN/strings.xml"))
-
         assertTrue("Default strings must not be empty", defaultStrings.isNotEmpty())
-        assertEquals("zh-rTW must match default key count", defaultStrings.size, zhTwStrings.size)
-        assertEquals("zh-rCN must match default key count", defaultStrings.size, zhCnStrings.size)
-
-        for ((key, defaultVal) in defaultStrings) {
-            assertTrue("Missing key '$key' in values-zh-rTW/strings.xml", zhTwStrings.containsKey(key))
-            assertTrue("Missing key '$key' in values-zh-rCN/strings.xml", zhCnStrings.containsKey(key))
-
-            val twVal = zhTwStrings[key]!!
-            val cnVal = zhCnStrings[key]!!
-
-            assertFalse("Key '$key' in zh-rTW must not be empty", twVal.isBlank())
-            assertFalse("Key '$key' in zh-rCN must not be empty", cnVal.isBlank())
-
-            // Verify format specifiers match
-            val formatPattern = Pattern.compile("%(?:\\d+\\$)?[-#+ 0,(]*\\d*(?:\\.\\d+)?[a-zA-Z]")
-            val defaultMatchers = formatPattern.matcher(defaultVal).results().map { it.group() }.toList()
-            val twMatchers = formatPattern.matcher(twVal).results().map { it.group() }.toList()
-            val cnMatchers = formatPattern.matcher(cnVal).results().map { it.group() }.toList()
-
-            assertEquals("Format specifiers in key '$key' mismatch for zh-rTW", defaultMatchers.size, twMatchers.size)
-            assertEquals("Format specifiers in key '$key' mismatch for zh-rCN", defaultMatchers.size, cnMatchers.size)
+        val formatPattern = Pattern.compile("%(?:\\d+\\$)?[-#+ 0,(]*\\d*(?:\\.\\d+)?[a-zA-Z]")
+        val localizedDirs = resDir.listFiles()!!.filter {
+            it.isDirectory && it.name.startsWith("values-") && File(it, "strings.xml").exists()
+        }
+        assertTrue("Localized strings must exist", localizedDirs.isNotEmpty())
+        for (dir in localizedDirs) {
+            val translated = loadStringsXml(File(dir, "strings.xml"))
+            assertEquals("Keys must match in ${dir.name}", defaultStrings.keys, translated.keys)
+            for ((key, defaultVal) in defaultStrings) {
+                val value = translated.getValue(key)
+                assertFalse("Key '$key' in ${dir.name} must not be empty", value.isBlank())
+                val expected = formatPattern.matcher(defaultVal).results().map { it.group() }.toList()
+                val actual = formatPattern.matcher(value).results().map { it.group() }.toList()
+                assertEquals("Format specifiers in '$key' mismatch for ${dir.name}", expected, actual)
+            }
         }
     }
 
@@ -131,7 +122,7 @@ class CarLocalizationTest {
 
         assertEquals("No observed warnings", defaultWarning)
         assertEquals("無觀測到警示", twWarning)
-        assertEquals("未观测到警示", cnWarning)
+        assertEquals("未观测到警告", cnWarning)
 
         // Strict safety rule: NEVER claim the entire vehicle or condition is "normal"
         val forbiddenTerms = listOf("車況正常", "车辆正常", "一切正常", "正常")
@@ -213,8 +204,32 @@ class CarLocalizationTest {
         val cnContext = app.createConfigurationContext(cnConfig)
         val cnNoWarnings = cnContext.getString(R.string.car_health_status_no_warnings)
         val cnStored = cnContext.getString(R.string.car_dtc_kind_stored)
-        assertEquals("未观测到警示", cnNoWarnings)
+        assertEquals("未观测到警告", cnNoWarnings)
         assertEquals("已存储", cnStored)
+    }
+
+    @Test
+    fun localizedCarContext_resolvesShippedScriptsAndRegionalFallbacks() {
+        val app = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val qualifiers = mapOf(
+            "de-AT" to "de", "ja-JP" to "ja", "ko-KR" to "ko",
+            "es-MX" to "es", "fr-CA" to "fr", "pt-BR" to "pt", "pt-PT" to "pt",
+            "it-CH" to "it", "nl-BE" to "nl",
+            "zh-Hans" to "zh-rCN", "zh-SG" to "zh-rCN",
+            "zh-Hans-TW" to "zh-rCN", "zh-Hant-CN" to "zh-rTW",
+            "zh-Hant" to "zh-rTW", "zh-HK" to "zh-rTW", "zh-MO" to "zh-rTW",
+        )
+        for ((tag, qualifier) in qualifiers) {
+            val config = Configuration(app.resources.configuration)
+            config.setLocale(Locale.forLanguageTag(tag))
+            val context = app.createConfigurationContext(config)
+            val expected = loadStringsXml(File(findResDir(), "values-$qualifier/strings.xml"))
+            assertEquals(
+                "Car resource selection for $tag",
+                expected.getValue("car_health_status_no_warnings"),
+                context.getString(R.string.car_health_status_no_warnings),
+            )
+        }
     }
 
     @Test

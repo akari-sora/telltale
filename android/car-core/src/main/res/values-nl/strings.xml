@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="car_app_name">Telltale</string>
+    <string name="car_home_status_title">Voertuigmonitor</string>
+    <string name="car_home_status_body">Android for Cars-basisstructuur is actief</string>
+    <string name="car_home_data_title">Voertuiggegevens</string>
+    <string name="car_home_data_body">Telemetriebrug is niet verbonden in AA-01</string>
+    <string name="car_home_safety_title">Alleen-lezen projectie</string>
+    <string name="car_home_safety_body">Er zijn geen voertuigopdrachten of destructieve acties beschikbaar</string>
+    <string name="car_home_speed_title">Snelheid</string>
+    <string name="car_home_rpm_title">Toerental</string>
+    <string name="car_home_coolant_title">Koelvloeistof</string>
+    <string name="car_home_voltage_title">Modulespanning</string>
+    <string name="car_home_boost_title">Turbodruk</string>
+    <string name="car_home_load_title">Motorbelasting</string>
+    <string name="car_signal_missing">--</string>
+    <string name="car_signal_stale">Verouderd</string>
+
+    <!-- AA-04 Actions -->
+    <string name="car_action_health">Gezondheid</string>
+    <string name="car_action_powertrain">Aandrijflijn</string>
+    <string name="car_action_fault_codes">Storingscodes</string>
+
+    <!-- AA-04 Health Screen -->
+    <string name="car_health_title">Voertuiggezondheid</string>
+    <string name="car_health_status_row">Waargenomen status</string>
+    <string name="car_health_mil_row">MIL</string>
+    <string name="car_health_dtc_row">Storingscodes</string>
+    <string name="car_health_coolant_row">Koelvloeistof</string>
+    <string name="car_health_voltage_row">Modulespanning</string>
+    <string name="car_health_status_attention">Aandacht</string>
+    <string name="car_health_status_no_warnings">Geen waargenomen waarschuwingen</string>
+    <string name="car_health_status_unknown">Onbekend</string>
+    <string name="car_mil_on">Aan</string>
+    <string name="car_mil_off">Uit</string>
+    <string name="car_dtc_count_format">%d codes</string>
+    <string name="car_dtc_none">0 codes</string>
+
+    <!-- AA-04 Powertrain Screen -->
+    <string name="car_powertrain_title">Aandrijflijn</string>
+    <string name="car_powertrain_rpm_title">Toerental</string>
+    <string name="car_powertrain_coolant_title">Koelvloeistof</string>
+    <string name="car_powertrain_iat_title">Inlaatlucht</string>
+    <string name="car_powertrain_map_title">MAP</string>
+    <string name="car_powertrain_voltage_title">Modulespanning</string>
+    <string name="car_powertrain_speed_title">Snelheid</string>
+
+    <!-- AA-04 DTC Screens -->
+    <string name="car_dtc_summary_title">Storingscodes</string>
+    <string name="car_dtc_no_codes">Geen storingscodes waargenomen</string>
+    <string name="car_dtc_status_not_scanned">Niet gescand</string>
+    <string name="car_dtc_status_scanning">Scan bezig</string>
+    <string name="car_dtc_status_partial_clean">Dekking onvolledig / geen storingen waargenomen in voltooide delen</string>
+    <string name="car_dtc_status_unavailable">Diagnose niet beschikbaar / onvolledig</string>
+    <string name="car_dtc_more_items_format">%d extra storingscodes niet getoond</string>
+    <string name="car_dtc_parked_only_notice">Alleen geparkeerd</string>
+    <string name="car_dtc_speed_unavailable">Voertuigsnelheid niet beschikbaar. Verbind de telemetrie of schakel voertuigsnelheid in terwijl je geparkeerd staat.</string>
+    <string name="car_dtc_detail_title">Codedetails</string>
+    <string name="car_dtc_detail_class">Klasse</string>
+    <string name="car_dtc_detail_controller">Regeleenheid</string>
+    <string name="car_dtc_detail_coverage">Dekking</string>
+    <string name="car_dtc_coverage_complete">Volledig</string>
+    <string name="car_dtc_coverage_partial">Gedeeltelijk</string>
+    <string name="car_dtc_kind_stored">Opgeslagen</string>
+    <string name="car_dtc_kind_pending">In afwachting</string>
+    <string name="car_dtc_kind_permanent">Permanent</string>
+    <string name="car_freeze_frame_section">Freeze-frame</string>
+    <string name="car_freeze_frame_none">Geen freeze-frame beschikbaar</string>
+    <string name="car_freeze_frame_unknown">Inhoud van freeze-frame onleesbaar</string>
+    <string name="car_freeze_frame_omitted">%d extra signalen weggelaten</string>
+    <string name="car_freeze_frame_incomplete_summary">Onvolledige gegevens · %d signalen ongelezen of weggelaten</string>
+    <string name="car_freeze_frame_read_incomplete">Onvolledige gegevens · Uitlezen onderbroken</string>
+
+    <!-- AA-05 In-Template Alert & Host Speed Strings -->
+    <string name="car_alert_high">Hoog</string>
+    <string name="car_alert_attention">Aandacht</string>
+    <string name="car_action_enable_speed">Voertuigsnelheid inschakelen</string>
+    <string name="car_speed_permission_phone_handoff">Regel de toestemming voor voertuigsnelheid op je telefoon terwijl je geparkeerd staat.</string>
+    <string name="car_speed_permission_handoff">Regel de toestemming voor voertuigsnelheid terwijl je geparkeerd staat.</string>
+</resources>
