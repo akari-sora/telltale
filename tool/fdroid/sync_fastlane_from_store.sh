@@ -49,5 +49,6 @@ sync_locale() {
 
 sync_locale en-US
 sync_locale zh-TW
+sync_locale de-DE
 
-echo "Synced store/ → fastlane/metadata/android/{en-US,zh-TW}"
+echo "Synced store/ → fastlane/metadata/android/{en-US,zh-TW,de-DE}"
