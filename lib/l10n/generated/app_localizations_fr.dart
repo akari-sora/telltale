@@ -4625,7 +4625,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String settingsCaPickerScope(int firstYear, int lastYear) {
-    return 'Lignes Fuel Consumption Ratings pour le marché canadien de $firstYear à $lastYear uniquement. Les véhicules thermiques, électriques à batterie et hybrides rechargeables restent des classes distinctes. Une correspondance de marque et de modèle ne constitue pas une configuration EPA ou taïwanaise.';
+    return 'Lignes des cotes de consommation de carburant pour le marché canadien de $firstYear à $lastYear uniquement. Les véhicules thermiques, électriques à batterie et hybrides rechargeables restent des classes distinctes. Une correspondance de marque et de modèle ne constitue pas une configuration EPA ou taïwanaise.';
   }
 
   @override

@@ -7920,7 +7920,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get settingsManualCommandHeaderRestoreFailed =>
-      '适配器拒绝恢复报头（ATSH），因此轮询已停止，直到重新连接。';
+      '适配器拒绝恢复标头（ATSH），因此轮询已停止，直到重新连接。';
 
   @override
   String get manualCommandRefusedEmpty => '没有输入任何内容，因此没有发送任何指令。';
@@ -8181,7 +8181,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get dtcCategoryUnattributed =>
-      '有读到故障码，但响应报头已关闭，因此无法确定哪些控制器作出了响应。请将此视为部分结果，而不是无故障的完整结果。';
+      '有读到故障码，但响应标头已关闭，因此无法确定哪些控制器作出了响应。请将此视为部分结果，而不是无故障的完整结果。';
 
   @override
   String dtcCategorySilentControllers(int count, String controllers) {
@@ -8550,7 +8550,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String serviceRecipesEcuHeader(String header) {
-    return 'ECU 报头：$header';
+    return 'ECU 标头：$header';
   }
 
   @override
@@ -8589,7 +8589,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get mode08ReasonUnheaderedLimitation =>
-      '来源归属和覆盖范围尚未确认：无报头的响应无法确定跨区块的 ECU 身份';
+      '来源归属和覆盖范围尚未确认：无标头的响应无法确定跨区块的 ECU 身份';
 
   @override
   String mode08ReasonNoResponseWithEcu(

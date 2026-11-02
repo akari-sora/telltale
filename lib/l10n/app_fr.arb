@@ -1167,7 +1167,7 @@
   "connectionFailureKeepInvalidAndExport": "La réponse est invalide. Conservez-la comme invalide et exportez le diagnostic limité ; ce n’est pas une mesure.",
   "settingsCatalogMarketCa": "Canada (NRCan)",
   "settingsCaPickerTitle": "Catalogue officiel des véhicules du Canada",
-  "settingsCaPickerScope": "Lignes Fuel Consumption Ratings pour le marché canadien de {firstYear} à {lastYear} uniquement. Les véhicules thermiques, électriques à batterie et hybrides rechargeables restent des classes distinctes. Une correspondance de marque et de modèle ne constitue pas une configuration EPA ou taïwanaise.",
+  "settingsCaPickerScope": "Lignes des cotes de consommation de carburant pour le marché canadien de {firstYear} à {lastYear} uniquement. Les véhicules thermiques, électriques à batterie et hybrides rechargeables restent des classes distinctes. Une correspondance de marque et de modèle ne constitue pas une configuration EPA ou taïwanaise.",
   "settingsCaMotorNotPower": "La puissance du moteur en kilowatts n’est pas la puissance aux roues en chevaux et n’est pas appliquée.",
   "settingsCaClassIce": "ICE",
   "settingsCaClassBev": "BEV",

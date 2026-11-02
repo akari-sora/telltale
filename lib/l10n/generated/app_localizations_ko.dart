@@ -192,7 +192,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get connectIssueAdapterAcceptedThenSilent =>
-      '어댑터가 연결은 수락했지만 제한 시간 내에 아무 응답도 하지 않았습니다. 대개 아직 전원이 들어오지 않은 상태이거나(대부분의 OBD 단자는 시동 스위치가 ON이어야 전원이 공급됨) 다른 앱이 이미 어댑터에 연결되어 있는 경우이므로, 해당 앱을 닫고 다시 시도하십시오.';
+      '어댑터가 연결은 수락했지만 제한 시간 내에 아무 응답도 하지 않았습니다. 대개 아직 전원이 들어오지 않은 상태이거나(대부분의 OBD 단자는 시동 스위치가 ON이어야 전원이 공급됨) 다른 앱이 이미 어댑터에 연결되어 있습니다. 다른 앱이 연결된 경우 해당 앱을 닫고 다시 시도하십시오.';
 
   @override
   String connectIssueAdapterSilentOnReset(String command) {
@@ -1074,7 +1074,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get performanceDisclaimer =>
-      '기록은 OBD 차속 신호를 기준으로 측정됩니다. 대부분의 차량 속도계는 실제보다 1–3 km/h 높게 표시되며 신호 갱신 주기도 초당 약 10–20회에 불과하므로, 이 결과는 참고용일 뿐 전문 계측 장비를 대체하지 않습니다.';
+      '기록은 OBD 차속 신호를 기준으로 측정됩니다. 대부분의 차량 속도계는 실제보다 1–3 km/h 높게 표시되며 신호 갱신 주기도 초당 약 10–20회에 불과하므로, 이 결과는 참고용일 뿐 전문 계측 장비와 동등하지 않습니다.';
 
   @override
   String get performanceHeadline => '가속 테스트';
@@ -2010,7 +2010,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsTwReferenceMassNotCurb =>
-      '기준 차량 중량은 curb mass(공차 중량)가 아니므로 적용되지 않습니다.';
+      '기준 차량 중량은 curb mass(공차 중량)가 아니며 적용되지 않습니다.';
 
   @override
   String settingsTwWillApplyOnly(String fields) {
@@ -3456,7 +3456,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get derivedAirflowSourceSpeedDensity => 'Speed-Density 추정';
 
   @override
-  String get derivedAirflowSourceUnavailable => '흡기량 사용 불가';
+  String get derivedAirflowSourceUnavailable => '공기 질량 사용 불가';
 
   @override
   String get derivedFuelSourceStoichiometric => '이론공연비(Stoichiometric) 추정';
@@ -4300,7 +4300,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsCaMotorNotPower =>
-      '킬로와트(kW) 단위의 모터 출력은 휠 마력이 아니므로 적용되지 않습니다.';
+      '킬로와트(kW) 단위의 모터 출력은 휠 마력이 아니며 적용되지 않습니다.';
 
   @override
   String get settingsCaClassIce => '내연기관 (ICE)';
