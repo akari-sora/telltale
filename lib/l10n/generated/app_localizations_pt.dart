@@ -43,7 +43,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get adapterErrorLowVoltageReset =>
-      'Baixa tensão reiniciou o adaptador.';
+      'A baixa tensão reiniciou o adaptador.';
 
   @override
   String get adapterErrorNoData =>
@@ -75,11 +75,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectAnswerBleWithClassic =>
-      'Escolha Bluetooth LE. Não precisa emparelhar antes — busque dentro do app. Mesmo que apareça na lista de emparelhamento Bluetooth do sistema, não emparelhe; esse caminho não funciona. Se a busca não encontrar nada, o 4.0 na caixa era só a especificação do chip — use Bluetooth Classic em vez disso.';
+      'Escolha Bluetooth LE. Não precisa emparelhar antes — busque dentro do app. Mesmo que apareça na lista de emparelhamento Bluetooth do sistema, não emparelhe; esse caminho não funciona. Se a busca não encontrar nada, o 4.0 na caixa era só a especificação do chip — nesse caso, use o Bluetooth Classic.';
 
   @override
   String get connectAnswerBleWithoutClassic =>
-      'Escolha Bluetooth LE. Não precisa emparelhar antes — busque dentro do app. Mesmo que apareça na lista de emparelhamento Bluetooth do sistema, não emparelhe; esse caminho não funciona. Se a busca não encontrar nada, verifique se o adaptador tem energia, ou tente Wi‑Fi em vez disso; este host não oferece Bluetooth Classic.';
+      'Escolha Bluetooth LE. Não precisa emparelhar antes — busque dentro do app. Mesmo que apareça na lista de emparelhamento Bluetooth do sistema, não emparelhe; esse caminho não funciona. Se a busca não encontrar nada, verifique se o adaptador tem energia ou tente usar Wi‑Fi; este host não oferece Bluetooth Classic.';
 
   @override
   String get connectAnswerClassic =>
@@ -99,20 +99,20 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String connectBleEmptyScan(String next) {
-    return 'A busca terminou sem encontrar um adaptador BLE. Verifique nesta ordem: a luz do adaptador está acesa — a maioria das tomadas OBD só tem energia com a ignição em ON; depois o alcance, então sente-se no carro antes de buscar. $next Um adaptador BLE não precisa e não deve ter emparelhamento nas configurações do sistema; esse caminho não funciona.';
+    return 'A busca terminou sem encontrar um adaptador BLE. Verifique nesta ordem: se a luz do adaptador está acesa — a maioria das tomadas OBD só tem energia com a ignição em ON; depois o alcance, então sente-se no carro antes de buscar. $next Um adaptador BLE não precisa — e não deve — ser emparelhado nas configurações do sistema; esse caminho não funciona.';
   }
 
   @override
   String get connectBleEmptyScanNextClassic =>
-      'Por último, confira a especificação na caixa: se diz 2.0 ou 3.0, isso é Bluetooth Classic, que nunca aparece nesta lista, então use Bluetooth Classic acima em vez disso.';
+      'Por último, confira a especificação na caixa: se indicar 2.0 ou 3.0, trata-se de Bluetooth Classic, que nunca aparece nesta lista; nesse caso, use a opção Bluetooth Classic acima.';
 
   @override
   String get connectBleEmptyScanNextWifi =>
-      'Por último, confira a especificação na caixa: se diz 2.0/3.0, ou só Wi‑Fi, tente Wi‑Fi em vez disso (este host não oferece Bluetooth Classic).';
+      'Por último, confira a especificação na caixa: se indicar 2.0/3.0, ou só Wi‑Fi, tente usar Wi‑Fi (este host não oferece Bluetooth Classic).';
 
   @override
   String get connectBlePermissionDeniedForever =>
-      'A permissão de Bluetooth foi permanentemente negada. O sistema não vai pedir de novo, então ative-a nas configurações do app.';
+      'A permissão de Bluetooth foi negada permanentemente. O sistema não vai pedir de novo, então ative-a nas configurações do app.';
 
   @override
   String get connectBlePermissionNeeded =>
@@ -161,15 +161,15 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectClassicListLinuxPort =>
-      'Isto lista as portas seriais Bluetooth que o BlueZ vinculou (/dev/rfcomm* ou equivalente). Uma lista vazia significa que o sistema ainda não criou um nó RFCOMM, não que o app esteja quebrado.';
+      'Esta lista mostra as portas seriais Bluetooth que o BlueZ vinculou (/dev/rfcomm* ou equivalente). Uma lista vazia significa que o sistema ainda não criou um nó RFCOMM, e não que o app esteja com problema.';
 
   @override
   String get connectClassicListPaired =>
-      'Isto lista todos os dispositivos emparelhados com o sistema — fones e alto-falantes incluídos, com os que parecem adaptadores primeiro. Se escolher o errado, toque em Cancelar em vez de esperar falhar; você pode escolher outro na hora.';
+      'Esta lista mostra todos os dispositivos emparelhados com o sistema — fones e caixas de som incluídos, com os que parecem adaptadores primeiro. Se escolher o errado, toque em Cancelar em vez de esperar falhar; você pode escolher outro na hora.';
 
   @override
   String get connectClassicListWindowsPort =>
-      'Isto lista as portas COM associadas ao Bluetooth (“Standard Serial over Bluetooth link”). Uma lista vazia significa que o sistema ainda não criou uma porta serial virtual, não que o app esteja quebrado.';
+      'Esta lista mostra as portas COM associadas ao Bluetooth (“Standard Serial over Bluetooth link”). Uma lista vazia significa que o sistema ainda não criou uma porta serial virtual, e não que o app esteja com problema.';
 
   @override
   String get connectClassicUnavailableHost =>
@@ -184,7 +184,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectDemoBody =>
-      'Simula um motor turbo de quatro cilindros 2.0 L em ciclos de marcha lenta, aceleração, cruzeiro e desaceleração, com sinais que permanecem fisicamente relacionados entre si (a rotação cai numa troca de marcha enquanto a velocidade na estrada continua subindo). Códigos de falha, leituras de VIN e consultas em lote fastMode funcionam por completo.';
+      'Simula um motor 2.0 L turbo de quatro cilindros em ciclos de marcha lenta, aceleração, cruzeiro e desaceleração, com sinais que permanecem fisicamente relacionados entre si (a rotação cai numa troca de marcha enquanto a velocidade do veículo continua subindo). Códigos de falha, leituras de VIN e consultas em lote fastMode funcionam por completo.';
 
   @override
   String get connectDemoStart => 'Iniciar o simulador';
@@ -218,7 +218,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectIssueHandshakeIncomplete =>
-      'A inicialização não passou. O adaptador pode não ser compatível.';
+      'A inicialização não foi bem-sucedida. O adaptador pode não ser compatível.';
 
   @override
   String connectIssueHandshakeStepFailed(String command, String reason) {
@@ -287,7 +287,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectTransportClassicDescription =>
-      'RFCOMM / SPP — o ELM327 econômico mais comum';
+      'RFCOMM / SPP — o ELM327 de entrada mais comum';
 
   @override
   String get connectTransportClassicTitle => 'Bluetooth Classic';
@@ -308,7 +308,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectWhichIntro =>
-      'Não se preocupe com as palavras SPP e GATT. Vá pelo que o adaptador faz depois de plugado:';
+      'Não se preocupe com as palavras SPP e GATT. Oriente-se pelo que o adaptador faz depois de plugado:';
 
   @override
   String get connectWhichNoteGuessing =>
@@ -329,7 +329,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectWifiInstructionsDesktop =>
-      'Conecte este computador ao ponto de acesso Wi-Fi que o adaptador transmite primeiro, depois informe o endereço. Se o sistema avisar que a rede não alcança a internet, escolha permanecer nela. Sistemas desktop em geral tratam o ponto de acesso como rota padrão; a vinculação de rota Wi-Fi do Android não é necessária.';
+      'Primeiro, conecte este computador ao ponto de acesso Wi-Fi transmitido pelo adaptador e depois informe o endereço. Se o sistema avisar que a rede não tem acesso à internet, escolha permanecer nela. Sistemas desktop em geral tratam o ponto de acesso como rota padrão; a vinculação de rota Wi-Fi do Android não é necessária.';
 
   @override
   String get connectWifiInstructionsPhone =>
@@ -378,11 +378,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get dashboardPollingModeHelpBatching =>
-      'Agrupamento ativado significa que o Telltale pode agrupar pedidos de PID num único intercâmbio, para reduzir o número de idas e voltas: tentativas agrupadas são permitidas e nada desativou o agrupamento. Ainda é permissão, não medição, porque se um intercâmbio agrupou algo também depende de quais PIDs o veículo confirmou e de quantos estão na fila.';
+      'Agrupamento ativado significa que o Telltale pode agrupar pedidos de PID numa única troca, para reduzir o número de idas e voltas: tentativas agrupadas são permitidas e nada desativou o agrupamento. Ainda é permissão, não medição, porque o fato de uma troca agrupar ou não algum pedido também depende de quais PIDs o veículo confirmou e de quantos estão na fila.';
 
   @override
   String get dashboardPollingModeHelpObserved =>
-      'Varredura em lote significa que um comando Mode 01 nesta conexão de fato carregou mais de um PID. É um registro desse intercâmbio, não uma promessa de que o próximo vai agrupar, e não uma afirmação sobre vazão.';
+      'Varredura em lote significa que um comando Mode 01 nesta conexão de fato levou mais de um PID. É um registro dessa troca, não uma promessa de que a próxima agrupará pedidos, e não uma afirmação sobre vazão.';
 
   @override
   String get dashboardPollingModeHelpRate =>
@@ -390,7 +390,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get dashboardPollingModeHelpSingle =>
-      'Modo de pedido único significa que cada PID Mode 01 é lido sozinho. O Telltale usa isso quando o barramento não aceita pedidos agrupados de jeito nenhum, o que vale para todo veículo que não é CAN; enquanto nenhum bloco de suporte respondeu ainda, porque agrupar PIDs que o veículo não confirmou é o que faz a resposta voltar curta; e depois que um pedido agrupado falha em voltar numa forma que se possa separar de novo, seja truncado, recusado porque o adaptador reportou buffer cheio, ou sem resposta. As leituras continuam atualizando, e por si só isso não é uma falha de conexão.';
+      'Modo de pedido único significa que cada PID Mode 01 é lido individualmente. O Telltale usa esse modo quando o barramento não aceita pedidos agrupados de jeito nenhum, o que vale para todo veículo que não é CAN; enquanto nenhum bloco de suporte respondeu ainda, porque agrupar PIDs que o veículo não confirmou é o que faz a resposta voltar incompleta; e depois que um pedido agrupado não volta em um formato que possa ser separado de novo, seja por vir truncado, ser recusado porque o adaptador reportou buffer cheio ou ficar sem resposta. As leituras continuam atualizando e, por si só, isso não é uma falha de conexão.';
 
   @override
   String get dashboardPollingModeHelpTitle => 'Modo de varredura';
@@ -426,7 +426,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get datumBadgeInvalid => 'Inválido';
 
   @override
-  String get datumBadgeJustUpdated => 'Acabou de atualizar';
+  String get datumBadgeJustUpdated => 'Recém-atualizado';
 
   @override
   String get datumBadgeOutOfReferenceRange => 'Fora da faixa';
@@ -487,7 +487,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get datumReasonFuelEstimateMissingInputs =>
-      'A estimativa de consumo de combustível está sem uma entrada necessária.';
+      'A estimativa de consumo de combustível está sem um dado de entrada necessário.';
 
   @override
   String get datumReasonHeaderNotOnThisBus =>
@@ -495,7 +495,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get datumReasonHorsepowerEstimateMissingInputs =>
-      'A estimativa de potência está sem uma entrada necessária.';
+      'A estimativa de potência está sem um dado de entrada necessário.';
 
   @override
   String get datumReasonMalformedPacket =>
@@ -538,7 +538,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get datumStatusDetailsHint =>
-      'Toque para detalhes do status dos dados';
+      'Toque para ver detalhes do status dos dados';
 
   @override
   String get datumStatusUnverifiedExplanation =>
@@ -581,7 +581,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String dtcBothSilentDetail(Object mode) {
-    return 'O veículo não respondeu à consulta Mode $mode, e o Mode 03 também não respondeu — então não dá para saber se o veículo não oferece suporte ou se esta conexão simplesmente não leu.';
+    return 'O veículo não respondeu à consulta Mode $mode, e o Mode 03 também não respondeu — então não dá para saber se o veículo não oferece suporte ou se apenas não foi lido nesta conexão.';
   }
 
   @override
@@ -816,7 +816,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get dtcNotConnectedBody =>
-      'Ler códigos de falha precisa de um adaptador ELM327 conectado, ou do simulador em execução.';
+      'Para ler códigos de falha, é preciso um adaptador ELM327 conectado ou o simulador em execução.';
 
   @override
   String get dtcNotConnectedTitle => 'Não conectado';
@@ -852,7 +852,7 @@ class AppLocalizationsPt extends AppLocalizations {
       other: '$count códigos de falha foram lidos',
       one: 'Um código de falha foi lido',
     );
-    return '$_temp0 antes desta categoria parar, mas a cobertura está incompleta:';
+    return '$_temp0 antes de esta categoria parar, mas a cobertura está incompleta:';
   }
 
   @override
@@ -912,9 +912,8 @@ class AppLocalizationsPt extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          'Este controlador reporta por si mesmo $count códigos de falha confirmados.',
-      one:
-          'Este controlador reporta por si mesmo 1 código de falha confirmado.',
+          'O próprio controlador reporta $count códigos de falha confirmados.',
+      one: 'O próprio controlador reporta 1 código de falha confirmado.',
     );
     return '$_temp0';
   }
@@ -1125,18 +1124,18 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get performanceDisclaimer =>
-      'Os tempos vêm do sinal OBD de velocidade na estrada. A maioria dos veículos lê 1–3 km/h a mais no próprio velocímetro, e o sinal atualiza só cerca de 10–20 vezes por segundo, então um resultado aqui é apenas indicativo — não equivalente a equipamento de teste profissional.';
+      'Os tempos vêm do sinal OBD de velocidade do veículo. A maioria dos veículos marca 1–3 km/h a mais no próprio velocímetro, e o sinal atualiza só cerca de 10–20 vezes por segundo, então um resultado aqui é apenas indicativo — não equivalente a equipamento de teste profissional.';
 
   @override
   String get performanceHeadline => 'Teste de aceleração';
 
   @override
   String get performanceNoSpeedSignal =>
-      'Não há sinal válido de velocidade na estrada agora (PID 010D). O teste de aceleração não consegue cronometrar uma corrida sem ele.';
+      'Não há sinal válido de velocidade do veículo agora (PID 010D). O teste de aceleração não consegue cronometrar uma corrida sem ele.';
 
   @override
   String get performanceNotConnectedBody =>
-      'O teste de aceleração precisa de velocidade na estrada ao vivo. Conecte um adaptador, ou inicie o simulador embutido.';
+      'O teste de aceleração precisa da velocidade do veículo ao vivo. Conecte um adaptador ou inicie o simulador embutido.';
 
   @override
   String get performanceNotConnectedTitle => 'Não conectado';
@@ -1178,7 +1177,7 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get performanceStateIdle => 'Escolha uma velocidade alvo e comece';
+  String get performanceStateIdle => 'Escolha uma velocidade-alvo e comece';
 
   @override
   String get performanceStateRunning => 'Cronometrando';
@@ -1189,10 +1188,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get performanceSubhead =>
-      'Uma corrida cronometrada de partida parada até uma velocidade alvo';
+      'Uma corrida cronometrada partindo da imobilidade até uma velocidade-alvo';
 
   @override
-  String get performanceTargetSpeedHeading => 'Velocidade alvo';
+  String get performanceTargetSpeedHeading => 'Velocidade-alvo';
 
   @override
   String get pidActionCancel => 'Cancelar';
@@ -1254,7 +1253,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String pidBulkWillAdd(int count) {
-    return 'Vai adicionar $count. Quanto mais PIDs estiverem ativados, menos vezes cada um pode atualizar.';
+    return 'Vai adicionar $count. Quanto mais PIDs estiverem ativados, com menos frequência cada um pode atualizar.';
   }
 
   @override
@@ -1273,7 +1272,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String pidCapabilityCoverageThroughUnknown(String through) {
-    return 'Cobertura contígua 01–$through (desconhecido além)';
+    return 'Cobertura contígua 01–$through (desconhecido além disso)';
   }
 
   @override
@@ -1289,7 +1288,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get pidCapabilityPhaseRunning =>
-      'Confirmando a que este veículo oferece suporte';
+      'Confirmando a quais PIDs este veículo oferece suporte';
 
   @override
   String pidCapabilitySemantics(String phase, int confirmed, int unknown) {
@@ -1322,7 +1321,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get pidEditorDiscardBody =>
-      'As alterações neste PID não foram salvas, e sair as perde.';
+      'As alterações neste PID não foram salvas e serão perdidas se você sair.';
 
   @override
   String get pidEditorDiscardTitle => 'Descartar alterações não salvas?';
@@ -1642,7 +1641,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get powertrainConfirmBody =>
-      'Os sinais do perfil instalado só são lidos depois que você confirma que este carro é aquele modelo, e a confirmação vale só para esta conexão.';
+      'Os sinais do perfil instalado só são lidos depois que você confirma que este carro é daquele modelo, e a confirmação vale só para esta conexão.';
 
   @override
   String get powertrainConfirmButton => 'Confirmar veículo';
@@ -1747,19 +1746,19 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get powertrainInstallDisclosureCommunity =>
-      'Instalar só adiciona PIDs de bateria somente leitura ao gerenciamento de PIDs. Antes de qualquer leitura começar, cada conexão pede que você confirme no painel que este carro é aquele modelo. Os dados vêm de fontes da comunidade e foram corroborados de forma independente; ainda assim não são uma garantia do fabricante.';
+      'Instalar só adiciona PIDs de bateria somente leitura ao gerenciamento de PIDs. Antes de qualquer leitura começar, cada conexão pede que você confirme no painel que este carro é daquele modelo. Os dados vêm de fontes da comunidade e foram corroborados de forma independente; ainda assim não são uma garantia do fabricante.';
 
   @override
   String get powertrainInstallDisclosureExperimental =>
-      'Instalar só adiciona PIDs de bateria somente leitura ao gerenciamento de PIDs. Antes de qualquer leitura começar, cada conexão pede que você confirme no painel que este carro é aquele modelo. Esta é uma decodificação experimental sem exigência de corroboração independente, não verificada neste veículo, e ainda assim não é uma garantia do fabricante.';
+      'Instalar só adiciona PIDs de bateria somente leitura ao gerenciamento de PIDs. Antes de qualquer leitura começar, cada conexão pede que você confirme no painel que este carro é daquele modelo. Esta é uma decodificação experimental sem exigência de corroboração independente, não verificada neste veículo, e ainda assim não é uma garantia do fabricante.';
 
   @override
   String get powertrainInstallDisclosureReady =>
-      'Instalar só adiciona PIDs de bateria somente leitura ao gerenciamento de PIDs. Antes de qualquer leitura começar, cada conexão pede que você confirme no painel que este carro é aquele modelo. Os dados de origem são mais completos; ainda assim não são uma garantia do fabricante.';
+      'Instalar só adiciona PIDs de bateria somente leitura ao gerenciamento de PIDs. Antes de qualquer leitura começar, cada conexão pede que você confirme no painel que este carro é daquele modelo. Os dados de origem são mais completos; ainda assim não são uma garantia do fabricante.';
 
   @override
   String get powertrainInstallDisclosureResearchOnly =>
-      'Instalar só adiciona PIDs de bateria somente leitura ao gerenciamento de PIDs. Antes de qualquer leitura começar, cada conexão pede que você confirme no painel que este carro é aquele modelo. Esta entrada é só para pesquisa e não deve ser instalada.';
+      'Instalar só adiciona PIDs de bateria somente leitura ao gerenciamento de PIDs. Antes de qualquer leitura começar, cada conexão pede que você confirme no painel que este carro é daquele modelo. Esta entrada é só para pesquisa e não deve ser instalada.';
 
   @override
   String get powertrainInstallCatalogShaMissing =>
@@ -1775,7 +1774,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get powertrainInstallProfileNotInstallable =>
-      'Não é possível instalar: este perfil não está em um estado que possa se tornar PIDs ativos.';
+      'Não é possível instalar: este perfil não está em um estado que permita convertê-lo em PIDs ativos.';
 
   @override
   String get powertrainInstallYearOutOfRange =>
@@ -1847,7 +1846,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get powertrainProbeOnceButton => 'Ler só uma vez';
 
   @override
-  String get powertrainProbePassedTitle => 'Consulta única passou';
+  String get powertrainProbePassedTitle => 'Consulta única aprovada';
 
   @override
   String get powertrainProbePickOneRead => 'Escolha um comando, leia uma vez';
@@ -1890,7 +1889,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get powertrainRefusedProfileNotProbeable =>
-      'Não autorizado: este perfil não é um que possa ser lido uma vez experimentalmente.';
+      'Não autorizado: este perfil não permite uma leitura única experimental.';
 
   @override
   String get powertrainRefusedQuarantinedAfterRejectedRead =>
@@ -1902,7 +1901,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get powertrainRefusedNoLiveAuthorization =>
-      'A leitura única não foi iniciada: nenhuma autorização de uso único está sendo mantida. Nenhuma foi dada, ou expirou, entrou em cooldown, ou foi colocada em quarentena.';
+      'A leitura única não foi iniciada: não há autorização de uso único ativa. Nenhuma foi concedida, ou ela expirou, entrou em cooldown ou foi colocada em quarentena.';
 
   @override
   String get powertrainRefusedDiscardedAtLifecycleBoundary =>
@@ -2008,11 +2007,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get settingsAdapterConcernsFooter =>
-      'Estes são pontos em que o relato do adaptador sobre si mesmo não fecha — não são evidência de que ele leu o carro errado. A única forma de confirmar um valor é uma segunda medição independente (veja o guia de campo).';
+      'Estes são pontos em que o relato do adaptador sobre si mesmo não fecha — não são evidência de que ele leu errado os dados do carro. A única forma de confirmar um valor é uma segunda medição independente (veja o guia de campo).';
 
   @override
   String get settingsAdapterNoContradictions =>
-      'Nenhuma contradição de autodescrição encontrada. Isso só significa que ele é consistente sobre si mesmo — não é evidência de que o chip é genuíno, e não é evidência de que os números que ele reporta estão corretos. Em um clone, a string de versão é só um texto que alguém escolheu.';
+      'Nenhuma contradição de autodescrição encontrada. Isso só significa que ele é consistente no que diz sobre si mesmo — não é evidência de que o chip é genuíno, e não é evidência de que os números que ele reporta estão corretos. Em um clone, a string de versão é só um texto que alguém escolheu.';
 
   @override
   String get settingsAdapterNoVersion => '(nenhuma versão reportada)';
@@ -2107,7 +2106,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String settingsTwWillApplyOnly(String fields) {
-    return 'Só $fields serão aplicados. Massa de referência, VE, Cd, área frontal, Crr e eficiência de transmissão permanecem sem resolução.';
+    return 'Só $fields serão aplicados. Massa de referência, VE, Cd, área frontal, Crr e eficiência de transmissão permanecem não resolvidos.';
   }
 
   @override
@@ -2182,7 +2181,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String settingsEpaWillApplyOnly(String fields) {
-    return 'Só $fields serão aplicados. Massa, VE, Cd, área frontal, Crr e eficiência de transmissão permanecem sem resolução.';
+    return 'Só $fields serão aplicados. Massa, VE, Cd, área frontal, Crr e eficiência de transmissão permanecem não resolvidos.';
   }
 
   @override
@@ -2289,7 +2288,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get settingsProfileEstimatesIntro =>
-      'Potência, torque e consumo de combustível são estimados a partir destes parâmetros; quanto mais próximos do veículo real, mais as estimativas significam.';
+      'Potência, torque e consumo de combustível são estimados a partir destes parâmetros; quanto mais próximos do veículo real, mais sentido fazem as estimativas.';
 
   @override
   String get settingsProfileNameProvesNothing =>
@@ -2382,7 +2381,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get settingsVinReportedDetail =>
-      'Um VIN é o que o veículo reporta sobre si mesmo; ele não verifica as especificações do modelo. A identidade não atravessa conexões; a transcrição diagnóstica ainda pode conter o VIN.';
+      'Um VIN é o que o veículo reporta sobre si mesmo; ele não verifica as especificações do modelo. A identidade não é mantida entre conexões; a transcrição diagnóstica ainda pode conter o VIN.';
 
   @override
   String get settingsVinSimulatorReported => 'VIN reportado pelo simulador';
@@ -2418,11 +2417,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get startupRetryHint =>
-      'Mantenha o Telltale em primeiro plano e tente de novo depois que outros trabalhos com arquivos terminarem. Gravação, reprodução, exportação e exclusão permanecem fechadas até a inicialização concluir.';
+      'Mantenha o Telltale em primeiro plano e tente de novo depois que as outras operações de arquivo terminarem. Gravação, reprodução, exportação e exclusão permanecem fechadas até a inicialização ser concluída.';
 
   @override
   String get telemetryArtifactRestartRequired =>
-      'O estado do trabalho local com arquivos não pode ser confirmado. Feche o Telltale por completo e abra de novo antes de continuar';
+      'O estado das operações locais de arquivo não pode ser confirmado. Feche o Telltale por completo e abra de novo antes de continuar';
 
   @override
   String get telemetryBlockedByRecorder => 'Pare e salve a gravação primeiro';
@@ -2448,7 +2447,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String telemetryDeleteDamagedBody(String id, String time) {
-    return 'Isto exclui $id (hora do arquivo $time). Não pode ser desfeito.';
+    return 'Esta ação exclui $id (hora do arquivo $time) e não pode ser desfeita.';
   }
 
   @override
@@ -2468,7 +2467,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String telemetryDeleteSessionBody(String time) {
-    return 'Isto exclui a gravação de $time. Não pode ser desfeito.';
+    return 'Esta ação exclui a gravação de $time e não pode ser desfeita.';
   }
 
   @override
@@ -2929,7 +2928,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String transcriptRecoveredBody(String timestamp, String size) {
-    return 'Deixada em $timestamp, $size. Sobreviveu ao sistema encerrar o Telltale ou ao celular perder energia.';
+    return 'Deixada em $timestamp, $size. Sobreviveu ao encerramento do Telltale pelo sistema ou à perda de energia do celular.';
   }
 
   @override
@@ -3062,7 +3061,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get wearPermissionLocation => 'Localização';
 
   @override
-  String get wearScanAgain => 'Rescanear';
+  String get wearScanAgain => 'Reescanear';
 
   @override
   String get wearScanFailed => 'Falha no escaneamento — tente de novo';
@@ -3081,7 +3080,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get wearScanning => 'Escaneando…';
 
   @override
-  String get telemetryRecorderNotRecording => 'Não gravando';
+  String get telemetryRecorderNotRecording => 'Não está gravando';
 
   @override
   String get dtcKindStored => 'Armazenado';
@@ -3615,7 +3614,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get dtcDescriptionP0700 =>
-      'O módulo de controle da transmissão pediu a luz de falha — o código de falha em si está no módulo da transmissão e precisa ser lido separadamente';
+      'O módulo de controle da transmissão solicitou o acendimento da luz de falha — o código de falha em si está no módulo da transmissão e precisa ser lido separadamente';
 
   @override
   String get dtcDescriptionP0701 =>
@@ -3684,7 +3683,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get gaugeSkinClusterDescription =>
-      'Parece um cluster de instrumentos de fábrica. Ponteiro, escala de 270 graus, face rebaixada.';
+      'Parece um painel de instrumentos de fábrica. Ponteiro, escala de 270 graus, mostrador rebaixado.';
 
   @override
   String get gaugeSkinMinimal => 'Minimalista';
@@ -3712,7 +3711,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get gaugeSkinNightDescription =>
-      'Para dirigir depois do escurecer. Baixo brilho, arco raso, sem animação — o mínimo possível da sua atenção.';
+      'Para dirigir à noite. Baixo brilho, arco raso, sem animação — exigindo o mínimo possível da sua atenção.';
 
   @override
   String get derivedAirflowSourceMaf => 'Sensor MAF';
@@ -3879,7 +3878,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectTransportWifiRouteRefused =>
-      'O sistema recusou enviar esta conexão pelo Wi-Fi. O telefone está no Wi-Fi; não foi permitido usá-lo para isto.';
+      'O sistema se recusou a enviar esta conexão pelo Wi-Fi. O telefone está no Wi-Fi; não foi permitido usá-lo para isto.';
 
   @override
   String get connectTransportWifiRouteTimeout =>
@@ -3887,7 +3886,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectTransportWifiRouteUnclassified =>
-      'A conexão não pôde ser enviada pelo Wi-Fi, por um motivo que o sistema não nomeou. O erro completo está no log abaixo.';
+      'A conexão não pôde ser enviada pelo Wi-Fi, por um motivo que o sistema não especificou. O erro completo está no registro abaixo.';
 
   @override
   String get connectTransportWifiHostUnreachable =>
@@ -3915,7 +3914,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectTransportClassicConnectTimeout =>
-      'A conexão com o adaptador esgotou o tempo. Ele ainda pode estar respondendo — espere alguns segundos em vez de tentar de novo imediatamente.';
+      'O tempo de conexão com o adaptador esgotou. Ele ainda pode estar respondendo — espere alguns segundos em vez de tentar de novo imediatamente.';
 
   @override
   String get connectTransportSerialPortOpenFailed =>
@@ -3943,7 +3942,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get settingsManualCommandLinkStoppedResponding =>
-      'Nada chegou do adaptador por tempo suficiente para a conexão ser encerrada. Ele ainda pode ter energia; o que se sabe é o silêncio.';
+      'Nada chegou do adaptador por tanto tempo que a conexão foi encerrada. Ele ainda pode ter energia; o que se sabe é o silêncio.';
 
   @override
   String get settingsManualCommandWriteFailed =>
@@ -3983,7 +3982,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get settingsManualCommandFlowControlRestoreFailed =>
-      'O adaptador recusou restaurar o controle de fluxo padrão (ATFCSM0), então a varredura fica parada até você reconectar.';
+      'O adaptador se recusou a restaurar o controle de fluxo padrão (ATFCSM0), então a varredura fica parada até você reconectar.';
 
   @override
   String get settingsManualCommandExtendedAddressingUnavailable =>
@@ -4003,7 +4002,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get settingsManualCommandHeaderRestoreFailed =>
-      'O adaptador recusou restaurar o cabeçalho (ATSH), então a varredura fica parada até você reconectar.';
+      'O adaptador se recusou a restaurar o cabeçalho (ATSH), então a varredura fica parada até você reconectar.';
 
   @override
   String get manualCommandRefusedEmpty =>
@@ -4037,17 +4036,17 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String commandFailureQueryHeaderRefused(Object header) {
-    return 'O adaptador recusou direcionar este pedido ao controlador $header, então o pedido não foi enviado. Se fosse mantido o endereço que o adaptador realmente está usando, a resposta viria de um controlador que não foi consultado.';
+    return 'O adaptador se recusou a direcionar este pedido ao controlador $header, então o pedido não foi enviado. Se fosse mantido o endereço que o adaptador realmente está usando, a resposta viria de um controlador que não foi consultado.';
   }
 
   @override
   String commandFailureWholeVehicleHeaderRefused(Object address) {
-    return 'O adaptador recusou mudar para o endereço $address, que é o que uma pergunta feita ao veículo inteiro precisa usar. Sem isso, as respostas não podem ser associadas aos controladores que as enviaram, então o pedido não foi feito.';
+    return 'O adaptador se recusou a mudar para o endereço $address, que é o que uma pergunta feita ao veículo inteiro precisa usar. Sem isso, as respostas não podem ser associadas aos controladores que as enviaram, então o pedido não foi feito.';
   }
 
   @override
   String commandFailureLegacyScanWouldBePartial(Object installed) {
-    return 'Este veículo usa um barramento mais antigo sem endereço padrão que alcance todos os controladores, e o adaptador está definido no momento para o controlador $installed. Uma varredura teria coberto só esse controlador enquanto seria apresentada como o veículo inteiro, então não foi enviada. Reconecte e escaneie de novo.';
+    return 'Este veículo usa um barramento mais antigo sem endereço padrão que alcance todos os controladores, e o adaptador está definido no momento para o controlador $installed. Uma varredura teria coberto só esse controlador, mas seria apresentada como se fosse do veículo inteiro, então não foi enviada. Reconecte e escaneie de novo.';
   }
 
   @override
@@ -4110,7 +4109,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get pidFormulaBaroTwoDefinitions =>
-      'Duas definições fornecem pressão ambiente, então o valor poderia ser qualquer uma e nenhuma pode ser usada. Remova um dos medidores que medem pressão ambiente.';
+      'Duas definições fornecem pressão ambiente, então o valor poderia vir de qualquer uma delas e nenhuma pode ser usada. Remova um dos medidores que medem pressão ambiente.';
 
   @override
   String get pidFormulaBaroNotYetMeasured =>
@@ -4140,7 +4139,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String pidFormulaDependencyTwoDefinitions(String key) {
-    return 'Duas definições decodificam $key, então o valor poderia ser qualquer uma e nenhuma pode ser usada. Mude uma delas para outro mode+PID. Observação: os PIDs de que as estimativas precisam (010B, 010C, 010D) são sempre lidos, então tirar um medidor do painel não os interrompe.';
+    return 'Duas definições decodificam $key, então o valor poderia vir de qualquer uma delas e nenhuma pode ser usada. Mude uma delas para outro mode+PID. Observação: os PIDs de que as estimativas precisam (010B, 010C, 010D) são sempre lidos, então tirar um medidor do painel não os interrompe.';
   }
 
   @override
@@ -4385,27 +4384,27 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String dtcClearNrcConditionsDoNotRepeat(String controller) {
-    return '$controller recusou a limpeza porque o estado do veículo não permite. A maioria dos controladores não limpa com o motor ligado. Ligue a ignição com o motor parado e escaneie de novo para ver quais códigos restam. Não envie outra limpeza global — uma segunda pode zerar a prontidão de emissões em um controlador que já pode ter limpo.';
+    return '$controller recusou a limpeza porque o estado do veículo não permite. A maioria dos controladores não limpa com o motor ligado. Ligue a ignição com o motor parado e escaneie de novo para ver quais códigos restam. Não envie outra limpeza global — uma segunda pode reiniciar a prontidão de emissões em um controlador que pode já ter limpo.';
   }
 
   @override
   String dtcClearNrcUnsupportedDoNotRepeat(String controller) {
-    return '$controller não oferece limpeza Mode 04. Pode ser necessário equipamento do fabricante ou da concessionária. Não envie outra limpeza global — uma segunda pode zerar a prontidão de emissões em um controlador que já pode ter limpo. Escaneie de novo para ver quais códigos restam.';
+    return '$controller não oferece limpeza Mode 04. Pode ser necessário equipamento do fabricante ou da concessionária. Não envie outra limpeza global — uma segunda pode reiniciar a prontidão de emissões em um controlador que pode já ter limpo. Escaneie de novo para ver quais códigos restam.';
   }
 
   @override
   String dtcClearNrcBusyDoNotRepeat(String controller) {
-    return '$controller está ocupado. Não envie outra limpeza global — uma segunda pode zerar a prontidão de emissões em um controlador que já pode ter limpo. Escaneie de novo para ver quais códigos restam.';
+    return '$controller está ocupado. Não envie outra limpeza global — uma segunda pode reiniciar a prontidão de emissões em um controlador que pode já ter limpo. Escaneie de novo para ver quais códigos restam.';
   }
 
   @override
   String dtcClearNrcSecurityDoNotRepeat(String controller) {
-    return '$controller exige acesso de segurança antes de limpar. É necessário equipamento do fabricante ou da concessionária. Não envie outra limpeza global — uma segunda pode zerar a prontidão de emissões em um controlador que já pode ter limpo.';
+    return '$controller exige acesso de segurança antes de limpar. É necessário equipamento do fabricante ou da concessionária. Não envie outra limpeza global — uma segunda pode reiniciar a prontidão de emissões em um controlador que pode já ter limpo.';
   }
 
   @override
   String dtcClearNrcOtherDoNotRepeat(String controller, String code) {
-    return '$controller recusou a limpeza (código de motivo $code). Não envie outra limpeza global — uma segunda pode zerar a prontidão de emissões em um controlador que já pode ter limpo. Escaneie de novo para ver quais códigos restam.';
+    return '$controller recusou a limpeza (código de motivo $code). Não envie outra limpeza global — uma segunda pode reiniciar a prontidão de emissões em um controlador que pode já ter limpo. Escaneie de novo para ver quais códigos restam.';
   }
 
   @override
@@ -4594,7 +4593,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String settingsCaPickerScope(int firstYear, int lastYear) {
-    return 'Somente linhas de Fuel Consumption Ratings do mercado canadense para $firstYear–$lastYear. ICE, elétrico a bateria e híbrido plug-in permanecem classes separadas. Uma string de marca/modelo correspondente não é uma configuração EPA nem de Taiwan.';
+    return 'Somente linhas de Fuel Consumption Ratings do mercado canadense para $firstYear–$lastYear. ICE, elétrico a bateria e híbrido plug-in permanecem classes separadas. Uma coincidência nos nomes de marca/modelo não é uma configuração EPA nem de Taiwan.';
   }
 
   @override
@@ -4612,7 +4611,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String settingsCaWillApplyOnly(String fields) {
-    return 'Só $fields serão aplicados. kW do motor, consumo de combustível, autonomia, CO2, VE, Cd, área frontal, Crr e eficiência da transmissão permanecem sem resolver.';
+    return 'Só $fields serão aplicados. kW do motor, consumo de combustível, autonomia, CO2, VE, Cd, área frontal, Crr e eficiência da transmissão permanecem não resolvidos.';
   }
 
   @override
@@ -4767,7 +4766,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String mode08ReasonTimeout(String block) {
-    return 'Consulta esgotou o tempo no bloco $block';
+    return 'Tempo esgotado na consulta do bloco $block';
   }
 
   @override
@@ -4847,14 +4846,14 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get performanceRecordingTrace =>
-      'Acelerando... gravando traço de velocidade';
+      'Acelerando... gravando traçado de velocidade';
 
   @override
   String get performanceNoAnalysisTitle => 'Sem dados de análise';
 
   @override
   String get performanceNoAnalysisBody =>
-      'Esta corrida parou antes de haver amostras de velocidade suficientes para montar um traço ou resultado por trechos.';
+      'Esta corrida parou antes de haver amostras de velocidade suficientes para montar um traçado ou resultado de parciais.';
 
   @override
   String get connectActivityReconnectingAutomatically =>

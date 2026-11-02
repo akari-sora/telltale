@@ -44,7 +44,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get adapterErrorNoData =>
-      '応答がありませんでした。一時的に無応答であるか、車両がこの項目に対応していない可能性があります。';
+      '応答がありませんでした。一時的に応答がないだけか、車両がこの項目に対応していない可能性があります。';
 
   @override
   String get adapterErrorStopped => '通信が中断されました。';
@@ -71,15 +71,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connectAnswerBleWithClassic =>
-      'Bluetooth LE を選んでください。事前のペアリングは不要です。アプリ内で直接スキャンしてください。システムのBluetoothペアリング一覧に表示されても、そこではペアリングしないでください（その方法では接続できません）。スキャンしても見つからない場合、箱に書かれた「4.0」はチップの規格にすぎないため、代わりに Bluetooth Classic を使ってください。';
+      'Bluetooth LE を選んでください。事前のペアリングは不要です。アプリ内で直接スキャンしてください。システムのBluetoothペアリング一覧に表示されても、そこではペアリングしないでください（その方法では接続できません）。スキャンしても見つからない場合、箱の「4.0」という表記はチップの規格にすぎないため、代わりに Bluetooth Classic を使ってください。';
 
   @override
   String get connectAnswerBleWithoutClassic =>
-      'Bluetooth LE を選んでください。事前のペアリングは不要です。アプリ内で直接スキャンしてください。システムのBluetoothペアリング一覧に表示されても、そこではペアリングしないでください（その方法では接続できません）。スキャンしても見つからない場合は、アダプターに電源が入っているか確認するか、代わりに Wi-Fi を試してください（この端末は Bluetooth Classic に対応していません）。';
+      'Bluetooth LE を選んでください。事前のペアリングは不要です。アプリ内で直接スキャンしてください。システムのBluetoothペアリング一覧に表示されても、そこではペアリングしないでください（その方法では接続できません）。スキャンしても見つからない場合は、アダプターの電源が入っているか確認するか、代わりに Wi-Fi を試してください（この端末は Bluetooth Classic に対応していません）。';
 
   @override
   String get connectAnswerClassic =>
-      'Bluetooth Classic を選んでください。先にシステム設定でペアリングを完了してください（アプリから代わりにペアリングすることはできません）。パスキーは通常 1234 または 0000 です。';
+      'Bluetooth Classic を選んでください。先にシステム設定でペアリングを完了してください（アプリ側でペアリングを行うことはできません）。パスキーは通常 1234 または 0000 です。';
 
   @override
   String get connectAnswerWifiDesktop =>
@@ -95,12 +95,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String connectBleEmptyScan(String next) {
-    return 'スキャンが完了しましたが、BLE アダプターは見つかりませんでした。順番に確認してください：まずアダプターのランプが点灯しているか（多くのOBDソケットはイグニッションがONになるまで給電されません）、次に距離（運転席に座ってからスキャンしてください）。$next BLE アダプターはシステム設定でのペアリングが不要であり、ペアリングしてはいけません（その方法では動作しません）。';
+    return 'スキャンが完了しましたが、BLE アダプターは見つかりませんでした。次の順に確認してください。まずアダプターのランプが点灯しているか（多くのOBDソケットはイグニッションがONになるまで給電されません）、次に距離です（車内に座ってからスキャンしてください）。$next BLE アダプターはシステム設定でのペアリングが不要なだけでなく、そこではペアリングしてはいけません（その方法では動作しません）。';
   }
 
   @override
   String get connectBleEmptyScanNextClassic =>
-      '最後に箱の仕様を確認してください。2.0 または 3.0 と記載されていれば Bluetooth Classic であり、この一覧には決して表示されないため、上の Bluetooth Classic を使ってください。';
+      '最後に箱の仕様を確認してください。2.0 または 3.0 と記載されていれば Bluetooth Classic であり、この一覧には一切表示されないため、代わりに上の Bluetooth Classic を使ってください。';
 
   @override
   String get connectBleEmptyScanNextWifi =>
@@ -155,15 +155,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connectClassicListLinuxPort =>
-      'ここには BlueZ がバインドしたBluetoothシリアルポート（/dev/rfcomm* または同等）が一覧表示されます。一覧が空の場合は、システムがまだ RFCOMM ノードを作成していないことを意味し、アプリの故障ではありません。';
+      'ここには BlueZ がバインドしたBluetoothシリアルポート（/dev/rfcomm* または同等）が一覧表示されます。一覧が空の場合は、システム側でまだ RFCOMM ノードが作成されていない状態であり、アプリの不具合ではありません。';
 
   @override
   String get connectClassicListPaired =>
-      'ここにはシステムとペアリング済みのすべてのデバイス（イヤホンやスピーカーを含む）が表示され、アダプターらしいものが先頭に並びます。間違ったものを選んだ場合は、失敗するのを待たずに「キャンセル」を押せば、すぐに別のものを選び直せます。';
+      'ここにはシステムとペアリング済みのすべてのデバイス（イヤホンやスピーカーを含む）が表示され、アダプターと思われるものが先頭に並びます。別のデバイスを誤って選んだ場合は、接続失敗を待たずに「キャンセル」を押せば、すぐに選び直せます。';
 
   @override
   String get connectClassicListWindowsPort =>
-      'ここにはBluetoothに関連付けられたCOMポート（「Standard Serial over Bluetooth link」）が一覧表示されます。一覧が空の場合は、システムがまだ仮想シリアルポートを作成していないことを意味し、アプリの故障ではありません。';
+      'ここにはBluetoothに関連付けられたCOMポート（「Standard Serial over Bluetooth link」）が一覧表示されます。一覧が空の場合は、システム側でまだ仮想シリアルポートが作成されていない状態であり、アプリの不具合ではありません。';
 
   @override
   String get connectClassicUnavailableHost =>
@@ -194,7 +194,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connectIssueAdapterAcceptedThenSilent =>
-      'アダプターは接続を受け入れましたが、時間内に応答がありませんでした。多くの場合、まだ給電されていない（大半のOBDソケットはイグニッションON時のみ給電されます）か、別のアプリがすでにこのアダプターに接続しています。別のアプリが接続している場合は、それを閉じてから再試行してください。';
+      'アダプターは接続を受け入れましたが、時間内に応答がありませんでした。多くの場合、まだ給電されていないか（大半のOBDソケットはイグニッションON時のみ給電されます）、別のアプリがすでにこのアダプターに接続しています。他のアプリが接続している場合は、そのアプリを終了してから再試行してください。';
 
   @override
   String connectIssueAdapterSilentOnReset(String command) {
@@ -207,7 +207,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connectIssueConnectionSetupFailed =>
-      '接続の確立中に失敗しました。アダプターに電源が入っており、近くにあることを確認してから再試行してください。エラーの詳細は下の通信記録に残されています。';
+      '接続を確立する途中で失敗しました。アダプターの電源が入っており、近くにあることを確認してから再試行してください。エラーの全文は下の通信記録に残されています。';
 
   @override
   String get connectIssueHandshakeIncomplete =>
@@ -271,7 +271,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '今回の試行の完全な通信記録が保存されました。1行のメッセージよりも、この記録を持ち帰る方が原因調査に役立ちます。';
 
   @override
-  String get connectTransportBleDescription => 'GATT UART — 新しい省電力アダプター';
+  String get connectTransportBleDescription => 'GATT UART — 近年の省電力アダプター';
 
   @override
   String get connectTransportBleTitle => 'Bluetooth LE';
@@ -324,7 +324,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connectWifiInstructionsPhone =>
-      '先にスマートフォンをアダプターが発信する Wi-Fi ホットスポットに接続してから、アドレスを入力してください。「この Wi-Fi はインターネットに接続できません。接続を維持しますか？」と尋ねられたら、維持を選択してください。Androidでは、Telltale は接続中に通信を Wi-Fi ルートに固定し、モバイルデータ通信に奪われないように試行します。';
+      '先にスマートフォンをアダプターが発信する Wi-Fi ホットスポットに接続してから、アドレスを入力してください。「この Wi-Fi はインターネットに接続できません。接続を維持しますか？」と尋ねられたら、維持を選択してください。Androidでは、Telltale は接続中の通信を Wi-Fi ルートに固定するよう試み、モバイルデータ通信へ切り替わらないようにします。';
 
   @override
   String connectWifiPortInvalid(String value, int min, int max) {
@@ -368,7 +368,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dashboardPollingModeHelpBatching =>
-      '「一括要求有効」は、往復回数を減らすために Telltale が複数のPID要求を1回の通信にまとめられる状態であることを示します（一括要求が許可されており、無効化もされていません）。ただし、実際に1回の通信で複数まとめられたかどうかは車両が確認済みのPIDや待機中の要求数にも依存するため、これは許可状態を示すものであり、実測された動作の記録ではありません。';
+      '「一括要求有効」は、往復回数を減らすために Telltale が複数のPID要求を1回の通信にまとめられる状態であることを示します（一括要求が許可されており、無効化もされていません）。ただし、実際に1回の通信で複数がまとめられたかどうかは、車両側で対応が確認されたPIDや待機中の要求数にも依存するため、これは許可状態を示すものであり、実測された動作の記録ではありません。';
 
   @override
   String get dashboardPollingModeHelpObserved =>
@@ -513,14 +513,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get datumStatusClose => '閉じる';
 
   @override
-  String get datumStatusFollowsData => '状態はデータに準拠';
+  String get datumStatusFollowsData => '状態はデータに追従';
 
   @override
   String get datumStatusDetailsHint => 'タップして読み取り値の状態詳細を表示';
 
   @override
   String get datumStatusUnverifiedExplanation =>
-      '「未検証」は、お使いの車両におけるこのデコーダーの実車比較記録がここに文書化されていないことを意味します。読み取り値が誤っているという意味ではなく、また精度を保証するものでもありません。鮮度と異常は別に表示されます。';
+      '「未検証」とは、お使いの車両でこのデコーダーを実車比較した記録がここに文書化されていないことを意味します。読み取り値が誤っているという意味ではなく、精度を保証するものでもありません。鮮度と異常は個別に表示されます。';
 
   @override
   String get datumStatusFormula => '計算式';
@@ -584,7 +584,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String dtcClearDialogFrames(Object codes) {
-    return '$codes のフリーズフレーム（故障発生時のエンジン回転数、水温、負荷の全記録）も同時に失われ、再び故障が発生するまで読み戻すことはできません。';
+    return '$codes のフリーズフレーム（故障発生時のエンジン回転数、水温、負荷の全記録）も同時に失われ、再び故障が発生するまで読み取ることはできません。';
   }
 
   @override
@@ -595,10 +595,10 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '今回のスキャンで$count個のカテゴリから完全な応答が得られなかった',
-      one: '今回のスキャンで1つのカテゴリから完全な応答が得られなかった',
+      other: '今回のスキャンでは$count個のカテゴリ',
+      one: '今回のスキャンでは1つのカテゴリ',
     );
-    return '$_temp0ため（$categories）、まだ表示されていない故障コードが存在する可能性があります。消去すると二度と読み取れません。';
+    return '$_temp0（$categories）から完全な応答が得られなかったため、まだ表示されていない故障コードが存在する可能性があります。消去すると二度と読み取れません。';
   }
 
   @override
@@ -618,11 +618,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dtcClearNotAccepted =>
-      '消去に失敗しました。コマンドを受け付けたコントローラーはありません。もう一度試すことができます。';
+      '消去に失敗しました。コマンドを受け付けたコントローラーはありません。もう一度お試しいただけます。';
 
   @override
   String get dtcClearPartiallyConfirmed =>
-      '少なくとも1つのコントローラーが消去完了を報告しましたが、残りは確認できませんでした。もう一度消去を送信しないでください。繰り返すと、すでに完了したコントローラーの排ガスレディネスが再びリセットされます。再スキャンして結果を確認してください。';
+      '少なくとも1つのコントローラーが消去完了を報告しましたが、残りは確認できませんでした。消去コマンドを再送信しないでください。繰り返すと、すでに完了したコントローラーの排ガスレディネスが再びリセットされます。再スキャンして結果を確認してください。';
 
   @override
   String get dtcClearPreviousConnectionUnconfirmed =>
@@ -634,15 +634,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dtcClearSentUnconfirmed =>
-      '消去コマンドは送信されましたが、応答が通信中に破損したため、車両が消去したかどうかは不明です。再スキャンして確認してください。もう一度消去を送信しないでください。すでに消去されていた場合、繰り返すと排ガスレディネスがリセットされます。';
+      '消去コマンドは送信されましたが、応答が通信中に破損したため、車両側で消去されたかどうかは不明です。再スキャンして確認してください。消去コマンドを再送信しないでください。すでに消去されていた場合、繰り返すと排ガスレディネスがリセットされます。';
 
   @override
   String get dtcClearTimeout =>
-      '消去コマンドの送信後に応答がなかったため、車両が消去したかどうかは不明です。再スキャンして確認してください。むやみにもう一度消去を送信しないでください。';
+      '消去コマンドの送信後に応答がなかったため、車両側で消去されたかどうかは不明です。再スキャンして確認してください。むやみに消去コマンドを再送信しないでください。';
 
   @override
   String get dtcClearUnexpected =>
-      '消去に失敗したため、車両が消去したかどうかは不明です。再スキャンして確認してください。むやみにもう一度消去を送信しないでください。';
+      '消去処理が正常に完了しなかったため、車両側で消去されたかどうかは不明です。再スキャンして確認してください。むやみに消去コマンドを再送信しないでください。';
 
   @override
   String get dtcClearing => '消去中…';
@@ -691,8 +691,8 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'このフリーズフレームには他に$count項目ありますが、本アプリに対応する換算式がないため表示されていません。',
-      one: 'このフリーズフレームには他に1項目ありますが、本アプリに対応する換算式がないため表示されていません。',
+      other: 'このフリーズフレームには他に$count項目ありますが、本アプリには対応する換算式がないため表示されていません。',
+      one: 'このフリーズフレームには他に1項目ありますが、本アプリには対応する換算式がないため表示されていません。',
     );
     return '$_temp0';
   }
@@ -804,7 +804,7 @@ class AppLocalizationsJa extends AppLocalizations {
       other: '$count個のコントローラー',
       one: '1つのコントローラー',
     );
-    return '3つのカテゴリすべてのクエリが完了しました。$_temp0（$controllers）は保留中および永久故障コードを実装していません。多くの車両で正常な仕様ですが、車両全体に故障がないと断定できない理由でもあります。';
+    return '3つのカテゴリすべてのクエリが完了しました。$_temp0（$controllers）は保留中および永久故障コードを実装していません。これは多くの車両で正常な仕様ですが、同時に車両全体に故障がないと断定できない理由でもあります。';
   }
 
   @override
@@ -812,7 +812,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String dtcPartialCleanUnanswered(Object categories) {
-    return '$categories は応答しなかったため、状態を確認できません。車両に問題がないという意味ではありません。';
+    return '$categories からは応答がなかったため、状態を確認できません。車両に問題がないという意味ではありません。';
   }
 
   @override
@@ -823,7 +823,7 @@ class AppLocalizationsJa extends AppLocalizations {
       other: '$count件の故障コードが読み取られました',
       one: '1件の故障コードが読み取られました',
     );
-    return 'このカテゴリが中断される前に$_temp0が、対象範囲は不完全です：';
+    return 'このカテゴリの読み取りが中断される前に$_temp0が、対象範囲は不完全です：';
   }
 
   @override
@@ -847,8 +847,8 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count項目のモニターがまだ未完了です',
-      one: '1項目のモニターがまだ未完了です',
+      other: '$count項目のモニターがまだ完了していません',
+      one: '1項目のモニターがまだ完了していません',
     );
     return '$_temp0。今すぐ検査を受けても合格しない可能性があります。';
   }
@@ -891,15 +891,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dtcSelfReportedNoCodes => 'このコントローラーは確定した故障コードがないと自己報告しています。';
 
   @override
-  String get dtcSilentCategoryHeadline => 'このカテゴリは応答しませんでした';
+  String get dtcSilentCategoryHeadline => 'このカテゴリからは応答がありませんでした';
 
   @override
   String get dtcSilentPendingDetail =>
-      '保留中の故障コード（Mode 07）は応答しませんでした。この ECU がこのサービスを実装していないか、今回読み取れなかっただけの可能性があります。無応答からは両者を区別できず、「保留中の故障がない」と解釈してはなりません。保存済み故障コードの結果には影響しません。';
+      '保留中の故障コード（Mode 07）からは応答がありませんでした。この ECU がこのサービスを実装していないか、今回読み取れなかっただけの可能性があります。無応答からは両者を区別できず、「保留中の故障がない」と解釈してはなりません。保存済み故障コードの結果には影響しません。';
 
   @override
   String get dtcSilentPermanentDetail =>
-      '永久故障コード（Mode 0A）は応答しませんでした。このカテゴリは2010年頃の OBD-II 世代で導入されたため、古い車両では対応していない場合があります。ただし無応答は今回読み取れなかっただけの可能性もあり、両者を区別することはできません。保存済み故障コードの結果には影響しません。';
+      '永久故障コード（Mode 0A）からは応答がありませんでした。このカテゴリは2010年頃の OBD-II 世代で導入されたため、古い車両では対応していない場合があります。ただし無応答は今回読み取れなかっただけの可能性もあり、両者を区別することはできません。保存済み故障コードの結果には影響しません。';
 
   @override
   String get dtcStartScan => 'スキャン開始';
@@ -937,7 +937,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get fieldEventBody =>
-      '車両が完全に停止しているときにのみ、同乗者または駐車中の操作者が押してください。イベントは生のOBDデータと同じタイムラインを共有し、即座に保存が試行されます。';
+      '車両が完全に停止しているときにのみ、同乗者または駐車中の操作者が押してください。イベントは生のOBDデータと同じタイムライン上に記録され、直ちに保存が試行されます。';
 
   @override
   String get fieldEventEngineStarted => 'エンジン始動';
@@ -993,7 +993,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get handshakeNoteEcuSilent => 'ECUが応答しませんでした。';
 
   @override
-  String get handshakeNoteNotAcknowledged => 'アダプターがこのコマンドを確認応答しませんでした。';
+  String get handshakeNoteNotAcknowledged => 'アダプターがこのコマンドに確認応答しませんでした。';
 
   @override
   String get handshakeNoteNotModeOnePositiveReply =>
@@ -1013,7 +1013,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get handshakeStepAdapterVersion => 'アダプターのバージョンを読み取る';
 
   @override
-  String get handshakeStepAdaptiveTiming => 'データシート推奨のアダプティブタイミングを有効化';
+  String get handshakeStepAdaptiveTiming => 'データシート推奨のアダプティブタイミングを有効化する';
 
   @override
   String get handshakeStepBatteryVoltage => 'バッテリー電圧を読み取る';
@@ -1046,10 +1046,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get handshakeStepReset => 'アダプターをソフトウェアリセットする';
 
   @override
-  String get handshakeStepResponseTimeout => '応答タイムアウトを約 408 ms に設定';
+  String get handshakeStepResponseTimeout => '応答タイムアウトを約 408 ms に設定する';
 
   @override
-  String get handshakeStepSpacesOff => '空白文字をオフにして通信量を約3分の1削減';
+  String get handshakeStepSpacesOff => '空白文字をオフにして通信量を3分の1削減する';
 
   @override
   String get handshakeStepSupportProbe => 'ECUが対応するPIDを照会し、車両の応答を確認する';
@@ -1076,7 +1076,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get navSettings => '設定';
 
   @override
-  String get performanceArm => 'タイマーを待機セット';
+  String get performanceArm => 'タイマーをセット';
 
   @override
   String get performanceDisclaimer =>
@@ -1198,7 +1198,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String pidBulkUnconfirmedBlocks(int count) {
-    return '$count 個のサポートブロックがまだ未確認です。今回は肯定的な証拠がある項目のみを追加します。';
+    return '$count 個のサポートブロックが未確認のままです。今回は対応を示す証拠がある項目のみを追加します。';
   }
 
   @override
@@ -1251,7 +1251,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String pidEditorCollision(String name) {
-    return 'この組み合わせはすでに別のカスタムPIDで使用されています（$name）。別のモード+PID、ヘッダー、または名前の接尾辞を使用してください。';
+    return 'この組み合わせはすでに別のカスタムPID（$name）で使用されています。別のモード+PID、ヘッダー、または名前の接尾辞を使用してください。';
   }
 
   @override
@@ -1396,8 +1396,8 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count件が既存の定義を上書きしました',
-      one: '1件が既存の定義を上書きしました',
+      other: '既存の定義$count件を上書きしました',
+      one: '既存の定義1件を上書きしました',
     );
     return '$_temp0';
   }
@@ -1551,7 +1551,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get powertrainCatalogScopeNote =>
-      'カタログは広範ですが、「データが見つかった」ことは「お使いの車両に対応している」ことを意味しません。調査専用（研究のみ）の項目にはコマンドが含まれません。Mode 22 の実験項目はインストールしてポーリングできますが、すべての値に「未検証」と表示されます。Mode 21 の実験項目は確認ごとに1回だけ読み取られます。';
+      'カタログの対象は広範ですが、「データが見つかった」ことは「お使いの車両に対応している」という意味ではありません。調査専用の項目にはコマンドが含まれません。Mode 22 の実験項目はインストールしてポーリングできますが、すべての値に「未検証」と表示されます。Mode 21 の実験項目は確認ごとに1回だけ読み取られます。';
 
   @override
   String get powertrainCatalogSearchHint => 'メーカー、車種、グレード、市場を検索…';
@@ -1581,7 +1581,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get powertrainConfirmDialogBody =>
-      '確認すると、今回の接続が終わるまでこのプロファイルの読み取り専用バッテリークエリが定期的にポーリングされます。誤ったプロファイルでは、もっともらしい誤った数値が表示されるおそれがあります。確信が持てない場合はキャンセルしてください。';
+      '確認すると、今回の接続が終わるまでこのプロファイルの読み取り専用バッテリークエリが定期的にポーリングされます。誤ったプロファイルでは、もっともらしい見た目でありながら誤った数値が表示されるおそれがあります。確信が持てない場合はキャンセルしてください。';
 
   @override
   String get powertrainConfirmDialogTitle => '接続中の車両を確認';
@@ -1675,19 +1675,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get powertrainInstallDisclosureCommunity =>
-      'インストールすると、読み取り専用のバッテリーPIDがPID管理に追加されるだけです。読み取りが始まる前に、接続するたびダッシュボードで「この車両がその車種である」ことの確認を求められます。データはコミュニティの出典に基づき独立した裏付けがありますが、メーカーの保証ではありません。';
+      'インストールしても、読み取り専用のバッテリーPIDがPID管理に追加されるだけです。読み取りが始まる前に、接続するたびにダッシュボードで「この車両がその車種である」ことの確認を求められます。データはコミュニティの出典に基づき独立した裏付けがありますが、メーカーの保証ではありません。';
 
   @override
   String get powertrainInstallDisclosureExperimental =>
-      'インストールすると、読み取り専用のバッテリーPIDがPID管理に追加されるだけです。読み取りが始まる前に、接続するたびダッシュボードで「この車両がその車種である」ことの確認を求められます。これは独立した裏付け要件のない実験的なデコードであり、この車両では未検証で、メーカーの保証でもありません。';
+      'インストールしても、読み取り専用のバッテリーPIDがPID管理に追加されるだけです。読み取りが始まる前に、接続するたびにダッシュボードで「この車両がその車種である」ことの確認を求められます。これは独立した裏付け要件のない実験的なデコードであり、この車両では未検証で、メーカーの保証でもありません。';
 
   @override
   String get powertrainInstallDisclosureReady =>
-      'インストールすると、読み取り専用のバッテリーPIDがPID管理に追加されるだけです。読み取りが始まる前に、接続するたびダッシュボードで「この車両がその車種である」ことの確認を求められます。出典データはより充実していますが、それでもメーカーの保証ではありません。';
+      'インストールしても、読み取り専用のバッテリーPIDがPID管理に追加されるだけです。読み取りが始まる前に、接続するたびにダッシュボードで「この車両がその車種である」ことの確認を求められます。出典データはより充実していますが、それでもメーカーの保証ではありません。';
 
   @override
   String get powertrainInstallDisclosureResearchOnly =>
-      'インストールすると、読み取り専用のバッテリーPIDがPID管理に追加されるだけです。読み取りが始まる前に、接続するたびダッシュボードで「この車両がその車種である」ことの確認を求められます。この項目は調査専用であり、インストールすべきではありません。';
+      'インストールしても、読み取り専用のバッテリーPIDがPID管理に追加されるだけです。読み取りが始まる前に、接続するたびにダッシュボードで「この車両がその車種である」ことの確認を求められます。この項目は調査専用であり、インストールすべきではありません。';
 
   @override
   String get powertrainInstallCatalogShaMissing =>
@@ -1793,7 +1793,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get powertrainRefusedCommandNotInProfile =>
-      '未承認：そのコマンドはこの検証済みプロファイル自身のコマンドではありません。';
+      '未承認：そのコマンドはこの検証済みプロファイルに属するコマンドではありません。';
 
   @override
   String get powertrainRefusedLabClosed => 'この読み取りが承認される前に実験用バッテリーラボがオフにされました。';
@@ -1895,7 +1895,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String recommendedPurchaseNoAdapterYet(String store) {
-    return 'アダプターをまだお持ちでない場合は、$storeで推奨モデルを見る';
+    return 'アダプターをまだお持ちでない場合：$storeで推奨モデルを見る';
   }
 
   @override
@@ -1923,7 +1923,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsAdapterConcernsFooter =>
-      'これらはアダプターの自己記述に矛盾がある箇所であり、車両の読み取り値を誤ったという証拠ではありません。値を確認する唯一の方法は、2つ目の独立した計測と照らし合わせることです（フィールドガイド参照）。';
+      'これらはアダプターの自己記述に矛盾がある箇所であり、車両の読み取り値を誤って取得したという証拠ではありません。値を確認する唯一の方法は、2つ目の独立した計測と照らし合わせることです（フィールドガイド参照）。';
 
   @override
   String get settingsAdapterNoContradictions =>
@@ -1952,7 +1952,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsBatteryLabEvidenceAck =>
-      '出典データおよび合成テストは、自身の車両に適用できることを証明するものではないことを理解しています';
+      '出典データおよび合成テストは、自分の車両に適用できることの証明にはならないと理解しています';
 
   @override
   String get settingsBatteryLabSwitchSubtitle =>
@@ -2014,7 +2014,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsTwReferenceMassNotCurb =>
-      '参考車両重量は curb mass（空車重量）ではなく、適用されません。';
+      '参考車両重量は curb mass（空車重量）とは異なり、適用されません。';
 
   @override
   String settingsTwWillApplyOnly(String fields) {
@@ -2191,11 +2191,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsProfileConfirmedDetail =>
-      '今回の接続についてプロファイルが確認されました。いずれかの値を変更した場合や再接続した場合は、再度確認が必要です。';
+      'このプロファイルは今回の接続で確認済みです。いずれかの値を変更した場合や再接続した場合は、再度確認が必要です。';
 
   @override
   String get settingsProfileEstimatesIntro =>
-      '馬力、トルク、燃料消費量はこれらのパラメータから推定されます。実際の車両に近い値を入力するほど、推定値の意味が高まります。';
+      '馬力、トルク、燃料消費量はこれらのパラメータから推定されます。実際の車両に近い値を入力するほど、より意味のある推定値になります。';
 
   @override
   String get settingsProfileNameProvesNothing =>
@@ -2335,7 +2335,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get telemetryDamagedCollision =>
-      '完了済みファイルと未完了ファイルが同じIDを共有しています。どちらも選択されませんでした';
+      '完了済みファイルと未完了ファイルで同じIDが重複しています。どちらも選択されませんでした';
 
   @override
   String get telemetryDamagedCorrupt => '記録が破損しており、安全に読み取れません';
@@ -2470,8 +2470,8 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '他に$countグループが非表示です',
-      one: '他に1グループが非表示です',
+      other: '他$countグループは表示されていません',
+      one: '他1グループは表示されていません',
     );
     return '$_temp0';
   }
@@ -2528,7 +2528,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get telemetryRecorderPhaseFinalizing => '記録を保存しています';
 
   @override
-  String get telemetryRecorderPhaseIdle => 'フォアグラウンドローカル記録';
+  String get telemetryRecorderPhaseIdle => 'フォアグラウンドでのローカル記録';
 
   @override
   String get telemetryRecorderPhasePreparing => '記録を準備しています';
@@ -2721,7 +2721,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get telemetryStartTooManyPids =>
-      '記録には推定馬力と推定燃料消費率の列が確保されます — 先にいくつかのPIDをオフにしてください';
+      '記録では推定馬力と推定燃料消費率の列も確保されます。先にいくつかのPIDをオフにしてください';
 
   @override
   String get telemetryStarting => '開始中';
@@ -2908,7 +2908,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get wearConfirmVehicleBody =>
-      '確認すると、今回の接続が終わるまでこの車種の読み取り専用バッテリークエリがポーリングされます。車種が異なると、もっともらしい誤った数値が返されるおそれがあります。確信が持てない場合はキャンセルしてください。';
+      '確認すると、今回の接続が終わるまでこの車種の読み取り専用バッテリークエリがポーリングされます。車種が異なると、もっともらしい見た目でありながら誤った数値が返されるおそれがあります。確信が持てない場合はキャンセルしてください。';
 
   @override
   String wearConnectFailed(String adapter) {
@@ -2975,7 +2975,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dtcKindPermanentExplanation =>
-      'スキャンツールでは消去できません。修理完了を ECU 自身が確認した後にのみ、ECU が自動で消去します。';
+      'スキャンツールでは消去できません。ECU が修理を確認した後にのみ、ECU 自身が消去します。';
 
   @override
   String get dtcSystemPowertrain => 'パワートレイン';
@@ -3031,10 +3031,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dtcDescriptionP0016 => 'クランクシャフト位置・カムシャフト位置の相関異常（バンク1 センサーA）';
 
   @override
-  String get dtcDescriptionP0087 => '燃料レール／システム圧力が低すぎます';
+  String get dtcDescriptionP0087 => '燃料レール／システム圧力の過小';
 
   @override
-  String get dtcDescriptionP0088 => '燃料レール／システム圧力が高すぎます';
+  String get dtcDescriptionP0088 => '燃料レール／システム圧力の過大';
 
   @override
   String get dtcDescriptionP0100 => 'エアフロセンサー（MAF）回路の異常';
@@ -3292,7 +3292,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dtcDescriptionP0410 => '二次空気噴射システムの異常';
 
   @override
-  String get dtcDescriptionP0411 => '二次空気噴射システムの不適切な流量を検出';
+  String get dtcDescriptionP0411 => '二次空気噴射システムの流量異常を検出';
 
   @override
   String get dtcDescriptionP0412 => '二次空気噴射システム切替バルブ A 回路の異常';
@@ -3367,7 +3367,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dtcDescriptionP0562 => 'システム電圧の低下';
 
   @override
-  String get dtcDescriptionP0563 => 'システム電圧が高い';
+  String get dtcDescriptionP0563 => 'システム電圧の過大';
 
   @override
   String get dtcDescriptionP0603 => '制御モジュール内部キープアライブメモリ（KAM）エラー';
@@ -3586,7 +3586,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get adapterConcernFirmwareNeverReleasedDetail =>
-      'Elm Electronics はこのバージョンを公開したことがないため、このアダプターのファームウェアは自称しているものではありません。この種の製品でも多くは動作しますが、自己記述は信頼できず、読み取れない項目がある場合はまずこのアダプターを疑う価値があります。';
+      'Elm Electronics はこのバージョンを公開したことがないため、このアダプターのファームウェアは自称しているものではありません。この種の製品でも多くは動作しますが、自己記述は信頼できず、読み取れない項目がある場合はまずこのアダプターを疑ってみる価値があります。';
 
   @override
   String adapterConcernPpsRefusedSummary(String version) {
@@ -3622,19 +3622,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connectTransportWifiRouteAmbiguous =>
-      'スマートフォンが複数の Wi-Fi ネットワークに接続されており、どれがアダプターのものか判別できないため選択されませんでした。アダプター以外の Wi-Fi 接続を切断してから再試行してください。';
+      'スマートフォンが複数の Wi-Fi ネットワークに接続されており、どれがアダプターのものか判別できないため、いずれも選択されませんでした。アダプター以外の Wi-Fi 接続を切断してから再試行してください。';
 
   @override
   String get connectTransportWifiRouteRefused =>
-      'システムがこの接続を Wi-Fi 経由で送信することを拒否しました。スマートフォンは Wi-Fi に接続されていますが、この通信への使用が許可されませんでした。';
+      'この接続を Wi-Fi 経由で通信させる要求がシステムに拒否されました。スマートフォンは Wi-Fi に接続されていますが、この通信での使用が許可されませんでした。';
 
   @override
   String get connectTransportWifiRouteTimeout =>
-      'この接続を Wi-Fi 経由で送信する要求にシステムが応答しませんでした。数秒待ってから再試行してください。';
+      'この接続を Wi-Fi 経由で通信させる要求にシステムが応答しませんでした。数秒待ってから再試行してください。';
 
   @override
   String get connectTransportWifiRouteUnclassified =>
-      'システムが明示しなかった理由により、この接続を Wi-Fi 経由で送信できませんでした。エラーの詳細は下の通信記録に残されています。';
+      'システムから理由が示されないまま、この接続を Wi-Fi 経由で通信させることができませんでした。エラーの全文は下の通信記録に残されています。';
 
   @override
   String get connectTransportWifiHostUnreachable =>
@@ -3658,7 +3658,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connectTransportClassicAllTiersRefused =>
-      'アダプターに接続できませんでした。先にシステムのBluetooth設定でペアリングし、OBDソケットに差し込まれてイグニッションがONになっていることを確認してください。';
+      'アダプターに接続できませんでした。先にシステムのBluetooth設定でペアリングを済ませ、アダプターがOBDソケットに差し込まれてイグニッションがONになっていることを確認してください。';
 
   @override
   String get connectTransportClassicConnectTimeout =>
@@ -3693,7 +3693,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsManualCommandWriteFailed =>
-      'コマンドをアダプターの接続へ渡せませんでした。アダプターにどこまで届いたかは不明です。';
+      'アダプターとの接続へコマンドを送出できませんでした。アダプターにどこまで届いたかは不明です。';
 
   @override
   String get settingsManualCommandTimedOut =>
@@ -3737,7 +3737,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsManualCommandRawIsoTpModeUnavailable =>
-      'この ELM327 経路ではホスト可視の ISO-TP 再構成を利用できません。';
+      'この ELM327 経路では、ホスト側から参照可能な ISO-TP 再構成は利用できません。';
 
   @override
   String get settingsManualCommandCanPriorityUnavailable =>
@@ -3756,7 +3756,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get manualCommandRefusedMoreThanOneCommand =>
-      'このテキストには改行または制御文字が含まれており、一度に複数のコマンドを送信してしまいます。アダプターは改行でコマンドを区切るため、2つ目のコマンドは故障コード消去の禁止を含むここのすべての安全チェックをすり抜けてしまいます。コマンドは1つずつ送信してください。';
+      'このテキストには改行または制御文字が含まれており、一度に複数のコマンドを送信してしまいます。アダプターは改行でコマンドを区切るため、2つ目のコマンドはここで行われるすべてのチェック（故障コード消去を拒否するチェックを含む）をすり抜けてしまいます。コマンドは1つずつ送信してください。';
 
   @override
   String manualCommandRefusedAdapterStateWouldChange(
@@ -3782,7 +3782,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String commandFailureQueryHeaderRefused(Object header) {
-    return 'アダプターがこの要求をコントローラー $header に向けることを拒否したため、送信されませんでした。アダプターが現在保持しているアドレスのまま送信すると、問い合わせていない別のコントローラーから応答が返ってきてしまいます。';
+    return 'この要求の宛先をコントローラー $header に設定することをアダプターが拒否したため、送信されませんでした。アダプターが現在保持しているアドレスのまま送信すると、問い合わせていない別のコントローラーから応答が返ってきてしまいます。';
   }
 
   @override
@@ -3820,10 +3820,10 @@ class AppLocalizationsJa extends AppLocalizations {
       '括弧の入れ子が深すぎるため計算できません。計算式を簡略化してください。';
 
   @override
-  String get pidFormulaDivisionByZero => '計算式がゼロで除算しています。';
+  String get pidFormulaDivisionByZero => '計算式でゼロ除算が行われています。';
 
   @override
-  String get pidFormulaModuloByZero => '計算式がゼロで剰余を求めています。';
+  String get pidFormulaModuloByZero => '計算式でゼロによる剰余演算が行われています。';
 
   @override
   String pidFormulaLog10NonPositiveArgument(double argument) {
@@ -4002,7 +4002,7 @@ class AppLocalizationsJa extends AppLocalizations {
       'ファイルに行は含まれていますが、PID定義として読み取れる行が1つもありません。';
 
   @override
-  String get dtcCategoryNoAnswer => 'このカテゴリは応答しませんでした。もう一度スキャンしてください。';
+  String get dtcCategoryNoAnswer => 'このカテゴリからは応答がありませんでした。もう一度スキャンしてください。';
 
   @override
   String get dtcCategoryError => 'このカテゴリを読み取れませんでした。エラーの詳細は通信記録に保存されています。';
@@ -4020,12 +4020,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String dtcCategorySilentControllers(int count, String controllers) {
-    return '$count 個のコントローラーがこのクエリに応答しませんでした（$controllers）。返ってきた応答は有効ですが、これを車両全体の結果とすることはできません。';
+    return '$count 個のコントローラー（$controllers）がこのクエリに応答しませんでした。返ってきた応答は有効ですが、これを車両全体の結果とすることはできません。';
   }
 
   @override
   String dtcCategoryUnresolvedSources(int count, String addresses) {
-    return '$count 件の応答について送信元のコントローラーを特定できませんでした（$addresses）。読み取られたコード自体は有効ですが、これを車両全体の結果とすることはできません。もう一度スキャンしてください。';
+    return '$count 件の応答（$addresses）について送信元のコントローラーを特定できませんでした。読み取られたコード自体は有効ですが、これを車両全体の結果とすることはできません。もう一度スキャンしてください。';
   }
 
   @override
@@ -4059,7 +4059,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String dtcCategoryMilDisagreement(String controllers) {
-    return '車両自身のステータスと読み取られた故障コードが一致しません（$controllers）。車両のメーターパネルの警告灯を優先し、整備工場にご相談ください。';
+    return '車両側が報告するステータスと読み取られた故障コードが一致しません（$controllers）。車両のメーターパネルの警告灯を優先し、整備工場にご相談ください。';
   }
 
   @override
@@ -4104,42 +4104,42 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String dtcClearSilentControllers(int count, String controllers) {
-    return '$count 個のコントローラーが消去コマンドに応答しませんでした（$controllers）。応答したコントローラーではコードが消去されましたが、他のコントローラーにはコードが残っている可能性があります。再スキャンしてください。もう一度消去を送信しないでください。';
+    return '$count 個のコントローラー（$controllers）が消去コマンドに応答しませんでした。応答したコントローラーではコードが消去されましたが、他のコントローラーにはコードが残っている可能性があります。再スキャンしてください。消去コマンドを再送信しないでください。';
   }
 
   @override
   String dtcClearUnresolvedSources(int count, String addresses) {
-    return '今回のスキャンで送信元を特定できない応答が $count 件あったため（$addresses）、消去コマンドがどのコントローラーに届くか判別できません。再スキャンしてください。そのアドレスが再度現れない場合は、再接続してからお試しください。';
+    return '今回のスキャンで送信元を特定できない応答が $count 件（$addresses）あったため、消去コマンドがどのコントローラーに届くか判別できません。再スキャンしてください。そのアドレスが再度現れない場合は、再接続してからお試しください。';
   }
 
   @override
   String dtcClearUnresolvedSourcesDoNotRepeat(int count, String addresses) {
-    return '消去の応答に送信元を特定できないデータが $count 件含まれていました（$addresses）。もう一度消去を送信しないでください。再スキャンしてどのコードが残っているか確認してください。';
+    return '消去の応答に送信元を特定できないデータが $count 件（$addresses）含まれていました。消去コマンドを再送信しないでください。再スキャンしてどのコードが残っているか確認してください。';
   }
 
   @override
   String dtcClearNrcConditionsDoNotRepeat(String controller) {
-    return '車両の状態が条件を満たしていないため、$controller が消去を拒否しました。多くのコントローラーはエンジン回転中には故障メモリを消去しません。エンジンを停止した状態でイグニッションをONにしてから、再スキャンしてどのコードが残っているか確認してください。もう一度一括消去を送信しないでください。2回目を送ると、すでにコードを消去した可能性のあるコントローラーの排ガスレディネスが再びリセットされるおそれがあります。';
+    return '車両の状態が条件を満たしていないため、$controller が消去を拒否しました。多くのコントローラーはエンジン回転中には故障メモリを消去しません。エンジンを停止した状態でイグニッションをONにしてから、再スキャンしてどのコードが残っているか確認してください。一括消去コマンドを再送信しないでください。2回目を送ると、すでにコードを消去した可能性のあるコントローラーの排ガスレディネスが再びリセットされるおそれがあります。';
   }
 
   @override
   String dtcClearNrcUnsupportedDoNotRepeat(String controller) {
-    return '$controller は Mode 04 の消去に対応していません。メーカー純正またはディーラー専用の診断機が必要になる場合があります。もう一度一括消去を送信しないでください。2回目を送ると、すでにコードを消去した可能性のあるコントローラーの排ガスレディネスが再びリセットされるおそれがあります。再スキャンしてどのコードが残っているか確認してください。';
+    return '$controller は Mode 04 の消去に対応していません。メーカーまたはディーラーの診断機が必要になる場合があります。一括消去コマンドを再送信しないでください。2回目を送ると、すでにコードを消去した可能性のあるコントローラーの排ガスレディネスが再びリセットされるおそれがあります。再スキャンしてどのコードが残っているか確認してください。';
   }
 
   @override
   String dtcClearNrcBusyDoNotRepeat(String controller) {
-    return '$controller はビジー状態です。もう一度一括消去を送信しないでください。2回目を送ると、すでにコードを消去した可能性のあるコントローラーの排ガスレディネスが再びリセットされるおそれがあります。再スキャンしてどのコードが残っているか確認してください。';
+    return '$controller はビジー状態です。一括消去コマンドを再送信しないでください。2回目を送ると、すでにコードを消去した可能性のあるコントローラーの排ガスレディネスが再びリセットされるおそれがあります。再スキャンしてどのコードが残っているか確認してください。';
   }
 
   @override
   String dtcClearNrcSecurityDoNotRepeat(String controller) {
-    return '$controller は消去の前にセキュリティアクセスを要求しています。メーカー純正またはディーラー専用の診断機が必要です。もう一度一括消去を送信しないでください。2回目を送ると、すでにコードを消去した可能性のあるコントローラーの排ガスレディネスが再びリセットされるおそれがあります。';
+    return '$controller は消去の前にセキュリティアクセスを要求しています。メーカーまたはディーラーの診断機が必要です。一括消去コマンドを再送信しないでください。2回目を送ると、すでにコードを消去した可能性のあるコントローラーの排ガスレディネスが再びリセットされるおそれがあります。';
   }
 
   @override
   String dtcClearNrcOtherDoNotRepeat(String controller, String code) {
-    return '$controller が消去を拒否しました（理由コード $code）。もう一度一括消去を送信しないでください。2回目を送ると、すでにコードを消去した可能性のあるコントローラーの排ガスレディネスが再びリセットされるおそれがあります。再スキャンしてどのコードが残っているか確認してください。';
+    return '$controller が消去を拒否しました（理由コード $code）。一括消去コマンドを再送信しないでください。2回目を送ると、すでにコードを消去した可能性のあるコントローラーの排ガスレディネスが再びリセットされるおそれがあります。再スキャンしてどのコードが残っているか確認してください。';
   }
 
   @override
@@ -4200,7 +4200,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String pidFormulaUnsupportedConstruct(String term) {
-    return '$term はこの方言で未実装の Torque 関数であるため、ここでは計算式を計算できません。';
+    return '$term はこの方言で未実装の Torque 関数であるため、ここでは計算できません。';
   }
 
   @override
@@ -4312,7 +4312,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get settingsCaMotorNotPower => 'モーター出力（kW）はホイール馬力ではなく、適用されません。';
+  String get settingsCaMotorNotPower => 'モーター出力（kW）はホイール馬力とは異なり、適用されません。';
 
   @override
   String get settingsCaClassIce => '内燃機関（ICE）';
@@ -4529,7 +4529,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get performanceGuideTitle => '加速テストの手順';
 
   @override
-  String get performanceGuideStep1 => '1. 目標車速を選択し、タイマーを待機セットします';
+  String get performanceGuideStep1 => '1. 目標車速を選択し、タイマーをセットします';
 
   @override
   String get performanceGuideStep2 => '2. 車両を完全に停止させ、準備完了になるまで待ちます';

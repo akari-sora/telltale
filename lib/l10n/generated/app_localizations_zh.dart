@@ -4371,7 +4371,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get connectBleBody =>
-      'BLE 适配器不需事先配对。搜索后选择你的设备即可，多见名称为 OBDII、V-LINK、Vgate 或 IOS-Vlink。';
+      'BLE 适配器无需事先配对。搜索后选择你的设备即可，常见名称有 OBDII、V-LINK、Vgate 或 IOS-Vlink。';
 
   @override
   String connectBleEmptyScan(String next) {
@@ -4388,7 +4388,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get connectBlePermissionDeniedForever =>
-      '蓝牙权限已被永久拒绝。系统不会再显示授权对话框，请到应用程序设置打开。';
+      '蓝牙权限已被永久拒绝。系统不会再弹出授权提示，请到应用设置中打开。';
 
   @override
   String get connectBlePermissionNeeded => '需要蓝牙权限才能搜索。';
@@ -4433,15 +4433,15 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get connectClassicListLinuxPort =>
-      '这里列出 BlueZ 已绑定的蓝牙串行端口（/dev/rfcomm* 或等效）。空清单代表系统尚未创建 RFCOMM 节点，不是 App 坏掉。';
+      '这里列出 BlueZ 已绑定的蓝牙串口（/dev/rfcomm* 或等效端口）。列表为空表示系统尚未创建 RFCOMM 节点，并非 App 故障。';
 
   @override
   String get connectClassicListPaired =>
-      '这里列出系统上所有已配对的设备 — 耳机、喇叭也会在内，看起来像适配器的排在前面。选错了就按「取消」，不必等它自己失败，取消后可以马上改选别的。';
+      '这里会列出系统中所有已配对的设备 —— 包括耳机和音箱，看起来像适配器的会排在前面。选错了直接点「取消」，不必等它自己失败，取消后可以立即改选其他设备。';
 
   @override
   String get connectClassicListWindowsPort =>
-      '这里列出与蓝牙关联的 COM 端口（「Standard Serial over Bluetooth link」）。空清单代表系统尚未创建虚拟串行端口，不是 App 坏掉。';
+      '这里列出与蓝牙关联的 COM 端口（「Standard Serial over Bluetooth link」）。列表为空表示系统尚未创建虚拟串口，并非 App 故障。';
 
   @override
   String get connectClassicUnavailableHost =>
@@ -4483,7 +4483,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get connectIssueConnectionSetupFailed =>
-      '连接在创建过程中失败了。请确认适配器已通电、就在附近，然后再试一次。完整的错误留在下方的记录里。';
+      '连接在建立过程中失败了。请确认适配器已通电且就在附近，然后再试一次。完整错误保留在下方的记录中。';
 
   @override
   String get connectIssueHandshakeIncomplete => '初始化未通过，适配器可能不兼容。';
@@ -4507,13 +4507,13 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get connectLastAdapterTitle => '上次用的适配器';
 
   @override
-  String get connectOpenAppSettings => '打开应用程序设置';
+  String get connectOpenAppSettings => '打开应用设置';
 
   @override
   String get connectOpenSystemSettings => '打开系统设置';
 
   @override
-  String get connectOpeningConnection => '创建连接中…';
+  String get connectOpeningConnection => '正在建立连接…';
 
   @override
   String get connectPairedPill => '已配对';
@@ -4541,7 +4541,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   }
 
   @override
-  String get connectTranscriptKept => '这次尝试的完整往返记录留着了。带回来比一句信息有用。';
+  String get connectTranscriptKept => '这次尝试的完整往返记录已保留。把它带回来比一行提示信息更有用。';
 
   @override
   String get connectTransportBleDescription => 'GATT UART — 较新的低功耗适配器';
@@ -4551,7 +4551,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get connectTransportClassicDescription =>
-      'RFCOMM / SPP — 最多见的平价 ELM327';
+      'RFCOMM / SPP — 最常见的平价 ELM327';
 
   @override
   String get connectTransportClassicTitle => 'Bluetooth Classic';
@@ -4563,8 +4563,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get connectTransportDemoTitle => 'Demo 模拟器';
 
   @override
-  String get connectTransportWifiDescription =>
-      'TCP 通信端口，多为 192.168.0.10:35000';
+  String get connectTransportWifiDescription => 'TCP 端口，通常为 192.168.0.10:35000';
 
   @override
   String get connectTransportWifiTitle => 'Wi-Fi';
@@ -4599,7 +4598,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String connectWifiPortInvalid(String value, int min, int max) {
-    return '「$value」不是有效的通信端口，范围是 $min–$max。';
+    return '「$value」不是有效的端口号，有效范围为 $min–$max。';
   }
 
   @override
@@ -4607,7 +4606,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String connectWifiPortRequired(int port) {
-    return '请输入通信端口（多数适配器为 $port）。';
+    return '请输入端口号（多数适配器为 $port）。';
   }
 
   @override
@@ -4620,7 +4619,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get dashboardChoosePids => '选择 PID';
 
   @override
-  String get dashboardEmptyBody => '到 PID 页面挑选想要监看的信号，它们会出现在这里。';
+  String get dashboardEmptyBody => '前往 PID 页面选择想要监控的信号，它们会显示在这里。';
 
   @override
   String get dashboardEmptyTitle => '仪表盘为空';
@@ -4720,13 +4719,13 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get datumGapVinNotRead => 'VIN 未读到';
 
   @override
-  String get datumNextStepEstimateOnly => '只影响此估算，其他读数照用';
+  String get datumNextStepEstimateOnly => '仅影响此项估算，其他读数仍可正常使用';
 
   @override
   String get datumNextStepGenericObd => '可继续通用 OBD，或手动选车、补参数';
 
   @override
-  String get datumNextStepOtherReadings => '失败只影响此项，其他读数照用';
+  String get datumNextStepOtherReadings => '失败仅影响此项，其他读数仍可正常使用';
 
   @override
   String get datumNextStepRawOnly => '可查看原始回复和错误，但两者均不可当作正常数值。';
@@ -4843,7 +4842,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get dtcClearDialogBody =>
-      '这会清掉已保存与待确认的故障码并熄灭故障灯，同时重置排放就绪状态 — 车辆需要重新完成一轮自我诊断才能通过验车。永久故障码（Mode 0A）不能清除。';
+      '这会清除已存储与待确认的故障码并熄灭故障灯，同时重置排放就绪状态 —— 车辆需要重新完成一轮自诊断才能通过验车。永久故障码（Mode 0A）无法清除。';
 
   @override
   String get dtcClearDialogFrameUnread =>
@@ -4875,7 +4874,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get dtcClearFailureDoNotRepeat =>
-      '清除指令可能已经送到车上。不要再发送清除指令 —— 第二次全车清除可能会重置可能已经清除故障码的控制器的排放就绪状态。请重新扫描，查看还剩哪些故障码。';
+      '清除指令可能已经到达车辆。请勿再次发送清除指令 —— 第二次全车清除可能会重置可能已清除故障码的控制器的排放就绪状态。请重新扫描，查看还剩哪些故障码。';
 
   @override
   String get dtcClearFailureGeneric => '清除没有完成。请先重新扫描，看目前的故障码，再决定要不要再试。';
@@ -5118,7 +5117,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get dtcRetry => '重试';
 
   @override
-  String get dtcScanBody => '读取 Mode 03 已保存、Mode 07 待确认与 Mode 0A 永久故障码。';
+  String get dtcScanBody => '读取 Mode 03 已存储、Mode 07 待确认与 Mode 0A 永久故障码。';
 
   @override
   String get dtcScanTitle => '扫描车辆故障码';
@@ -5144,18 +5143,18 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get dtcSilentPendingDetail =>
-      '待确认故障码（Mode 07）没有回应。可能是这具 ECU 未实现这个服务，也可能是这次没有读到 —— 没有回应不能分辨两者，也不能当作「没有待确认故障」。已保存故障码的结果不受影响。';
+      '待确认故障码（Mode 07）没有回应。可能是该 ECU 未实现这项服务，也可能是这次没有读到 —— 没有回应无法区分这两种情况，也不能当作「没有待确认故障」。已存储故障码的结果不受影响。';
 
   @override
   String get dtcSilentPermanentDetail =>
-      '永久故障码（Mode 0A）没有回应。这个类别在 2010 年前后才随新一代 OBD-II 导入，较旧的车辆不一定支持 —— 但没有回应也可能只是这次没读到，两者不能分辨。已保存故障码的结果不受影响。';
+      '永久故障码（Mode 0A）没有回应。这个类别在 2010 年前后才随新一代 OBD-II 引入，较旧的车辆不一定支持 —— 但没有回应也可能只是这次没读到，两者无法区分。已存储故障码的结果不受影响。';
 
   @override
   String get dtcStartScan => '开始扫描';
 
   @override
   String dtcStoredSilentDetail(Object mode) {
-    return '车辆没有回应 Mode $mode 查询，因此未能确认是否有已保存的故障码。这与「没有故障码」不是同一件事。';
+    return '车辆没有回应 Mode $mode 查询，因此未能确认是否有已存储的故障码。这与「没有故障码」不是同一件事。';
   }
 
   @override
@@ -5248,7 +5247,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get handshakeNotePidEchoMismatch => '回复中回显的 PID 与请求的不符';
 
   @override
-  String get handshakeNoteSupportMaskTooShort => '支持度回应过短（需要 41 00 加四个字节）';
+  String get handshakeNoteSupportMaskTooShort => '支持情况响应过短（需要 41 00 外加四个字节）';
 
   @override
   String get handshakeNoteTimedOut => '超时';
@@ -5266,7 +5265,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get handshakeStepDeviceIdentity => '读取设备识别字符串';
 
   @override
-  String get handshakeStepEchoOff => '关闭指令回音';
+  String get handshakeStepEchoOff => '关闭指令回显';
 
   @override
   String get handshakeStepLinefeedsOff => '关闭换行字符';
@@ -5397,10 +5396,10 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get pidArrangeBody => '拖动调整顺序。仪表盘从左到右、从上到下排列，排在前面的会最先看到。';
 
   @override
-  String get pidArrangeEmptyMessage => '先在清单中激活几项，再回来排列顺序。';
+  String get pidArrangeEmptyMessage => '请先在列表中启用几项，再回来排列顺序。';
 
   @override
-  String get pidArrangeEmptyTitle => '还没有激活任何 PID';
+  String get pidArrangeEmptyTitle => '还没有启用任何 PID';
 
   @override
   String pidBulkActionAddConfirmed(int count) {
@@ -5408,7 +5407,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   }
 
   @override
-  String get pidBulkActionAllActive => '已全部激活';
+  String get pidBulkActionAllActive => '已全部启用';
 
   @override
   String get pidBulkActionIncomplete => '扫描数据不完整';
@@ -5444,7 +5443,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String pidBulkWillAdd(int count) {
-    return '将加入 $count 项。激活越多 PID，单项数据的更新频率可能降低。';
+    return '将加入 $count 项。启用的 PID 越多，单项数据的更新频率可能降低。';
   }
 
   @override
@@ -5658,7 +5657,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get pidListSeparator => '、';
 
   @override
-  String get pidManagerActiveOnly => '只显示已激活';
+  String get pidManagerActiveOnly => '只显示已启用';
 
   @override
   String get pidManagerAdd => '添加';
@@ -5668,7 +5667,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String pidManagerCounts(int active, int total) {
-    return '已激活 $active 项 · 共 $total 项可用';
+    return '已启用 $active 项 · 共 $total 项可用';
   }
 
   @override
@@ -5755,7 +5754,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String powertrainAuthorizationGranted(String profile) {
-    return '已激活 $profile 的电池信号（本次连接）';
+    return '已启用 $profile 的电池信号（本次连接）';
   }
 
   @override
@@ -6017,7 +6016,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
       '未授权：目录的完整性哈希无效，因此其中任何内容都不能读取。';
 
   @override
-  String get powertrainRefusedCommandNotInProfile => '未授权：这个指令不属于此已验证车型配置的指令。';
+  String get powertrainRefusedCommandNotInProfile => '未授权：该指令不属于此已验证车型配置自带的指令。';
 
   @override
   String get powertrainRefusedLabClosed => '在这次读取取得授权之前，大电池证据实验室已被关闭。';
@@ -6038,7 +6037,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get powertrainRefusedNotConnectedOrNotInForeground =>
-      '这次单次读取没有开始：目前没有连接，或 App 不在前景。';
+      '这次单次读取没有开始：目前没有连接，或 App 不在前台。';
 
   @override
   String get powertrainRefusedNoLiveAuthorization =>
@@ -6046,7 +6045,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get powertrainRefusedDiscardedAtLifecycleBoundary =>
-      '单次读取进行中，连接或前景状态改变了，因此它的结果被丢弃而没有显示。没有任何失败，也没有保留任何结果。';
+      '单次读取进行期间，连接或前台状态发生了变化，因此结果已丢弃而未显示。没有任何失败，也没有保留任何结果。';
 
   @override
   String powertrainRefusedQuarantinedAtAttemptCap(int attemptCap) {
@@ -6057,7 +6056,8 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get powertrainResearchOnlyNeverQueries => '仅供研究，不会查询';
 
   @override
-  String get powertrainRestoreStorageErrorRetry => '还原先前安装时发生保存错误，已重新调度，请再试一次。';
+  String get powertrainRestoreStorageErrorRetry =>
+      '恢复先前的安装项时发生存储错误，已重新安排重试，请再试一次。';
 
   @override
   String powertrainSecondarySource(String name, String license) {
@@ -6096,11 +6096,11 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String powertrainVehicleYearFixed(int year) {
-    return '车辆车型年份：$year';
+    return '车型年份：$year';
   }
 
   @override
-  String get powertrainVehicleYearLabel => '车辆车型年份';
+  String get powertrainVehicleYearLabel => '车型年份';
 
   @override
   String get recommendedPurchaseDisclosure =>
@@ -6219,7 +6219,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get settingsTwCertificationYear => '核发年份';
 
   @override
-  String get settingsTwMake => '台湾厂牌';
+  String get settingsTwMake => '台湾品牌';
 
   @override
   String settingsTwPickerScope(int firstYear, int lastYear) {
@@ -6247,7 +6247,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get settingsDiagnosticsSection => '诊断记录';
 
   @override
-  String get settingsDisconnect => '中断连接';
+  String get settingsDisconnect => '断开连接';
 
   @override
   String settingsDrivetrainEfficiency(int percent) {
@@ -6383,7 +6383,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get settingsManualCommandNoContent => '（没有回应内容）';
 
   @override
-  String get settingsManualCommandSend => '送出';
+  String get settingsManualCommandSend => '发送';
 
   @override
   String get settingsManualCommandTitle => '手动指令';
@@ -6423,8 +6423,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
       '请先连接此车辆再确认。每次重新连接都会使确认失效，因此上一辆车的配置绝不会应用于下一辆车。';
 
   @override
-  String get settingsProvenanceNoneExact =>
-      '目前没有字段已精确解析到这次车辆；通用值、手动值或旧来源值仍须确认。';
+  String get settingsProvenanceNoneExact => '目前没有字段精确解析到当前车辆；通用值、手动值或旧来源值仍须确认。';
 
   @override
   String settingsProvenanceOnlyExact(String fields) {
@@ -6439,7 +6438,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
     int scientific,
     int total,
   ) {
-    return '来源：官方／原厂 $official / $total 栏 · 手动 $user / $total 栏 · 通用 $generic / $total 栏 · 科学模型 $scientific / $total 栏';
+    return '来源：官方／原厂 $official / $total 项 · 用户输入 $user / $total 项 · 通用默认值 $generic / $total 项 · 科学模型 $scientific / $total 项';
   }
 
   @override
@@ -6456,12 +6455,12 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
     int conflict,
     int total,
   ) {
-    return '解析：官方精确 $exact / $total 栏 · 本次确认 $sessionConfirmed / $total 栏 · 未解析 $unresolved / $total 栏 · 歧义 $ambiguous / $total 栏 · 冲突 $conflict / $total 栏';
+    return '解析：官方精确 $exact / $total 项 · 本次确认 $sessionConfirmed / $total 项 · 未解析 $unresolved / $total 项 · 歧义 $ambiguous / $total 项 · 冲突 $conflict / $total 项';
   }
 
   @override
   String get settingsStandardsFooter =>
-      '本 App 的 OBD2 实现依据 SAE J1979 与 ELM327 数据手册 等公开标准；每一条影响硬件行为的公式与 AT 指令都经过交叉验证，结果记录于 docs/protocol-deviations.zh-TW.md。本 App 与 Torque / Torque Pro 无关联。';
+      '本 App 的 OBD2 实现依据 SAE J1979 与 ELM327 数据手册等公开标准；每一条影响硬件行为的公式与 AT 指令都经过交叉验证，结果记录于 docs/protocol-deviations.zh-TW.md。本 App 与 Torque / Torque Pro 无关联。';
 
   @override
   String get settingsThemeDark => '深色';
@@ -6518,7 +6517,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get startupCannotComplete => '目前未能完成启动检查';
 
   @override
-  String get startupChecking => '正在检查本机分享暂存与遥测记录';
+  String get startupChecking => '正在检查本地分享缓存与遥测记录';
 
   @override
   String get startupRestartHint =>
@@ -6532,11 +6531,11 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get startupRetryHint =>
-      '请让 Telltale 保持在前景，并在其他文件作业完成后重试。启动完成前不会开放记录、回放、导出或删除。';
+      '请让 Telltale 保持在前台，并在其他文件操作完成后重试。启动完成前不会开放记录、回放、导出或删除。';
 
   @override
   String get telemetryArtifactRestartRequired =>
-      '本机文件作业状态未能确认；请完全关闭并重新打开 Telltale 后再操作';
+      '本机文件操作状态未能确认；请完全关闭并重新打开 Telltale 后再操作';
 
   @override
   String get telemetryBlockedByRecorder => '请先停止并保存';
@@ -6560,7 +6559,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String telemetryDeleteDamagedBody(String id, String time) {
-    return '将删除 $id（文件时间 $time）。删除后不能复原。';
+    return '将删除 $id（文件时间 $time）。删除后无法恢复。';
   }
 
   @override
@@ -6579,7 +6578,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String telemetryDeleteSessionBody(String time) {
-    return '将删除 $time 的记录。此操作不能复原。';
+    return '将删除 $time 的记录。此操作无法撤销。';
   }
 
   @override
@@ -6609,7 +6608,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get telemetryEndedByLibrarySizeLimit => '本机记录空间已满';
 
   @override
-  String get telemetryEndedByRecoveredAfterInterruption => '上次中断后已复原';
+  String get telemetryEndedByRecoveredAfterInterruption => '已从上次中断中恢复';
 
   @override
   String get telemetryEndedBySessionReplacement => '连接会话已更换';
@@ -6735,7 +6734,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get telemetryRecorderPhaseFinalizing => '正在保存记录';
 
   @override
-  String get telemetryRecorderPhaseIdle => '前景本机记录';
+  String get telemetryRecorderPhaseIdle => '前台本机记录';
 
   @override
   String get telemetryRecorderPhasePreparing => '正在准备录制';
@@ -6864,7 +6863,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   }
 
   @override
-  String get telemetryStartBusy => '另一个记录或文件作业尚未完成';
+  String get telemetryStartBusy => '另一项记录或文件操作尚未完成';
 
   @override
   String get telemetryStartCannotCreateFile => '无法创建记录文件';
@@ -6893,7 +6892,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get telemetryStartMoving => '请停车后操作';
 
   @override
-  String get telemetryStartNeedsActivePid => '请先激活至少一项 PID';
+  String get telemetryStartNeedsActivePid => '请先启用至少一项 PID';
 
   @override
   String get telemetryStartNeedsConnection => '请先连接再开始记录';
@@ -6964,7 +6963,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get transcriptDelete => '删除';
 
   @override
-  String get transcriptDeleteBusy => '另一个文件作业尚未完成。';
+  String get transcriptDeleteBusy => '另一项文件操作尚未完成。';
 
   @override
   String get transcriptDeleteFailed => '未能删除上一次连接的记录。';
@@ -6980,7 +6979,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get transcriptExportExplanation =>
-      '这次连接会保留开头握手与最新的原始往返数据；长时间连接若省略中段，文件会明确标出。在车上遇到读不到、判断不出来的情况时，把记录导出带回来，比画面上的一句信息有用得多。';
+      '这次连接会保留开头握手与最新的原始往返数据；长时间连接若省略中段，文件中会明确标出。在车上遇到读不到的情况时，把记录导出带回来，比屏幕上的一行提示信息有用得多。';
 
   @override
   String transcriptExportFailed(String error) {
@@ -7024,7 +7023,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get trendLiveData => '实时数据';
 
   @override
-  String get trendNoSignalsBody => '先到 PID 页面激活想要监看的信号。';
+  String get trendNoSignalsBody => '请先到 PID 页面启用想要监控的信号。';
 
   @override
   String get trendNoSignalsTitle => '没有可用的趋势信号';
@@ -7059,7 +7058,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   }
 
   @override
-  String get trendSignalNoLongerActive => '其中一项信号已不在 PID 监看清单';
+  String get trendSignalNoLongerActive => '其中一项信号已不在 PID 监控列表中';
 
   @override
   String get trendSignalsHeading => '趋势信号';
@@ -7108,10 +7107,10 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get wearDemoSimulator => 'Demo 模拟器';
 
   @override
-  String get wearDisconnect => '中断';
+  String get wearDisconnect => '断开';
 
   @override
-  String get wearDisconnectQuestion => '中断连接？';
+  String get wearDisconnectQuestion => '断开连接？';
 
   @override
   String get wearNoDevicesFound => '没有找到设备';
@@ -7145,7 +7144,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get telemetryRecorderNotRecording => '未录制';
 
   @override
-  String get dtcKindStored => '已保存';
+  String get dtcKindStored => '已存储';
 
   @override
   String get dtcKindPending => '待确认';
@@ -7557,7 +7556,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get dtcDescriptionP0603 => '内部控制模块可保持存储器（KAM）错误';
 
   @override
-  String get dtcDescriptionP0605 => '控制模块内部只读内存（ROM）错误';
+  String get dtcDescriptionP0605 => '控制模块内部只读存储器（ROM）错误';
 
   @override
   String get dtcDescriptionP0606 => 'ECM/PCM 处理器故障';
@@ -7635,7 +7634,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get gaugeSkinClassic => '经典';
 
   @override
-  String get gaugeSkinClassicDescription => '印刷式面盘、整圈数字、指针像机械表一样慢慢定位。';
+  String get gaugeSkinClassicDescription => '印刷式表盘、整圈数字刻度，指针像机械表一样缓慢稳定下来。';
 
   @override
   String get gaugeSkinNight => '夜视';
@@ -7650,7 +7649,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get derivedAirflowSourceSpeedDensity => '速度密度法推算';
 
   @override
-  String get derivedAirflowSourceUnavailable => '无法获取进气质量';
+  String get derivedAirflowSourceUnavailable => '无法获取进气量';
 
   @override
   String get derivedFuelSourceStoichiometric => '化学计量比推算';
@@ -7877,7 +7876,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get settingsManualCommandRequestUnaddressable =>
-      '这条要求在这辆车使用的总线上未能寻址，因此没有送出。再试一次也不会改变。';
+      '该请求在这辆车使用的总线上无法寻址，因此未发送。再试一次也不会改变。';
 
   @override
   String get commandFailureBusJ1939 =>
@@ -7953,12 +7952,12 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String commandFailureQueryHeaderRefused(Object header) {
-    return '适配器拒绝将这条要求对准到控制器 $header，因此它没有送出。如果留在适配器实际持有的地址上，回应会来自没有人询问的控制器。';
+    return '适配器拒绝将该请求指向控制器 $header，因此未发送。如果继续使用适配器当前持有的地址，返回的响应就会来自并未被询问的控制器。';
   }
 
   @override
   String commandFailureWholeVehicleHeaderRefused(Object address) {
-    return '适配器拒绝切换到 $address 这个地址，而向全车提出的问题必须从它送出。没有它，回应就未能对应到送出它们的控制器，因此这个要求没有送出。';
+    return '适配器拒绝切换到地址 $address，而向全车发送的查询必须使用该地址。没有它，返回的响应就无法对应到各自的控制器，因此未发送该请求。';
   }
 
   @override
@@ -8190,7 +8189,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String dtcCategoryUnresolvedSources(int count, String addresses) {
-    return '有 $count 笔回应不能判断是哪个控制器送出的（$addresses）。已读到的结果仍然有效，但不能当作全车结果。请重新扫描。';
+    return '有 $count 条响应无法判断是由哪个控制器发出的（$addresses）。已读到的故障码仍然有效，但不能当作全车结果。请重新扫描。';
   }
 
   @override
@@ -8205,7 +8204,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String dtcCategoryUnrecognisedResponses(int count, int answered) {
-    return '有 $count 笔回应未能辨识（$answered 个已回应）。其余结果仍然有效，但这次扫描并不完整。';
+    return '有 $count 条响应无法识别（$answered 个已回应）。其余结果仍然有效，但这次扫描并不完整。';
   }
 
   @override
@@ -8277,32 +8276,32 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String dtcClearUnresolvedSourcesDoNotRepeat(int count, String addresses) {
-    return '清除指令的回应中有 $count 笔不能判断来源的数据（$addresses）。不要再送一次清除。请重新扫描确认哪些故障码还在。';
+    return '清除指令的响应中有 $count 条无法判断来源的数据（$addresses）。请勿再次发送清除指令。请重新扫描以确认还剩哪些故障码。';
   }
 
   @override
   String dtcClearNrcConditionsDoNotRepeat(String controller) {
-    return '$controller 拒绝清除，因为车辆当前状态不允许。多数控制器不会在发动机运转时清除故障码。请关闭发动机，将点火开关转至 ON，然后重新扫描以确认哪些故障码仍然存在。不要再次发送全车清除指令 —— 第二次清除可能会重置可能已经清除故障码的控制器的排放就绪状态。';
+    return '$controller 拒绝清除，因为车辆当前状态不允许。多数控制器不会在发动机运转时清除故障码。请关闭发动机并将点火开关转至 ON，然后重新扫描以确认还剩哪些故障码。请勿再次发送全车清除指令 —— 第二次清除可能会使可能已清除故障码的控制器再次重置排放就绪状态。';
   }
 
   @override
   String dtcClearNrcUnsupportedDoNotRepeat(String controller) {
-    return '$controller 不支持清除服务（Mode 04）。可能需要制造商或经销商的设备。不要再送一次全车清除 —— 重复清除可能会重置可能已经清除故障码的控制器的排放就绪状态。请重新扫描确认哪些故障码还在。';
+    return '$controller 不支持清除服务（Mode 04），可能需要制造商或经销商的设备。请勿再次发送全车清除指令 —— 重复清除可能会使可能已清除故障码的控制器再次重置排放就绪状态。请重新扫描以确认还剩哪些故障码。';
   }
 
   @override
   String dtcClearNrcBusyDoNotRepeat(String controller) {
-    return '$controller 目前忙碌中。不要再送一次全车清除 —— 重复清除可能会重置可能已经清除故障码的控制器的排放就绪状态。请重新扫描确认哪些故障码还在。';
+    return '$controller 当前正忙。请勿再次发送全车清除指令 —— 重复清除可能会使可能已清除故障码的控制器再次重置排放就绪状态。请重新扫描以确认还剩哪些故障码。';
   }
 
   @override
   String dtcClearNrcSecurityDoNotRepeat(String controller) {
-    return '$controller 要求先获得安全访问权限才允许清除。这需要制造商或经销商的设备。不要再送一次全车清除 —— 重复清除可能会重置可能已经清除故障码的控制器的排放就绪状态。';
+    return '$controller 要求先获得安全访问权限才允许清除，这需要制造商或经销商的设备。请勿再次发送全车清除指令 —— 重复清除可能会使可能已清除故障码的控制器再次重置排放就绪状态。';
   }
 
   @override
   String dtcClearNrcOtherDoNotRepeat(String controller, String code) {
-    return '$controller 拒绝清除（原因码 $code）。不要再送一次全车清除 —— 重复清除可能会重置可能已经清除故障码的控制器的排放就绪状态。请重新扫描确认哪些故障码还在。';
+    return '$controller 拒绝清除（原因码 $code）。请勿再次发送全车清除指令 —— 重复清除可能会使可能已清除故障码的控制器再次重置排放就绪状态。请重新扫描以确认还剩哪些故障码。';
   }
 
   @override
@@ -8380,16 +8379,16 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get telemetrySessionInvalidId => '记录识别码无效';
 
   @override
-  String get telemetrySessionNotFound => '找不到这笔本机记录';
+  String get telemetrySessionNotFound => '找不到这条本机记录';
 
   @override
-  String get telemetrySessionStorageFailed => '本机保存作业失败';
+  String get telemetrySessionStorageFailed => '本机存储操作失败';
 
   @override
   String get telemetrySessionShareFailed => '未能准备或打开分享';
 
   @override
-  String get pidMutationPersistFailed => '自定义 PID 清单未能写入。没有任何变更。';
+  String get pidMutationPersistFailed => '未能保存自定义 PID 列表，未做任何更改。';
 
   @override
   String get powertrainAuthorizeYearOutOfRange => '该车型年份不在此车型配置记载的年份范围内。';
@@ -8460,7 +8459,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get connectionFailureKeepInvalidAndExport =>
-      '这笔回应无效。维持无效并导出有限诊断；它不是读数。';
+      '该响应无效。请保留其无效状态并导出受限诊断记录；它不是读数。';
 
   @override
   String get settingsCatalogMarketCa => '加拿大（NRCan）';
@@ -8582,7 +8581,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get serviceRecipesNoPreconditions => '无';
 
   @override
-  String get settingsServiceRecipesEntry => '车行诊断配方与主动测试';
+  String get settingsServiceRecipesEntry => '诊断配方与主动测试';
 
   @override
   String get settingsServiceRecipesDesc => '查看维修服务配方并查询支持的 Mode 08 测试';
@@ -8649,13 +8648,13 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get mode08ReasonRequiresCanBus => 'Mode 08 能力查询需要已确定的 OBD-II CAN 总线';
 
   @override
-  String get mode08ReasonUnexpectedExecution => '查询支持 TID 时收到非预期的运行回应';
+  String get mode08ReasonUnexpectedExecution => '查询支持的 TID 时收到非预期的执行响应';
 
   @override
-  String get pidDetailEmptyTitle => '选取 PID';
+  String get pidDetailEmptyTitle => '选择 PID';
 
   @override
-  String get pidDetailEmptyBody => '从清单中选取一个 PID 以查看其定义与实时状态。';
+  String get pidDetailEmptyBody => '从列表中选择一个 PID，即可查看其定义与实时状态。';
 
   @override
   String get pidDetailRangeLabel => '范围';

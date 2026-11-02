@@ -4,7 +4,7 @@
     <string name="car_home_status_title">Monitor veicolo</string>
     <string name="car_home_status_body">La struttura Android for Cars è attiva</string>
     <string name="car_home_data_title">Dati veicolo</string>
-    <string name="car_home_data_body">Il collegamento telemetrico non è connesso in AA-01</string>
+    <string name="car_home_data_body">Il ponte telemetrico non è connesso in AA-01</string>
     <string name="car_home_safety_title">Proiezione in sola lettura</string>
     <string name="car_home_safety_body">Non sono disponibili comandi al veicolo né azioni distruttive</string>
     <string name="car_home_speed_title">Velocità</string>
@@ -54,7 +54,7 @@
     <string name="car_dtc_status_unavailable">Diagnostica non disponibile / incompleta</string>
     <string name="car_dtc_more_items_format">Altri %d codici diagnostici non mostrati</string>
     <string name="car_dtc_parked_only_notice">Solo a veicolo parcheggiato</string>
-    <string name="car_dtc_speed_unavailable">Velocità del veicolo non disponibile. Connetti la telemetria o attiva la velocità del veicolo mentre sei parcheggiato.</string>
+    <string name="car_dtc_speed_unavailable">Velocità del veicolo non disponibile. Connetti la telemetria o attiva la velocità del veicolo quando è parcheggiato.</string>
     <string name="car_dtc_detail_title">Dettagli codice</string>
     <string name="car_dtc_detail_class">Classe</string>
     <string name="car_dtc_detail_controller">Controller</string>
@@ -75,6 +75,6 @@
     <string name="car_alert_high">Alto</string>
     <string name="car_alert_attention">Attenzione</string>
     <string name="car_action_enable_speed">Attiva velocità veicolo</string>
-    <string name="car_speed_permission_phone_handoff">Completa sul telefono l\'autorizzazione alla velocità del veicolo mentre sei parcheggiato.</string>
-    <string name="car_speed_permission_handoff">Completa l\'autorizzazione alla velocità del veicolo mentre sei parcheggiato.</string>
+    <string name="car_speed_permission_phone_handoff">Completa sul telefono l\'autorizzazione per la velocità del veicolo a veicolo parcheggiato.</string>
+    <string name="car_speed_permission_handoff">Completa l\'autorizzazione per la velocità del veicolo a veicolo parcheggiato.</string>
 </resources>

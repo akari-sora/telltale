@@ -48,11 +48,11 @@
     <!-- AA-04 DTC Screens -->
     <string name="car_dtc_summary_title">진단 고장 코드</string>
     <string name="car_dtc_no_codes">관측된 진단 고장 코드 없음</string>
-    <string name="car_dtc_status_not_scanned">스캔 안 됨</string>
+    <string name="car_dtc_status_not_scanned">스캔하지 않음</string>
     <string name="car_dtc_status_scanning">스캔 중</string>
-    <string name="car_dtc_status_partial_clean">조회 불완전 · 완료 범위에서 관측된 고장 없음</string>
+    <string name="car_dtc_status_partial_clean">조회 범위 불완전 · 완료된 범위에서 관측된 고장 없음</string>
     <string name="car_dtc_status_unavailable">진단 사용 불가 / 불완전</string>
-    <string name="car_dtc_more_items_format">추가 진단 고장 코드 %d개 미표시</string>
+    <string name="car_dtc_more_items_format">진단 고장 코드 추가 %d개 미표시</string>
     <string name="car_dtc_parked_only_notice">주차 시에만 사용 가능</string>
     <string name="car_dtc_speed_unavailable">차량 속도를 확인할 수 없습니다. 주차 상태에서 텔레메트리를 연결하거나 차량 속도를 활성화하십시오.</string>
     <string name="car_dtc_detail_title">코드 상세</string>

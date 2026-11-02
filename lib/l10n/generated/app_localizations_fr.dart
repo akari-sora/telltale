@@ -76,7 +76,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectAnswerBleWithClassic =>
-      'Choisissez Bluetooth LE. Aucun appairage préalable n’est nécessaire : recherchez-le dans l’application. Même s’il apparaît dans la liste d’appairage Bluetooth du système, ne l’appairez pas ; cette méthode ne fonctionne pas. Si la recherche ne trouve rien, le 4.0 sur la boîte ne désignait que les caractéristiques de la puce : utilisez plutôt Bluetooth Classic.';
+      'Choisissez Bluetooth LE. Aucun appairage préalable n’est nécessaire : recherchez-le dans l’application. Même s’il apparaît dans la liste d’appairage Bluetooth du système, ne l’appairez pas ; cette méthode ne fonctionne pas. Si la recherche ne trouve rien, la mention 4.0 sur la boîte ne désignait que les caractéristiques de la puce : utilisez plutôt Bluetooth Classic.';
 
   @override
   String get connectAnswerBleWithoutClassic =>
@@ -100,7 +100,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String connectBleEmptyScan(String next) {
-    return 'La recherche est terminée sans trouver d’adaptateur BLE. Vérifiez dans l’ordre : le voyant de l’adaptateur est-il allumé ? La plupart des prises OBD ne sont alimentées que lorsque le contact est sur ON. Vérifiez ensuite la portée et installez-vous dans le véhicule avant la recherche. $next Un adaptateur BLE n’a pas besoin d’être appairé dans les paramètres système et ne doit pas l’être ; cette méthode ne fonctionne pas.';
+    return 'La recherche s’est terminée sans trouver d’adaptateur BLE. Vérifiez dans l’ordre : le voyant de l’adaptateur est-il allumé ? La plupart des prises OBD ne sont alimentées que lorsque le contact est sur ON. Vérifiez ensuite la portée : installez-vous dans le véhicule avant la recherche. $next Un adaptateur BLE n’a pas besoin d’être appairé dans les paramètres système et ne doit pas l’être ; cette méthode ne fonctionne pas.';
   }
 
   @override
@@ -131,7 +131,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectBluetoothOff =>
-      'Bluetooth est désactivé. Activez d’abord Bluetooth dans les paramètres système.';
+      'Le Bluetooth est désactivé. Activez d’abord le Bluetooth dans les paramètres système.';
 
   @override
   String get connectBluetoothPermissionDeniedForever =>
@@ -166,11 +166,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectClassicListPaired =>
-      'Cette liste affiche tous les appareils appairés au système, y compris les casques et les enceintes, en plaçant d’abord ceux qui ressemblent à des adaptateurs. Si vous choisissez le mauvais, appuyez sur Annuler plutôt que d’attendre l’échec ; vous pourrez aussitôt en choisir un autre.';
+      'Cette liste affiche tous les appareils appairés au système, y compris les casques et les enceintes, en plaçant en premier ceux qui ressemblent à des adaptateurs. Si vous choisissez le mauvais, appuyez sur Annuler plutôt que d’attendre l’échec ; vous pourrez aussitôt en choisir un autre.';
 
   @override
   String get connectClassicListWindowsPort =>
-      'Cette liste affiche les ports COM associés à Bluetooth (« Standard Serial over Bluetooth link »). Une liste vide signifie que le système n’a pas encore créé de port série virtuel, et non que l’application est défaillante.';
+      'Cette liste affiche les ports COM associés au Bluetooth (« Standard Serial over Bluetooth link »). Une liste vide signifie que le système n’a pas encore créé de port série virtuel, et non que l’application est défaillante.';
 
   @override
   String get connectClassicUnavailableHost =>
@@ -185,7 +185,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectDemoBody =>
-      'Simule un moteur quatre cylindres turbo de 2.0 L au ralenti, en accélération, à vitesse stabilisée et en décélération, avec des signaux qui restent physiquement liés (le régime moteur baisse lors d’un changement de rapport tandis que la vitesse continue d’augmenter). Les codes défaut, la lecture du VIN et les requêtes groupées fastMode fonctionnent intégralement.';
+      'Simule un moteur quatre cylindres turbo de 2.0 L au ralenti, en accélération, à vitesse stabilisée et en décélération, avec des signaux qui restent physiquement liés (le régime moteur baisse lors d’un changement de rapport tandis que la vitesse continue d’augmenter). Les codes défaut, la lecture du VIN et les requêtes groupées fastMode fonctionnent tous pleinement.';
 
   @override
   String get connectDemoStart => 'Démarrer le simulateur';
@@ -215,7 +215,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectIssueConnectionSetupFailed =>
-      'La connexion a échoué pendant son établissement. Vérifiez que l’adaptateur est alimenté et à proximité, puis réessayez. L’erreur complète est conservée dans le journal ci-dessous.';
+      'La connexion a échoué lors de son établissement. Vérifiez que l’adaptateur est alimenté et à proximité, puis réessayez. L’erreur complète est conservée dans le journal ci-dessous.';
 
   @override
   String get connectIssueHandshakeIncomplete =>
@@ -277,7 +277,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectTranscriptKept =>
-      'Le journal complet de cette tentative a été conservé. Le fournir sera plus utile qu’un message d’une ligne.';
+      'Le journal complet de cette tentative a été conservé. Le transmettre sera plus utile qu’un message d’une ligne.';
 
   @override
   String get connectTransportBleDescription =>
@@ -313,7 +313,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectWhichNoteGuessing =>
-      'Vous ne risquez rien à vous tromper : si la connexion échoue, revenez essayer un autre choix. Si vous êtes vraiment bloqué, utilisez le simulateur Demo en bas pour vérifier que l’application elle-même fonctionne.';
+      'Vous ne risquez rien à vous tromper : si la connexion échoue, revenez essayer une autre option. Si vous êtes vraiment bloqué, utilisez le simulateur Demo en bas pour vérifier que l’application elle-même fonctionne.';
 
   @override
   String get connectWhichNoteIos =>
@@ -331,7 +331,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectWifiInstructionsDesktop =>
-      'Connectez d’abord cet ordinateur au point d’accès Wi-Fi diffusé par l’adaptateur, puis saisissez son adresse. Si le système indique que le réseau ne peut pas accéder à Internet, choisissez d’y rester. Les ordinateurs utilisent généralement ce point d’accès comme route par défaut ; la liaison à la route Wi-Fi d’Android n’est pas nécessaire.';
+      'Connectez d’abord cet ordinateur au point d’accès Wi-Fi diffusé par l’adaptateur, puis saisissez son adresse. Si le système indique que le réseau ne peut pas accéder à Internet, choisissez d’y rester. Les ordinateurs utilisent généralement ce point d’accès comme route par défaut ; la liaison à la route Wi-Fi propre à Android n’est pas nécessaire.';
 
   @override
   String get connectWifiInstructionsPhone =>
@@ -393,7 +393,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dashboardPollingModeHelpSingle =>
-      'Le mode requête unique signifie que chaque PID Mode 01 est lu séparément. Telltale l’utilise lorsque le bus n’accepte jamais les requêtes groupées, comme sur tous les véhicules sans CAN ; tant qu’aucun bloc de prise en charge n’a répondu, car le regroupement de PID non confirmés par le véhicule produit une réponse trop courte ; et après l’échec d’une requête groupée à revenir sous une forme séparable, qu’elle soit tronquée, refusée parce que l’adaptateur a signalé sa mémoire tampon pleine ou restée sans réponse. Les mesures continuent de s’actualiser ; à lui seul, ce mode ne signifie pas un échec de connexion.';
+      'Le mode requête unique signifie que chaque PID Mode 01 est lu séparément. Telltale l’utilise lorsque le bus n’accepte jamais les requêtes groupées, comme sur tous les véhicules sans CAN ; tant qu’aucun bloc de prise en charge n’a répondu, car le regroupement de PID non confirmés par le véhicule produit une réponse trop courte ; et lorsqu’une requête groupée ne revient pas sous une forme pouvant être séparée à nouveau, qu’elle soit tronquée, refusée parce que l’adaptateur a signalé sa mémoire tampon pleine ou restée sans réponse. Les mesures continuent de s’actualiser ; à lui seul, ce mode n’indique pas un échec de connexion.';
 
   @override
   String get dashboardPollingModeHelpTitle => 'Mode d’interrogation';
@@ -467,7 +467,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get datumNextStepGenericObd =>
-      'Vous pouvez continuer avec OBD générique ou choisir le véhicule manuellement et renseigner les paramètres.';
+      'Vous pouvez continuer avec l’OBD générique ou choisir le véhicule manuellement et renseigner les paramètres.';
 
   @override
   String get datumNextStepOtherReadings =>
@@ -489,7 +489,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get datumReasonFuelEstimateMissingInputs =>
-      'Une donnée nécessaire à l’estimation de consommation manque.';
+      'Il manque une donnée nécessaire à l’estimation de la consommation.';
 
   @override
   String get datumReasonHeaderNotOnThisBus =>
@@ -497,7 +497,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get datumReasonHorsepowerEstimateMissingInputs =>
-      'Une donnée nécessaire à l’estimation de puissance manque.';
+      'Il manque une donnée nécessaire à l’estimation de la puissance.';
 
   @override
   String get datumReasonMalformedPacket =>
@@ -540,7 +540,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get datumStatusDetailsHint =>
-      'Appuyez pour les détails de l’état des données';
+      'Appuyez pour voir les détails de l’état des données';
 
   @override
   String get datumStatusUnverifiedExplanation =>
@@ -553,7 +553,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get derivedAirflow => 'Débit d’air';
 
   @override
-  String get derivedEcuFuelTitle => 'Données de carburant ECU';
+  String get derivedEcuFuelTitle => 'Données de carburant de l’ECU';
 
   @override
   String get derivedEcuReported => 'Indiqué par l’ECU';
@@ -583,7 +583,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String dtcBothSilentDetail(Object mode) {
-    return 'Le véhicule n’a pas répondu à la requête Mode $mode, et Mode 03 n’a pas répondu non plus : il est donc impossible de savoir si le véhicule ne la prend pas en charge ou si cette connexion ne l’a simplement pas lue.';
+    return 'Le véhicule n’a pas répondu à la requête Mode $mode, et le Mode 03 n’a pas répondu non plus : il est donc impossible de savoir si le véhicule ne la prend pas en charge ou si cette connexion ne l’a simplement pas lue.';
   }
 
   @override
@@ -610,7 +610,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String dtcClearDialogFrames(Object codes) {
-    return 'La trame figée associée à $codes sera également effacée : tout l’enregistrement du régime moteur, de la température du liquide de refroidissement et de la charge au moment du défaut. Elle ne pourra pas être relue tant que le défaut ne se reproduit pas.';
+    return 'La trame figée associée à $codes sera également effacée — soit tout l’enregistrement du régime moteur, de la température du liquide de refroidissement et de la charge au moment du défaut — et ne pourra pas être relue tant que le défaut ne se reproduira pas.';
   }
 
   @override
@@ -649,7 +649,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dtcClearPartiallyConfirmed =>
-      'Au moins un calculateur a signalé que l’effacement était terminé, et l’état des autres n’a pas pu être confirmé. N’envoyez pas d’autre commande d’effacement : la répéter réinitialise l’état de préparation antipollution des calculateurs ayant déjà terminé. Relancez l’analyse pour voir le résultat.';
+      'Au moins un calculateur a signalé que l’effacement était terminé, et l’état des autres n’a pas pu être confirmé. N’envoyez pas d’autre commande d’effacement : la répéter réinitialise l’état de préparation antipollution des calculateurs ayant déjà effectué l’effacement. Relancez l’analyse pour voir le résultat.';
 
   @override
   String get dtcClearPreviousConnectionUnconfirmed =>
@@ -661,15 +661,15 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dtcClearSentUnconfirmed =>
-      'La commande d’effacement a été envoyée, mais la réponse a été endommagée pendant le transport ; on ignore donc si le véhicule a effectué l’effacement. Relancez l’analyse pour vérifier ; n’envoyez pas d’autre commande d’effacement : si la première a réussi, la répéter réinitialisera l’état de préparation antipollution.';
+      'La commande d’effacement a été envoyée, mais la réponse a été endommagée lors de la transmission ; on ignore donc si le véhicule a effectué l’effacement. Relancez l’analyse pour vérifier ; n’envoyez pas d’autre commande d’effacement : si la première a réussi, la répéter réinitialisera l’état de préparation antipollution.';
 
   @override
   String get dtcClearTimeout =>
-      'Aucune réponse après l’envoi de la commande d’effacement ; on ignore donc si le véhicule a effectué l’effacement. Relancez l’analyse pour vérifier. N’envoyez pas une autre commande d’effacement à l’aveugle.';
+      'Aucune réponse après l’envoi de la commande d’effacement ; on ignore donc si le véhicule a effectué l’effacement. Relancez l’analyse pour vérifier. N’envoyez pas d’autre commande d’effacement à l’aveugle.';
 
   @override
   String get dtcClearUnexpected =>
-      'L’effacement a échoué ; on ignore donc si le véhicule a effectué l’effacement. Relancez l’analyse pour vérifier. N’envoyez pas une autre commande d’effacement à l’aveugle.';
+      'L’effacement a échoué ; on ignore donc si le véhicule a effectué l’effacement. Relancez l’analyse pour vérifier. N’envoyez pas d’autre commande d’effacement à l’aveugle.';
 
   @override
   String get dtcClearing => 'Effacement…';
@@ -883,7 +883,7 @@ class AppLocalizationsFr extends AppLocalizations {
       other: '$count moniteurs sont encore incomplets',
       one: '1 moniteur est encore incomplet',
     );
-    return '$_temp0 : un contrôle pourrait échouer actuellement.';
+    return '$_temp0 : un contrôle effectué maintenant pourrait échouer.';
   }
 
   @override
@@ -914,33 +914,33 @@ class AppLocalizationsFr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Ce calculateur indique lui-même $count codes défaut confirmés.',
-      one: 'Ce calculateur indique lui-même 1 code défaut confirmé.',
+      other: 'Ce calculateur déclare lui-même $count codes défaut confirmés.',
+      one: 'Ce calculateur déclare lui-même 1 code défaut confirmé.',
     );
     return '$_temp0';
   }
 
   @override
   String get dtcSelfReportedNoCodes =>
-      'Ce calculateur indique lui-même qu’il n’a aucun code défaut confirmé.';
+      'Ce calculateur déclare lui-même n’avoir aucun code défaut confirmé.';
 
   @override
   String get dtcSilentCategoryHeadline => 'Cette catégorie n’a pas répondu';
 
   @override
   String get dtcSilentPendingDetail =>
-      'Les codes défaut en attente (Mode 07) n’ont pas répondu. Cet ECU ne met peut-être pas le service en œuvre, ou il n’a simplement pas été lu cette fois : l’absence de réponse ne permet pas de distinguer ces cas et ne doit pas être interprétée comme une absence de défauts en attente. Le résultat des codes défaut mémorisés n’est pas affecté.';
+      'Les codes défaut en attente (Mode 07) n’ont pas répondu. Cet ECU n’implémente peut-être pas ce service, ou celui-ci n’a simplement pas été lu cette fois : l’absence de réponse ne permet pas de distinguer ces deux cas et ne doit pas être interprétée comme une absence de défauts en attente. Le résultat des codes défaut mémorisés n’est pas affecté.';
 
   @override
   String get dtcSilentPermanentDetail =>
-      'Les codes défaut permanents (Mode 0A) n’ont pas répondu. Cette catégorie est apparue avec la génération OBD-II vers 2010 ; les véhicules plus anciens ne la prennent donc pas toujours en charge. Mais l’absence de réponse peut tout aussi bien signifier qu’elle n’a simplement pas été lue cette fois, sans pouvoir distinguer les deux cas. Le résultat des codes défaut mémorisés n’est pas affecté.';
+      'Les codes défaut permanents (Mode 0A) n’ont pas répondu. Cette catégorie est apparue avec la génération OBD-II vers 2010 ; les véhicules plus anciens ne la prennent donc pas toujours en charge. Mais l’absence de réponse peut tout aussi bien signifier qu’elle n’a simplement pas été lue cette fois, sans qu’il soit possible de distinguer les deux cas. Le résultat des codes défaut mémorisés n’est pas affecté.';
 
   @override
   String get dtcStartScan => 'Lancer l’analyse';
 
   @override
   String dtcStoredSilentDetail(Object mode) {
-    return 'Le véhicule n’a pas répondu à la requête Mode $mode ; il est donc impossible de confirmer s’il possède des codes défaut mémorisés. Ce n’est pas la même chose que ne pas avoir de codes défaut.';
+    return 'Le véhicule n’a pas répondu à la requête Mode $mode ; il est donc impossible de confirmer s’il possède des codes défaut mémorisés. Ce n’est pas la même chose que de ne pas avoir de codes défaut.';
   }
 
   @override
@@ -972,7 +972,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get fieldEventBody =>
-      'N’appuyez que lorsque le véhicule est complètement arrêté, en tant que passager ou conducteur d’un véhicule en stationnement. Les événements partagent une même chronologie avec les données OBD brutes et une sauvegarde immédiate est tentée.';
+      'N’appuyez que lorsque le véhicule est complètement arrêté, que vous soyez passager ou conducteur en stationnement. Les événements partagent une même chronologie avec les données OBD brutes et une sauvegarde immédiate est tentée.';
 
   @override
   String get fieldEventEngineStarted => 'Moteur démarré';
@@ -1086,7 +1086,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get handshakeStepProtocolNumber => 'Lire le numéro du protocole';
 
   @override
-  String get handshakeStepReset => 'Réinitialiser l’adaptateur par logiciel';
+  String get handshakeStepReset =>
+      'Effectuer une réinitialisation logicielle de l’adaptateur';
 
   @override
   String get handshakeStepResponseTimeout =>
@@ -1163,7 +1164,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get performanceStateAborted =>
-      'Ce passage n’a pas été terminé ; voici ce qui a été enregistré avant son arrêt';
+      'Ce passage ne s’est pas terminé ; voici ce qui a été enregistré avant son arrêt';
 
   @override
   String get performanceStateAwaitingSpeedSignal =>
@@ -1171,7 +1172,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String performanceStateAwaitingStandstill(String speed) {
-    return 'Arrêtez-vous complètement d’abord : actuellement $speed km/h';
+    return 'Arrêtez-vous d’abord complètement : actuellement $speed km/h';
   }
 
   @override
@@ -1205,7 +1206,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get pidArrangeBody =>
-      'Faites glisser pour réorganiser. Le tableau de bord se remplit de gauche à droite et de haut en bas : le premier élément est donc vu en premier.';
+      'Faites glisser pour réorganiser. Le tableau de bord se remplit de gauche à droite et de haut en bas : le premier élément apparaît donc en premier.';
 
   @override
   String get pidArrangeEmptyMessage =>
@@ -1457,7 +1458,7 @@ class AppLocalizationsFr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count éléments ont remplacé une définition existante',
+      other: '$count éléments ont remplacé des définitions existantes',
       one: '1 élément a remplacé une définition existante',
     );
     return '$_temp0';
@@ -1627,7 +1628,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get powertrainCatalogTitle =>
-      'Catalogue de batteries du groupe motopropulseur';
+      'Catalogue des batteries du groupe motopropulseur';
 
   @override
   String get powertrainChooseCommandNote =>
@@ -1684,7 +1685,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get powertrainExperimentalDataDisclosure =>
-      'Il s’agit d’une lecture candidate signalée par les auteurs de la source, et non d’une garantie du constructeur ou de sécurité pour tous les modèles ; ELM327 ne fait que transmettre la commande. La commande brute et la réponse restent dans le journal de diagnostic local et ne sont pas envoyées automatiquement par cette fonction ; les valeurs décodées ne sont jamais installées comme PID ni ajoutées à un cadran. Annuler ne modifie pas les fonctions OBD ordinaires.';
+      'Il s’agit d’une lecture candidate signalée par les auteurs de la source, et non d’une garantie du constructeur ni d’une garantie de sécurité pour tous les modèles ; l’ELM327 ne fait que transmettre la commande. La commande brute et la réponse restent dans le journal de diagnostic local et ne sont pas envoyées automatiquement par cette fonction ; les valeurs décodées ne sont jamais installées comme PID ni ajoutées à un cadran. Annuler ne modifie pas les fonctions OBD ordinaires.';
 
   @override
   String get powertrainExperimentalDialogTitle =>
@@ -1696,7 +1697,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get powertrainExperimentalParkedAck =>
-      'Le véhicule est garé en sécurité ; je comprends que la lecture est unique et que le nombre peut ne pas s’appliquer';
+      'Le véhicule est garé en sécurité ; je comprends qu’il s’agit d’une lecture unique et que le nombre peut malgré tout ne pas s’appliquer';
 
   @override
   String powertrainExperimentalWireLine(String responder, int bytes) {
@@ -1778,7 +1779,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get powertrainInstallProfileNotInstallable =>
-      'Installation impossible : ce profil n’est pas dans un état permettant de devenir des PID actifs.';
+      'Installation impossible : ce profil n’est pas dans un état permettant d’en faire des PID actifs.';
 
   @override
   String get powertrainInstallYearOutOfRange =>
@@ -1908,7 +1909,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get powertrainRefusedNoLiveAuthorization =>
-      'La lecture unique n’a pas démarré : aucune autorisation à usage unique n’est détenue. Aucune n’a été donnée, ou elle a expiré, est en délai d’attente ou a été mise en quarantaine.';
+      'La lecture unique n’a pas démarré : aucune autorisation à usage unique n’est détenue. Soit aucune n’a été accordée, soit elle a expiré, est soumise à un délai d’attente ou a été mise en quarantaine.';
 
   @override
   String get powertrainRefusedDiscardedAtLifecycleBoundary =>
@@ -1925,7 +1926,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get powertrainRestoreStorageErrorRetry =>
-      'Une erreur de stockage s’est produite lors de la restauration des installations précédentes. Elle a été reprogrammée ; réessayez.';
+      'Une erreur de stockage s’est produite lors de la restauration des installations précédentes. La restauration a été reprogrammée ; réessayez.';
 
   @override
   String powertrainSecondarySource(String name, String license) {
@@ -2014,7 +2015,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settingsAdapterConcernsFooter =>
-      'Ces points révèlent des incohérences dans ce que l’adaptateur dit de lui-même, et non une preuve qu’il a mal lu le véhicule. Seule une seconde mesure indépendante permet de confirmer une valeur (voir le guide pratique).';
+      'Il s’agit d’incohérences dans ce que l’adaptateur dit de lui-même, et non d’une preuve qu’il a mal lu le véhicule. Seule une seconde mesure indépendante permet de confirmer une valeur (voir le guide pratique).';
 
   @override
   String get settingsAdapterNoContradictions =>
@@ -2079,7 +2080,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settingsCatalogScope =>
-      'Catalogues officiels : EPA des États-Unis, MOEA de Taïwan, NRCan du Canada. Chaque instantané concerne uniquement ce marché, pas toutes les marques ni toutes les années du monde.';
+      'Catalogues officiels : EPA des États-Unis, MOEA de Taïwan, NRCan du Canada. Chaque instantané concerne uniquement son marché, pas toutes les marques ni toutes les années dans le monde.';
 
   @override
   String get settingsCatalogVerifying =>
@@ -2269,7 +2270,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get settingsManualCommandFieldLabel => 'Commande';
 
   @override
-  String get settingsManualCommandNoContent => '(contenu de réponse vide)';
+  String get settingsManualCommandNoContent => '(réponse sans contenu)';
 
   @override
   String get settingsManualCommandSend => 'Envoyer';
@@ -2383,7 +2384,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settingsVinNotReadDisconnectedDetail =>
-      'Une fois connecté, le VIN que le véhicule déclare à son propre sujet peut être lu ; l’identité ne passe pas à la connexion suivante. Le journal de diagnostic brut peut toutefois encore contenir le VIN.';
+      'Une fois la connexion établie, le VIN que le véhicule déclare à son propre sujet peut être lu ; l’identité n’est pas conservée à la connexion suivante. Le journal de diagnostic brut peut toutefois encore contenir le VIN.';
 
   @override
   String get settingsVinRead => 'Lire le VIN';
@@ -2393,7 +2394,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settingsVinReportedDetail =>
-      'Le VIN est ce que le véhicule déclare à son propre sujet ; il ne vérifie pas les caractéristiques du modèle. L’identité ne passe pas d’une connexion à l’autre ; le journal de diagnostic peut toutefois encore contenir le VIN.';
+      'Le VIN est ce que le véhicule déclare à son propre sujet ; il ne vérifie pas les caractéristiques du modèle. L’identité n’est pas conservée d’une connexion à l’autre ; le journal de diagnostic peut toutefois encore contenir le VIN.';
 
   @override
   String get settingsVinSimulatorReported => 'VIN déclaré par le simulateur';
@@ -2824,7 +2825,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get telemetryStartLibraryByteLimit =>
-      'Espace local insuffisant pour un enregistrement ; exportez-en ou supprimez-en d’abord';
+      'Espace local insuffisant pour un enregistrement ; exportez ou supprimez d’abord des enregistrements';
 
   @override
   String telemetryStartLibraryGroupLimit(int limit) {
@@ -2935,7 +2936,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get transcriptExportExplanation =>
-      'Cette connexion conserve l’initialisation et le trafic brut le plus récent ; si une longue connexion omet la partie centrale, le fichier le précise. Lorsqu’une donnée ne peut pas être lue sur le véhicule, exporter le journal et le rapporter vaut bien plus qu’un simple message à l’écran.';
+      'Cette connexion conserve l’initialisation et le trafic brut le plus récent ; si une longue connexion omet la partie centrale, le fichier le précise. Lorsqu’une donnée ne peut pas être lue sur le véhicule, exporter le journal et le transmettre vaut bien plus qu’un simple message à l’écran.';
 
   @override
   String transcriptExportFailed(String error) {
@@ -3236,11 +3237,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dtcDescriptionP0112 =>
-      'Entrée basse du circuit du capteur de température de l’air d’admission';
+      'Signal d’entrée bas du circuit du capteur de température d’air d’admission';
 
   @override
   String get dtcDescriptionP0113 =>
-      'Entrée haute du circuit du capteur de température de l’air d’admission';
+      'Signal d’entrée haut du circuit du capteur de température d’air d’admission';
 
   @override
   String get dtcDescriptionP0115 =>
@@ -3252,11 +3253,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dtcDescriptionP0117 =>
-      'Entrée basse du circuit du capteur de température du liquide de refroidissement moteur';
+      'Signal d’entrée bas du circuit du capteur de température du liquide de refroidissement moteur';
 
   @override
   String get dtcDescriptionP0118 =>
-      'Entrée haute du circuit du capteur de température du liquide de refroidissement moteur';
+      'Signal d’entrée haut du circuit du capteur de température du liquide de refroidissement moteur';
 
   @override
   String get dtcDescriptionP0120 =>
@@ -3268,11 +3269,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dtcDescriptionP0122 =>
-      'Entrée basse du circuit du capteur de position du papillon';
+      'Signal d’entrée bas du circuit du capteur de position du papillon';
 
   @override
   String get dtcDescriptionP0123 =>
-      'Entrée haute du circuit du capteur de position du papillon';
+      'Signal d’entrée haut du circuit du capteur de position du papillon';
 
   @override
   String get dtcDescriptionP0125 =>
@@ -3391,11 +3392,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dtcDescriptionP0222 =>
-      'Entrée basse du circuit du capteur B de position du papillon ou de la pédale';
+      'Signal d’entrée bas du circuit du capteur B de position du papillon ou de la pédale';
 
   @override
   String get dtcDescriptionP0223 =>
-      'Entrée haute du circuit du capteur B de position du papillon ou de la pédale';
+      'Signal d’entrée haut du circuit du capteur B de position du papillon ou de la pédale';
 
   @override
   String get dtcDescriptionP0234 =>
@@ -3455,11 +3456,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dtcDescriptionP0327 =>
-      'Entrée basse du circuit du capteur de cliquetis (banc 1)';
+      'Signal d’entrée bas du circuit du capteur de cliquetis (banc 1)';
 
   @override
   String get dtcDescriptionP0328 =>
-      'Entrée haute du circuit du capteur de cliquetis (banc 1)';
+      'Signal d’entrée haut du circuit du capteur de cliquetis (banc 1)';
 
   @override
   String get dtcDescriptionP0330 =>
@@ -3579,11 +3580,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dtcDescriptionP0452 =>
-      'Entrée basse du circuit du capteur de pression du système d’émissions par évaporation';
+      'Signal d’entrée bas du circuit du capteur de pression du système d’émissions par évaporation';
 
   @override
   String get dtcDescriptionP0453 =>
-      'Entrée haute du circuit du capteur de pression du système d’émissions par évaporation';
+      'Signal d’entrée haut du circuit du capteur de pression du système d’émissions par évaporation';
 
   @override
   String get dtcDescriptionP0455 =>
@@ -3626,10 +3627,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'Dysfonctionnement de la tension du système';
 
   @override
-  String get dtcDescriptionP0562 => 'Tension du système basse';
+  String get dtcDescriptionP0562 => 'Tension basse du système';
 
   @override
-  String get dtcDescriptionP0563 => 'Tension du système haute';
+  String get dtcDescriptionP0563 => 'Tension haute du système';
 
   @override
   String get dtcDescriptionP0603 =>
@@ -3690,7 +3691,7 @@ class AppLocalizationsFr extends AppLocalizations {
       'Corrélation des tensions des capteurs de position du papillon A/B';
 
   @override
-  String get dtcDescriptionU0100 => 'Communication perdue avec ECM/PCM';
+  String get dtcDescriptionU0100 => 'Communication perdue avec l’ECM/PCM';
 
   @override
   String get dtcDescriptionU0101 =>
@@ -3727,7 +3728,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get gaugeSkinTrackDescription =>
-      'Barre segmentée, sans lissage. La valeur apparaît là où elle se trouve, sans valeur intermédiaire.';
+      'Barre segmentée, sans lissage. La valeur s’affiche directement à sa position, sans étape intermédiaire.';
 
   @override
   String get gaugeSkinClassic => 'Classique';
@@ -3867,7 +3868,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get adapterConcernFirmwareNeverReleasedDetail =>
-      'Elm Electronics n’a jamais publié cette version ; le firmware de cet adaptateur n’est donc pas celui qu’il prétend avoir. Beaucoup de ces adaptateurs fonctionnent néanmoins, mais leur propre description n’est pas fiable et il est judicieux de les suspecter en premier lorsqu’une lecture échoue.';
+      'Elm Electronics n’a jamais publié cette version ; le firmware de cet adaptateur n’est donc pas celui qu’il prétend être. Beaucoup de ces adaptateurs fonctionnent néanmoins, mais la description que cet adaptateur donne de lui-même n’est pas fiable et il est judicieux de le suspecter en premier lorsqu’une lecture échoue.';
 
   @override
   String adapterConcernPpsRefusedSummary(String version) {
@@ -3944,7 +3945,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectTransportClassicConnectTimeout =>
-      'Le délai de connexion à l’adaptateur a expiré. Il répond peut-être encore ; attendez quelques secondes avant de réessayer.';
+      'Le délai de connexion à l’adaptateur a expiré. Il est peut-être encore en train de répondre ; attendez quelques secondes au lieu de réessayer aussitôt.';
 
   @override
   String get connectTransportSerialPortOpenFailed =>
@@ -3972,11 +3973,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settingsManualCommandLinkStoppedResponding =>
-      'Rien n’est arrivé de l’adaptateur pendant suffisamment longtemps pour que la connexion soit interrompue. Il est peut-être toujours alimenté ; seule son absence de réponse est connue.';
+      'Rien n’est parvenu de l’adaptateur pendant si longtemps que la connexion a été interrompue. Il est peut-être toujours alimenté ; seule son absence de réponse est connue.';
 
   @override
   String get settingsManualCommandWriteFailed =>
-      'La commande n’a pas pu être transmise à la connexion de l’adaptateur. On ne sait pas quelle partie a atteint l’adaptateur.';
+      'La commande n’a pas pu être transmise à la connexion de l’adaptateur. On ne sait pas quelle part de la commande a atteint l’adaptateur.';
 
   @override
   String get settingsManualCommandTimedOut =>
@@ -4047,7 +4048,7 @@ class AppLocalizationsFr extends AppLocalizations {
     Object command,
     Object allowed,
   ) {
-    return 'Ce champ accepte des requêtes, pas des commandes qui modifient le fonctionnement de l’adaptateur. « $command » modifierait l’état de l’adaptateur alors que l’application conserverait son modèle précédent : les mesures suivantes pourraient provenir d’un autre calculateur sans que l’écran ne l’indique.\nRequêtes autorisées : $allowed.';
+    return 'Ce champ accepte des requêtes, pas des commandes qui modifient le fonctionnement de l’adaptateur. « $command » modifierait l’état de l’adaptateur alors que l’application en conserverait la représentation précédente : les mesures suivantes pourraient provenir d’un autre calculateur sans que l’écran ne l’indique.\nRequêtes autorisées : $allowed.';
   }
 
   @override
@@ -4066,7 +4067,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String commandFailureQueryHeaderRefused(Object header) {
-    return 'L’adaptateur a refusé de diriger cette requête vers le calculateur $header ; elle n’a donc pas été envoyée. En conservant l’adresse réellement détenue par l’adaptateur, la réponse serait venue d’un calculateur qui n’avait pas été interrogé.';
+    return 'L’adaptateur a refusé de diriger cette requête vers le calculateur $header ; elle n’a donc pas été envoyée. Avec l’adresse réellement détenue par l’adaptateur, la réponse serait venue d’un calculateur qui n’avait pas été interrogé.';
   }
 
   @override
@@ -4112,17 +4113,17 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String pidFormulaLog10NonPositiveArgument(double argument) {
-    return 'LOG10 exige un argument supérieur à 0, et celui-ci vaut $argument.';
+    return 'LOG10 exige un argument supérieur à 0, or celui-ci vaut $argument.';
   }
 
   @override
   String pidFormulaLogNonPositiveArgument(double argument) {
-    return 'LOG exige un argument supérieur à 0, et celui-ci vaut $argument.';
+    return 'LOG exige un argument supérieur à 0, or celui-ci vaut $argument.';
   }
 
   @override
   String pidFormulaSqrtNegativeArgument(double argument) {
-    return 'SQRT exige un argument supérieur ou égal à 0, et celui-ci vaut $argument.';
+    return 'SQRT exige un argument supérieur ou égal à 0, or celui-ci vaut $argument.';
   }
 
   @override
@@ -4140,7 +4141,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get pidFormulaBaroTwoDefinitions =>
-      'Deux définitions fournissent toutes deux la pression ambiante ; la valeur pourrait donc provenir de l’une ou de l’autre et aucune ne peut être utilisée. Retirez l’un des cadrans qui mesure la pression ambiante.';
+      'Deux définitions fournissent chacune la pression ambiante ; la valeur pourrait donc provenir de l’une ou de l’autre et aucune ne peut être utilisée. Retirez l’un des cadrans qui mesurent la pression ambiante.';
 
   @override
   String get pidFormulaBaroNotYetMeasured =>
@@ -4170,7 +4171,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String pidFormulaDependencyTwoDefinitions(String key) {
-    return 'Deux définitions décodent toutes deux $key ; la valeur pourrait donc provenir de l’une ou de l’autre et aucune ne peut être utilisée. Modifiez l’une d’elles pour utiliser un autre mode+PID. Remarque : les PID nécessaires aux estimations (010B, 010C, 010D) sont toujours lus ; retirer un cadran du tableau de bord n’arrête donc pas leur lecture.';
+    return 'Deux définitions décodent chacune $key ; la valeur pourrait donc provenir de l’une ou de l’autre et aucune ne peut être utilisée. Modifiez l’une d’elles pour utiliser un autre mode+PID. Remarque : les PID nécessaires aux estimations (010B, 010C, 010D) sont toujours lus ; retirer un cadran du tableau de bord n’arrête donc pas leur lecture.';
   }
 
   @override
@@ -4267,7 +4268,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String pidImportRowTooFewColumns(int line) {
-    return 'Ligne $line : pas assez de cellules — nom, nom court, PID et formule sont le minimum.';
+    return 'Ligne $line : pas assez de cellules — nom, nom court, PID et formule sont requis au minimum.';
   }
 
   @override
@@ -4287,7 +4288,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String pidImportRowRangeDefaulted(int line, double min, double max) {
-    return 'Ligne $line : la plage du cadran était vide ; $min–$max a donc été appliquée. Vérifiez que cette échelle convient au capteur.';
+    return 'Ligne $line : la plage du cadran était vide ; la plage $min–$max a donc été appliquée. Vérifiez que cette échelle convient au capteur.';
   }
 
   @override
@@ -4360,11 +4361,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectPairedListFailed =>
-      'La liste des appareils Bluetooth appairés n’a pas pu être lue. Vérifiez que Bluetooth est activé, puis réessayez.';
+      'La liste des appareils Bluetooth appairés n’a pas pu être lue. Vérifiez que le Bluetooth est activé, puis réessayez.';
 
   @override
   String get connectBleScanUnavailable =>
-      'Bluetooth n’est pas utilisable pour le moment. Patientez, puis relancez la recherche.';
+      'Le Bluetooth n’est pas utilisable pour le moment. Patientez, puis relancez la recherche.';
 
   @override
   String get connectBleScanBluez =>
@@ -4400,7 +4401,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String dtcClearSilentControllers(int count, String controllers) {
-    return '$count calculateur(s) n’ont pas répondu à la commande d’effacement ($controllers). Les calculateurs ayant répondu ont effacé les codes ; les autres peuvent encore en contenir. Relancez l’analyse. N’envoyez pas une autre commande d’effacement.';
+    return '$count calculateur(s) n’ont pas répondu à la commande d’effacement ($controllers). Les calculateurs ayant répondu ont effacé les codes ; les autres peuvent encore en contenir. Relancez l’analyse. N’envoyez pas d’autre commande d’effacement.';
   }
 
   @override
@@ -4410,32 +4411,32 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String dtcClearUnresolvedSourcesDoNotRepeat(int count, String addresses) {
-    return '$count réponse(s) à la commande d’effacement n’ont pas pu être attribuées ($addresses). N’envoyez pas une autre commande d’effacement. Relancez l’analyse pour voir quels codes restent.';
+    return '$count réponse(s) à la commande d’effacement n’ont pas pu être attribuées ($addresses). N’envoyez pas d’autre commande d’effacement. Relancez l’analyse pour voir quels codes restent.';
   }
 
   @override
   String dtcClearNrcConditionsDoNotRepeat(String controller) {
-    return '$controller a refusé l’effacement car l’état du véhicule ne le permet pas. La plupart des calculateurs n’effacent pas les codes lorsque le moteur tourne. Mettez le contact sur ON moteur arrêté, puis relancez l’analyse pour voir quels codes restent. N’envoyez pas une autre commande d’effacement global : une seconde peut réinitialiser l’état de préparation antipollution d’un calculateur qui a peut-être déjà effacé ses codes.';
+    return '$controller a refusé l’effacement car l’état du véhicule ne le permet pas. La plupart des calculateurs n’effacent pas les codes lorsque le moteur tourne. Mettez le contact sur ON moteur arrêté, puis relancez l’analyse pour voir quels codes restent. N’envoyez pas d’autre commande d’effacement global : une seconde commande peut réinitialiser l’état de préparation antipollution d’un calculateur qui a peut-être déjà effacé ses codes.';
   }
 
   @override
   String dtcClearNrcUnsupportedDoNotRepeat(String controller) {
-    return '$controller ne prend pas en charge l’effacement Mode 04. Un équipement du constructeur ou du concessionnaire peut être nécessaire. N’envoyez pas une autre commande d’effacement global : une seconde peut réinitialiser l’état de préparation antipollution d’un calculateur qui a peut-être déjà effacé ses codes. Relancez l’analyse pour voir quels codes restent.';
+    return '$controller ne prend pas en charge l’effacement Mode 04. Un équipement du constructeur ou du concessionnaire peut être nécessaire. N’envoyez pas d’autre commande d’effacement global : une seconde commande peut réinitialiser l’état de préparation antipollution d’un calculateur qui a peut-être déjà effacé ses codes. Relancez l’analyse pour voir quels codes restent.';
   }
 
   @override
   String dtcClearNrcBusyDoNotRepeat(String controller) {
-    return '$controller est occupé. N’envoyez pas une autre commande d’effacement global : une seconde peut réinitialiser l’état de préparation antipollution d’un calculateur qui a peut-être déjà effacé ses codes. Relancez l’analyse pour voir quels codes restent.';
+    return '$controller est occupé. N’envoyez pas d’autre commande d’effacement global : une seconde commande peut réinitialiser l’état de préparation antipollution d’un calculateur qui a peut-être déjà effacé ses codes. Relancez l’analyse pour voir quels codes restent.';
   }
 
   @override
   String dtcClearNrcSecurityDoNotRepeat(String controller) {
-    return '$controller exige un accès de sécurité avant l’effacement. Un équipement du constructeur ou du concessionnaire est nécessaire. N’envoyez pas une autre commande d’effacement global : une seconde peut réinitialiser l’état de préparation antipollution d’un calculateur qui a peut-être déjà effacé ses codes.';
+    return '$controller exige un accès de sécurité avant l’effacement. Un équipement du constructeur ou du concessionnaire est nécessaire. N’envoyez pas d’autre commande d’effacement global : une seconde commande peut réinitialiser l’état de préparation antipollution d’un calculateur qui a peut-être déjà effacé ses codes.';
   }
 
   @override
   String dtcClearNrcOtherDoNotRepeat(String controller, String code) {
-    return '$controller a refusé l’effacement (code de motif $code). N’envoyez pas une autre commande d’effacement global : une seconde peut réinitialiser l’état de préparation antipollution d’un calculateur qui a peut-être déjà effacé ses codes. Relancez l’analyse pour voir quels codes restent.';
+    return '$controller a refusé l’effacement (code de motif $code). N’envoyez pas d’autre commande d’effacement global : une seconde commande peut réinitialiser l’état de préparation antipollution d’un calculateur qui a peut-être déjà effacé ses codes. Relancez l’analyse pour voir quels codes restent.';
   }
 
   @override
@@ -4598,7 +4599,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get connectionFailureOpenSettings => 'Ouvrez les paramètres système.';
 
   @override
-  String get connectionFailureTurnRadioOn => 'Activez Bluetooth.';
+  String get connectionFailureTurnRadioOn => 'Activez le Bluetooth.';
 
   @override
   String get connectionFailureCheckDistanceOrPower =>
@@ -4680,16 +4681,16 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String serviceRecipesDiscoverySuccess(String tids) {
-    return 'Mode 08 est pris en charge par l’ECU. TID pris en charge : $tids';
+    return 'Le Mode 08 est pris en charge par l’ECU. TID pris en charge : $tids';
   }
 
   @override
   String get serviceRecipesDiscoveryUnsupported =>
-      'Mode 08 n’est pas pris en charge par cet ECU';
+      'Le Mode 08 n’est pas pris en charge par cet ECU';
 
   @override
   String serviceRecipesDiscoveryUnknown(String reason) {
-    return 'Prise en charge de Mode 08 inconnue : $reason';
+    return 'Prise en charge du Mode 08 inconnue : $reason';
   }
 
   @override
@@ -4886,7 +4887,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get performanceNoAnalysisBody =>
-      'Ce passage s’est arrêté avant qu’assez d’échantillons de vitesse aient été enregistrés pour construire une courbe ou des temps partiels.';
+      'Ce passage s’est arrêté avant que suffisamment d’échantillons de vitesse aient été enregistrés pour établir une courbe ou des temps partiels.';
 
   @override
   String get connectActivityReconnectingAutomatically =>

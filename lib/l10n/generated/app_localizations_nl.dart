@@ -43,7 +43,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get adapterErrorLowVoltageReset =>
-      'Lage spanning heeft de adapter gereset.';
+      'De adapter is gereset door lage spanning.';
 
   @override
   String get adapterErrorNoData =>
@@ -75,11 +75,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get connectAnswerBleWithClassic =>
-      'Kies Bluetooth LE. Vooraf koppelen is niet nodig — zoek ernaar in de app. Zelfs als het apparaat in de Bluetooth-koppelingslijst van het systeem verschijnt, koppel het dan niet; die route werkt niet. Als het zoeken niets vindt, sloeg 4.0 op de doos alleen op de chipspecificatie — gebruik dan Bluetooth Classic.';
+      'Kies Bluetooth LE. Vooraf koppelen is niet nodig — zoek ernaar in de app. Zelfs als het apparaat in de Bluetooth-koppelingslijst van het systeem verschijnt, koppel het dan niet; die route werkt niet. Als het zoeken niets oplevert, sloeg 4.0 op de doos alleen op de chipspecificatie — gebruik dan Bluetooth Classic.';
 
   @override
   String get connectAnswerBleWithoutClassic =>
-      'Kies Bluetooth LE. Vooraf koppelen is niet nodig — zoek ernaar in de app. Zelfs als het apparaat in de Bluetooth-koppelingslijst van het systeem verschijnt, koppel het dan niet; die route werkt niet. Als het zoeken niets vindt, controleer dan of de adapter stroom heeft of probeer in plaats daarvan Wi-Fi; dit systeem biedt geen Bluetooth Classic.';
+      'Kies Bluetooth LE. Vooraf koppelen is niet nodig — zoek ernaar in de app. Zelfs als het apparaat in de Bluetooth-koppelingslijst van het systeem verschijnt, koppel het dan niet; die route werkt niet. Als het zoeken niets oplevert, controleer dan of de adapter stroom heeft of probeer in plaats daarvan Wi-Fi; dit systeem biedt geen Bluetooth Classic.';
 
   @override
   String get connectAnswerClassic =>
@@ -99,7 +99,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String connectBleEmptyScan(String next) {
-    return 'Het zoeken is voltooid zonder een BLE-adapter te vinden. Controleer op volgorde: brandt het lampje op de adapter — de meeste OBD-poorten krijgen pas stroom als het contact op ON staat; daarna het bereik, dus ga in de auto zitten voordat je zoekt. $next Een BLE-adapter hoeft niet in de systeeminstellingen gekoppeld te worden en mag dat ook niet zijn; die route werkt niet.';
+    return 'Het zoeken is voltooid zonder dat er een BLE-adapter is gevonden. Controleer in deze volgorde: brandt het lampje op de adapter — de meeste OBD-poorten krijgen pas stroom als het contact op ON staat; daarna het bereik, dus ga in de auto zitten voordat je zoekt. $next Een BLE-adapter hoeft niet in de systeeminstellingen gekoppeld te worden en mag dat ook niet zijn; die route werkt niet.';
   }
 
   @override
@@ -165,7 +165,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get connectClassicListPaired =>
-      'Dit toont elk apparaat dat met het systeem is gekoppeld — inclusief koptelefoons en luidsprekers, met de apparaten die op adapters lijken bovenaan. Als je de verkeerde kiest, tik dan op Annuleren in plaats van te wachten tot het mislukt; je kunt meteen een andere kiezen.';
+      'Dit toont elk apparaat dat met het systeem is gekoppeld — inclusief koptelefoons en luidsprekers, met de apparaten die op adapters lijken bovenaan. Als je het verkeerde apparaat kiest, tik dan op Annuleren in plaats van te wachten tot het mislukt; je kunt meteen een ander kiezen.';
 
   @override
   String get connectClassicListWindowsPort =>
@@ -214,7 +214,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get connectIssueConnectionSetupFailed =>
-      'De verbinding is mislukt tijdens het opbouwen. Controleer of de adapter stroom heeft en dichtbij is, en probeer het opnieuw. De volledige fout staat in het logboek hieronder.';
+      'Het opbouwen van de verbinding is mislukt. Controleer of de adapter stroom heeft en dichtbij is, en probeer het opnieuw. De volledige fout staat in het logboek hieronder.';
 
   @override
   String get connectIssueHandshakeIncomplete =>
@@ -308,7 +308,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get connectWhichIntro =>
-      'Trek je niets aan van de termen SPP en GATT. Kijk naar wat je adapter doet zodra je hem aansluit:';
+      'Laat de termen SPP en GATT voor wat ze zijn. Kijk naar wat je adapter doet zodra je hem aansluit:';
 
   @override
   String get connectWhichNoteGuessing =>
@@ -537,11 +537,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get datumStatusFollowsData => 'Status volgt de gegevens';
 
   @override
-  String get datumStatusDetailsHint => 'Tik voor details over gegevensstatus';
+  String get datumStatusDetailsHint =>
+      'Tik voor details over de gegevensstatus';
 
   @override
   String get datumStatusUnverifiedExplanation =>
-      'Ongeverifieerd betekent dat er hier geen vergelijking met een echt voertuig voor deze decoder op jouw voertuig is gedocumenteerd. Het betekent niet dat de uitlezing fout is, en het certificeert de nauwkeurigheid niet. Actualiteit en fouten worden apart getoond.';
+      'Ongeverifieerd betekent dat er hier voor deze decoder op jouw voertuig geen vergelijking met een echt voertuig is gedocumenteerd. Het betekent niet dat de uitlezing fout is, en het certificeert de nauwkeurigheid niet. Actualiteit en fouten worden apart getoond.';
 
   @override
   String get datumStatusFormula => 'Formule';
@@ -579,7 +580,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String dtcBothSilentDetail(Object mode) {
-    return 'Het voertuig heeft niet geantwoord op het Mode $mode-uitleesverzoek en Mode 03 antwoordde evenmin — het valt dus niet te zeggen of het voertuig geen ondersteuning biedt of dat deze verbinding het simpelweg niet heeft uitgelezen.';
+    return 'Het voertuig heeft niet geantwoord op het Mode $mode-uitleesverzoek en op Mode 03 kwam evenmin antwoord — het valt dus niet te zeggen of het voertuig dit niet ondersteunt of dat deze verbinding het simpelweg niet heeft uitgelezen.';
   }
 
   @override
@@ -606,7 +607,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String dtcClearDialogFrames(Object codes) {
-    return 'Het freeze-frame voor $codes verdwijnt mee — de volledige registratie van motortoerental, koelvloeistoftemperatuur en motorbelasting op het moment dat de storing optrad — en kan niet opnieuw worden uitgelezen totdat de storing zich weer voordoet.';
+    return 'Het freeze-frame voor $codes gaat daarbij ook verloren — de volledige registratie van motortoerental, koelvloeistoftemperatuur en motorbelasting op het moment dat de storing optrad — en kan niet opnieuw worden uitgelezen totdat de storing zich weer voordoet.';
   }
 
   @override
@@ -617,10 +618,10 @@ class AppLocalizationsNl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count categorieën in deze scan hebben niet volledig geantwoord',
-      one: 'Eén categorie in deze scan heeft niet volledig geantwoord',
+      other: '$count categorieën in deze scan',
+      one: 'één categorie in deze scan',
     );
-    return '$_temp0 ($categories), dus er kunnen storingscodes zijn die je nog niet hebt gezien. Na het wissen kunnen ze nooit meer worden uitgelezen.';
+    return 'Bij $_temp0 ($categories) kwam geen volledig antwoord, dus er kunnen storingscodes zijn die je nog niet hebt gezien. Na het wissen kunnen ze nooit meer worden uitgelezen.';
   }
 
   @override
@@ -632,7 +633,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dtcClearFailureDoNotRepeat =>
-      'Er heeft mogelijk al een wisopdracht het voertuig bereikt. Stuur er geen tweede achteraan — een tweede globale wisopdracht kan de emissiegereedheid resetten op een regeleenheid die mogelijk al is gewist. Scan opnieuw om te zien wat er over is.';
+      'Mogelijk heeft een wisopdracht het voertuig al bereikt. Stuur er geen tweede achteraan — een tweede globale wisopdracht kan de emissiegereedheid resetten op een regeleenheid die mogelijk al is gewist. Scan opnieuw om te zien wat er over is.';
 
   @override
   String get dtcClearFailureGeneric =>
@@ -727,8 +728,8 @@ class AppLocalizationsNl extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          '$count items kwamen deze keer niet terug (er was mogelijk onvoldoende tijd of de regeleenheid antwoordde niet). Opnieuw scannen kan ze uitlezen.',
-      one: 'Eén item kwam deze keer niet terug (er was mogelijk onvoldoende tijd of de regeleenheid antwoordde niet). Opnieuw scannen kan het uitlezen.',
+          '$count items kwamen deze keer niet terug (er was mogelijk onvoldoende tijd of de regeleenheid antwoordde niet). Bij opnieuw scannen kunnen ze mogelijk wel worden uitgelezen.',
+      one: 'Eén item kwam deze keer niet terug (er was mogelijk onvoldoende tijd of de regeleenheid antwoordde niet). Bij opnieuw scannen kan het mogelijk wel worden uitgelezen.',
     );
     return '$_temp0';
   }
@@ -827,10 +828,10 @@ class AppLocalizationsNl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count regeleenheden implementeren',
-      one: 'Eén regeleenheid implementeert',
+      other: '$count regeleenheden',
+      one: 'één regeleenheid',
     );
-    return 'Alle drie de categorieën zijn volledig bevraagd. $_temp0 ($controllers) noch in afwachting zijnde noch permanente storingscodes — normaal bij veel voertuigen, en tevens de reden waarom dit voertuig niet storingsvrij kan worden verklaard.';
+    return 'Alle drie de categorieën zijn volledig bevraagd. Bij $_temp0 ($controllers) zijn noch in afwachting zijnde noch permanente storingscodes geïmplementeerd — normaal bij veel voertuigen, en tevens de reden waarom dit voertuig niet storingsvrij kan worden verklaard.';
   }
 
   @override
@@ -839,7 +840,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String dtcPartialCleanUnanswered(Object categories) {
-    return '$categories hebben niet geantwoord, dus hun status kan niet worden bevestigd — dat is niet hetzelfde als een voertuig zonder problemen.';
+    return 'Voor $categories kwam geen antwoord, dus de status daarvan kan niet worden bevestigd — dat is niet hetzelfde als een voertuig zonder problemen.';
   }
 
   @override
@@ -883,7 +884,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dtcReadinessSaysNothing =>
-      'Deze regeleenheid meldde helemaal geen gereedheidsmonitors — mogelijk is deze niet verantwoordelijk voor emissiebewaking, en dat betekent niet dat hij gereed is.';
+      'Deze regeleenheid meldde helemaal geen gereedheidsmonitors — mogelijk is deze niet verantwoordelijk voor emissiebewaking, en dat betekent niet dat deze gereed is.';
 
   @override
   String get dtcReadinessTitle => 'Emissiegereedheid';
@@ -896,7 +897,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dtcScanBody =>
-      'Leest Mode 03 opgeslagen, Mode 07 in afwachting en Mode 0A permanente storingscodes uit.';
+      'Leest opgeslagen (Mode 03), in afwachting zijnde (Mode 07) en permanente (Mode 0A) storingscodes uit.';
 
   @override
   String get dtcScanTitle => 'Scan het voertuig op storingscodes';
@@ -925,11 +926,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dtcSilentPendingDetail =>
-      'In afwachting zijnde storingscodes (Mode 07) hebben niet geantwoord. Mogelijk ondersteunt deze ECU de service niet, of is deze nu simpelweg niet uitgelezen — het uitblijven van een antwoord kan geen onderscheid maken tussen die twee en mag niet worden opgevat alsof er geen in afwachting zijnde storingen zijn. Het resultaat van de opgeslagen storingscodes blijft ongewijzigd.';
+      'Op het verzoek om in afwachting zijnde storingscodes (Mode 07) kwam geen antwoord. Mogelijk ondersteunt deze ECU de service niet, of is deze nu simpelweg niet uitgelezen — zonder antwoord zijn die twee niet van elkaar te onderscheiden, en dit mag niet worden opgevat alsof er geen in afwachting zijnde storingen zijn. Het resultaat van de opgeslagen storingscodes blijft ongewijzigd.';
 
   @override
   String get dtcSilentPermanentDetail =>
-      'Permanente storingscodes (Mode 0A) hebben niet geantwoord. Deze categorie kwam rond 2010 met de OBD-II-generatie mee, dus oudere voertuigen ondersteunen dit niet altijd — maar geen antwoord kan net zo goed betekenen dat het deze keer simpelweg niet is uitgelezen, en die twee zijn niet van elkaar te onderscheiden. Het resultaat van de opgeslagen storingscodes blijft ongewijzigd.';
+      'Op het verzoek om permanente storingscodes (Mode 0A) kwam geen antwoord. Deze categorie werd geïntroduceerd met de OBD-II-generatie van rond 2010, dus oudere voertuigen ondersteunen deze niet altijd — maar geen antwoord kan net zo goed betekenen dat deze nu simpelweg niet is uitgelezen, en die twee zijn niet van elkaar te onderscheiden. Het resultaat van de opgeslagen storingscodes blijft ongewijzigd.';
 
   @override
   String get dtcStartScan => 'Scan starten';
@@ -968,7 +969,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get fieldEventBody =>
-      'Druk alleen wanneer het voertuig volledig stilstaat, als passagier of als bestuurder van een geparkeerd voertuig. Gebeurtenissen delen één tijdlijn met de ruwe OBD-gegevens en er wordt direct geprobeerd op te slaan.';
+      'Gebruik deze knoppen alleen wanneer het voertuig volledig stilstaat, als passagier of als bestuurder van een geparkeerd voertuig. Gebeurtenissen delen één tijdlijn met de ruwe OBD-gegevens en de app probeert ze direct op te slaan.';
 
   @override
   String get fieldEventEngineStarted => 'Motor gestart';
@@ -1087,7 +1088,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get handshakeStepSpacesOff =>
-      'Spaties uitschakelen, bespaart een derde van het verkeer';
+      'Spaties uitschakelen (bespaart een derde van het verkeer)';
 
   @override
   String get handshakeStepSupportProbe =>
@@ -1169,7 +1170,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String performanceStateFinished(int target) {
-    return 'Voltooid 0 → $target km/h';
+    return '0 → $target km/h voltooid';
   }
 
   @override
@@ -1248,7 +1249,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String pidBulkWillAdd(int count) {
-    return 'Voegt $count toe. Hoe meer PID\'s er zijn ingeschakeld, hoe minder vaak elke afzonderlijke PID mogelijk wordt ververst.';
+    return 'Voegt er $count toe. Hoe meer PID\'s er zijn ingeschakeld, hoe minder vaak elke afzonderlijke PID mogelijk wordt ververst.';
   }
 
   @override
@@ -1345,7 +1346,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get pidEditorFieldName => 'Naam';
 
   @override
-  String get pidEditorFieldSample => 'Test-antwoordbytes';
+  String get pidEditorFieldSample => 'Testantwoordbytes';
 
   @override
   String get pidEditorFieldShortName => 'Korte naam (op de meter)';
@@ -1437,8 +1438,8 @@ class AppLocalizationsNl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count rijen gebruikten het standaard meterbereik',
-      one: '1 rij gebruikte het standaard meterbereik',
+      other: 'voor $count rijen is het standaard meterbereik gebruikt',
+      one: 'voor 1 rij is het standaard meterbereik gebruikt',
     );
     return '$_temp0';
   }
@@ -1448,8 +1449,8 @@ class AppLocalizationsNl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count items vervingen bestaande definities',
-      one: '1 item verving een bestaande definitie',
+      other: '$count items hebben bestaande definities vervangen',
+      one: '1 item heeft een bestaande definitie vervangen',
     );
     return '$_temp0';
   }
@@ -1607,7 +1608,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get powertrainCatalogScopeNote =>
-      'De catalogus is breed, maar “we hebben gegevens gevonden” betekent niet “jouw auto wordt ondersteund”. Vermeldingen uitsluitend voor onderzoek bevatten nooit een opdracht. Experimentele Mode 22-vermeldingen kunnen worden geïnstalleerd en gepolld, maar elke waarde krijgt het label ongeverifieerd; experimentele Mode 21 wordt eenmalig per bevestiging uitgelezen.';
+      'De catalogus is uitgebreid, maar “we hebben gegevens gevonden” betekent niet “jouw auto wordt ondersteund”. Vermeldingen die uitsluitend voor onderzoek zijn, bevatten nooit een opdracht. Experimentele Mode 22-vermeldingen kunnen worden geïnstalleerd en gepolld, maar elke waarde krijgt het label ongeverifieerd; experimentele Mode 21 wordt eenmalig per bevestiging uitgelezen.';
 
   @override
   String get powertrainCatalogSearchHint =>
@@ -1683,7 +1684,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get powertrainExperimentalParkedAck =>
-      'Het voertuig staat veilig geparkeerd; ik begrijp dat dit eenmalig uitleest en dat het getal alsnog niet van toepassing kan zijn';
+      'Het voertuig staat veilig geparkeerd; ik begrijp dat dit eenmalig wordt uitgelezen en dat het getal alsnog niet van toepassing kan zijn';
 
   @override
   String powertrainExperimentalWireLine(String responder, int bytes) {
@@ -1737,19 +1738,19 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get powertrainInstallDisclosureCommunity =>
-      'Installeren voegt uitsluitend alleen-lezen accu-PID\'s toe aan PID-beheer. Voordat het uitlezen begint, vraagt elke verbinding je op het dashboard te bevestigen dat deze auto dat model is. De gegevens komen uit communitybronnen en zijn onafhankelijk bevestigd; het blijft geen garantie van de fabrikant.';
+      'Installeren voegt uitsluitend alleen-lezen accu-PID\'s toe aan PID-beheer. Voordat het uitlezen begint, word je bij elke verbinding op het dashboard gevraagd te bevestigen dat deze auto dat model is. De gegevens komen uit communitybronnen en zijn onafhankelijk bevestigd; het blijft geen garantie van de fabrikant.';
 
   @override
   String get powertrainInstallDisclosureExperimental =>
-      'Installeren voegt uitsluitend alleen-lezen accu-PID\'s toe aan PID-beheer. Voordat het uitlezen begint, vraagt elke verbinding je op het dashboard te bevestigen dat deze auto dat model is. Dit is een experimentele decodering zonder vereiste van onafhankelijke bevestiging, ongeverifieerd op dit voertuig en nog steeds geen garantie van de fabrikant.';
+      'Installeren voegt uitsluitend alleen-lezen accu-PID\'s toe aan PID-beheer. Voordat het uitlezen begint, word je bij elke verbinding op het dashboard gevraagd te bevestigen dat deze auto dat model is. Dit is een experimentele decodering zonder vereiste van onafhankelijke bevestiging, ongeverifieerd op dit voertuig en nog steeds geen garantie van de fabrikant.';
 
   @override
   String get powertrainInstallDisclosureReady =>
-      'Installeren voegt uitsluitend alleen-lezen accu-PID\'s toe aan PID-beheer. Voordat het uitlezen begint, vraagt elke verbinding je op het dashboard te bevestigen dat deze auto dat model is. De brongegevens zijn vollediger; het blijft geen garantie van de fabrikant.';
+      'Installeren voegt uitsluitend alleen-lezen accu-PID\'s toe aan PID-beheer. Voordat het uitlezen begint, word je bij elke verbinding op het dashboard gevraagd te bevestigen dat deze auto dat model is. De brongegevens zijn vollediger; het blijft geen garantie van de fabrikant.';
 
   @override
   String get powertrainInstallDisclosureResearchOnly =>
-      'Installeren voegt uitsluitend alleen-lezen accu-PID\'s toe aan PID-beheer. Voordat het uitlezen begint, vraagt elke verbinding je op het dashboard te bevestigen dat deze auto dat model is. Deze vermelding is uitsluitend voor onderzoek en mag niet worden geïnstalleerd.';
+      'Installeren voegt uitsluitend alleen-lezen accu-PID\'s toe aan PID-beheer. Voordat het uitlezen begint, word je bij elke verbinding op het dashboard gevraagd te bevestigen dat deze auto dat model is. Deze vermelding is uitsluitend voor onderzoek en mag niet worden geïnstalleerd.';
 
   @override
   String get powertrainInstallCatalogShaMissing =>
@@ -1785,8 +1786,8 @@ class AppLocalizationsNl extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          '$count signalen geïnstalleerd. Voeg ze toe aan het dashboard vanaf de PID-pagina; elke verbinding vereist een voertuigbevestiging.',
-      one: '1 signaal geïnstalleerd. Voeg het toe aan het dashboard vanaf de PID-pagina; elke verbinding vereist een voertuigbevestiging.',
+          '$count signalen geïnstalleerd. Voeg ze vanaf de PID-pagina toe aan het dashboard; bij elke verbinding is een voertuigbevestiging vereist.',
+      one: '1 signaal geïnstalleerd. Voeg het vanaf de PID-pagina toe aan het dashboard; bij elke verbinding is een voertuigbevestiging vereist.',
     );
     return '$_temp0';
   }
@@ -1895,7 +1896,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get powertrainRefusedNoLiveAuthorization =>
-      'De eenmalige uitlezing is niet gestart: er is geen actieve eenmalige autorisatie. Er is geen autorisatie gegeven, of deze is verlopen, in afkoeltijd gegaan of in quarantaine geplaatst.';
+      'De eenmalige uitlezing is niet gestart: er is geen actieve eenmalige autorisatie. Er is geen autorisatie gegeven, of deze is verlopen, zit in een afkoelperiode of is in quarantaine geplaatst.';
 
   @override
   String get powertrainRefusedDiscardedAtLifecycleBoundary =>
@@ -2167,7 +2168,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String settingsEpaPickerScope(int firstYear, int lastYear) {
-    return 'Uitsluitend momentopname-configuraties voor de Amerikaanse markt voor $firstYear–$lastYear. Modellen met dezelfde naam hebben nog steeds het modeljaar, de transmissie, de brandstof en de EPA-ID nodig om ze uit elkaar te houden.';
+    return 'Uitsluitend momentopname-configuraties voor de Amerikaanse markt voor $firstYear–$lastYear. Voor modellen met dezelfde naam zijn nog steeds het modeljaar, de transmissie, de brandstof en de EPA-ID nodig om ze uit elkaar te houden.';
   }
 
   @override
@@ -2329,7 +2330,7 @@ class AppLocalizationsNl extends AppLocalizations {
     int conflict,
     int total,
   ) {
-    return 'Vaststelling: officieel exact $exact / $total velden · deze sessie bevestigd $sessionConfirmed / $total · onopgelost $unresolved / $total · meerduidig $ambiguous / $total · tegenstrijdig $conflict / $total';
+    return 'Vaststelling: officieel exact $exact / $total velden · in deze sessie bevestigd $sessionConfirmed / $total · onopgelost $unresolved / $total · meerduidig $ambiguous / $total · tegenstrijdig $conflict / $total';
   }
 
   @override
@@ -2796,7 +2797,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get telemetryStartLibraryByteLimit =>
-      'Niet genoeg lokale opslag voor een opname — exporteer of verwijder er eerst enkele';
+      'Niet genoeg lokale opslagruimte voor een opname — exporteer of verwijder eerst enkele opnamen';
 
   @override
   String telemetryStartLibraryGroupLimit(int limit) {
@@ -2908,7 +2909,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get transcriptExportExplanation =>
-      'Deze verbinding bewaart de openingshandshake en het meest recente ruwe verkeer; als bij een lange verbinding het middendeel wegvalt, vermeldt het bestand dat. Wanneer iets op de auto niet wil uitlezen, is het exporteren en meesturen van het diagnoselogboek veel waardevoller dan één melding op het scherm.';
+      'Deze verbinding bewaart de openingshandshake en het meest recente ruwe verkeer; als bij een lange verbinding het middendeel wegvalt, vermeldt het bestand dat. Wanneer iets bij de auto niet kan worden uitgelezen, is het exporteren en meesturen van het diagnoselogboek veel waardevoller dan één melding op het scherm.';
 
   @override
   String transcriptExportFailed(String error) {
@@ -3094,7 +3095,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dtcKindPendingExplanation =>
-      'Eenmaal gedetecteerd en heeft de bevestigingsdrempel nog niet bereikt.';
+      'Eenmaal gedetecteerd; de bevestigingsdrempel is nog niet bereikt.';
 
   @override
   String get dtcKindPermanentExplanation =>
@@ -3365,7 +3366,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Hoog ingangssignaal circuit gasklep-/pedaalpositiesensor B';
 
   @override
-  String get dtcDescriptionP0234 => 'Overdrukconditie turbo/supercharger';
+  String get dtcDescriptionP0234 => 'Laaddruk turbo/compressor te hoog';
 
   @override
   String get dtcDescriptionP0299 => 'Laaddruk turbo/compressor A te laag';
@@ -3580,11 +3581,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dtcDescriptionP0603 =>
-      'Fout in keep-alive-geheugen (KAM) van interne regeleenheid';
+      'Interne fout in keep-alive-geheugen (KAM) van regeleenheid';
 
   @override
   String get dtcDescriptionP0605 =>
-      'Fout in alleen-lezen-geheugen (ROM) van interne regeleenheid';
+      'Interne fout in alleen-lezen-geheugen (ROM) van regeleenheid';
 
   @override
   String get dtcDescriptionP0606 => 'Processorfout ECM/PCM';
@@ -3651,7 +3652,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dtcDescriptionU0155 =>
-      'Communicatie met de instrumentenpaneel-regeleenheid verbroken';
+      'Communicatie met de regeleenheid van het instrumentenpaneel verbroken';
 
   @override
   String get gaugeSkinCluster => 'Cluster';
@@ -3811,7 +3812,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get adapterConcernFirmwareNeverReleasedDetail =>
-      'Elm Electronics heeft deze versie nooit uitgebracht, dus de firmware op deze adapter is niet degene die hij beweert te zijn. Veel van zulke adapters werken nog steeds — maar zijn beschrijving van zichzelf is niet te vertrouwen, en het is de eerste verdachte wanneer iets niet wil uitlezen.';
+      'Elm Electronics heeft deze versie nooit uitgebracht, dus de firmware op deze adapter is niet de versie die hij beweert te hebben. Veel van zulke adapters werken nog steeds — maar zijn beschrijving van zichzelf is niet te vertrouwen, en het is de moeite waard om hem als eerste te verdenken wanneer iets niet kan worden uitgelezen.';
 
   @override
   String adapterConcernPpsRefusedSummary(String version) {
@@ -3852,19 +3853,19 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get connectTransportWifiRouteRefused =>
-      'Het systeem weigerde deze verbinding via Wi-Fi te sturen. De telefoon is verbonden met Wi-Fi; die verbinding mocht hiervoor niet worden gebruikt.';
+      'Het systeem weigerde deze verbinding via Wi-Fi te laten lopen. De telefoon is verbonden met Wi-Fi; die verbinding mocht hiervoor niet worden gebruikt.';
 
   @override
   String get connectTransportWifiRouteTimeout =>
-      'Het systeem heeft niet geantwoord op het verzoek om deze verbinding via Wi-Fi te sturen. Wacht een paar seconden en probeer het opnieuw.';
+      'Het systeem heeft niet geantwoord op het verzoek om deze verbinding via Wi-Fi te laten lopen. Wacht een paar seconden en probeer het opnieuw.';
 
   @override
   String get connectTransportWifiRouteUnclassified =>
-      'De verbinding kon niet via Wi-Fi worden verstuurd, om een reden die het systeem niet heeft genoemd. De volledige fout staat in het logboek hieronder.';
+      'De verbinding kon niet via Wi-Fi worden geleid, om een reden die het systeem niet heeft genoemd. De volledige fout staat in het logboek hieronder.';
 
   @override
   String get connectTransportWifiHostUnreachable =>
-      'Er kwam geen antwoord op dat adres. Controleer of de telefoon is verbonden met de Wi-Fi-hotspot van de adapter — als het systeem vroeg of je verbonden wilt blijven zonder internet, kies dan om te blijven. Mobiele data uitschakelen kan ook helpen.';
+      'Er kwam geen antwoord op dat adres. Controleer of de telefoon is verbonden met de Wi-Fi-hotspot van de adapter — als het systeem vroeg of je verbonden wilt blijven zonder internet, kies er dan voor om verbonden te blijven. Mobiele data uitschakelen kan ook helpen.';
 
   @override
   String get connectTransportWifiConnectTimeout =>
@@ -3872,7 +3873,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get connectTransportWifiRouteRestoreFailed =>
-      'De verbinding werkte, maar de netwerkroutering van de telefoon kon niet worden teruggezet, dus de verbinding is verbroken in plaats van gewijzigd achtergelaten. Herstart de app en probeer het opnieuw.';
+      'De verbinding werkte, maar de netwerkroutering van de telefoon kon niet worden teruggezet, dus de verbinding is verbroken in plaats van de routering gewijzigd achter te laten. Herstart de app en probeer het opnieuw.';
 
   @override
   String get connectTransportBleLinkFailed =>
@@ -3936,7 +3937,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get commandFailureBusJ1939 =>
-      'Deze bus is SAE J1939 (zware bedrijfsvoertuigen en machines), niet het OBD2-diagnoseprotocol dat deze app uitleest, dus dit uitleesverzoek kan niet worden uitgelezen.';
+      'Deze bus is SAE J1939 (zware bedrijfsvoertuigen en machines), niet het OBD2-diagnoseprotocol dat deze app uitleest, dus dit verzoek kan niet worden uitgelezen.';
 
   @override
   String commandFailureUserCanFramingUnknown(
@@ -3964,7 +3965,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get settingsManualCommandRawIsoTpModeUnavailable =>
-      'Door het systeem zichtbare ISO-TP-herassemblage is niet beschikbaar op dit ELM327-pad.';
+      'Voor het systeem zichtbare ISO-TP-herassemblage is niet beschikbaar op dit ELM327-pad.';
 
   @override
   String get settingsManualCommandCanPriorityUnavailable =>
@@ -3996,7 +3997,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get manualCommandRefusedClearHasItsOwnButton =>
-      'Gebruik om storingscodes te wissen de knop Wissen op het scherm Storingscodes. Vanaf hier verzonden zou de opdracht de bevestiging, de dekkingscontrole en de antwoordvalidatie overslaan en alleen de ene regeleenheid bereiken die momenteel is geselecteerd.';
+      'Gebruik de knop Wissen op het scherm Storingscodes om storingscodes te wissen. Vanaf hier verzonden zou de opdracht de bevestiging, de dekkingscontrole en de antwoordvalidatie overslaan en alleen de ene regeleenheid bereiken die momenteel is geselecteerd.';
 
   @override
   String manualCommandRefusedCharactersNoObdCommandHas(Object command) {
@@ -4020,7 +4021,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String commandFailureLegacyScanWouldBePartial(Object installed) {
-    return 'Dit voertuig gebruikt een oudere bus zonder standaardadres dat elke regeleenheid bereikt, en de adapter staat momenteel ingesteld op regeleenheid $installed. Een scan zou uitsluitend die ene regeleenheid hebben gedekt terwijl het resultaat als het hele voertuig zou zijn gepresenteerd, dus de scan is niet verzonden. Verbind opnieuw en scan daarna nogmaals.';
+    return 'Dit voertuig gebruikt een oudere bus zonder standaardadres dat elke regeleenheid bereikt, en de adapter staat momenteel ingesteld op regeleenheid $installed. Een scan zou uitsluitend die ene regeleenheid hebben gedekt terwijl het resultaat als een resultaat voor het hele voertuig zou zijn gepresenteerd, dus de scan is niet verzonden. Verbind opnieuw en scan daarna nogmaals.';
   }
 
   @override
@@ -4084,7 +4085,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get pidFormulaBaroTwoDefinitions =>
-      'Twee definities leveren beide de omgevingsdruk, waardoor de waarde elk van beide kan zijn en geen van beide kan worden gebruikt. Verwijder een van de meters die de omgevingsdruk meet.';
+      'Twee definities leveren allebei de omgevingsdruk, waardoor beide waarden mogelijk zijn en geen van beide kan worden gebruikt. Verwijder een van de meters die de omgevingsdruk meet.';
 
   @override
   String get pidFormulaBaroNotYetMeasured =>
@@ -4114,7 +4115,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String pidFormulaDependencyTwoDefinitions(String key) {
-    return 'Twee definities decoderen beide $key, waardoor de waarde elk van beide kan zijn en geen van beide kan worden gebruikt. Wijzig een van beide naar een andere mode+PID. Let op: de PID\'s die voor de schattingen nodig zijn (010B, 010C, 010D) worden altijd uitgelezen, dus een meter van het dashboard halen stopt ze niet.';
+    return 'Twee definities decoderen allebei $key, waardoor beide waarden mogelijk zijn en geen van beide kan worden gebruikt. Wijzig een van beide naar een andere mode+PID. Let op: de PID\'s die voor de schattingen nodig zijn (010B, 010C, 010D) worden altijd uitgelezen, dus een meter van het dashboard halen stopt ze niet.';
   }
 
   @override
@@ -4201,12 +4202,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String pidImportDuplicateHeaderColumns(String columns) {
-    return 'De koptekstrij noemt dezelfde kolom twee keer: $columns. Het is niet te bepalen welke moet worden gebruikt, dus herstel eerst het bestand.';
+    return 'De koprij noemt dezelfde kolom twee keer: $columns. Het is niet te bepalen welke moet worden gebruikt, dus herstel eerst het bestand.';
   }
 
   @override
   String pidImportMissingRequiredColumns(String columns, String required) {
-    return 'In de koptekstrij ontbreken vereiste kolommen: $columns. $required zijn allemaal nodig.';
+    return 'In de koprij ontbreken vereiste kolommen: $columns. $required zijn allemaal nodig.';
   }
 
   @override
@@ -4294,7 +4295,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String dtcCategoryMilLitNoCodes(String controller) {
-    return '$controller meldde dat het storingslampje brandt, maar er zijn geen storingscodes van uitgelezen. Vertrouw op het storingslampje op het dashboard en raadpleeg een werkplaats.';
+    return '$controller meldde dat het storingslampje brandt, maar er zijn daarvan geen storingscodes uitgelezen. Vertrouw op het storingslampje op het dashboard en raadpleeg een werkplaats.';
   }
 
   @override
@@ -4488,7 +4489,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Dat modeljaar valt buiten het gedocumenteerde jaarbereik van dit profiel.';
 
   @override
-  String get connectionLayerTransport => 'Verbindingsweg';
+  String get connectionLayerTransport => 'Verbindingstype';
 
   @override
   String get connectionLayerProtocol => 'Protocol';
@@ -4591,14 +4592,14 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get serviceRecipesSubtitle =>
-      'Standaardgebonden servicerecepten en niet-aansturende functieherkenning';
+      'Aan standaarden gekoppelde servicerecepten en niet-aansturende functieherkenning';
 
   @override
   String get serviceRecipesSafetyBannerTitle => 'Geen live kandidaten';
 
   @override
   String get serviceRecipesSafetyBannerBody =>
-      'Live fysieke voertuigaansturing is strikt verboden (0 gekwalificeerde voertuigen). Beschikbare recepten zijn uitsluitend simulatie-opstellingen.';
+      'Live aansturing van een fysiek voertuig is strikt verboden (0 gekwalificeerde voertuigen). Beschikbare recepten zijn uitsluitend simulatie-opstellingen.';
 
   @override
   String get serviceRecipesDiscoverySection =>
@@ -4692,7 +4693,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get mode08ReasonUnheaderedLimitation =>
-      'Bronherkomst en dekking onbevestigd: antwoorden zonder header kunnen geen blokoverstijgende ECU-identiteit vaststellen';
+      'Brontoewijzing en dekking onbevestigd: antwoorden zonder header kunnen de ECU-identiteit niet over meerdere blokken vaststellen';
 
   @override
   String mode08ReasonNoResponseWithEcu(
@@ -4756,7 +4757,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get mode08ReasonUnexpectedExecution =>
-      'Onverwacht uitvoeringsantwoord op uitleesverzoek naar ondersteunde TID\'s';
+      'Onverwacht uitvoeringsantwoord op uitleesverzoek voor ondersteunde TID\'s';
 
   @override
   String get pidDetailEmptyTitle => 'Selecteer een PID';
@@ -4821,7 +4822,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get performanceNoAnalysisBody =>
-      'Deze run stopte voordat er genoeg snelheidsmetingen waren opgenomen om een verloop of tussentijd op te bouwen.';
+      'Deze run stopte voordat er genoeg snelheidsuitlezingen waren opgenomen om een snelheidsverloop of tussentijden op te stellen.';
 
   @override
   String get connectActivityReconnectingAutomatically =>

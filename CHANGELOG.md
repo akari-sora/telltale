@@ -10,12 +10,12 @@ Dates are the date the build was made, not the date it reached anyone.
 
 - Add Japanese, Korean, Spanish, French, Brazilian Portuguese, Simplified Chinese,
   Italian and Dutch to the app and Android Auto; add German Android Auto strings.
-  Native-speaker screen review has not been performed; some translation reviews remain pending.
+  The eight translations completed model review; no native speaker has read them on a screen.
 
 ### 繁體中文
 
 - App 與 Android Auto 新增日文、韓文、西班牙文、法文、巴西葡萄牙文、簡體中文、
-  義大利文與荷蘭文，Android Auto 另新增德文。尚未完成母語者螢幕閱讀，部分翻譯審查仍在進行。
+  義大利文與荷蘭文，Android Auto 另新增德文。八種新增翻譯已完成模型審查，尚未由母語者在螢幕上閱讀。
 
 ## 1.0.26 — 2026-11-02
 

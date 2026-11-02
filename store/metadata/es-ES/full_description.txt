@@ -4,7 +4,7 @@ Esta aplicación se organiza en torno a una frase:
 
 Un número erróneo pero plausible es peor que ningún número.
 
-Sobre los resultados de diagnóstico se actúa con una llave mecánica. Una lectura de refrigerante de −40 °C hace que se sustituya un sensor; «sin códigos de fallo» manda a alguien a circular en un vehículo que sigue teniendo un problema. Por eso cada regla aquí existe para que la incertidumbre se vea como incertidumbre, y no como una respuesta.
+Sobre los resultados de diagnóstico se actúa con una llave inglesa. Una lectura de refrigerante de −40 °C hace que se sustituya un sensor; «sin códigos de fallo» manda a alguien a circular en un vehículo que sigue teniendo un problema. Por eso cada regla aquí existe para que la incertidumbre se vea como incertidumbre, y no como una respuesta.
 
 〇Qué hace
 
@@ -40,8 +40,8 @@ Las compilaciones de F-Droid, de lanzamiento en GitLab y de Google Play usan tre
 
 〇Qué necesita
 
-Un adaptador OBD2 ELM327 (Bluetooth o Wi-Fi) y un vehículo compatible con OBD2. Sigue conectando y leyendo sin una entrada de catálogo ni datos del vehículo.
+Un adaptador OBD2 ELM327 (Bluetooth o Wi-Fi) y un vehículo compatible con OBD2. Sigue conectándose y leyendo sin una entrada de catálogo ni datos del vehículo.
 
 〇Aviso
 
-Esta aplicación no está afiliada, respaldada ni derivada de Torque o Torque Pro de Ian Hawkins. La implementación OBD2 sigue estándares públicos, incluidos SAE J1979 y la hoja de datos de ELM327.
+Esta aplicación no está afiliada a Torque o Torque Pro de Ian Hawkins, ni cuenta con su respaldo ni deriva de ellos. La implementación OBD2 sigue estándares públicos, incluidos SAE J1979 y la hoja de datos de ELM327.

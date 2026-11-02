@@ -2,6 +2,6 @@
 <resources>
     <string name="projection_notification_channel_name">Connessione adattatore OBD</string>
     <string name="projection_notification_title">Adattatore OBD connesso a Telltale</string>
-    <string name="projection_notification_live_body">La telemetria del veicolo in tempo reale continua per Android Auto</string>
+    <string name="projection_notification_live_body">La telemetria del veicolo in tempo reale prosegue per Android Auto</string>
     <string name="projection_notification_waiting_body">In attesa di Android Auto</string>
 </resources>

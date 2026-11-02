@@ -2,7 +2,7 @@ Lees je auto uit via een ELM327-adapter: live toerental, snelheid, koelvloeistof
 
 Deze app is opgebouwd rond één zin:
 
-Een plausibel fout getal is erger dan geen getal.
+Een plausibel maar fout getal is erger dan geen getal.
 
 Op basis van diagnoseresultaten wordt er gesleuteld. Een koelvloeistoftemperatuur van −40 °C leidt tot het vervangen van een sensor; "geen storingscodes" stuurt iemand op pad met een auto die nog steeds een probleem heeft. Elke regel hier bestaat dan ook om onzekerheid eruit te laten zien als onzekerheid, in plaats van als een antwoord.
 
@@ -10,7 +10,7 @@ Op basis van diagnoseresultaten wordt er gesleuteld. Een koelvloeistoftemperatuu
 
 • Zes handgetekende meters in vijf stijlen — niet alleen andere kleuren: de vorm van de wijzerplaat, de naald en de beweging verschillen. Zowel donkere als lichte achtergronden
 • Storingscodes: Mode 03 opgeslagen, Mode 07 in afwachting, Mode 0A permanent, elk voorzien van het label van de regeleenheid die de code heeft gemeld
-• Freeze-frame: de voertuigstatus op het moment dat de storing werd bevestigd — toerental, koelvloeistof, motorbelasting, brandstofcorrectie. Dit is de enige registratie in de app van de omstandigheden terwijl de storing plaatsvond, en het wissen van de codes vernietigt deze definitief, dus de app vraagt eerst om bevestiging
+• Freeze-frame: de voertuigstatus op het moment dat de storing werd bevestigd — toerental, koelvloeistof, motorbelasting, brandstofcorrectie. Dit is de enige registratie in de app van de omstandigheden terwijl de storing optrad, en het wissen van de codes vernietigt deze definitief, dus de app vraagt eerst om bevestiging
 • Emissiegereedheid: bekijk vóór een keuring welke monitors zijn voltooid
 • Afgeleide waarden: vermogen, koppel, brandstofverbruik, luchtstroom. Algemene OBD werkt nog steeds zonder VIN en zonder catalogusmatch; schattingen worden gelabeld met de formule en de voertuigaannames waarop ze berusten, en zijn geen metingen
 • Aangepaste PID's: schrijf je eigen formules, met CSV-import en -export

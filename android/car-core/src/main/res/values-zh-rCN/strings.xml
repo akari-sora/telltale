@@ -4,7 +4,7 @@
     <string name="car_home_status_title">车辆监控</string>
     <string name="car_home_status_body">Android for Cars 基础框架已运行</string>
     <string name="car_home_data_title">车辆数据</string>
-    <string name="car_home_data_body">AA-01 中尚未连接遥测桥</string>
+    <string name="car_home_data_body">AA-01 中尚未连接遥测桥接</string>
     <string name="car_home_safety_title">只读投影</string>
     <string name="car_home_safety_body">不提供车辆指令或破坏性操作</string>
     <string name="car_home_speed_title">车速</string>
@@ -42,7 +42,7 @@
     <string name="car_dtc_no_codes">未观测到诊断故障码</string>
     <string name="car_dtc_status_not_scanned">尚未扫描</string>
     <string name="car_dtc_status_scanning">扫描中</string>
-    <string name="car_dtc_status_partial_clean">覆盖不全；已完成部分未观测到故障</string>
+    <string name="car_dtc_status_partial_clean">覆盖不完整 / 已完成部分未观测到故障</string>
     <string name="car_dtc_status_unavailable">诊断不可用 / 不完整</string>
     <string name="car_dtc_more_items_format">另有 %d 条诊断故障码未显示</string>
     <string name="car_dtc_parked_only_notice">仅限停车时使用</string>

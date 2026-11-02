@@ -14,7 +14,7 @@ Resultados de diagnóstico viram ação com ferramenta. Uma leitura de −40 °C
 • Prontidão de emissões: veja quais monitores foram concluídos antes de uma inspeção
 • Valores derivados: potência, torque, consumo, fluxo de ar. OBD genérico ainda funciona sem VIN e sem correspondência de catálogo; as estimativas são rotuladas com a fórmula e as premissas do veículo em que se apoiam, e não são medições
 • PIDs personalizados: escreva suas próprias fórmulas, com importação e exportação CSV
-• Teste de aceleração: cronometrado de parado até uma velocidade-alvo
+• Teste de aceleração: cronometrado partindo da imobilidade até uma velocidade-alvo
 • Transcrição de diagnóstico: cada byte trocado com o adaptador é guardado e pode ser exportado quando a conexão falha; gravação e exportação mantêm seus rótulos de status
 • English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano e Nederlands: altere o idioma na tela de conexão e nas configurações ou siga o idioma do sistema. Algumas mensagens ainda estão disponíveis apenas em chinês tradicional
 
@@ -25,18 +25,18 @@ Bluetooth Classic (RFCOMM/SPP), Bluetooth LE (GATT UART), Wi-Fi (TCP) e um simul
 〇O que ele deliberadamente se recusa a fazer
 
 • Não transforma "os controladores que responderam não reportaram códigos" em "este veículo não tem códigos de falha"
-• Quando dois controladores respondem a mesma pergunta de forma diferente, não usa nenhuma — escolher uma é escolher ao acaso
+• Quando dois controladores respondem à mesma pergunta de forma diferente, não usa nenhuma das respostas — escolher uma é escolher ao acaso
 • Leituras não verificadas continuam usáveis e rotuladas com origem e estado (não verificado / estimado / anômalo); um pacote malformado nunca vira um número que parece plausível
 • Sem anúncios, sem rastreamento, sem coleta de dados pessoais
 
 〇Código aberto
 
-O código-fonte está no GitLab sob GPL-3.0, e você pode compilá-lo você mesmo:
+O código-fonte está no GitLab sob GPL-3.0, e você mesmo pode compilá-lo:
 https://gitlab.com/aa22396584/telltale
 
 A edição paga do Play tem exatamente os mesmos recursos — nada é retido. É para quem prefere não compilar, e para quem quer apoiar o desenvolvimento contínuo.
 
-As builds do F-Droid, do GitLab release e do Google Play usam três chaves de assinatura diferentes. Elas não podem se atualizar uma à outra no lugar; isso é intencional.
+As builds do F-Droid, do GitLab release e do Google Play usam três chaves de assinatura diferentes. Elas não podem ser instaladas como atualizações umas das outras; isso é intencional.
 
 〇O que você precisa
 
@@ -44,4 +44,4 @@ Um adaptador OBD2 ELM327 (Bluetooth ou Wi-Fi) e um veículo compatível com OBD2
 
 〇Aviso
 
-Este app não é afiliado a, endossado por, nem derivado do Torque ou Torque Pro de Ian Hawkins. A implementação OBD2 segue padrões públicos, incluindo SAE J1979 e o datasheet do ELM327.
+Este app não é afiliado ao Torque ou Torque Pro de Ian Hawkins, nem é endossado por eles ou deles derivado. A implementação OBD2 segue padrões públicos, incluindo SAE J1979 e o datasheet do ELM327.

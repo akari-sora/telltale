@@ -1,8 +1,8 @@
 # Localization working documents
 
 Telltale supports eleven UI languages. The claim depends on the language and surface.
-The eight additions are being integrated from reviewed translation packets; their
-final review status is stated below.
+The eight additions use the reviewed final translation packets; the review record and
+its limits are stated below.
 
 | Language | UI translation claim | Android Auto claim |
 |---|---|---|
@@ -18,13 +18,37 @@ final review status is stated below.
 | Italian (`it`) | New-language claim and review status below | Same claim and status |
 | Dutch (`nl`) | New-language claim and review status below | Same claim and status |
 
-The eight new languages were translated by an LLM from the English template. Their
-packets were mechanically checked for keys, ICU arguments, plural/select forms,
-do-not-translate tokens and XML escaping, and reviewed by a different model. Repeated
-Codex hedge passes are required until a pass finds no meaning blockers. The final pass
-is complete for Brazilian Portuguese and Dutch; it remains pending for Japanese,
-Korean, Spanish, French, Italian and Simplified Chinese. None has been read by a
-native speaker on a screen. Integration verification is tracked separately.
+The eight new languages are LLM translations of the English template. Each packet
+was mechanically checked for keys, ICU arguments, plural/select branches,
+do-not-translate tokens, Android XML escaping and store length limits, then reviewed
+by a second model. Codex reviewed each against the [hedge register](hedge-register.md):
+for seven languages, two to five full passes were made; Dutch had one full pass.
+A pass found no meaning blocker, or the remaining findings were fixed and the changed
+strings were re-read against English. Korean's four reported results include two
+parallel reviewers, whose findings differed rather than forming one linear sequence.
+
+A Gemini 4 Argon fluency pass followed. Every string it changed was re-read against
+English to check that its force was preserved: 69–99 changes per language, with 27
+corrected in total. The handoff records these results:
+
+| Language | Second-model reviewer | Codex passes: blockers found | Fluency changes / corrected |
+|---|---|---|---|
+| Japanese | Grok | 4: 18, 5, 2, 0 | 94 / 9 |
+| Korean | Codex | 4: 12, 2, 9, 4; includes two parallel reviewers | 99 / 2 |
+| Spanish | agy | 2: 1, 0 | 95 / 4 |
+| French | agy | 3: 5, 1, 0 | 93 / 0 |
+| Brazilian Portuguese | Codex | 2: 2, 0 | 89 / 3 |
+| Simplified Chinese | Codex | 5: 32, 18, 4, 2, 0 | 85 / 5 |
+| Italian | Grok | 3: 1, 1, 0 | 87 / 3 |
+| Dutch | Codex | 1: 0; 48 major findings fixed and re-read | 69 / 1 |
+
+No native speaker has read these translations on a screen. Two independent reviewers
+of the same Korean file found entirely different problems, so residual defects are
+likely. A translation that weakens, adds or drops a qualifier is a defect: please
+report it using the guidance in [CONTRIBUTING.md](../../CONTRIBUTING.md). Integration
+and device verification are tracked separately. The adjusted store language and
+readiness bullets and the machine-translated current-version release notes were not
+part of the packets' model review; the release notes have not been reviewed.
 
 Chinese scripts take priority over regions: Hans/CN/SG resolve to Simplified Chinese;
 Hant/TW/HK/MO resolve to Traditional Chinese. Bare `zh` retains the existing Traditional

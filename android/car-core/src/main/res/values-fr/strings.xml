@@ -42,7 +42,7 @@
   <string name="car_dtc_no_codes">Aucun code de diagnostic observé</string>
   <string name="car_dtc_status_not_scanned">Non analysé</string>
   <string name="car_dtc_status_scanning">Analyse en cours</string>
-  <string name="car_dtc_status_partial_clean">Couverture incomplète / aucun défaut observé dans les parties achevées</string>
+  <string name="car_dtc_status_partial_clean">Couverture incomplète / aucun défaut observé dans les parties terminées</string>
   <string name="car_dtc_status_unavailable">Diagnostic indisponible / incomplet</string>
   <string name="car_dtc_more_items_format">%d codes de diagnostic supplémentaires non affichés</string>
   <string name="car_dtc_parked_only_notice">Uniquement en stationnement</string>
@@ -65,6 +65,6 @@
   <string name="car_alert_high">Élevé</string>
   <string name="car_alert_attention">Attention</string>
   <string name="car_action_enable_speed">Activer la vitesse du véhicule</string>
-  <string name="car_speed_permission_phone_handoff">Terminez l\'autorisation d\'accès à la vitesse du véhicule sur votre téléphone en stationnement.</string>
-  <string name="car_speed_permission_handoff">Terminez l\'autorisation d\'accès à la vitesse du véhicule en stationnement.</string>
+  <string name="car_speed_permission_phone_handoff">Finalisez l\'autorisation d\'accès à la vitesse du véhicule sur votre téléphone en stationnement.</string>
+  <string name="car_speed_permission_handoff">Finalisez l\'autorisation d\'accès à la vitesse du véhicule en stationnement.</string>
 </resources>

@@ -71,11 +71,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get connectAnswerBleWithClassic =>
-      'Bluetooth LE를 선택하십시오. 사전 페어링이 필요하지 않으며 앱 안에서 직접 스캔하면 됩니다. 시스템 블루투스 페어링 목록에 나타나더라도 거기서 페어링하지 마십시오 — 그 경로로는 작동하지 않습니다. 스캔해도 아무것도 나오지 않는다면 박스에 적힌 4.0은 칩 사양일 뿐이므로 대신 Bluetooth Classic을 사용하십시오.';
+      'Bluetooth LE를 선택하십시오. 사전 페어링은 필요하지 않으며 앱 안에서 바로 검색하면 됩니다. 시스템 블루투스 페어링 목록에 나타나더라도 그 목록에서 페어링하지 마십시오 — 그 경로로는 작동하지 않습니다. 검색해도 아무것도 나오지 않는다면 박스에 적힌 4.0은 칩 사양일 뿐이므로 대신 Bluetooth Classic을 사용하십시오.';
 
   @override
   String get connectAnswerBleWithoutClassic =>
-      'Bluetooth LE를 선택하십시오. 사전 페어링이 필요하지 않으며 앱 안에서 직접 스캔하면 됩니다. 시스템 블루투스 페어링 목록에 나타나더라도 거기서 페어링하지 마십시오 — 그 경로로는 작동하지 않습니다. 스캔해도 아무것도 나오지 않는다면 어댑터에 전원이 들어왔는지 확인하거나 대신 Wi-Fi를 시도해 보십시오(이 호스트에서는 Bluetooth Classic을 제공하지 않습니다).';
+      'Bluetooth LE를 선택하십시오. 사전 페어링은 필요하지 않으며 앱 안에서 바로 검색하면 됩니다. 시스템 블루투스 페어링 목록에 나타나더라도 그 목록에서 페어링하지 마십시오 — 그 경로로는 작동하지 않습니다. 검색해도 아무것도 나오지 않는다면 어댑터에 전원이 들어왔는지 확인하거나 대신 Wi-Fi를 시도해 보십시오(이 호스트에서는 Bluetooth Classic을 제공하지 않습니다).';
 
   @override
   String get connectAnswerClassic =>
@@ -95,7 +95,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String connectBleEmptyScan(String next) {
-    return '검색이 끝났지만 BLE 어댑터를 찾지 못했습니다. 순서대로 확인하십시오: 먼저 어댑터의 표시등이 켜져 있는지 보십시오(대부분의 OBD 단자는 시동 스위치를 ON으로 돌려야 전원이 공급됩니다). 다음은 거리이므로 차 안에 앉아서 검색하십시오. $next BLE 어댑터는 시스템 설정에서 페어링할 필요가 없으며 페어링해서도 안 됩니다 — 그 경로로는 작동하지 않습니다.';
+    return '검색이 끝났지만 BLE 어댑터를 찾지 못했습니다. 순서대로 확인해 보십시오. 먼저 어댑터의 표시등이 켜져 있는지 확인하십시오(대부분의 OBD 단자는 시동 스위치를 ON으로 돌려야 전원이 공급됩니다). 다음은 통신 거리이므로 차 안에 앉아서 검색하십시오. $next BLE 어댑터는 시스템 설정에서 페어링할 필요가 없으며 페어링해서도 안 됩니다 — 그 경로로는 작동하지 않습니다.';
   }
 
   @override
@@ -158,7 +158,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get connectClassicListPaired =>
-      '시스템에 페어링된 모든 기기가 표시됩니다 — 이어폰과 스피커도 포함되며, 어댑터로 보이는 기기가 앞에 정렬됩니다. 잘못 골랐다면 실패할 때까지 기다리지 말고 취소를 누르십시오. 곧바로 다른 기기를 선택할 수 있습니다.';
+      '시스템에 페어링된 모든 기기가 표시됩니다 — 이어폰과 스피커도 포함되며, 어댑터로 보이는 기기가 먼저 정렬됩니다. 잘못 골랐다면 실패할 때까지 기다리지 말고 취소를 누르십시오. 곧바로 다른 기기를 선택할 수 있습니다.';
 
   @override
   String get connectClassicListWindowsPort =>
@@ -192,7 +192,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get connectIssueAdapterAcceptedThenSilent =>
-      '어댑터가 연결은 수락했지만 제한 시간 내에 아무 응답도 하지 않았습니다. 대개 아직 전원이 들어오지 않은 상태이거나(대부분의 OBD 단자는 시동 스위치가 ON이어야 전원이 공급됨) 다른 앱이 이미 어댑터에 연결되어 있습니다. 다른 앱이 연결된 경우 해당 앱을 닫고 다시 시도하십시오.';
+      '어댑터가 연결은 수락했지만 제한 시간 내에 아무 응답도 하지 않았습니다. 대개 아직 전원이 들어오지 않았거나(대부분의 OBD 단자는 시동 스위치가 ON이어야 전원이 공급됨) 다른 앱이 이미 어댑터에 연결된 상태입니다. 다른 앱이 연결되어 있다면 해당 앱을 닫고 다시 시도하십시오.';
 
   @override
   String connectIssueAdapterSilentOnReset(String command) {
@@ -209,7 +209,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get connectIssueHandshakeIncomplete =>
-      '초기화를 통과하지 못했습니다. 어댑터가 호환되지 않을 수 있습니다.';
+      '초기화 과정을 통과하지 못했습니다. 어댑터가 호환되지 않을 수 있습니다.';
 
   @override
   String connectIssueHandshakeStepFailed(String command, String reason) {
@@ -247,7 +247,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get connectQuestionClassic =>
-      '둘 다 아님 — 구형 모델이며 박스에 2.0 또는 3.0이라고 인쇄되어 있습니까?';
+      '둘 다 해당하지 않습니까 — 박스에 2.0 또는 3.0이라고 인쇄된 구형 모델입니까?';
 
   @override
   String get connectQuestionWifiDesktop =>
@@ -297,7 +297,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get connectWhichIntro =>
-      'SPP나 GATT 같은 용어는 신경 쓰지 마십시오. 어댑터를 꽂았을 때 어떻게 동작하는지만 보십시오:';
+      'SPP나 GATT 같은 용어는 신경 쓰지 마십시오. 어댑터를 꽂았을 때 어떻게 작동하는지만 확인하십시오:';
 
   @override
   String get connectWhichNoteGuessing =>
@@ -308,7 +308,7 @@ class AppLocalizationsKo extends AppLocalizations {
       'iPhone은 Wi-Fi 또는 BLE만 사용할 수 있습니다 — 일반 블루투스 ELM327은 iOS에서 전혀 작동하지 않습니다. 이는 OS 제한이므로 다른 앱을 써도 마찬가지입니다.';
 
   @override
-  String get connectWhichTitle => '어느 것을 골라야 할지 모르겠나요?';
+  String get connectWhichTitle => '어느 것을 골라야 할지 모르시겠습니까?';
 
   @override
   String get connectWifiHostLabel => 'IP 주소';
@@ -366,7 +366,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dashboardPollingModeHelpBatching =>
-      '「일괄 요청 허용됨」은 왕복 횟수를 줄이기 위해 Telltale이 여러 PID 요청을 한 번의 교환으로 묶을 수 있음을 뜻합니다. 즉, 일괄 시도가 허용되어 있고 비활성화되지 않은 상태입니다. 다만 이는 측정 결과가 아니라 허용 상태를 뜻하는데, 실제 교환에서 묶여서 전송되었는지는 차량이 어떤 PID 지원을 확인해 주었는지와 대기 중인 요청 수에 따라 달라지기 때문입니다.';
+      '「일괄 요청 허용됨」은 왕복 횟수를 줄이기 위해 Telltale이 여러 PID 요청을 한 번의 교환으로 묶을 수 있음을 뜻합니다. 즉, 일괄 요청 시도가 허용되어 있고 비활성화되지 않은 상태입니다. 다만 이는 측정 결과가 아니라 허용 상태일 뿐인데, 실제 교환에서 요청이 묶여 전송되었는지는 차량에서 지원이 확인된 PID가 무엇인지와 대기 중인 요청 수에 따라 달라지기 때문입니다.';
 
   @override
   String get dashboardPollingModeHelpObserved =>
@@ -378,7 +378,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dashboardPollingModeHelpSingle =>
-      '「단일 요청 모드」는 각 Mode 01 PID를 개별적으로 읽어옴을 뜻합니다. Telltale은 세 가지 경우에 이 모드를 사용합니다: 버스가 일괄 요청을 아예 받지 않는 경우(모든 비-CAN 차량); 아직 응답한 지원 블록이 없는 경우(차량이 확인해 주지 않은 PID를 묶어서 요청하면 응답이 잘려서 돌아오는 원인이 됨); 그리고 묶어서 보낸 요청이 다시 각 PID로 분리할 수 있는 형태로 돌아오지 않은 경우(응답이 잘렸거나, 어댑터가 버퍼 가득 참을 보고하며 거부했거나, 응답이 없었을 때). 판독값은 계속 갱신되며, 이것만으로는 연결 실패를 뜻하지 않습니다.';
+      '「단일 요청 모드」는 각 Mode 01 PID를 하나씩 개별적으로 읽어 온다는 뜻입니다. Telltale은 세 가지 경우에 이 모드를 사용합니다. 첫째, 버스가 일괄 요청을 아예 받지 않는 경우(모든 비-CAN 차량), 둘째, 아직 응답한 지원 블록이 없는 경우(차량에서 지원이 확인되지 않은 PID를 묶어서 요청하면 응답이 잘려서 돌아오는 원인이 됨), 셋째, 묶어서 보낸 요청이 다시 각 PID로 분리할 수 있는 형태로 돌아오지 않은 경우(응답이 잘렸거나, 어댑터가 버퍼 가득 참을 보고하며 거부했거나, 응답이 없었을 때)입니다. 판독값은 계속 갱신되며, 이것만으로는 연결 실패를 뜻하지 않습니다.';
 
   @override
   String get dashboardPollingModeHelpTitle => '폴링 모드';
@@ -455,7 +455,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get datumNextStepOtherReadings =>
-      '실패는 이 항목에만 영향을 미치며 다른 판독값은 계속 유효합니다.';
+      '이 실패는 해당 항목에만 영향을 미치며 다른 판독값은 계속 유효합니다.';
 
   @override
   String get datumNextStepRawOnly =>
@@ -522,7 +522,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get datumStatusUnverifiedExplanation =>
-      '미검증은 이 차량에서 해당 디코더를 실제 차량과 대조한 검증 기록이 여기에 문서화되어 있지 않음을 뜻합니다. 판독값이 틀렸다는 뜻도 아니고 정확성을 보증한다는 뜻도 아닙니다. 최신성 및 오류 상태는 별도로 표시됩니다.';
+      '「미검증」은 내 차량에서 이 디코더를 실차와 대조한 기록이 여기에 문서화되어 있지 않다는 뜻입니다. 판독값이 틀렸다는 뜻도 아니며, 정확성을 보증한다는 뜻도 아닙니다. 최신성 및 오류 상태는 별도로 표시됩니다.';
 
   @override
   String get datumStatusFormula => '공식';
@@ -555,8 +555,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get derivedTorque => '토크';
 
   @override
-  String get derivedUnavailableMessage =>
-      '차량 속도와 가속도 데이터가 도착해야만 마력을 추정할 수 있습니다';
+  String get derivedUnavailableMessage => '차량 속도와 가속도 데이터가 들어와야 마력을 추정할 수 있습니다';
 
   @override
   String dtcBothSilentDetail(Object mode) {
@@ -587,7 +586,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String dtcClearDialogFrames(Object codes) {
-    return '$codes의 프리즈 프레임 — 고장이 발생한 순간의 엔진 회전수, 냉각수 온도, 부하를 담은 전체 기록 — 도 함께 삭제되며, 고장이 다시 발생하기 전까지는 다시 읽어올 수 없습니다.';
+    return '$codes의 프리즈 프레임(고장이 발생한 순간의 엔진 회전수, 냉각수 온도, 부하를 담은 전체 기록)도 함께 삭제되며, 고장이 다시 발생하기 전까지는 다시 읽어 올 수 없습니다.';
   }
 
   @override
@@ -598,9 +597,9 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '이번 스캔에서 $count개 범주가 완전히 응답하지 않았습니다',
+      other: '이번 스캔에서 범주 $count개',
     );
-    return '$_temp0($categories). 따라서 아직 확인하지 못한 고장 코드가 남아 있을 수 있습니다. 삭제한 뒤에는 다시 읽어올 수 없습니다.';
+    return '$_temp0($categories)가 완전히 응답하지 않았으므로, 아직 확인하지 못한 고장 코드가 남아 있을 수 있습니다. 삭제한 뒤에는 다시 읽어 올 수 없습니다.';
   }
 
   @override
@@ -658,7 +657,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dtcCompleteCleanBody =>
-      '이는 응답한 모든 제어기가 고장 코드 없음을 보고했다는 뜻입니다. 차량의 모든 모듈에 질의했다는 뜻은 아닙니다.';
+      '응답한 모든 제어기가 고장 코드가 없다고 보고했다는 뜻입니다. 차량의 모든 모듈에 질의했다는 뜻은 아닙니다.';
 
   @override
   String get dtcCompleteCleanTitle => '응답한 제어기 중 고장 코드를 보고한 곳이 없습니다.';
@@ -802,7 +801,7 @@ class AppLocalizationsKo extends AppLocalizations {
       locale: localeName,
       other: '제어기 $count개',
     );
-    return '세 범주 모두 끝까지 쿼리했습니다. $_temp0($controllers)가 보류 중 또는 영구 고장 코드를 구현하지 않습니다 — 많은 차량에서 정상적인 현상이지만, 바로 이 때문에 차량 전체에 고장이 없다고 단정할 수 없습니다.';
+    return '세 범주 모두 끝까지 쿼리했습니다. $_temp0($controllers)가 보류 중 고장 코드와 영구 고장 코드를 둘 다 구현하지 않습니다 — 많은 차량에서 정상적인 현상이지만, 바로 이 때문에 차량 전체에 고장이 없다고 단정할 수 없습니다.';
   }
 
   @override
@@ -820,7 +819,7 @@ class AppLocalizationsKo extends AppLocalizations {
       locale: localeName,
       other: '고장 코드 $count개를 읽었으나',
     );
-    return '이 범주가 중단되기 전에 $_temp0 조회 범위가 불완전합니다:';
+    return '이 범주 읽기가 중단되기 전에 $_temp0 조회 범위가 불완전합니다:';
   }
 
   @override
@@ -878,7 +877,7 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '이 제어기는 확정된 고장 코드 $count개를 자체 보고합니다.',
+      other: '이 제어기는 확정된 고장 코드가 $count개 있다고 자체 보고합니다.',
     );
     return '$_temp0';
   }
@@ -891,11 +890,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dtcSilentPendingDetail =>
-      '보류 중 고장 코드(Mode 07)가 응답하지 않았습니다. 이 ECU가 해당 서비스를 구현하지 않았거나 단순히 이번에 읽히지 않은 것일 수 있습니다 — 무응답만으로는 두 경우를 구분할 수 없으며, 보류 중인 고장이 없다는 뜻으로 받아들여서는 안 됩니다. 저장된 고장 코드 결과에는 영향이 없습니다.';
+      '보류 중 고장 코드(Mode 07)에 대한 응답이 없었습니다. 이 ECU가 해당 서비스를 구현하지 않았거나 단순히 이번에 읽히지 않은 것일 수 있습니다 — 무응답만으로는 두 경우를 구분할 수 없으며, 보류 중인 고장이 없다는 뜻으로 받아들여서는 안 됩니다. 저장된 고장 코드 결과에는 영향이 없습니다.';
 
   @override
   String get dtcSilentPermanentDetail =>
-      '영구 고장 코드(Mode 0A)가 응답하지 않았습니다. 이 범주는 2010년경 OBD-II 세대부터 도입되었으므로 구형 차량은 지원하지 않는 경우가 있습니다 — 하지만 무응답은 단순히 이번에 읽히지 않았다는 뜻일 수도 있으며 두 경우는 구분할 수 없습니다. 저장된 고장 코드 결과에는 영향이 없습니다.';
+      '영구 고장 코드(Mode 0A)에 대한 응답이 없었습니다. 이 범주는 2010년경 OBD-II 세대부터 도입되었으므로 구형 차량은 지원하지 않는 경우가 있습니다 — 하지만 무응답은 단순히 이번에 읽히지 않았다는 뜻일 수도 있으며 두 경우는 구분할 수 없습니다. 저장된 고장 코드 결과에는 영향이 없습니다.';
 
   @override
   String get dtcStartScan => '스캔 시작';
@@ -1019,7 +1018,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get handshakeStepEchoOff => '명령 에코 끄기';
 
   @override
-  String get handshakeStepLinefeedsOff => '줄바꿈 문자 끄기';
+  String get handshakeStepLinefeedsOff => '줄바꿈 출력 끄기';
 
   @override
   String get handshakeStepMemoryOff => '메모리 쓰기 끄기';
@@ -1043,7 +1042,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get handshakeStepResponseTimeout => '응답 제한 시간을 약 408 ms로 설정';
 
   @override
-  String get handshakeStepSpacesOff => '공백 문자 끄기 (전송량 약 1/3 절감)';
+  String get handshakeStepSpacesOff => '공백 출력 끄기 (전송량 1/3 절감)';
 
   @override
   String get handshakeStepSupportProbe => 'ECU가 지원하는 PID를 질의하여 차량 응답 확인';
@@ -1074,7 +1073,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get performanceDisclaimer =>
-      '기록은 OBD 차속 신호를 기준으로 측정됩니다. 대부분의 차량 속도계는 실제보다 1–3 km/h 높게 표시되며 신호 갱신 주기도 초당 약 10–20회에 불과하므로, 이 결과는 참고용일 뿐 전문 계측 장비와 동등하지 않습니다.';
+      '기록은 OBD 차속 신호를 기준으로 측정됩니다. 대부분의 차량 속도계는 실제보다 1–3 km/h 높게 표시되며 신호 갱신 빈도도 초당 약 10–20회에 불과하므로, 이 결과는 참고용일 뿐 전문 계측 장비와 동등하지 않습니다.';
 
   @override
   String get performanceHeadline => '가속 테스트';
@@ -1310,7 +1309,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get pidEditorModeAndPidHelper => '예: 010C 또는 221101';
 
   @override
-  String get pidEditorSampleHelper => '16진수를 입력하면 입력하는 즉시 계산 결과를 미리 볼 수 있습니다';
+  String get pidEditorSampleHelper => '16진수를 입력하는 즉시 계산 결과를 미리 볼 수 있습니다';
 
   @override
   String get pidEditorSave => '저장';
@@ -1370,7 +1369,7 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count개 행에 문제가 있어 건너뛰었습니다',
+      other: '행 $count개는 문제가 있어 건너뜀',
     );
     return '$_temp0';
   }
@@ -1380,7 +1379,7 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count개 행에 기본 게이지 범위를 적용했습니다',
+      other: '행 $count개에 기본 게이지 범위 적용',
     );
     return '$_temp0';
   }
@@ -1390,7 +1389,7 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count개 항목이 기존 정의를 대체했습니다',
+      other: '항목 $count개는 기존 정의를 대체함',
     );
     return '$_temp0';
   }
@@ -1400,7 +1399,7 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count개 행이 파일 내 다른 행과 중복되어 건너뛰었습니다',
+      other: '행 $count개는 파일 내 다른 행과 중복되어 건너뜀',
     );
     return '$_temp0';
   }
@@ -1612,11 +1611,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get powertrainExperimentalIdentityAck =>
-      '출처에 기록된 출시 국가, 모델, 연식을 대조해 보았으며 미확인 필드를 감수하는 것에 동의합니다';
+      '출처에 기록된 판매 시장, 모델, 연식을 확인했으며 미확인 필드를 받아들입니다';
 
   @override
   String get powertrainExperimentalParkedAck =>
-      '차량이 안전하게 주차되어 있으며, 이 작업은 한 번만 읽고 그 숫자도 내 차량에 맞지 않을 수 있음을 이해합니다';
+      '차량이 안전하게 주차되어 있으며, 이 작업은 값을 한 번만 읽어 오고 그 숫자도 내 차량에 맞지 않을 수 있음을 이해합니다';
 
   @override
   String powertrainExperimentalWireLine(String responder, int bytes) {
@@ -1669,19 +1668,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get powertrainInstallDisclosureCommunity =>
-      '설치하면 읽기 전용 배터리 PID가 PID 관리에 추가될 뿐입니다. 판독을 시작하기 전에 매 연결마다 대시보드에서 이 차량이 해당 모델인지 확인을 요청합니다. 데이터는 커뮤니티 출처에서 왔으며 독립적인 교차 검증을 거쳤으나 여전히 제조사 보증이 아닙니다.';
+      '설치하면 읽기 전용 배터리 PID가 PID 관리에 추가될 뿐입니다. 판독을 시작하기 전에 연결할 때마다 대시보드에서 이 차량이 해당 모델인지 확인을 요청합니다. 데이터는 커뮤니티 출처에서 왔으며 독립적인 교차 검증을 거쳤으나 여전히 제조사 보증이 아닙니다.';
 
   @override
   String get powertrainInstallDisclosureExperimental =>
-      '설치하면 읽기 전용 배터리 PID가 PID 관리에 추가될 뿐입니다. 판독을 시작하기 전에 매 연결마다 대시보드에서 이 차량이 해당 모델인지 확인을 요청합니다. 이는 독립적 교차 검증 요건이 없는 실험적 디코드이며, 이 차량에서 미검증 상태이고 제조사 보증도 아닙니다.';
+      '설치하면 읽기 전용 배터리 PID가 PID 관리에 추가될 뿐입니다. 판독을 시작하기 전에 연결할 때마다 대시보드에서 이 차량이 해당 모델인지 확인을 요청합니다. 이는 독립적인 교차 검증 요건이 없는 실험적 디코드이며, 이 차량에서 미검증 상태이고 여전히 제조사 보증이 아닙니다.';
 
   @override
   String get powertrainInstallDisclosureReady =>
-      '설치하면 읽기 전용 배터리 PID가 PID 관리에 추가될 뿐입니다. 판독을 시작하기 전에 매 연결마다 대시보드에서 이 차량이 해당 모델인지 확인을 요청합니다. 출처 데이터는 더 충실하지만 여전히 제조사 보증이 아닙니다.';
+      '설치하면 읽기 전용 배터리 PID가 PID 관리에 추가될 뿐입니다. 판독을 시작하기 전에 연결할 때마다 대시보드에서 이 차량이 해당 모델인지 확인을 요청합니다. 출처 데이터는 더 충실하지만 여전히 제조사 보증이 아닙니다.';
 
   @override
   String get powertrainInstallDisclosureResearchOnly =>
-      '설치하면 읽기 전용 배터리 PID가 PID 관리에 추가될 뿐입니다. 판독을 시작하기 전에 매 연결마다 대시보드에서 이 차량이 해당 모델인지 확인을 요청합니다. 이 항목은 연구 전용이므로 설치해서는 안 됩니다.';
+      '설치하면 읽기 전용 배터리 PID가 PID 관리에 추가될 뿐입니다. 판독을 시작하기 전에 연결할 때마다 대시보드에서 이 차량이 해당 모델인지 확인을 요청합니다. 이 항목은 연구 전용이므로 설치해서는 안 됩니다.';
 
   @override
   String get powertrainInstallCatalogShaMissing =>
@@ -1714,7 +1713,8 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '신호 $count개를 설치했습니다. PID 페이지에서 대시보드에 추가하십시오. 매 연결마다 차량 확인이 필요합니다.',
+      other:
+          '신호 $count개를 설치했습니다. PID 페이지에서 대시보드에 추가하십시오. 연결할 때마다 차량 확인이 필요합니다.',
     );
     return '$_temp0';
   }
@@ -1891,7 +1891,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String recommendedPurchaseNoAdapterYet(String store) {
-    return '아직 어댑터가 없으신가요? $store에서 추천 모델 보기';
+    return '아직 어댑터가 없으십니까? $store에서 추천 모델 보기';
   }
 
   @override
@@ -1919,11 +1919,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsAdapterConcernsFooter =>
-      '이 항목들은 어댑터의 자기 설명이 앞뒤가 맞지 않는 부분일 뿐 차량 데이터를 잘못 읽었다는 증거는 아닙니다. 판독값을 확인하는 유일한 방법은 두 번째 독립적인 계측값과 대조하는 것입니다(실차 가이드 참조).';
+      '이 항목들은 어댑터의 자체 보고 내용이 앞뒤가 맞지 않는 부분일 뿐 차량 데이터를 잘못 읽었다는 증거는 아닙니다. 판독값을 확인하는 유일한 방법은 또 다른 독립적인 계측값과 대조하는 것입니다(실차 가이드 참조).';
 
   @override
   String get settingsAdapterNoContradictions =>
-      '자기 설명에서 모순이 발견되지 않았습니다. 이는 어댑터의 자기 설명이 일관된다는 뜻일 뿐 정품 칩이라는 증거도 아니고 보고하는 수치가 정확하다는 증거도 아닙니다. 복제품(클론)의 버전 문자열은 누군가 임의로 적어 넣은 텍스트에 불과합니다.';
+      '자체 보고 정보에서 모순이 발견되지 않았습니다. 이는 어댑터의 자체 보고 내용이 일관된다는 뜻일 뿐 정품 칩이라는 증거도 아니고 보고하는 수치가 정확하다는 증거도 아닙니다. 복제품(클론)의 버전 문자열은 누군가 임의로 적어 넣은 텍스트에 불과합니다.';
 
   @override
   String get settingsAdapterNoVersion => '(보고된 버전 없음)';
@@ -1976,7 +1976,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsCatalogNothingApplicable =>
-      '이 공식 구성에는 현재 공식에 안전하게 적용할 수 있는 필드가 없어 기존 프로필을 그대로 유지합니다.';
+      '이 공식 구성에는 현재 계산 공식에 안전하게 적용할 수 있는 필드가 없어 기존 프로필을 그대로 유지합니다.';
 
   @override
   String get settingsCatalogScope =>
@@ -2191,7 +2191,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsProfileEstimatesIntro =>
-      '마력, 토크, 연료 소모량은 모두 이 파라미터들로부터 추정됩니다. 실제 차량에 가까울수록 추정값의 의미가 커집니다.';
+      '마력, 토크, 연료 소모량은 모두 이 파라미터를 바탕으로 추정됩니다. 입력값이 실제 차량에 가까울수록 추정값도 더 유의미해집니다.';
 
   @override
   String get settingsProfileNameProvesNothing =>
@@ -2317,7 +2317,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get startupRetryHint =>
-      'Telltale을 포그라운드 상태로 유지한 채 다른 파일 작업이 끝난 뒤 다시 시도하십시오. 시작 검사가 완료될 때까지 기록, 재생, 내보내기 및 삭제 기능은 닫혀 있습니다.';
+      'Telltale을 포그라운드 상태로 유지한 채 다른 파일 작업이 끝난 뒤 다시 시도하십시오. 시작 검사가 완료될 때까지 기록, 재생, 내보내기 및 삭제 기능은 닫힌 상태로 유지됩니다.';
 
   @override
   String get telemetryArtifactRestartRequired =>
@@ -2493,7 +2493,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get telemetryPendingOwnerRecovery =>
-      '현재 프로세스가 아직 작업을 보유하고 있습니다. 이 상태가 계속되면 Telltale을 완전히 종료한 뒤 다시 여십시오';
+      '현재 프로세스가 아직 이 작업을 점유하고 있습니다. 이 상태가 계속되면 Telltale을 완전히 종료한 뒤 다시 여십시오';
 
   @override
   String telemetryPhraseJoin(String first, String second) {
@@ -2569,7 +2569,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get telemetryRecoveryTitle => '시작 시 기록 파일 검사를 마쳤습니다';
+  String get telemetryRecoveryTitle => '기록 파일의 시작 검사를 마쳤습니다';
 
   @override
   String get telemetryReload => '다시 불러오기';
@@ -2707,7 +2707,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get telemetryStartTooManyPids =>
-      '기록에는 추정 마력과 추정 연료 소모량 열이 유지됩니다 — 먼저 일부 PID를 비활성화하십시오';
+      '기록에는 추정 마력과 추정 연료 소모량 열이 포함되므로 먼저 일부 PID를 비활성화하십시오';
 
   @override
   String get telemetryStarting => '시작 중';
@@ -2959,7 +2959,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dtcKindPermanentExplanation =>
-      '진단기로 삭제할 수 없습니다. 수리가 완료된 것을 ECU가 스스로 확인한 뒤에만 직접 지웁니다.';
+      '진단기로는 삭제할 수 없습니다. 수리가 완료되었음을 ECU가 확인한 뒤에만 스스로 지웁니다.';
 
   @override
   String get dtcSystemPowertrain => '파워트레인';
@@ -3027,10 +3027,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0101 => '질량 공기 유량 센서 범위/성능 문제';
 
   @override
-  String get dtcDescriptionP0102 => '질량 공기 유량 센서 회로 낮은 입력';
+  String get dtcDescriptionP0102 => '질량 공기 유량 센서 회로 입력 낮음';
 
   @override
-  String get dtcDescriptionP0103 => '질량 공기 유량 센서 회로 높은 입력';
+  String get dtcDescriptionP0103 => '질량 공기 유량 센서 회로 입력 높음';
 
   @override
   String get dtcDescriptionP0105 => '흡기 매니폴드 절대 압력/대기압 센서 회로 고장';
@@ -3039,10 +3039,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0106 => '흡기 매니폴드 절대 압력 센서 범위/성능 문제';
 
   @override
-  String get dtcDescriptionP0107 => '흡기 매니폴드 절대 압력 센서 회로 낮은 입력';
+  String get dtcDescriptionP0107 => '흡기 매니폴드 절대 압력 센서 회로 입력 낮음';
 
   @override
-  String get dtcDescriptionP0108 => '흡기 매니폴드 절대 압력 센서 회로 높은 입력';
+  String get dtcDescriptionP0108 => '흡기 매니폴드 절대 압력 센서 회로 입력 높음';
 
   @override
   String get dtcDescriptionP0110 => '흡기 온도 센서 회로 고장';
@@ -3051,10 +3051,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0111 => '흡기 온도 센서 범위/성능 문제';
 
   @override
-  String get dtcDescriptionP0112 => '흡기 온도 센서 회로 낮은 입력';
+  String get dtcDescriptionP0112 => '흡기 온도 센서 회로 입력 낮음';
 
   @override
-  String get dtcDescriptionP0113 => '흡기 온도 센서 회로 높은 입력';
+  String get dtcDescriptionP0113 => '흡기 온도 센서 회로 입력 높음';
 
   @override
   String get dtcDescriptionP0115 => '엔진 냉각수 온도 센서 회로 고장';
@@ -3063,10 +3063,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0116 => '엔진 냉각수 온도 센서 범위/성능 문제';
 
   @override
-  String get dtcDescriptionP0117 => '엔진 냉각수 온도 센서 회로 낮은 입력';
+  String get dtcDescriptionP0117 => '엔진 냉각수 온도 센서 회로 입력 낮음';
 
   @override
-  String get dtcDescriptionP0118 => '엔진 냉각수 온도 센서 회로 높은 입력';
+  String get dtcDescriptionP0118 => '엔진 냉각수 온도 센서 회로 입력 높음';
 
   @override
   String get dtcDescriptionP0120 => '스로틀 위치 센서 회로 고장';
@@ -3075,10 +3075,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0121 => '스로틀 위치 센서 범위/성능 문제';
 
   @override
-  String get dtcDescriptionP0122 => '스로틀 위치 센서 회로 낮은 입력';
+  String get dtcDescriptionP0122 => '스로틀 위치 센서 회로 입력 낮음';
 
   @override
-  String get dtcDescriptionP0123 => '스로틀 위치 센서 회로 높은 입력';
+  String get dtcDescriptionP0123 => '스로틀 위치 센서 회로 입력 높음';
 
   @override
   String get dtcDescriptionP0125 => '폐루프 연료 제어를 위한 냉각수 온도 불충분';
@@ -3090,10 +3090,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0130 => '산소 센서 회로 고장 (뱅크 1 센서 1)';
 
   @override
-  String get dtcDescriptionP0131 => '산소 센서 회로 낮은 전압 (뱅크 1 센서 1)';
+  String get dtcDescriptionP0131 => '산소 센서 회로 전압 낮음 (뱅크 1 센서 1)';
 
   @override
-  String get dtcDescriptionP0132 => '산소 센서 회로 높은 전압 (뱅크 1 센서 1)';
+  String get dtcDescriptionP0132 => '산소 센서 회로 전압 높음 (뱅크 1 센서 1)';
 
   @override
   String get dtcDescriptionP0133 => '산소 센서 회로 응답 지연 (뱅크 1 센서 1)';
@@ -3108,10 +3108,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0136 => '산소 센서 회로 고장 (뱅크 1 센서 2)';
 
   @override
-  String get dtcDescriptionP0137 => '산소 센서 회로 낮은 전압 (뱅크 1 센서 2)';
+  String get dtcDescriptionP0137 => '산소 센서 회로 전압 낮음 (뱅크 1 센서 2)';
 
   @override
-  String get dtcDescriptionP0138 => '산소 센서 회로 높은 전압 (뱅크 1 센서 2)';
+  String get dtcDescriptionP0138 => '산소 센서 회로 전압 높음 (뱅크 1 센서 2)';
 
   @override
   String get dtcDescriptionP0140 => '산소 센서 회로에서 신호 활동이 감지되지 않음 (뱅크 1 센서 2)';
@@ -3171,10 +3171,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0221 => '스로틀/페달 위치 센서 B 범위/성능 문제';
 
   @override
-  String get dtcDescriptionP0222 => '스로틀/페달 위치 센서 B 회로 낮은 입력';
+  String get dtcDescriptionP0222 => '스로틀/페달 위치 센서 B 회로 입력 낮음';
 
   @override
-  String get dtcDescriptionP0223 => '스로틀/페달 위치 센서 B 회로 높은 입력';
+  String get dtcDescriptionP0223 => '스로틀/페달 위치 센서 B 회로 입력 높음';
 
   @override
   String get dtcDescriptionP0234 => '터보차저/슈퍼차저 과급 압력 과다(오버부스트) 상태';
@@ -3219,10 +3219,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0326 => '노크 센서 범위/성능 문제 (뱅크 1)';
 
   @override
-  String get dtcDescriptionP0327 => '노크 센서 회로 낮은 입력 (뱅크 1)';
+  String get dtcDescriptionP0327 => '노크 센서 회로 입력 낮음 (뱅크 1)';
 
   @override
-  String get dtcDescriptionP0328 => '노크 센서 회로 높은 입력 (뱅크 1)';
+  String get dtcDescriptionP0328 => '노크 센서 회로 입력 높음 (뱅크 1)';
 
   @override
   String get dtcDescriptionP0330 => '노크 센서 회로 고장 (뱅크 2)';
@@ -3312,10 +3312,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0451 => '증발가스 제어 시스템 압력 센서 범위/성능 문제';
 
   @override
-  String get dtcDescriptionP0452 => '증발가스 제어 시스템 압력 센서 회로 낮은 입력';
+  String get dtcDescriptionP0452 => '증발가스 제어 시스템 압력 센서 회로 입력 낮음';
 
   @override
-  String get dtcDescriptionP0453 => '증발가스 제어 시스템 압력 센서 회로 높은 입력';
+  String get dtcDescriptionP0453 => '증발가스 제어 시스템 압력 센서 회로 입력 높음';
 
   @override
   String get dtcDescriptionP0455 => '증발가스 제어 시스템 누출 감지 (대량 누출)';
@@ -3339,10 +3339,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dtcDescriptionP0507 => '공회전(아이들) 제어 시스템 RPM이 예상보다 높음';
 
   @override
-  String get dtcDescriptionP0508 => '공회전(아이들) 제어 시스템 회로 낮은 입력';
+  String get dtcDescriptionP0508 => '공회전(아이들) 제어 시스템 회로 낮음';
 
   @override
-  String get dtcDescriptionP0509 => '공회전(아이들) 제어 시스템 회로 높은 입력';
+  String get dtcDescriptionP0509 => '공회전(아이들) 제어 시스템 회로 높음';
 
   @override
   String get dtcDescriptionP0560 => '시스템 전압 고장';
@@ -3447,7 +3447,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get gaugeSkinNightDescription =>
-      '야간 주행용입니다. 낮은 밝기, 완만한 호, 애니메이션 없음 — 운전자의 주의를 최소한으로만 끕니다.';
+      '야간 주행용입니다. 낮은 밝기, 완만한 호, 애니메이션 없음 — 운전자의 주의를 최소한으로만 빼앗습니다.';
 
   @override
   String get derivedAirflowSourceMaf => 'MAF 센서';
@@ -3456,7 +3456,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get derivedAirflowSourceSpeedDensity => 'Speed-Density 추정';
 
   @override
-  String get derivedAirflowSourceUnavailable => '공기 질량 사용 불가';
+  String get derivedAirflowSourceUnavailable => '흡기량 사용 불가';
 
   @override
   String get derivedFuelSourceStoichiometric => '이론공연비(Stoichiometric) 추정';
@@ -3570,7 +3570,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get adapterConcernFirmwareNeverReleasedDetail =>
-      'Elm Electronics는 이 버전을 출시한 적이 없으므로 이 어댑터의 펌웨어는 스스로 주장하는 버전이 아닙니다. 이런 어댑터 중 상당수는 여전히 작동하지만, 자기 자신에 대한 설명은 신뢰할 수 없으므로 데이터가 읽히지 않을 때 가장 먼저 의심해 볼 만합니다.';
+      'Elm Electronics는 이 버전을 출시한 적이 없으므로 이 어댑터의 펌웨어는 스스로 주장하는 버전이 아닙니다. 이런 어댑터 중 상당수는 여전히 작동하지만, 자체 보고 내용은 신뢰할 수 없으므로 데이터가 읽히지 않을 때 가장 먼저 의심해 볼 만합니다.';
 
   @override
   String adapterConcernPpsRefusedSummary(String version) {
@@ -3610,15 +3610,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get connectTransportWifiRouteRefused =>
-      '시스템이 이 연결을 Wi-Fi로 보내는 것을 거부했습니다. 휴대폰은 Wi-Fi에 연결되어 있지만, 이 용도로 Wi-Fi를 사용하는 것은 허용되지 않았습니다.';
+      '시스템이 이 연결을 Wi-Fi를 통해 전달하는 것을 거부했습니다. 휴대폰은 Wi-Fi에 연결되어 있지만, 이 용도로 Wi-Fi를 사용하는 것은 허용되지 않았습니다.';
 
   @override
   String get connectTransportWifiRouteTimeout =>
-      '이 연결을 Wi-Fi로 보내 달라는 요청에 시스템이 응답하지 않았습니다. 몇 초 기다린 뒤 다시 시도하십시오.';
+      '이 연결을 Wi-Fi를 통해 전달해 달라는 요청에 시스템이 응답하지 않았습니다. 몇 초 기다린 뒤 다시 시도하십시오.';
 
   @override
   String get connectTransportWifiRouteUnclassified =>
-      '시스템이 밝히지 않은 이유로 인해 이 연결을 Wi-Fi로 보낼 수 없었습니다. 전체 오류 내용은 아래 로그에 보관되어 있습니다.';
+      '시스템이 밝히지 않은 이유로 인해 이 연결을 Wi-Fi를 통해 전달할 수 없었습니다. 전체 오류 내용은 아래 로그에 보관되어 있습니다.';
 
   @override
   String get connectTransportWifiHostUnreachable =>
@@ -3630,7 +3630,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get connectTransportWifiRouteRestoreFailed =>
-      '연결 자체는 작동했으나 휴대폰의 네트워크 라우팅을 원래대로 되돌릴 수 없어, 변경된 채로 두는 대신 연결을 끊었습니다. 앱을 다시 시작하고 재시도하십시오.';
+      '연결 자체는 이루어졌으나 휴대폰의 네트워크 라우팅을 원래대로 되돌릴 수 없어, 변경된 채로 두는 대신 연결을 끊었습니다. 앱을 다시 시작하고 재시도하십시오.';
 
   @override
   String get connectTransportBleLinkFailed =>
@@ -3673,11 +3673,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsManualCommandLinkStoppedResponding =>
-      '어댑터에서 오랫동안 아무 데이터도 오지 않아 연결을 끊었습니다. 전원은 여전히 켜져 있을 수 있으며, 확실히 알 수 있는 것은 침묵뿐입니다.';
+      '어댑터에서 오랫동안 아무 데이터도 오지 않아 연결을 끊었습니다. 전원은 여전히 켜져 있을 수 있으며, 확실히 알 수 있는 것은 응답이 없다는 점뿐입니다.';
 
   @override
   String get settingsManualCommandWriteFailed =>
-      '명령을 어댑터 연결로 전달할 수 없었습니다. 명령의 어느 정도가 어댑터에 도달했는지는 알 수 없습니다.';
+      '명령을 어댑터 연결로 전달할 수 없었습니다. 명령이 어디까지 어댑터에 도달했는지는 알 수 없습니다.';
 
   @override
   String get settingsManualCommandTimedOut =>
@@ -3700,7 +3700,7 @@ class AppLocalizationsKo extends AppLocalizations {
     String protocol,
     String parameter,
   ) {
-    return '이 어댑터는 사용자 정의 CAN 프로토콜 $protocol(프레임 형식은 $parameter에 의해 결정됨)로 설정되어 있습니다. 어댑터가 해당 설정을 보고하지 않아 버스 형식을 확인할 수 없으며 이 쿼리를 안전하게 해독할 수 없습니다.';
+    return '이 어댑터는 프레임 형식이 $parameter 값으로 결정되는 사용자 정의 CAN 프로토콜($protocol)로 설정되어 있습니다. 어댑터가 해당 설정을 보고하지 않아 버스 형식을 확인할 수 없으며 이 쿼리를 안전하게 해독할 수 없습니다.';
   }
 
   @override
@@ -3721,7 +3721,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsManualCommandRawIsoTpModeUnavailable =>
-      '이 ELM327 경로에서는 호스트 가시적 ISO-TP 재조립을 사용할 수 없습니다.';
+      '이 ELM327 경로에서는 호스트에서 확인 가능한 ISO-TP 재조립을 사용할 수 없습니다.';
 
   @override
   String get settingsManualCommandCanPriorityUnavailable =>
@@ -3747,7 +3747,7 @@ class AppLocalizationsKo extends AppLocalizations {
     Object command,
     Object allowed,
   ) {
-    return '이 입력란은 어댑터 상태를 바꾸는 명령이 아니라 질의만 수락합니다. “$command” 명령은 어댑터 상태를 변경하지만 앱이 알고 있는 어댑터 모델은 그대로 남기 때문에, 이후 판독값이 화면에 아무런 표시도 없이 다른 제어기에서 들어올 수 있습니다.\n전송 가능한 질의: $allowed.';
+    return '이 입력란은 어댑터 상태를 바꾸는 명령이 아니라 질의만 수락합니다. “$command” 명령은 어댑터 상태를 변경하지만 앱이 파악하고 있는 어댑터 상태 모델은 그대로 남기 때문에, 이후 판독값이 화면에 아무런 표시도 없이 다른 제어기에서 들어올 수 있습니다.\n전송 가능한 질의: $allowed.';
   }
 
   @override
@@ -3804,7 +3804,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '괄호가 너무 깊게 중첩되어 계산할 수 없습니다. 공식을 단순화하십시오.';
 
   @override
-  String get pidFormulaDivisionByZero => '공식이 0으로 나눕니다.';
+  String get pidFormulaDivisionByZero => '공식에서 값을 0으로 나누고 있습니다.';
 
   @override
   String get pidFormulaModuloByZero => '공식이 0으로 나눈 나머지를 구하려고 합니다.';
@@ -3852,7 +3852,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get pidFormulaInt16Unclaimed =>
-      'INT16은 이 방언에서 확정되지 않았습니다: 위키에서는 (A*255)+B를 대체할 수 있다고 하지만 이는 (A*256)+B와 다릅니다. 두 등식 중 하나를 공식에 직접 명시하십시오.';
+      'INT16은 이 방언에서 확정되지 않았습니다. 위키에서는 (A*255)+B를 대체할 수 있다고 하지만 이는 (A*256)+B와 다릅니다. 두 수식 중 하나를 공식에 직접 명시하십시오.';
 
   @override
   String pidFormulaTimeWindowUnsupported(String term) {
@@ -3986,7 +3986,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '파일에 행이 들어 있지만 PID 정의에 해당하는 행이 하나도 없습니다.';
 
   @override
-  String get dtcCategoryNoAnswer => '이 범주가 응답하지 않았습니다. 다시 스캔하십시오.';
+  String get dtcCategoryNoAnswer => '이 범주에 대한 응답이 없었습니다. 다시 스캔하십시오.';
 
   @override
   String get dtcCategoryError =>
@@ -4005,12 +4005,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String dtcCategorySilentControllers(int count, String controllers) {
-    return '제어기 $count개가 이번 쿼리에 응답하지 않았습니다($controllers). 돌아온 응답은 유효하지만 이를 차량 전체의 결과로 간주할 수 없습니다.';
+    return '제어기 $count개($controllers)가 이번 쿼리에 응답하지 않았습니다. 돌아온 응답은 유효하지만 이를 차량 전체의 결과로 간주할 수 없습니다.';
   }
 
   @override
   String dtcCategoryUnresolvedSources(int count, String addresses) {
-    return '응답 $count건의 발신 제어기를 식별할 수 없었습니다($addresses). 읽힌 고장 코드는 여전히 유효하지만 이를 차량 전체의 결과로 간주할 수 없습니다. 다시 스캔하십시오.';
+    return '응답 $count건($addresses)의 발신 제어기를 식별할 수 없었습니다. 읽힌 고장 코드는 여전히 유효하지만 이를 차량 전체의 결과로 간주할 수 없습니다. 다시 스캔하십시오.';
   }
 
   @override
@@ -4044,7 +4044,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String dtcCategoryMilDisagreement(String controllers) {
-    return '차량 자체 상태가 읽힌 고장 코드와 일치하지 않습니다($controllers). 차량 계기판의 경고등을 기준으로 삼고 정비소를 방문하십시오.';
+    return '차량 자체 상태($controllers)가 읽힌 고장 코드와 일치하지 않습니다. 차량 계기판의 경고등을 기준으로 삼고 정비소를 방문하십시오.';
   }
 
   @override
@@ -4089,17 +4089,17 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String dtcClearSilentControllers(int count, String controllers) {
-    return '제어기 $count개가 삭제 명령에 응답하지 않았습니다($controllers). 응답한 제어기에서는 고장 코드가 삭제되었으나 나머지 제어기에는 여전히 코드가 남아 있을 수 있습니다. 다시 스캔하십시오. 삭제 명령을 또 보내지 마십시오.';
+    return '제어기 $count개($controllers)가 삭제 명령에 응답하지 않았습니다. 응답한 제어기에서는 고장 코드가 삭제되었으나 나머지 제어기에는 여전히 코드가 남아 있을 수 있습니다. 다시 스캔하십시오. 삭제 명령을 다시 보내지 마십시오.';
   }
 
   @override
   String dtcClearUnresolvedSources(int count, String addresses) {
-    return '이번 스캔의 응답 $count건에 대해 발신 제어기를 식별할 수 없어($addresses) 삭제 명령이 어느 제어기에 도달할지 알 수 없습니다. 다시 스캔하십시오. 해당 주소가 다시 나타나지 않으면 재연결한 뒤 시도하십시오.';
+    return '이번 스캔의 응답 $count건($addresses)에 대해 발신 제어기를 식별할 수 없어 삭제 명령이 어느 제어기에 도달할지 알 수 없습니다. 다시 스캔하십시오. 해당 주소가 다시 나타나지 않으면 재연결한 뒤 시도하십시오.';
   }
 
   @override
   String dtcClearUnresolvedSourcesDoNotRepeat(int count, String addresses) {
-    return '삭제 응답 중 $count건의 발신 제어기를 식별할 수 없었습니다($addresses). 삭제 명령을 다시 보내지 마십시오. 남아 있는 코드를 확인하려면 다시 스캔하십시오.';
+    return '삭제 응답 중 $count건($addresses)의 발신 제어기를 식별할 수 없었습니다. 삭제 명령을 다시 보내지 마십시오. 남아 있는 코드를 확인하려면 다시 스캔하십시오.';
   }
 
   @override
@@ -4174,7 +4174,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get shareTorqueSubsetCsvSubject => 'Torque 호환 PID 정의';
 
   @override
-  String get shareHumanReportCsvSubject => 'Telltale 사람이 읽기 쉬운 PID 보고서';
+  String get shareHumanReportCsvSubject => '사람이 읽기 쉬운 Telltale PID 보고서';
 
   @override
   String get transcriptExportUnidentified => '내보내기에 실패했습니다.';
@@ -4321,7 +4321,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get serviceRecipesSubtitle =>
-      '표준 참조 서비스 레시피 및 비작동(Non-Actuating) 기능 탐색';
+      '표준 참조 서비스 레시피 및 비구동(Non-Actuating) 기능 탐색';
 
   @override
   String get serviceRecipesSafetyBannerTitle =>
@@ -4333,7 +4333,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get serviceRecipesDiscoverySection =>
-      'Mode 08 비작동(Non-Actuating) 기능 탐색';
+      'Mode 08 비구동(Non-Actuating) 기능 탐색';
 
   @override
   String get serviceRecipesDiscoveryDescription =>
@@ -4420,7 +4420,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get mode08ReasonUnheaderedLimitation =>
-      '출처 귀속 및 조회 범위 미확인: 헤더가 없는 응답으로는 블록 간 ECU 신원을 확립할 수 없습니다';
+      '출처 귀속 및 조회 범위 미확인: 헤더가 없는 응답으로는 블록 간 ECU 식별 정보를 확립할 수 없습니다';
 
   @override
   String mode08ReasonNoResponseWithEcu(
@@ -4469,7 +4469,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get mode08ReasonBudgetExceeded => '모든 블록을 쿼리하기 전에 탐색 한도에 도달함';
 
   @override
-  String get mode08ReasonSessionDisconnected => '탐색 도중 세션 연결이 끊어졌거나 대체됨';
+  String get mode08ReasonSessionDisconnected => '탐색 도중 세션 연결이 끊어졌거나 교체됨';
 
   @override
   String mode08ReasonUnqueriedAnnounced(String blocks) {

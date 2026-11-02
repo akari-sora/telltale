@@ -52,7 +52,7 @@
     <string name="car_dtc_status_scanning">スキャン中</string>
     <string name="car_dtc_status_partial_clean">対象範囲不完全 / 完了範囲では故障の観測なし</string>
     <string name="car_dtc_status_unavailable">診断利用不可 / 不完全</string>
-    <string name="car_dtc_more_items_format">他に %d 件の診断コードが非表示です</string>
+    <string name="car_dtc_more_items_format">他 %d 件の診断コードは表示されていません</string>
     <string name="car_dtc_parked_only_notice">駐車時のみ</string>
     <string name="car_dtc_speed_unavailable">車速を取得できません。駐車中にテレメトリーを接続するか、車速権限を有効にしてください。</string>
     <string name="car_dtc_detail_title">コード詳細</string>
@@ -68,7 +68,7 @@
     <string name="car_freeze_frame_none">利用可能なフリーズフレームなし</string>
     <string name="car_freeze_frame_unknown">フリーズフレームの内容を読み取れません</string>
     <string name="car_freeze_frame_omitted">他 %d 件の信号を省略</string>
-    <string name="car_freeze_frame_incomplete_summary">データ不完全 · %d 件の信号が未読または省略</string>
+    <string name="car_freeze_frame_incomplete_summary">データ不完全 · %d 件の信号が未読み取りまたは省略</string>
     <string name="car_freeze_frame_read_incomplete">データ不完全 · 読み取り中断</string>
 
     <!-- AA-05 In-Template Alert & Host Speed Strings -->

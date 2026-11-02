@@ -2,11 +2,11 @@
 <resources>
     <string name="car_app_name">Telltale</string>
     <string name="car_home_status_title">Monitor do veículo</string>
-    <string name="car_home_status_body">O esqueleto Android for Cars está ativo</string>
+    <string name="car_home_status_body">O esqueleto do Android for Cars está ativo</string>
     <string name="car_home_data_title">Dados do veículo</string>
     <string name="car_home_data_body">A ponte de telemetria não está conectada no AA-01</string>
     <string name="car_home_safety_title">Projeção somente leitura</string>
-    <string name="car_home_safety_body">Nenhum comando do veículo ou ação destrutiva está disponível</string>
+    <string name="car_home_safety_body">Nenhum comando para o veículo ou ação destrutiva está disponível</string>
     <string name="car_home_speed_title">Velocidade</string>
     <string name="car_home_rpm_title">RPM</string>
     <string name="car_home_coolant_title">Arrefecimento</string>
@@ -75,6 +75,6 @@
     <string name="car_alert_high">Alto</string>
     <string name="car_alert_attention">Atenção</string>
     <string name="car_action_enable_speed">Ativar velocidade do veículo</string>
-    <string name="car_speed_permission_phone_handoff">Conclua a permissão de velocidade do veículo no telefone enquanto estiver estacionado.</string>
-    <string name="car_speed_permission_handoff">Conclua a permissão de velocidade do veículo enquanto estiver estacionado.</string>
+    <string name="car_speed_permission_phone_handoff">Conceda a permissão de velocidade do veículo no telefone enquanto estiver estacionado.</string>
+    <string name="car_speed_permission_handoff">Conceda a permissão de velocidade do veículo enquanto estiver estacionado.</string>
 </resources>
