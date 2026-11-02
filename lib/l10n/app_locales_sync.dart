@@ -90,18 +90,24 @@ String? mapTagToSupported(String raw) {
   if (language == 'it') return 'it';
   if (language == 'nl') return 'nl';
   if (language != 'zh') return null;
-  final subtags = parts.skip(1).toList();
+  // Extension and private-use subtags cannot supply a script or region.
+  final subtags = parts.skip(1).takeWhile((part) => part.length != 1).toList();
   String? script;
   String? region;
   for (final part in subtags) {
-    if (part.length == 4) script ??= part.toLowerCase();
-    if (part.length == 2) region ??= part.toUpperCase();
+    if (RegExp(r'^[A-Za-z]{4}$').hasMatch(part)) {
+      script ??= part.toLowerCase();
+    }
+    if (RegExp(r'^(?:[A-Za-z]{2}|[0-9]{3})$').hasMatch(part)) {
+      region ??= part.toUpperCase();
+    }
   }
   if (script == 'hans') return 'zh-Hans';
   if (script == 'hant') return 'zh-Hant';
   if (region == 'CN' || region == 'SG') return 'zh-Hans';
   if (region == 'TW' || region == 'HK' || region == 'MO') return 'zh-Hant';
-  if (subtags.isEmpty) return 'zh-Hant';
+  // An unrecognized script has no effect when no region is specified.
+  if (subtags.isEmpty || (script != null && region == null)) return 'zh-Hant';
   return null;
 }
 

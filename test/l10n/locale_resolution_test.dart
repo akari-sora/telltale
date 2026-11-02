@@ -253,6 +253,32 @@ void main() {
     );
   });
 
+  test('unknown Chinese script falls back to region or bare zh', () {
+    final cases = <String?, Locale?>{
+      null: traditionalChineseLocale,
+      'CN': simplifiedChineseLocale,
+      'SG': simplifiedChineseLocale,
+      'TW': traditionalChineseLocale,
+      'HK': traditionalChineseLocale,
+      'MO': traditionalChineseLocale,
+      'US': null,
+      '419': null,
+    };
+    for (final entry in cases.entries) {
+      expect(
+        mapDeviceLocale(
+          Locale.fromSubtags(
+            languageCode: 'zh',
+            scriptCode: 'Latn',
+            countryCode: entry.key,
+          ),
+        ),
+        entry.value,
+        reason: 'zh-Latn-${entry.key}',
+      );
+    }
+  });
+
   test('generic zh with no script or region maps to Traditional Chinese', () {
     expect(mapDeviceLocale(const Locale('zh')), traditionalChineseLocale);
   });

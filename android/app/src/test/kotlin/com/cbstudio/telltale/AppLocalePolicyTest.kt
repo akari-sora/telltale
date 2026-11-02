@@ -120,14 +120,30 @@ class AppLocalePolicyTest {
             "pt-BR" to "pt-BR", "zh" to "zh-Hant", "zh-CN" to "zh-Hans",
             "zh-SG" to "zh-Hans", "zh-TW" to "zh-Hant", "zh-HK" to "zh-Hant",
             "zh-MO" to "zh-Hant", "zh_Hans_TW" to "zh-Hans", "zh-Hant-CN" to "zh-Hant",
+            "zh-Latn" to "zh-Hant", "zh-Latn-CN" to "zh-Hans", "zh-Latn-SG" to "zh-Hans",
+            "zh-Latn-TW" to "zh-Hant", "zh-Latn-HK" to "zh-Hant", "zh-Latn-MO" to "zh-Hant",
         )
         for ((input, expected) in mappings) {
             assertEquals(input, expected, AppLocalePolicy.mapToSupported(input))
         }
+        assertNull(AppLocalePolicy.mapToSupported("zh-Latn-US"))
         assertEquals(
             AppLocaleOverride(false, listOf("pt-BR", "zh-Hans")),
             AppLocalePolicy.overrideFromRequestedTags(listOf("pt-PT", "pt-BR", "zh-Hans-TW")),
         )
+    }
+
+    @Test
+    fun `unknown Chinese script preserves numeric region`() {
+        assertNull(AppLocalePolicy.mapToSupported("zh-Latn-419"))
+    }
+
+    @Test
+    fun `Chinese extensions do not supply a region or script`() {
+        assertEquals("zh-Hant", AppLocalePolicy.mapToSupported("zh-Latn-u-nu-hanidec"))
+        assertEquals("zh-Hans", AppLocalePolicy.mapToSupported("zh-Latn-CN-u-nu-hanidec"))
+        assertEquals("zh-Hans", AppLocalePolicy.mapToSupported("zh-Hans-TW-u-nu-hanidec"))
+        assertEquals("zh-Hant", AppLocalePolicy.mapToSupported("zh-u-nu-hanidec"))
     }
 
     @Test

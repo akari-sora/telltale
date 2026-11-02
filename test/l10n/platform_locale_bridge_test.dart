@@ -73,13 +73,31 @@ void main() {
       'zh-MO': 'zh_Hant',
       'zh-Hans-TW': 'zh_Hans',
       'zh-Hant-CN': 'zh_Hant',
+      'zh-Latn': 'zh_Hant',
+      'zh-Latn-CN': 'zh_Hans',
+      'zh-Latn-SG': 'zh_Hans',
+      'zh-Latn-TW': 'zh_Hant',
+      'zh-Latn-HK': 'zh_Hant',
+      'zh-Latn-MO': 'zh_Hant',
     };
     for (final entry in cases.entries) {
       expect(storedIdFromOsTags([entry.key]), entry.value, reason: entry.key);
     }
     expect(storedIdFromOsTags(['zh-US']), 'system');
+    expect(storedIdFromOsTags(['zh-Latn-US']), 'system');
     expect(storedIdFromOsTags(['sv']), 'system');
     expect(storedIdFromOsTags(['pt-BR', 'fr']), 'system');
+  });
+
+  test('unknown Chinese script preserves numeric region', () {
+    expect(storedIdFromOsTags(['zh-Latn-419']), 'system');
+  });
+
+  test('Chinese extensions do not supply a region or script', () {
+    expect(storedIdFromOsTags(['zh-Latn-u-nu-hanidec']), 'zh_Hant');
+    expect(storedIdFromOsTags(['zh-Latn-CN-u-nu-hanidec']), 'zh_Hans');
+    expect(storedIdFromOsTags(['zh-Hans-TW-u-nu-hanidec']), 'zh_Hans');
+    expect(storedIdFromOsTags(['zh-u-nu-hanidec']), 'zh_Hant');
   });
 
   group('planSync first run', () {

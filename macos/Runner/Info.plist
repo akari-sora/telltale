@@ -9,6 +9,14 @@
 		<string>en</string>
 		<string>zh-Hant</string>
 		<string>de</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>es</string>
+		<string>fr</string>
+		<string>pt</string>
+		<string>zh-Hans</string>
+		<string>it</string>
+		<string>nl</string>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>

@@ -29,6 +29,17 @@ const _workflow = '.github/workflows/release.yml';
 const _evidence = 'docs/verification/device-verification.md';
 const _changelog = 'CHANGELOG.md';
 
+void _expectPlayChangelogWithinLimit(File file) {
+  // Play counts Unicode code points; the file's line ending is not prose.
+  final count = file
+      .readAsStringSync()
+      .replaceFirst(RegExp(r'\r?\n$'), '')
+      .runes
+      .length;
+  expect(count, lessThanOrEqualTo(500),
+      reason: '${file.path} is $count characters; Play rejects over 500');
+}
+
 /// One list, two consumers. `release_notes.sh` and `require_device_walk.sh`
 /// each answer "is this a pre-release" from their own `case "$TAG" in *-*)`,
 /// and the suite used to feed them different tags -- five forms to the notes,
@@ -1043,6 +1054,28 @@ void main() {
     });
   });
 
+  group('Play changelog Unicode character limit', () {
+    late Directory tmp;
+    setUp(() => tmp = Directory.systemTemp.createTempSync('play_note_limit'));
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    for (final character in ['界', '🚗']) {
+      for (final newline in ['', '\n', '\r\n']) {
+        test('500 $character code points pass with newline ${newline.length}', () {
+          final file = File('${tmp.path}/209.txt')
+            ..writeAsStringSync(List.filled(500, character).join() + newline);
+          expect(() => _expectPlayChangelogWithinLimit(file), returnsNormally);
+        });
+        test('501 $character code points fail with newline ${newline.length}', () {
+          final file = File('${tmp.path}/209.txt')
+            ..writeAsStringSync(List.filled(501, character).join() + newline);
+          expect(() => _expectPlayChangelogWithinLimit(file),
+              throwsA(isA<TestFailure>()));
+        });
+      }
+    }
+  });
+
   group('the version is declared once and agrees everywhere', () {
     test('CHANGELOG.md has a section for the version being shipped', () {
       // Nothing checked this, so it drifted: at the 1.0.12 bump the changelog's
@@ -1085,9 +1118,7 @@ void main() {
             reason: 'versionCode $code needs ${f.path}; Play shows the last '
                 'one it has, so a missing file ships the previous release\'s '
                 'notes rather than nothing');
-        final bytes = f.readAsBytesSync().length;
-        expect(bytes, lessThanOrEqualTo(500),
-            reason: '${f.path} is $bytes bytes; Play rejects over 500');
+        _expectPlayChangelogWithinLimit(f);
         expect(f.readAsStringSync().trim(), isNotEmpty);
       }
     });

@@ -140,14 +140,16 @@ object AppLocalePolicy {
         if (language in setOf("en", "de", "ja", "ko", "es", "fr", "it", "nl")) return language
         if (language == "pt") return "pt-BR"
         if (language != "zh") return null
-        val subtags = parts.drop(1)
-        val script = subtags.firstOrNull { it.length == 4 }?.lowercase()
+        // Extension and private-use subtags cannot supply a script or region.
+        val subtags = parts.drop(1).takeWhile { it.length != 1 }
+        val script = subtags.firstOrNull { it.matches(Regex("[A-Za-z]{4}")) }?.lowercase()
         if (script == "hans") return "zh-Hans"
         if (script == "hant") return "zh-Hant"
-        val region = subtags.firstOrNull { it.length == 2 }?.uppercase()
+        val region = subtags.firstOrNull { it.matches(Regex("[A-Za-z]{2}|[0-9]{3}")) }?.uppercase()
         if (region == "CN" || region == "SG") return "zh-Hans"
         if (region == "TW" || region == "HK" || region == "MO") return "zh-Hant"
-        if (subtags.isEmpty()) return "zh-Hant"
+        // An unrecognized script has no effect when no region is specified.
+        if (subtags.isEmpty() || (script != null && region == null)) return "zh-Hant"
         return null
     }
 }

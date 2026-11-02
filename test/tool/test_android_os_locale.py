@@ -8,6 +8,7 @@ unless --execute --serial emulator-5554 is under test as a refused serial.
 from __future__ import annotations
 
 import os
+import plistlib
 import re
 import sys
 import tempfile
@@ -218,6 +219,19 @@ class AndroidOsLocaleLaneTest(unittest.TestCase):
                         self.assertTrue(value.strip(), key)
                         self.assertEqual(format_pattern.findall(default[key]),
                                          format_pattern.findall(value), key)
+
+    def test_apple_bundle_localizations_match_shipped_languages(self):
+        # The Dart Portuguese bundle is language-only, so Apple advertises pt.
+        expected = {
+            "en", "zh-Hant", "de", "ja", "ko", "es", "fr", "pt",
+            "zh-Hans", "it", "nl",
+        }
+        for platform in ("ios", "macos"):
+            with self.subTest(platform=platform):
+                with (ROOT / platform / "Runner" / "Info.plist").open("rb") as source:
+                    localizations = plistlib.load(source)["CFBundleLocalizations"]
+                self.assertEqual(len(localizations), len(set(localizations)))
+                self.assertEqual(set(localizations), expected)
 
     def test_locales_config_lists_dart_resolved_system_languages(self):
         xml = (

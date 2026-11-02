@@ -602,10 +602,10 @@ void main() {
         // Standard automotive drivetrain class acronym (ICE, glossed as Verbrandingsmotor (ICE) in
         // settingsCaPickerScope) kept compact for segmented chip.
         'settingsCaClassIce',
-        // Do-not-translate drivetrain class acronym (BEV in inputs/docs/do-not-translate.md,
+        // Do-not-translate drivetrain class acronym (BEV in docs/i18n/do-not-translate.md,
         // glossed in settingsCaPickerScope).
         'settingsCaClassBev',
-        // Do-not-translate drivetrain class acronym (PHEV in inputs/docs/do-not-translate.md,
+        // Do-not-translate drivetrain class acronym (PHEV in docs/i18n/do-not-translate.md,
         // glossed in settingsCaPickerScope).
         'settingsCaClassPhev',
       },

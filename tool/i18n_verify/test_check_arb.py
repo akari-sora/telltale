@@ -49,6 +49,16 @@ class CheckArbTest(unittest.TestCase):
             errors = check_arb.check_files([en, zh])
             self.assertEqual(errors, [])
 
+    def test_unannotated_first_file_is_not_a_template(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            translated = _write(tmp, "app_zh.arb", {"@@locale": "zh", "hello": "你好"})
+            template = _write(tmp, "app_en.arb", {
+                "hello": "Hello", "@hello": {"description": "Greeting"},
+            })
+            errors = check_arb.check_files([translated, template])
+            self.assertTrue(any("template" in e and "metadata" in e for e in errors), errors)
+
     def test_missing_key_fails(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)

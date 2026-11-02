@@ -55,7 +55,8 @@ Hant/TW/HK/MO resolve to Traditional Chinese. Bare `zh` retains the existing Tra
 Chinese fallback, also guarded by tests. Other unrecognized regions remain unsupported.
 All Portuguese device regions use the Brazilian Portuguese bundle (`pt`), with `pt-BR`
 in Android per-app settings and language-only `values-pt` car resources so a `pt-PT`
-device also finds that bundle.
+device also finds that bundle. Apple bundle localization declarations use `pt` to
+match the language-only Dart bundle and cover regional Portuguese preferences.
 
 ## What the German locale claims, and what it does not
 
@@ -123,10 +124,18 @@ The glossary guard does not check ARB content; the parity test and ARB checker a
 
 ### Packet token exceptions
 
-The reviewed packets use `Torque` exceptions only where English means the physical
-quantity or torque converter, rather than the protected Torque app name:
-`derivedTorque` in Japanese, Spanish, French, Italian and Dutch, plus
-`dtcDescriptionP0740` and `dtcDescriptionP0741` in Japanese, French, Italian and Dutch.
+`Torque` exceptions occur only where English means the physical quantity or torque
+converter, rather than the protected Torque app name. The table covers all shipped
+ARBs, including the reviewed packets, and records where the exact English spelling
+`Torque` is absent; Portuguese retains it in `derivedTorque`, while its converter
+descriptions use lowercase `torque`.
+
+| Key | Shipped locales |
+|---|---|
+| `derivedTorque` | `de`, `ja`, `ko`, `es`, `fr`, `zh`, `zh_Hant`, `zh_Hans`, `it`, `nl` |
+| `dtcDescriptionP0740` | `ja`, `ko`, `es`, `fr`, `pt`, `zh`, `zh_Hant`, `zh_Hans`, `it`, `nl` |
+| `dtcDescriptionP0741` | `ja`, `ko`, `es`, `fr`, `pt`, `zh`, `zh_Hant`, `zh_Hans`, `it`, `nl` |
+
 These agree with the glossary's product/quantity distinction. The repository checker
 has no per-key DNT exception file; packet acceptance checked these cases separately.
 Per-locale English-identical values and their reasons are retained in
