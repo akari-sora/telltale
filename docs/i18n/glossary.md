@@ -118,7 +118,7 @@ See also [do-not-translate.md](do-not-translate.md) and [hedge-register.md](hedg
 | 繁體中文 | English | Evidence | Status | Note |
 |---|---|---|---|---|
 | App 截圖與實車示範 | Screenshots and vehicle demo | README.md:32 ↔ README.zh-TW.md:30 (T1 heading) | evidenced |  |
-| Language / 語言 | Language / 語言 | lib/l10n/app_en.arb:974 ↔ lib/l10n/app_zh_Hant.arb:265 (T1 same ARB key) | evidenced | DO NOT localize. app_en.arb:10 description: 'Bilingual label for the language picker. Options use self-names.' |
+| Language / 語言 | Language / 語言 | lib/l10n/app_en.arb:974 ↔ lib/l10n/app_zh_Hant.arb:265 (T1 same ARB key) | evidenced | Keep bilingual; zh-Hans uses `Language / 语言`. app_en.arb `@languageSectionTitle` description: 'Bilingual label for the language picker. Options use self-names.' |
 | 主打圖片（feature graphic） | feature graphic | store/README.md:25 '主打圖片（feature graphic）' (T1 — the project's own inline gloss) | evidenced |  |
 | 儀表 | gauge | README.md:96 'read-only BMS gauges' ↔ README.zh-TW.md:84 '唯讀 BMS 儀表' (T1) | evidenced | See the 即時 PID 儀表 note: 儀表 renders both 'gauge' and 'PID dashboard'. |
 | 儀表板 | dashboard | README.md:36 alt 'Telltale live telemetry dashboard' ↔ README.zh-TW.md:34 alt 'Telltale 即時遙測儀表板' (T1); store/README.md:27 | evidenced |  |

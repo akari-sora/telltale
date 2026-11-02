@@ -58,6 +58,13 @@ in Android per-app settings and language-only `values-pt` car resources so a `pt
 device also finds that bundle. Apple bundle localization declarations use `pt` to
 match the language-only Dart bundle and cover regional Portuguese preferences.
 
+Known gaps, the same in every language: on Android 12 and older (no per-app language),
+text drawn by Android itself — the connection notification and the Android Auto
+screens — follows the device language, not the language picked in the app. Some
+text is still hard-coded in Traditional Chinese for every language, such as the
+derived lane names in recorded-session replay and wording stored inside recorded
+evidence.
+
 ## What the German locale claims, and what it does not
 
 Mechanically it is held to the same standard as any other locale, and the checks are the
