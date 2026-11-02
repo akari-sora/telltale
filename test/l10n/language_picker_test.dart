@@ -69,6 +69,7 @@ void main() {
     required SharedPreferences prefs,
     required Widget home,
     required _IdleSession session,
+    List<Locale> deviceLocales = const [Locale('en', 'US')],
   }) {
     return ProviderScope(
       overrides: [
@@ -79,7 +80,7 @@ void main() {
         builder: (context, ref, _) {
           final locale = resolveAppLocale(
             preference: ref.watch(localePreferenceProvider),
-            deviceLocales: const [Locale('en', 'US')],
+            deviceLocales: deviceLocales,
           );
           return MaterialApp(
             locale: locale,
@@ -188,6 +189,53 @@ void main() {
     );
     expect(find.text('繁體中文'), findsOneWidget);
     expect(find.text('简体中文'), findsOneWidget);
+  });
+
+  for (final device in const [
+    Locale('zh', 'CN'),
+    Locale('zh', 'SG'),
+    Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans', countryCode: 'TW'),
+    Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
+  ]) {
+    testWidgets('following a $device device keeps the picker Simplified', (
+      tester,
+    ) async {
+      final prefs = await prefsWith({});
+      await tester.pumpWidget(
+        host(
+          prefs: prefs,
+          home: const Scaffold(body: LanguagePicker()),
+          session: _IdleSession(),
+          deviceLocales: [device],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Language / 语言'), findsOneWidget);
+      expect(find.text('System default / 跟随系统'), findsOneWidget);
+      expect(find.text('Language / 語言'), findsNothing);
+      expect(find.text('System default / 跟隨系統'), findsNothing);
+      // The Traditional option keeps its own self-name.
+      expect(find.text('繁體中文'), findsOneWidget);
+    });
+  }
+
+  testWidgets('a Traditional device keeps the Traditional picker labels', (
+    tester,
+  ) async {
+    final prefs = await prefsWith({});
+    await tester.pumpWidget(
+      host(
+        prefs: prefs,
+        home: const Scaffold(body: LanguagePicker()),
+        session: _IdleSession(),
+        deviceLocales: const [Locale('zh', 'TW')],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Language / 語言'), findsOneWidget);
+    expect(find.text('System default / 跟隨系統'), findsOneWidget);
   });
 
   testWidgets('switching language does not start an OBD session', (

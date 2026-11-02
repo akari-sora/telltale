@@ -48,6 +48,8 @@ class LanguagePicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final current = ref.watch(localePreferenceProvider);
+    final uiLocale = Localizations.localeOf(context);
+    final hans = uiLocale.languageCode == 'zh' && uiLocale.scriptCode == 'Hans';
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -65,8 +67,7 @@ class LanguagePicker extends ConsumerWidget {
             key: Key('locale_${value.name}'),
             contentPadding: EdgeInsets.zero,
             title: Text(
-              value == LocalePreference.system &&
-                      Localizations.localeOf(context) == simplifiedChineseLocale
+              value == LocalePreference.system && hans
                   ? 'System default / 跟随系统'
                   : localePreferenceLabel(value),
             ),
