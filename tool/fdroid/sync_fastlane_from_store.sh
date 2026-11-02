@@ -10,7 +10,7 @@ FASTLANE="$ROOT/fastlane/metadata/android"
 sync_locale() {
   local loc="$1"
   local dest="$FASTLANE/$loc"
-  mkdir -p "$dest/changelogs" "$dest/images/phoneScreenshots"
+  mkdir -p "$dest/changelogs"
 
   cp "$STORE/metadata/$loc/title.txt" "$dest/title.txt"
   cp "$STORE/metadata/$loc/short_description.txt" "$dest/short_description.txt"
@@ -20,13 +20,14 @@ sync_locale() {
   fi
 
   if [[ -d "$STORE/metadata/$loc/changelogs" ]]; then
-    cp "$STORE/metadata/$loc/changelogs/"*.txt "$dest/changelogs/"
     # F-Droid builds one APK per ABI with versionCode N*10+1..3 (see the
     # fdroiddata recipe's VercodeOperation) and reads the changelog named
     # after that code, so N.txt alone never shows there. Split builds
     # started at 206.
     local log code abi
     for log in "$STORE/metadata/$loc/changelogs/"*.txt; do
+      [[ -f "$log" ]] || continue
+      cp "$log" "$dest/changelogs/"
       code="$(basename "$log" .txt)"
       [[ "$code" =~ ^[0-9]+$ ]] && (( 10#$code >= 206 )) || continue
       for abi in 1 2 3; do
@@ -35,6 +36,13 @@ sync_locale() {
     done
   fi
 
+  if [[ ! -d "$STORE/$loc" ]]; then
+    case "$loc" in
+      en-US|zh-TW|de-DE) echo "Missing images for $loc" >&2; return 1 ;;
+      *) echo "$loc: text only; screenshots pending"; return 0 ;;
+    esac
+  fi
+  mkdir -p "$dest/images/phoneScreenshots"
   cp "$STORE/icon-512.png" "$dest/images/icon.png"
   cp "$STORE/$loc/feature-1024x500.png" "$dest/images/featureGraphic.png"
 
@@ -47,8 +55,8 @@ sync_locale() {
   done
 }
 
-sync_locale en-US
-sync_locale zh-TW
-sync_locale de-DE
+for locale in en-US zh-TW de-DE ja-JP ko-KR es-ES es-419 fr-FR pt-BR zh-CN it-IT nl-NL; do
+  sync_locale "$locale"
+done
 
-echo "Synced store/ → fastlane/metadata/android/{en-US,zh-TW,de-DE}"
+echo "Synced store/ → fastlane/metadata/android/"

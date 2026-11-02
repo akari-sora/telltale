@@ -1,20 +1,29 @@
 /// App locale preference and resolution. Pure functions — no Flutter widgets,
 /// no OBD, no SharedPreferences.
 ///
-/// Supported UI languages are English, Traditional Chinese and German.
-/// Simplified Chinese is not a shipped translation; `zh-Hans` must not be
-/// dressed up as 繁體中文.
-///
-/// German is a machine translation of the English template, corrected by hand
-/// and reviewed against docs/i18n/do-not-translate.md, but not by a native
-/// speaker reading it on a screen. docs/i18n/README.md records that difference,
-/// because it is the difference between a sentence somebody stands behind and
-/// one nobody has read in place.
+/// UI languages: English, Traditional and Simplified Chinese, German, Japanese,
+/// Korean, Spanish, French, Brazilian Portuguese, Italian and Dutch.
+/// German was machine-translated and corrected by hand. The eight newer
+/// translations require mechanical checks and a second-model hedge review;
+/// none claims a native speaker's reading on a screen. See docs/i18n/README.md.
 library;
 
 import 'package:flutter/widgets.dart';
 
-enum LocalePreference { system, english, traditionalChinese, german }
+enum LocalePreference {
+  system,
+  english,
+  traditionalChinese,
+  german,
+  japanese,
+  korean,
+  spanish,
+  french,
+  brazilianPortuguese,
+  simplifiedChinese,
+  italian,
+  dutch,
+}
 
 const kLocalePreferenceKey = 'locale_preference_v1';
 
@@ -24,11 +33,30 @@ const traditionalChineseLocale = Locale.fromSubtags(
   scriptCode: 'Hant',
 );
 const germanLocale = Locale('de');
+const japaneseLocale = Locale('ja');
+const koreanLocale = Locale('ko');
+const spanishLocale = Locale('es');
+const frenchLocale = Locale('fr');
+const brazilianPortugueseLocale = Locale('pt');
+const simplifiedChineseLocale = Locale.fromSubtags(
+  languageCode: 'zh',
+  scriptCode: 'Hans',
+);
+const italianLocale = Locale('it');
+const dutchLocale = Locale('nl');
 
 const supportedAppLocales = <Locale>[
   englishLocale,
   traditionalChineseLocale,
   germanLocale,
+  japaneseLocale,
+  koreanLocale,
+  spanishLocale,
+  frenchLocale,
+  brazilianPortugueseLocale,
+  simplifiedChineseLocale,
+  italianLocale,
+  dutchLocale,
 ];
 
 /// The stored ids are a format, not an implementation detail: they are written
@@ -42,6 +70,14 @@ LocalePreference localePreferenceFromStored(Object? raw) {
     'en' => LocalePreference.english,
     'zh_Hant' => LocalePreference.traditionalChinese,
     'de' => LocalePreference.german,
+    'ja' => LocalePreference.japanese,
+    'ko' => LocalePreference.korean,
+    'es' => LocalePreference.spanish,
+    'fr' => LocalePreference.french,
+    'pt' => LocalePreference.brazilianPortuguese,
+    'zh_Hans' => LocalePreference.simplifiedChinese,
+    'it' => LocalePreference.italian,
+    'nl' => LocalePreference.dutch,
     'system' => LocalePreference.system,
     _ => LocalePreference.system,
   };
@@ -53,6 +89,14 @@ String localePreferenceToStored(LocalePreference preference) {
     LocalePreference.english => 'en',
     LocalePreference.traditionalChinese => 'zh_Hant',
     LocalePreference.german => 'de',
+    LocalePreference.japanese => 'ja',
+    LocalePreference.korean => 'ko',
+    LocalePreference.spanish => 'es',
+    LocalePreference.french => 'fr',
+    LocalePreference.brazilianPortuguese => 'pt',
+    LocalePreference.simplifiedChinese => 'zh_Hans',
+    LocalePreference.italian => 'it',
+    LocalePreference.dutch => 'nl',
   };
 }
 
@@ -66,6 +110,14 @@ Locale resolveAppLocale({
     LocalePreference.english => englishLocale,
     LocalePreference.traditionalChinese => traditionalChineseLocale,
     LocalePreference.german => germanLocale,
+    LocalePreference.japanese => japaneseLocale,
+    LocalePreference.korean => koreanLocale,
+    LocalePreference.spanish => spanishLocale,
+    LocalePreference.french => frenchLocale,
+    LocalePreference.brazilianPortuguese => brazilianPortugueseLocale,
+    LocalePreference.simplifiedChinese => simplifiedChineseLocale,
+    LocalePreference.italian => italianLocale,
+    LocalePreference.dutch => dutchLocale,
     LocalePreference.system => resolveSystemLocale(deviceLocales),
   };
 }
@@ -84,24 +136,30 @@ Locale resolveSystemLocale(List<Locale> deviceLocales) {
 Locale? mapDeviceLocale(Locale locale) {
   final language = locale.languageCode.toLowerCase();
   if (language == 'en') return englishLocale;
-  // Region is deliberately ignored here: de-AT and de-CH read the one German
-  // bundle this app ships. A regional variant is a later ARB, not a reason to
-  // fall back to English.
+  // Regional variants share one bundle; all pt regions use Brazilian content.
   if (language == 'de') return germanLocale;
+  if (language == 'ja') return japaneseLocale;
+  if (language == 'ko') return koreanLocale;
+  if (language == 'es') return spanishLocale;
+  if (language == 'fr') return frenchLocale;
+  if (language == 'pt') return brazilianPortugueseLocale;
+  if (language == 'it') return italianLocale;
+  if (language == 'nl') return dutchLocale;
   if (language != 'zh') return null;
 
   final script = locale.scriptCode?.toLowerCase();
-  if (script == 'hans') return null;
+  if (script == 'hans') return simplifiedChineseLocale;
   if (script == 'hant') return traditionalChineseLocale;
 
   final country = locale.countryCode?.toUpperCase();
+  if (country == 'CN' || country == 'SG') return simplifiedChineseLocale;
   if (country == 'TW' || country == 'HK' || country == 'MO') {
     return traditionalChineseLocale;
   }
   if (country == null || country.isEmpty) {
-    // Generic `zh` with no script/region. This release maps it to 繁中.
+    // Preserve the existing bare `zh` fallback to Traditional Chinese.
     return traditionalChineseLocale;
   }
-  // zh-CN / zh-SG / other regions without Hans/Hant: not a Traditional match.
+  // Other regions without a recognized script are not a supported match.
   return null;
 }

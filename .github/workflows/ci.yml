@@ -98,7 +98,15 @@ jobs:
             lib/l10n/app_en.arb \
             lib/l10n/app_zh.arb \
             lib/l10n/app_zh_Hant.arb \
-            lib/l10n/app_de.arb
+            lib/l10n/app_de.arb \
+            lib/l10n/app_ja.arb \
+            lib/l10n/app_ko.arb \
+            lib/l10n/app_es.arb \
+            lib/l10n/app_fr.arb \
+            lib/l10n/app_pt.arb \
+            lib/l10n/app_zh_Hans.arb \
+            lib/l10n/app_it.arb \
+            lib/l10n/app_nl.arb
 
       # The three simulator-backed oracle files self-skip here because no
       # simulator is listening. The `oracle` job below exercises the public
@@ -785,20 +793,24 @@ jobs:
                   if n > CHANGELOG_LIMIT:
                       problems.append(f'{f}: {n} characters, limit {CHANGELOG_LIMIT}')
 
-          # Every locale must carry release notes for the same versionCodes, or
-          # one language silently ships last release's notes.
-          notes = {loc: {f.stem for f in (pathlib.Path('store/metadata') / loc / 'changelogs').glob('*.txt')}
-                   for loc in locales}
-          if notes and len(set(map(frozenset, notes.values()))) != 1:
-              problems.append('locales carry release notes for different versionCodes: '
-                              + '; '.join(f'{k}={sorted(v)}' for k, v in notes.items()))
+          # New locales need the current release, not fabricated historical notes.
+          import re
+          version = re.search(r'^version:\s*[^+\s]+\+(\d+)',
+                              pathlib.Path('pubspec.yaml').read_text(), re.MULTILINE)
+          if not version:
+              problems.append('pubspec.yaml has no versionCode')
+          else:
+              for locale in locales:
+                  f = pathlib.Path('store/metadata') / locale / 'changelogs' / (version.group(1) + '.txt')
+                  if not f.exists() or not f.read_text(encoding='utf-8').strip():
+                      problems.append(f'{f} is missing or empty')
 
           if problems:
               print('Listing copy will not upload:')
               for p in problems:
                   print(' - ' + p)
               sys.exit(1)
-          print(f'OK: {len(locales)} locales within every Play limit, matching release notes.')
+          print(f'OK: {len(locales)} locales within every Play limit, with current release notes.')
           PY
 
   rigs:

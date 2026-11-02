@@ -6,6 +6,17 @@ which therefore does not always move in step with the name.
 
 Dates are the date the build was made, not the date it reached anyone.
 
+## Unreleased
+
+- Add Japanese, Korean, Spanish, French, Brazilian Portuguese, Simplified Chinese,
+  Italian and Dutch to the app and Android Auto; add German Android Auto strings.
+  Native-speaker screen review has not been performed; some translation reviews remain pending.
+
+### 繁體中文
+
+- App 與 Android Auto 新增日文、韓文、西班牙文、法文、巴西葡萄牙文、簡體中文、
+  義大利文與荷蘭文，Android Auto 另新增德文。尚未完成母語者螢幕閱讀，部分翻譯審查仍在進行。
+
 ## 1.0.26 — 2026-11-02
 
 - Learn Mode 01 support from every responder when a vehicle has no `7E8`.

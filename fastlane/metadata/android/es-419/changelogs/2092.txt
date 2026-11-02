@@ -1,0 +1,1 @@
+Indicadores Android Auto más grandes y colores día/noche. Velocidad entera; toque el icono de información para consultar el estado. Los PID de prioridad muy baja se mantienen actualizados. Sin 7E8, se aprende de todos los módulos y se dejan de consultar los PID no compatibles. Probado solo con Demo/DHU; vehículos y adaptadores reportados y unidades reales sin verificar.

@@ -16,7 +16,7 @@ Diagnostic results get acted on with a wrench. A −40 °C coolant reading gets 
 • Custom PIDs: write your own formulas, with CSV import and export
 • Acceleration test: timed from a standstill to a target speed
 • Diagnostic transcript: every byte exchanged with the adapter is kept and can be exported when a connection fails; recording and export keep their status labels
-• English, Traditional Chinese and German, switchable on the connect screen and in Settings, or set to follow the system. A few messages are still Traditional Chinese only
+• English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano and Nederlands, switchable on the connect screen and in Settings, or set to follow the system. A few messages are still Traditional Chinese only
 
 〇Four ways to connect
 

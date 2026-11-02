@@ -1,10 +1,37 @@
 # Localization working documents
 
-Telltale ships three languages, and they do not all carry the same claim. English is the
-template. Traditional Chinese is a human translation, reviewed against the documents below.
-German is DeepL output that was then read end to end and corrected by hand. Simplified
-Chinese is still deliberately not shipped; `lib/l10n/locale_resolution.dart` says so in
-code, and `zh-Hans` must never be dressed up as 繁體中文.
+Telltale supports eleven UI languages. The claim depends on the language and surface.
+The eight additions are being integrated from reviewed translation packets; their
+final review status is stated below.
+
+| Language | UI translation claim | Android Auto claim |
+|---|---|---|
+| English (`en`) | Source template | Source template |
+| Traditional Chinese (`zh_Hant`) | Human translation, reviewed against the documents below | Existing translation; no new review in this integration |
+| German (`de`) | DeepL output, read end to end and corrected by hand; not read by a native speaker on a screen | Machine-assisted translation using the German ARB terms, checked mechanically for keys and format placeholders; no end-to-end or native-speaker screen read |
+| Japanese (`ja`) | New-language claim and review status below | Same claim and status |
+| Korean (`ko`) | New-language claim and review status below | Same claim and status |
+| Spanish (`es`) | New-language claim and review status below | Same claim and status |
+| French (`fr`) | New-language claim and review status below | Same claim and status |
+| Brazilian Portuguese (`pt`) | New-language claim and review status below | Same claim and status |
+| Simplified Chinese (`zh_Hans`) | New-language claim and review status below | Same claim and status |
+| Italian (`it`) | New-language claim and review status below | Same claim and status |
+| Dutch (`nl`) | New-language claim and review status below | Same claim and status |
+
+The eight new languages were translated by an LLM from the English template. Their
+packets were mechanically checked for keys, ICU arguments, plural/select forms,
+do-not-translate tokens and XML escaping, and reviewed by a different model. Repeated
+Codex hedge passes are required until a pass finds no meaning blockers. The final pass
+is complete for Brazilian Portuguese and Dutch; it remains pending for Japanese,
+Korean, Spanish, French, Italian and Simplified Chinese. None has been read by a
+native speaker on a screen. Integration verification is tracked separately.
+
+Chinese scripts take priority over regions: Hans/CN/SG resolve to Simplified Chinese;
+Hant/TW/HK/MO resolve to Traditional Chinese. Bare `zh` retains the existing Traditional
+Chinese fallback, also guarded by tests. Other unrecognized regions remain unsupported.
+All Portuguese device regions use the Brazilian Portuguese bundle (`pt`), with `pt-BR`
+in Android per-app settings and language-only `values-pt` car resources so a `pt-PT`
+device also finds that bundle.
 
 ## What the German locale claims, and what it does not
 
@@ -68,4 +95,15 @@ machine can answer honestly: is the evidence still where the glossary says it is
 tone and preserved hedging are a human's job, which is what
 [hedge-register.md](hedge-register.md) exists to make reviewable.
 
-It also does not check the ARB files. Nothing in this branch does.
+The glossary guard does not check ARB content; the parity test and ARB checker above do.
+
+### Packet token exceptions
+
+The reviewed packets use `Torque` exceptions only where English means the physical
+quantity or torque converter, rather than the protected Torque app name:
+`derivedTorque` in Japanese, Spanish, French, Italian and Dutch, plus
+`dtcDescriptionP0740` and `dtcDescriptionP0741` in Japanese, French, Italian and Dutch.
+These agree with the glossary's product/quantity distinction. The repository checker
+has no per-key DNT exception file; packet acceptance checked these cases separately.
+Per-locale English-identical values and their reasons are retained in
+`test/l10n/arb_parity_test.dart`.

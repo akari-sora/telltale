@@ -6,7 +6,9 @@ Drives the text of `.github/workflows/ci.yml`, not a rewrite of the checker.
 
 from __future__ import annotations
 
+import json
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -39,6 +41,26 @@ class I18nVerifyCiGuardTest(unittest.TestCase):
         arb_step = self.workflow.index("ARB locales have matching keys")
         shipped = self.workflow.index("lib/l10n/app_en.arb")
         self.assertGreater(shipped, arb_step)
+
+    def test_portable_gate_checks_every_arb(self) -> None:
+        gate = (REPO / "tool/ci/full_gate.sh").read_text(encoding="utf-8")
+        self.assertIn("run_step arb-locales python3 tool/i18n_verify/check_arb.py", gate)
+        arb_step = gate[gate.index("run_step arb-locales"):gate.index("run_step analyze")]
+        self.assertLess(arb_step.index("app_en.arb"), arb_step.index("app_de.arb"))
+        for path in ARB_DIR.glob("*.arb"):
+            self.assertIn(f"lib/l10n/{path.name}", arb_step)
+
+    def test_acceptance_manifest_lists_configured_locales(self) -> None:
+        manifest = json.loads(
+            (REPO / "tool/i18n_verify/production_acceptance_manifest.json").read_text()
+        )
+        config = ET.parse(REPO / "android/app/src/main/res/xml/locales_config.xml")
+        tags = [node.attrib["{http://schemas.android.com/apk/res/android}name"]
+                for node in config.getroot()]
+        self.assertEqual(manifest["supportedAppLocales"], tags)
+        residual = next(item for item in manifest["nativeResiduals"]
+                        if item["residualId"] == "R04_ADDITIONAL_LOCALE_ACCEPTANCE")
+        self.assertEqual(residual["status"], "NOT_RUN")
 
     def test_ci_compiles_the_checker_before_running_it(self) -> None:
         compile_at = self.workflow.index(

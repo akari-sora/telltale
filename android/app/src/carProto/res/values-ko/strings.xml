@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projection_notification_channel_name">OBD 어댑터 연결</string>
+    <string name="projection_notification_title">Telltale OBD 어댑터 연결됨</string>
+    <string name="projection_notification_live_body">Android Auto용 실시간 차량 텔레메트리가 계속 실행 중입니다</string>
+    <string name="projection_notification_waiting_body">Android Auto 대기 중</string>
+</resources>

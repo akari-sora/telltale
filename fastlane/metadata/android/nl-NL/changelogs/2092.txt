@@ -1,0 +1,1 @@
+Grotere Android Auto-meters met dag- en nachtkleuren. Snelheid als geheel getal; tik op het infopictogram voor de status. PID’s met zeer lage prioriteit blijven actueel. Zonder 7E8 wordt ondersteuning van alle responders geleerd en stopt het pollen van niet-ondersteunde PID’s. Alleen getest met Demo/DHU; gemelde voertuigen, adapters en echte headunits zijn niet geverifieerd.

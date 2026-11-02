@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+  <string name="projection_notification_channel_name">Connexion à l\'adaptateur OBD</string>
+  <string name="projection_notification_title">Adaptateur OBD Telltale connecté</string>
+  <string name="projection_notification_live_body">La télémétrie du véhicule en direct se poursuit pour Android Auto</string>
+  <string name="projection_notification_waiting_body">En attente d\'Android Auto</string>
+</resources>

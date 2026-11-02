@@ -9,6 +9,7 @@
     "AC40-4": "Export canonical CSV/JSON, gate settling, reopen; capture child exits, SDK, environment, test outcomes, and artifact hashes",
     "AC40-5": "Clean UI disconnect and post-disconnect quiescent transport; reviewer inspection of copy and accessibility artifacts while preserving frozen canonical exports"
   },
+  "supportedAppLocales": ["en", "zh-Hant", "de", "ja", "ko", "es", "fr", "pt-BR", "zh-Hans", "it", "nl"],
   "cases": [
     {
       "caseId": "C01",
@@ -193,6 +194,14 @@
       "requiredInC1a": false,
       "residualOwner": "Issue #65 (Rotary/Ambient/Provisioning) & Issue #48 (Release Evidence)",
       "notes": "Circular round display physical render, rotary input, ambient mode on WearOS (#65); release qualification (#48)"
+    },
+    {
+      "residualId": "R04_ADDITIONAL_LOCALE_ACCEPTANCE",
+      "layer": "translation-and-native-platform",
+      "status": "NOT_RUN",
+      "requiredInC1a": false,
+      "residualOwner": "Eight-language integration / Phase 2",
+      "notes": "ja, ko, es, fr, pt (Brazilian content), zh-Hans, it and nl require real translation delivery, mechanical checks, second-model hedge review and native per-app/car resource selection checks. Existing en/zh journey expectations do not prove these languages."
     }
   ]
 }

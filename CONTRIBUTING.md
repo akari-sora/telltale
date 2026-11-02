@@ -387,3 +387,10 @@ anything in the AT initialisation sequence.
 ## Licence
 
 GPL-3.0. By contributing you agree your work is licensed the same way.
+
+
+## Translation defect reports
+
+Native speakers are welcome to report translation defects, especially wording that
+changes or drops a qualifier. Please include the language, screen and intended meaning;
+see the [hedge register](docs/i18n/hedge-register.md) for examples and review criteria.

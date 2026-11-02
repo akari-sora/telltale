@@ -1,0 +1,1 @@
+Telemetria ELM327 ao vivo e diagnóstico OBD2. Quando não tem certeza, diz isso.

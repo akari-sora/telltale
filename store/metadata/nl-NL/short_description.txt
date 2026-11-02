@@ -1,0 +1,1 @@
+ELM327 live telemetrie en OBD2-diagnose. Als het onzeker is, zegt de app dat.

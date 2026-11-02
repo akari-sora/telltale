@@ -29,7 +29,10 @@ void main() {
     expect(localePreferenceFromStored(null), LocalePreference.system);
     expect(localePreferenceFromStored(1), LocalePreference.system);
     expect(localePreferenceFromStored(''), LocalePreference.system);
-    expect(localePreferenceFromStored('zh_Hans'), LocalePreference.system);
+    expect(
+      localePreferenceFromStored('zh_Hans'),
+      LocalePreference.simplifiedChinese,
+    );
     expect(localePreferenceFromStored('system'), LocalePreference.system);
     expect(localePreferenceFromStored('en'), LocalePreference.english);
     expect(
@@ -55,7 +58,7 @@ void main() {
     // Downgrading is a real path: a preference written by a build that ships a
     // language this one does not must not throw, and must not be quietly read
     // as some other language.
-    expect(localePreferenceFromStored('fr'), LocalePreference.system);
+    expect(localePreferenceFromStored('sv'), LocalePreference.system);
     expect(localePreferenceFromStored('de_AT'), LocalePreference.system);
   });
 
@@ -81,16 +84,59 @@ void main() {
     expect(mapDeviceLocale(const Locale('de', 'CH')), germanLocale);
   });
 
-  test('an unshipped language still falls through to the next device locale', () {
-    expect(mapDeviceLocale(const Locale('fr')), isNull);
-    expect(
-      resolveAppLocale(
-        preference: LocalePreference.system,
-        deviceLocales: [const Locale('fr', 'FR'), const Locale('de', 'DE')],
-      ),
-      germanLocale,
-    );
+  test('new stored ids and explicit preferences resolve independently', () {
+    final cases = <(String, LocalePreference, Locale)>[
+      ('ja', LocalePreference.japanese, japaneseLocale),
+      ('ko', LocalePreference.korean, koreanLocale),
+      ('es', LocalePreference.spanish, spanishLocale),
+      ('fr', LocalePreference.french, frenchLocale),
+      ('pt', LocalePreference.brazilianPortuguese, brazilianPortugueseLocale),
+      ('zh_Hans', LocalePreference.simplifiedChinese, simplifiedChineseLocale),
+      ('it', LocalePreference.italian, italianLocale),
+      ('nl', LocalePreference.dutch, dutchLocale),
+    ];
+    for (final (id, preference, locale) in cases) {
+      expect(localePreferenceFromStored(id), preference);
+      expect(localePreferenceToStored(preference), id);
+      expect(
+        resolveAppLocale(
+          preference: preference,
+          deviceLocales: const [Locale('en', 'US')],
+        ),
+        locale,
+      );
+    }
   });
+
+  test('new device language regions map to their language bundle', () {
+    final cases = <(Locale, Locale)>[
+      (const Locale('ja', 'JP'), japaneseLocale),
+      (const Locale('ko', 'KR'), koreanLocale),
+      (const Locale('es', 'MX'), spanishLocale),
+      (const Locale('fr', 'CA'), frenchLocale),
+      (const Locale('pt', 'BR'), brazilianPortugueseLocale),
+      (const Locale('pt', 'PT'), brazilianPortugueseLocale),
+      (const Locale('it', 'CH'), italianLocale),
+      (const Locale('nl', 'BE'), dutchLocale),
+    ];
+    for (final (device, expected) in cases) {
+      expect(mapDeviceLocale(device), expected, reason: '$device');
+    }
+  });
+
+  test(
+    'an unshipped language still falls through to the next device locale',
+    () {
+      expect(mapDeviceLocale(const Locale('sv')), isNull);
+      expect(
+        resolveAppLocale(
+          preference: LocalePreference.system,
+          deviceLocales: [const Locale('sv', 'SE'), const Locale('de', 'DE')],
+        ),
+        germanLocale,
+      );
+    },
+  );
 
   test('every preference resolves to a locale the app ships', () {
     for (final preference in LocalePreference.values) {
@@ -146,12 +192,18 @@ void main() {
     expect(mapDeviceLocale(const Locale('zh', 'MO')), traditionalChineseLocale);
   });
 
-  test('explicit zh-Hans is not dressed up as Traditional Chinese', () {
+  test('system zh-CN/SG without script map to Simplified Chinese', () {
+    expect(mapDeviceLocale(const Locale('zh', 'CN')), simplifiedChineseLocale);
+    expect(mapDeviceLocale(const Locale('zh', 'SG')), simplifiedChineseLocale);
+    expect(mapDeviceLocale(const Locale('zh', 'US')), isNull);
+  });
+
+  test('explicit zh-Hans resolves to Simplified Chinese', () {
     expect(
       mapDeviceLocale(
         const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
       ),
-      isNull,
+      simplifiedChineseLocale,
     );
     expect(
       mapDeviceLocale(
@@ -161,7 +213,7 @@ void main() {
           countryCode: 'CN',
         ),
       ),
-      isNull,
+      simplifiedChineseLocale,
     );
     expect(
       resolveAppLocale(
@@ -174,7 +226,7 @@ void main() {
           ),
         ],
       ),
-      englishLocale,
+      simplifiedChineseLocale,
     );
   });
 
@@ -187,7 +239,17 @@ void main() {
           countryCode: 'TW',
         ),
       ),
-      isNull,
+      simplifiedChineseLocale,
+    );
+    expect(
+      mapDeviceLocale(
+        const Locale.fromSubtags(
+          languageCode: 'zh',
+          scriptCode: 'Hant',
+          countryCode: 'CN',
+        ),
+      ),
+      traditionalChineseLocale,
     );
   });
 
@@ -195,13 +257,13 @@ void main() {
     expect(mapDeviceLocale(const Locale('zh')), traditionalChineseLocale);
   });
 
-  test('ja then en in the device list selects English', () {
+  test('ja then en in the device list selects Japanese', () {
     expect(
       resolveAppLocale(
         preference: LocalePreference.system,
         deviceLocales: [const Locale('ja'), const Locale('en', 'US')],
       ),
-      englishLocale,
+      japaneseLocale,
     );
   });
 

@@ -1076,7 +1076,10 @@ void main() {
       // present it must be complete.
       if (!Directory('store/metadata').existsSync()) return;
       final code = _pubspecVersion().code;
-      for (final locale in ['en-US', 'zh-TW', 'de-DE']) {
+      for (final locale in [
+        'en-US', 'zh-TW', 'de-DE', 'ja-JP', 'ko-KR', 'es-ES', 'es-419',
+        'fr-FR', 'pt-BR', 'zh-CN', 'it-IT', 'nl-NL',
+      ]) {
         final f = File('store/metadata/$locale/changelogs/$code.txt');
         expect(f.existsSync(), isTrue,
             reason: 'versionCode $code needs ${f.path}; Play shows the last '

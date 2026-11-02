@@ -1,0 +1,1 @@
+Telemetria ELM327 in tempo reale e diagnosi OBD2. Se ha dubbi, lo dice.

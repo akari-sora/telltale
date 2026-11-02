@@ -1,0 +1,1 @@
+Telemetría ELM327 en vivo y diagnóstico OBD2. Si la app tiene dudas, lo dice.

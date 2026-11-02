@@ -37,6 +37,19 @@ for pub_get_attempt in 1 2 3; do
   sleep $((pub_get_attempt * 10))
 done
 run_step car-pigeon-codegen bash tool/ci/verify_car_pigeon_codegen.sh
+run_step arb-locales python3 tool/i18n_verify/check_arb.py \
+  lib/l10n/app_en.arb \
+  lib/l10n/app_zh.arb \
+  lib/l10n/app_zh_Hant.arb \
+  lib/l10n/app_de.arb \
+  lib/l10n/app_ja.arb \
+  lib/l10n/app_ko.arb \
+  lib/l10n/app_es.arb \
+  lib/l10n/app_fr.arb \
+  lib/l10n/app_pt.arb \
+  lib/l10n/app_zh_Hans.arb \
+  lib/l10n/app_it.arb \
+  lib/l10n/app_nl.arb
 run_step analyze flutter analyze
 run_step python-tools python3 -m unittest discover -s test/tool -p 'test_*.py'
 run_step python-aa08-pytest python3 -m pytest -q test/tool/test_challenger_empirical_r3.py test/tool/test_run_targeted_mutations.py

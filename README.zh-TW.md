@@ -213,3 +213,8 @@ Telltale 不會主動上傳資料。本機診斷匯出可能含 VIN、裝置、�
 [來源與重用聲明](assets/vehicle_catalog/NOTICE.md)，大電池資料另有
 [第三方來源聲明](THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md)。請自行承擔使用風險；
 任何診斷結果都不保證車輛可安全行駛。
+
+
+## 介面語言
+
+English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano, Nederlands。可在連線畫面或設定中切換，也可跟隨系統；少數訊息仍只有繁體中文。

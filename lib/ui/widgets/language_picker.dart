@@ -27,6 +27,14 @@ String localePreferenceLabel(LocalePreference preference) {
     LocalePreference.english => 'English',
     LocalePreference.traditionalChinese => '繁體中文',
     LocalePreference.german => 'Deutsch',
+    LocalePreference.japanese => '日本語',
+    LocalePreference.korean => '한국어',
+    LocalePreference.spanish => 'Español',
+    LocalePreference.french => 'Français',
+    LocalePreference.brazilianPortuguese => 'Português (Brasil)',
+    LocalePreference.simplifiedChinese => '简体中文',
+    LocalePreference.italian => 'Italiano',
+    LocalePreference.dutch => 'Nederlands',
     LocalePreference.system => 'System default / 跟隨系統',
   };
 }

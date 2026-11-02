@@ -8,9 +8,11 @@ unless --execute --serial emulator-5554 is under test as a refused serial.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -194,6 +196,29 @@ class AndroidOsLocaleLaneTest(unittest.TestCase):
                     os.environ["ADB"] = previous
             self.assertFalse(stale.exists())
 
+    def test_car_strings_match_defaults_for_every_configured_locale(self):
+        config = ET.parse(ROOT / "android/app/src/main/res/xml/locales_config.xml")
+        qualifiers = {"en": "", "zh-Hant": "-zh-rTW", "zh-Hans": "-zh-rCN", "pt-BR": "-pt"}
+        format_pattern = re.compile(r"%(?:\d+\$)?[-#+ 0,(]*\d*(?:\.\d+)?[a-zA-Z]")
+        for base in ("android/car-core/src/main/res", "android/app/src/carProto/res"):
+            def read_strings(qualifier):
+                path = ROOT / base / f"values{qualifier}/strings.xml"
+                nodes = ET.parse(path).getroot().findall("string")
+                strings = {node.attrib["name"]: "".join(node.itertext()) for node in nodes}
+                self.assertEqual(len(nodes), len(strings), f"Duplicate keys in {path}")
+                return strings
+
+            default = read_strings("")
+            for node in config.getroot():
+                tag = node.attrib["{http://schemas.android.com/apk/res/android}name"]
+                with self.subTest(base=base, tag=tag):
+                    translated = read_strings(qualifiers.get(tag, f"-{tag}"))
+                    self.assertEqual(default.keys(), translated.keys())
+                    for key, value in translated.items():
+                        self.assertTrue(value.strip(), key)
+                        self.assertEqual(format_pattern.findall(default[key]),
+                                         format_pattern.findall(value), key)
+
     def test_locales_config_lists_dart_resolved_system_languages(self):
         xml = (
             ROOT / "android" / "app" / "src" / "main" / "res" / "xml" / "locales_config.xml"
@@ -201,7 +226,8 @@ class AndroidOsLocaleLaneTest(unittest.TestCase):
         self.assertIn('android:name="en"', xml)
         self.assertIn('android:name="zh-Hant"', xml)
         self.assertIn('android:name="de"', xml)
-        self.assertNotIn("zh-Hans", xml)
+        for tag in ("ja", "ko", "es", "fr", "pt-BR", "zh-Hans", "it", "nl"):
+            self.assertIn(f'android:name="{tag}"', xml)
         self.assertNotIn("zh-CN", xml)
         manifest = (
             ROOT / "android" / "app" / "src" / "main" / "AndroidManifest.xml"
