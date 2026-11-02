@@ -1,1 +1,1 @@
-ELM327-Live-Daten und OBD2-Diagnose. Unsicherheit wird benannt.
+ELM327-Live-Daten und OBD2-Diagnose. Wenn sie unsicher ist, sagt sie es.

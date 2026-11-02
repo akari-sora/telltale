@@ -1,4 +1,4 @@
-Lies dein Fahrzeug über einen ELM327-Adapter aus: Live-Daten zu Drehzahl, Geschwindigkeit, Kühlmittel, Last und Ansaugtemperatur, Fehlercodes und der vollständige Fahrzeugzustand zum Zeitpunkt eines Fehlers.
+Lesen Sie Ihr Fahrzeug über einen ELM327-Adapter aus: Live-Daten zu Drehzahl, Geschwindigkeit, Kühlmittel, Last und Ansaugtemperatur, Fehlercodes und der vollständige Fahrzeugzustand zum Zeitpunkt eines Fehlers.
 
 Diese App folgt einem Grundsatz:
 
@@ -11,12 +11,12 @@ Diagnoseergebnisse führen zu Reparaturen. Bei −40 °C Kühlmitteltemperatur w
 • Sechs von Hand gezeichnete Instrumente in fünf Stilen – nicht nur anders eingefärbt: Form der Skala, Zeiger und Bewegung unterscheiden sich. Mit dunklem und hellem Hintergrund
 • Fehlercodes: Mode 03 gespeichert, Mode 07 ausstehend, Mode 0A permanent, jeweils mit dem Steuergerät gekennzeichnet, das sie gemeldet hat
 • Freeze-Frame: der Fahrzeugzustand zum Zeitpunkt der Fehlerbestätigung – Drehzahl, Kühlmittel, Last, Kraftstoffkorrektur. Er ist die einzige Aufzeichnung der Bedingungen während des Fehlers in der App. Das Löschen der Codes zerstört ihn dauerhaft, deshalb fragt die App zuerst
-• Emissionsbereitschaft: Vor der Untersuchung wissen, ob sie bestanden wird
+• Emissionsbereitschaft: vor der Untersuchung sehen, welche Monitore abgeschlossen sind
 • Abgeleitete Werte: Leistung, Drehmoment, Kraftstoffverbrauch, Luftstrom. Generisches OBD funktioniert auch ohne VIN und ohne Katalogtreffer; Schätzwerte sind mit Formel und Fahrzeugannahmen gekennzeichnet und keine Messungen
 • Eigene PIDs: eigene Formeln schreiben, mit CSV-Import und -Export
 • Beschleunigungstest: Zeitmessung aus dem Stand bis zu einer Zielgeschwindigkeit
 • Diagnoseprotokoll: Jedes mit dem Adapter ausgetauschte Byte wird gespeichert und kann bei einem Verbindungsfehler exportiert werden; Aufzeichnung und Export behalten ihre Statuskennzeichnungen
-• Englisch und traditionelles Chinesisch auf allen Bildschirmen, umschaltbar auf dem Verbindungsbildschirm und in den Einstellungen oder gemäß Systemsprache. Einige Meldungen bei fehlgeschlagener Verbindung gibt es weiterhin nur auf traditionellem Chinesisch
+• Deutsch, Englisch und traditionelles Chinesisch, umschaltbar auf dem Verbindungsbildschirm und in den Einstellungen oder gemäß Systemsprache. Einige Meldungen gibt es weiterhin nur auf traditionellem Chinesisch
 
 〇Vier Verbindungsmöglichkeiten
 
@@ -38,10 +38,10 @@ Die kostenpflichtige Play-Version hat genau dieselben Funktionen – nichts wird
 
 F-Droid-, GitLab-Release- und Google Play-Builds verwenden drei verschiedene Signaturschlüssel. Sie können einander nicht direkt aktualisieren; das ist beabsichtigt.
 
-〇Was du brauchst
+〇Was Sie brauchen
 
 Einen ELM327 OBD2-Adapter (Bluetooth oder Wi-Fi) und ein OBD2-konformes Fahrzeug. Die App verbindet sich und liest auch ohne Katalogeintrag oder Fahrzeugdaten aus.
 
 〇Hinweis
 
-Diese App ist weder mit Torque oder Torque Pro von Ian Hawkins verbunden noch von ihm unterstützt oder davon abgeleitet. Die OBD2-Implementierung folgt öffentlichen Standards, darunter SAE J1979 und das ELM327-Datenblatt.
+Diese App steht in keiner Verbindung zu Torque oder Torque Pro von Ian Hawkins, wird von ihm nicht unterstützt und ist nicht davon abgeleitet. Die OBD2-Implementierung folgt öffentlichen Standards, darunter SAE J1979 und das ELM327-Datenblatt.
