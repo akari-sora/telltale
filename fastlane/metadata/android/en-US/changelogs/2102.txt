@@ -1,0 +1,1 @@
+Added Japanese, Korean, Spanish, French, Brazilian Portuguese, Simplified Chinese, Italian and Dutch UI (11 languages total). German is now also available in Android Auto. These LLM translations were checked mechanically and reviewed by models, not native speakers; please report translation issues. No OBD or vehicle-logic changes.
