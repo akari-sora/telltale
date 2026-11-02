@@ -7,11 +7,13 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:torque_obd/core/theme/app_theme.dart';
+import 'package:torque_obd/l10n/generated/app_localizations.dart';
 import 'package:torque_obd/l10n/locale_resolution.dart';
 import 'package:torque_obd/obd/pid/pid.dart';
 import 'package:torque_obd/obd/pid/pid_library.dart';
@@ -147,6 +149,7 @@ Future<ProviderContainer> _pumpWear(
   WidgetTester tester, {
   required bool connected,
   TelemetrySnapshot snapshot = const TelemetrySnapshot(),
+  Locale locale = testUiLocale,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
@@ -174,7 +177,11 @@ Future<ProviderContainer> _pumpWear(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: localizedMaterialApp(theme: AppTheme.dark(), home: const WearShell()),
+      child: localizedMaterialApp(
+        theme: AppTheme.dark(),
+        home: const WearShell(),
+        locale: locale,
+      ),
     ),
   );
   await tester.pump(const Duration(milliseconds: 400));
@@ -232,6 +239,93 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('wear_disconnect_confirm')), findsNothing);
   });
+
+  // 454 px at 2.0 is a 227-point round face. AlertDialog's phone insets left
+  // it one line: Korean lost the second half of its question in 1.0.27 QA.
+  for (final locale in AppLocalizations.supportedLocales) {
+    testWidgets('the disconnect question fits the round face in $locale', (
+      tester,
+    ) async {
+      final container = await _pumpWear(
+        tester,
+        connected: true,
+        locale: locale,
+      );
+      addTearDown(container.dispose);
+      final l10n = lookupAppLocalizations(locale);
+
+      await tester.longPress(find.byKey(const Key('wear_dial')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      final card = tester.getRect(
+        find
+            .descendant(
+              of: find.byType(Dialog),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      const center = Offset(113.5, 113.5);
+      void readable(Finder finder, String what) {
+        expect(finder, findsOneWidget, reason: '$what in $locale');
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(of: finder, matching: find.byType(RichText)).first,
+        );
+        expect(
+          paragraph.size.height,
+          greaterThanOrEqualTo(
+            paragraph.getMaxIntrinsicHeight(paragraph.size.width) - 0.5,
+          ),
+          reason: '$what is cut short in $locale',
+        );
+        final rect = tester.getRect(finder);
+        for (final corner in [
+          rect.topLeft,
+          rect.topRight,
+          rect.bottomLeft,
+          rect.bottomRight,
+        ]) {
+          expect(
+            card.inflate(0.5).contains(corner),
+            isTrue,
+            reason: '$what leaves the dialog in $locale',
+          );
+          expect(
+            (corner - center).distance,
+            lessThanOrEqualTo(113.5),
+            reason: '$what leaves the round face in $locale',
+          );
+        }
+      }
+
+      final inDialog = find.byType(Dialog);
+      readable(
+        find.descendant(
+          of: inDialog,
+          matching: find.text(l10n.wearDisconnectQuestion),
+        ),
+        'question',
+      );
+      readable(
+        find.descendant(of: inDialog, matching: find.text(l10n.wearCancel)),
+        'cancel',
+      );
+      readable(
+        find.descendant(
+          of: find.byKey(const Key('wear_disconnect_confirm')),
+          matching: find.text(l10n.wearDisconnect),
+        ),
+        'disconnect',
+      );
+
+      await tester.tap(
+        find.descendant(of: inDialog, matching: find.text(l10n.wearCancel)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('wear_disconnect_confirm')), findsNothing);
+    });
+  }
 
   testWidgets('no battery page without installed profile signals', (
     tester,
