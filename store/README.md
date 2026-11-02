@@ -1,18 +1,19 @@
 # Google Play 上架素材
 
-這裡的檔案是 Play Console listing 上傳過的原件。**這一份是來源，Play Console 上的是副本** ——
+這裡的檔案是 Play Console listing 素材的來源。**上傳後 Play Console 上的是副本** ——
 要換圖先換這裡，再上傳。
 
 ## 目錄
 
-素材依 Play 的 listing 語系分開，因為 App 從 `1.0.11` 起是雙語的，而**截圖裡的字就是
+素材依 listing 語系分開：英文、繁體中文與德文。**截圖裡的字就是
 listing 的一部分**。一份英文 listing 配一組中文截圖，等於在告訴讀者這個 App 沒有英文介面。
 
 ```
 store/
 ├── en-US/          英文 listing 的素材
 ├── zh-TW/          繁體中文 listing 的素材
-├── icon-512.png    兩邊共用：圖示沒有文字
+├── de-DE/          德文 listing 的素材
+├── icon-512.png    各語系共用：圖示沒有文字
 └── preview-gt86-vin-redacted.mp4
 ```
 
@@ -31,8 +32,11 @@ store/
 | `fastlane/metadata/android/<locale>/images/automotiveScreenshots/` | 800×1280 (直式) / 1024×768 (橫式) | 24-bit PNG | Android for Cars / Automotive 車載商店截圖（6 個 unique AAOS 原生 emulator captures，包含 3 張 800×1280 直式與 3 張 1024×768 橫式，共用於 en-US 與 zh-TW listing；Google Play Developer API 支援 automotiveScreenshots，但目前專案使用的 gplay CLI 以及 Fastlane Supply 的預設 metadata auto-discovery 未支援，需直接呼叫 API、擴充工具，或於 Play Console 手動處理） |
 | `preview-gt86-vin-redacted.mp4` | 1920×1080 | H.264 MP4 | Google Play YouTube 預覽影片來源；GT86 實車 VIN 已遮蔽 |
 
-兩組截圖**畫面編號相同、內容刻意不同**。`en-US/06-skins.png` 取的是語言選單連同外觀設定，
+各組截圖**畫面編號相同、內容可依語系不同**。`en-US/06-skins.png` 取的是語言選單連同外觀設定，
 因為對英文讀者來說「這個 App 有英文」本身就是新消息；`zh-TW/06-skins.png` 只取外觀。
+德文五張手機截圖為實際 1.0.26 Demo 畫面，尺寸均為 1080×2340；`de-DE/06-skins.png`
+包含語言選單與面盤外觀。德文素材尚待上傳 Play Console。德文主打圖片沿用英文版：圖片包含英文，
+目前及 Git 歷史中沒有可用的產生器或範本。
 
 ## 怎麼重拍
 
@@ -60,10 +64,11 @@ im.convert('RGB').save(dst, 'PNG', optimize=True)
 
 ## 隱私檢查
 
-- `03-dtc-freeze.png` 顯示的是內建 Demo ECU 的固定測試 VIN
+- 英文及繁體中文的 `03-dtc-freeze.png` 顯示的是內建 Demo ECU 的固定測試 VIN
   `1D4GP00R55B123456`，不是實車或使用者資料。**2026-09-06 查證：Play 上的 zh-TW
   listing 五張截圖全部在線，包含這一張。**（先前這裡寫著「可只使用其餘四張」，讀起來
   像是描述現況，其實只是一個選項 —— `gplay images list` 才是現況。）
+- 德文五張手機截圖使用 Demo 資料，不顯示 VIN、位置或測試人員資料。
 - 原始 GT86 實車錄影曾短暫顯示真實 VIN，因此**不得直接上傳**。
   `preview-gt86-vin-redacted.mp4` 已裁掉 Android 狀態列與手勢列，將 VIN 欄位遮蔽，
   並以模糊背景輸出為 16:9 標準影片，避免被 YouTube 歸類為 Shorts。
@@ -84,12 +89,13 @@ store/metadata/<locale>/
 ```
 
 `store/upload.sh` 把這些文字與 `store/<locale>/` 的圖片組成 Play CLI 要的 FastLane
-樹（在暫存目錄裡，不進版控），然後上傳。**預設是 dry run**：
+樹（在暫存目錄裡，不進版控），然後上傳。預設處理 en-US 與 zh-TW；要處理 de-DE 必須明確指定。
+**預設是 dry run，但仍會建立並刪除真實 Play edit，可能使其他進行中的 edit 失效**：
 
 ```bash
-store/upload.sh                # 只列出會改什麼
+store/upload.sh                # dry run：建立並刪除真實 edit，不提交
 store/upload.sh --apply        # 真的寫入並 commit edit
-store/upload.sh --apply en-US  # 只做一個語系
+store/upload.sh --apply en-US  # 只做一個語系（也可指定 de-DE）
 ```
 
 它只碰 listing 與圖片，不碰任何發布軌道。兩者分開的理由很實際：改一行文案不應該有
