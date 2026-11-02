@@ -18,7 +18,7 @@ import '../../state/locale_settings.dart';
 /// "English / Traditional Chinese" to a reader of Chinese, hides the very row
 /// they came to find. A self-name is legible to the person who needs it no
 /// matter which language is currently on screen, which is why the system
-/// option is bilingual rather than translated.
+/// option is bilingual, with Simplified Chinese when the UI is in Hans.
 ///
 /// So this function takes no [AppLocalizations]: an unused parameter would
 /// imply the strings are a translation gap somebody should close.
@@ -64,7 +64,12 @@ class LanguagePicker extends ConsumerWidget {
           ListTile(
             key: Key('locale_${value.name}'),
             contentPadding: EdgeInsets.zero,
-            title: Text(localePreferenceLabel(value)),
+            title: Text(
+              value == LocalePreference.system &&
+                      Localizations.localeOf(context) == simplifiedChineseLocale
+                  ? 'System default / 跟随系统'
+                  : localePreferenceLabel(value),
+            ),
             leading: Icon(
               current == value
                   ? Icons.radio_button_checked

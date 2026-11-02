@@ -5301,7 +5301,7 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get languageSaveFailed => '未能保存语言设置，请再试一次。';
 
   @override
-  String get languageSectionTitle => 'Language / 語言';
+  String get languageSectionTitle => 'Language / 语言';
 
   @override
   String get navDashboard => '仪表盘';

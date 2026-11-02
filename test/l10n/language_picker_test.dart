@@ -166,6 +166,30 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Simplified Chinese picker uses Simplified Chinese labels', (
+    tester,
+  ) async {
+    final prefs = await prefsWith({kLocalePreferenceKey: 'zh_Hans'});
+    await tester.pumpWidget(
+      host(
+        prefs: prefs,
+        home: const Scaffold(body: LanguagePicker()),
+        session: _IdleSession(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      [
+        find.text('Language / 语言').evaluate().length,
+        find.text('System default / 跟随系统').evaluate().length,
+      ],
+      [1, 1],
+    );
+    expect(find.text('繁體中文'), findsOneWidget);
+    expect(find.text('简体中文'), findsOneWidget);
+  });
+
   testWidgets('switching language does not start an OBD session', (
     tester,
   ) async {
