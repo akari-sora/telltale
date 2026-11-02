@@ -258,7 +258,7 @@
     "lib/ui/screens/telemetry/telemetry_sessions_screen.dart": "30865ed23ef52c15e49f243edf0ff87d03e6a5b4ab856a10916b3bfa23bf7e64",
     "lib/ui/screens/telemetry/telemetry_source_copy.dart": "41ab22d03ea3b2dd0358d55335d27e0f7ee878d852646a26fcad044762f7729e",
     "lib/ui/screens/workshop/service_recipe_detail_sheet.dart": "7c3bed4c43d54b28802e38b9098cec840c45a149ec170fdd8ed7847200713ea7",
-    "lib/ui/screens/workshop/service_recipes_screen.dart": "e234f709d5d5576f0480e01f5e36da4808f1f86eef7b742cd86f83f18c45f3c0",
+    "lib/ui/screens/workshop/service_recipes_screen.dart": "2fc8833c9111f4f2fc1b3b087076be563b051e8712290a2076d743deb4ea446b",
     "lib/ui/shell.dart": "f10b52446b834360b8290b2c7daf8d7279c84f270522535dca012aaa87a03fd7",
     "lib/ui/wear/wear_permission_copy.dart": "7f19d94621039d91e16a175a9399fd4fab650066509192b923a7095c17b47e36",
     "lib/ui/wear/wear_shell.dart": "73751ad9ae21cebc0c5f920566d5f972cafdfb2710b64f0cd2549fe422112b96",
