@@ -288,7 +288,7 @@
   "handshakeStepSpacesOff": "关闭空格，减少三分之一的传输量",
   "handshakeStepSupportProbe": "查询 ECU 支持的 PID（确认车辆已回应）",
   "languageSaveFailed": "未能保存语言设置，请再试一次。",
-  "languageSectionTitle": "Language / 語言",
+  "languageSectionTitle": "Language / 语言",
   "navDashboard": "仪表盘",
   "navDtc": "故障码",
   "navPerformance": "计时",
