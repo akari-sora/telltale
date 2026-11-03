@@ -140,7 +140,7 @@ are anchored at the start of a line.
 
 **English** — This is one observed adapter/phone/vehicle combination, not certification or a promise that every listing variant, phone, vehicle, PID, or firmware behaves the same.
 
-**Why it is load-bearing.** README.zh-TW.md:106-107 ↔ README.md:126-128 (T1). Sits directly under an affiliate link, so it is also a commercial-disclosure hedge. Both negations (不是認證 / 也不保證) must survive; the enumeration of what is NOT covered is deliberate.
+**Why it is load-bearing.** README.zh-TW.md:113-114 ↔ README.md:135-137 (T1). Sits directly under an affiliate link, so it is also a commercial-disclosure hedge. Both negations (不是認證 / 也不保證) must survive; the enumeration of what is NOT covered is deliberate.
 
 ### 4. 這項觀察**不代表**已認證轉接器韌體、PID 準確度、DTC 涵蓋率、道路負載行為或所有 GT86。
 
@@ -148,7 +148,7 @@ are anchored at the start of a line.
 
 **English** — the observation does **not** certify adapter firmware, PID accuracy, DTC coverage, loaded-road behaviour, or general GT86 support.
 
-**Why it is load-bearing.** README.zh-TW.md:136-137 ↔ README.md:161-162 (T1). The bold on 不代表/**not** is in the source and must be kept — it is the only visual cue that the preceding paragraph of positive evidence is bounded.
+**Why it is load-bearing.** README.zh-TW.md:143-144 ↔ README.md:170-171 (T1). The bold on 不代表/**not** is in the source and must be kept — it is the only visual cue that the preceding paragraph of positive evidence is bounded.
 
 ### 5. 驗證文件只描述有邊界的證據，不是認證或安全保證。
 
@@ -156,7 +156,7 @@ are anchored at the start of a line.
 
 **English** — Verification reports describe bounded evidence, not certification or a safety guarantee.
 
-**Why it is load-bearing.** README.zh-TW.md:139 ↔ README.md:164-165 (T1). Also stated at docs/README.md:3-5 ('they are **not** certifications of an adapter, diagnosis, repair, vehicle, or safety outcome'). 有邊界/'bounded' is the operative word; 'detailed'/'thorough' would invert the meaning.
+**Why it is load-bearing.** README.zh-TW.md:146 ↔ README.md:173-174 (T1). Also stated at docs/README.md:3-5 ('they are **not** certifications of an adapter, diagnosis, repair, vehicle, or safety outcome'). 有邊界/'bounded' is the operative word; 'detailed'/'thorough' would invert the meaning.
 
 ### 6. Settings 的持久開關只會顯示實驗入口，不代表信任任何車輛。
 
@@ -164,7 +164,7 @@ are anchored at the start of a line.
 
 **English** — Its persistent Settings switch only reveals the laboratory; it never trusts a vehicle.
 
-**Why it is load-bearing.** README.zh-TW.md:70-71 ↔ README.md:81-82 (T1). Separates 'UI is visible' from 'data is trusted' for the experimental battery lab. 只會/'only' and 不代表信任/'never trusts' are both load-bearing; a user who reads this as 'enabling it enables the feature' will over-trust decoded BMS values.
+**Why it is load-bearing.** README.zh-TW.md:77-78 ↔ README.md:90-91 (T1). Separates 'UI is visible' from 'data is trusted' for the experimental battery lab. 只會/'only' and 不代表信任/'never trusts' are both load-bearing; a user who reads this as 'enabling it enables the feature' will over-trust decoded BMS values.
 
 ### 7. 合成馬具或手機 transport 測試不等於實車 PID 或解碼正確性證明。
 
@@ -172,7 +172,7 @@ are anchored at the start of a line.
 
 **English** — a synthetic rig or phone transport test does not prove that a real vehicle exposes or correctly decodes that PID.
 
-**Why it is load-bearing.** README.zh-TW.md:80 ↔ README.md:96-97 (T1). The project's standing rule that a passing test is not vehicle evidence. 不等於…證明 / 'does not prove' — not 'may not fully prove'.
+**Why it is load-bearing.** README.zh-TW.md:87 ↔ README.md:105-106 (T1). The project's standing rule that a passing test is not vehicle evidence. 不等於…證明 / 'does not prove' — not 'may not fully prove'.
 
 ### 8. 任何診斷結果都不保證車輛可安全行駛。
 
@@ -180,7 +180,7 @@ are anchored at the start of a line.
 
 **English** — no diagnostic result guarantees that a vehicle is safe to operate.
 
-**Why it is load-bearing.** README.zh-TW.md:185 ↔ README.md:215-216 (T1). Final sentence of the README in both languages. Absolute negation (任何…都不 / 'no…guarantees'); any hedge-softening here is a liability change, not a style change.
+**Why it is load-bearing.** README.zh-TW.md:223 ↔ README.md:266-267 (T1). Final sentence of the README in both languages. Absolute negation (任何…都不 / 'no…guarantees'); any hedge-softening here is a liability change, not a style change.
 
 ### 9. 請只在停妥時操作，或交由乘客操作。清除 DTC 前先保存診斷證據，也不要以本 App 取代專業檢查。
 
@@ -188,7 +188,7 @@ are anchored at the start of a line.
 
 **English** — Use the app only while parked or as a passenger. Save diagnostic evidence before clearing DTCs, and do not treat this app as a substitute for professional inspection.
 
-**Why it is load-bearing.** README.zh-TW.md:174-175 ↔ README.md:201-203 (T1). Three safety imperatives in one breath. 只在/'only' scopes the first; the clear-before-save ordering is causal (clearing destroys the freeze frame — docs/field-guide.zh-TW.md:235); 取代/'substitute' must stay.
+**Why it is load-bearing.** README.zh-TW.md:212-213 ↔ README.md:246-248 (T1). Three safety imperatives in one breath. 只在/'only' scopes the first; the clear-before-save ordering is causal (clearing destroys the freeze frame — docs/field-guide.zh-TW.md:238); 取代/'substitute' must stay.
 
 ### 10. Telltale 不會主動上傳資料。
 
@@ -196,7 +196,7 @@ are anchored at the start of a line.
 
 **English** — Telltale proactively uploads nothing.
 
-**Why it is load-bearing.** README.zh-TW.md:169 ↔ README.md:195 (T1). 主動/'proactively' is the entire hedge — the app does not upload on its own, but the user CAN export and share, and OS backup may copy app data (README.zh-TW.md:169-170 ↔ README.md:196-198). Dropping 主動 turns a scoped claim into a false absolute.
+**Why it is load-bearing.** README.zh-TW.md:207 ↔ README.md:240 (T1). 主動/'proactively' is the entire hedge — the app does not upload on its own, but the user CAN export and share, and OS backup may copy app data (README.zh-TW.md:207-208 ↔ README.md:241-243). Dropping 主動 turns a scoped claim into a false absolute.
 
 ### 11. 這次沒有讀到凍結幀 —— 不代表車上沒有。
 
@@ -206,7 +206,7 @@ are anchored at the start of a line.
 
 **Shipped as** `dtcClearDialogFrameUnread` (lib/l10n/app_en.arb). The panel says more and is entry 45. The sentence appears in more than one place on purpose — the panel and the clear dialog both have to say it, and a reader who only sees one of them must still be told.
 
-**Why it is load-bearing.** lib/ui/screens/dtc/dtc_screen.dart:353 (also :89 and lib/obd/polling_engine.dart:3221 'This scan did not read a freeze frame — that does not mean the vehicle has none.'). Explained at docs/field-guide.zh-TW.md:226-228. Distinguishes a READ FAILURE from an ABSENT freeze frame; the field guide tells users to rescan rather than clear, because clearing destroys an unread frame permanently. Collapsing this into 'no freeze frame' causes irreversible evidence loss. The engine sentence is transcript-only English; the screen still ships the Traditional Chinese ARB hedge.
+**Why it is load-bearing.** lib/ui/screens/dtc/dtc_screen.dart:353 (also :89 and lib/obd/polling_engine.dart:3221 'This scan did not read a freeze frame — that does not mean the vehicle has none.'). Explained at docs/field-guide.zh-TW.md:229-231. Distinguishes a READ FAILURE from an ABSENT freeze frame; the field guide tells users to rescan rather than clear, because clearing destroys an unread frame permanently. Collapsing this into 'no freeze frame' causes irreversible evidence loss. The engine sentence is transcript-only English; the screen still ships the Traditional Chinese ARB hedge.
 
 ### 12. 這個控制器沒有儲存凍結幀 —— 故障碼可能是清除後重新出現的，或是由不記錄凍結幀的模組所報告。
 
@@ -219,7 +219,7 @@ are anchored at the start of a line.
 **Why it is load-bearing.** lib/obd/freeze_frame.dart:125-126, which as of the
 engine-layer l10n wave is an unused constant — no screen reads it, so this hedge is
 currently a rule about a sentence the app does not ship. Wiring it up means giving it an
-ARB entry first. The complement of the previous hedge: a CONFIRMED absence, with its two innocent explanations. The two strings must stay distinguishable in translation (docs/field-guide.zh-TW.md:223-228 teaches users to tell them apart).
+ARB entry first. The complement of the previous hedge: a CONFIRMED absence, with its two innocent explanations. The two strings must stay distinguishable in translation (docs/field-guide.zh-TW.md:226-231 teaches users to tell them apart).
 
 ### 13. 已回應的控制器都沒有故障碼。
 
@@ -229,7 +229,7 @@ ARB entry first. The complement of the previous hedge: a CONFIRMED absence, with
 
 **Shipped as** `dtcCompleteCleanTitle` (lib/l10n/app_en.arb).
 
-**Why it is load-bearing.** lib/ui/screens/dtc/dtc_screen.dart:408. Glossed at docs/field-guide.zh-TW.md:206: '有回覆的模組都說沒事。**不代表車上每個模組都被問到了。**' The qualifier 已回應的/'that answered' is the whole hedge — it must never be rendered as 'no fault codes' or 'your car is fine'. Compare lib/state/dtc_scan.dart:593 '可能有控制器不在這次查詢的範圍內。請以車輛儀表為準，並洽維修廠。'
+**Why it is load-bearing.** lib/ui/screens/dtc/dtc_screen.dart:408. Glossed at docs/field-guide.zh-TW.md:209: '有回覆的模組都說沒事。**不代表車上每個模組都被問到了。**' The qualifier 已回應的/'that answered' is the whole hedge — it must never be rendered as 'no fault codes' or 'your car is fine'. Compare lib/state/dtc_scan.dart:593 '可能有控制器不在這次查詢的範圍內。請以車輛儀表為準，並洽維修廠。'
 
 ### 14. 部分未確認 / 無法確認
 
@@ -239,7 +239,7 @@ ARB entry first. The complement of the previous hedge: a CONFIRMED absence, with
 
 **Shipped as** `dtcVerdictPartialClean` (lib/l10n/app_en.arb).
 
-**Why it is load-bearing.** lib/ui/screens/dtc/dtc_screen.dart:173 (ScanVerdict.partialClean => '部分未確認'). docs/field-guide.zh-TW.md:207-208 defines them: 部分未確認 = 'some categories could not be read, the verdict is incomplete'; 無法確認 = '**do not read this as "no problem"**'. These are verdict states, not prose — keep them short, distinct, and never merge into a single 'unknown'.
+**Why it is load-bearing.** lib/ui/screens/dtc/dtc_screen.dart:173 (ScanVerdict.partialClean => '部分未確認'). docs/field-guide.zh-TW.md:210-211 defines them: 部分未確認 = 'some categories could not be read, the verdict is incomplete'; 無法確認 = '**do not read this as "no problem"**'. These are verdict states, not prose — keep them short, distinct, and never merge into a single 'unknown'.
 
 ### 15. 請先重新掃描
 
@@ -249,7 +249,7 @@ ARB entry first. The complement of the previous hedge: a CONFIRMED absence, with
 
 **Shipped as** `dtcRescanFirst` (lib/l10n/app_en.arb). An imperative on a disabled button, not the sentence that explains it — a matcher that went by wording alone paired this with the freeze-frame paragraph, which says something else entirely.
 
-**Why it is load-bearing.** lib/ui/screens/dtc/dtc_screen.dart:202 (the disabled clear-button label), :354, lib/state/dtc_scan.dart:336. docs/field-guide.zh-TW.md:275-278: the button IS the verdict of the last clear. Greyed + '請先重新掃描' means something may already have been cleared, so re-sending a global clear would reset a completed controller's readiness and cost the user another drive cycle. The imperative must stay an imperative.
+**Why it is load-bearing.** lib/ui/screens/dtc/dtc_screen.dart:202 (the disabled clear-button label), :354, lib/state/dtc_scan.dart:336. docs/field-guide.zh-TW.md:278-281: the button IS the verdict of the last clear. Greyed + '請先重新掃描' means something may already have been cleared, so re-sending a global clear would reset a completed controller's readiness and cost the user another drive cycle. The imperative must stay an imperative.
 
 ### 16. 此車輛不支援這個 PID
 
@@ -269,7 +269,7 @@ ARB entry first. The complement of the previous hedge: a CONFIRMED absence, with
 
 **Status** — proposed
 
-**Why it is load-bearing.** lib/ui/screens/dtc/dtc_screen.dart:941. docs/field-guide.zh-TW.md:229-233 contrasts it with '有 N 個項目這次沒有讀回來' (dtc_screen.dart:955): the first is an APP limitation that rescanning will not change, the second is a READ FAILURE that rescanning usually fixes. '這兩句話意思不一樣：前者重掃也不會變，後者會。' Merging them destroys the user's next action.
+**Why it is load-bearing.** lib/ui/screens/dtc/dtc_screen.dart:941. docs/field-guide.zh-TW.md:232-236 contrasts it with '有 N 個項目這次沒有讀回來' (dtc_screen.dart:955): the first is an APP limitation that rescanning will not change, the second is a READ FAILURE that rescanning usually fixes. '這兩句話意思不一樣：前者重掃也不會變，後者會。' Merging them destroys the user's next action.
 
 ### 18. 假設尚未確認，仍可估算
 
@@ -279,7 +279,7 @@ ARB entry first. The complement of the previous hedge: a CONFIRMED absence, with
 
 **Shipped as** `datumReasonAssumptionsUnconfirmed` (lib/l10n/app_en.arb).
 
-**Why it is load-bearing.** `lib/ui/widgets/status/datum_status_copy.dart:96`, written when the string lived on `lib/diagnostics/availability.dart:518` and had no English. The fail-closed derived-value label: raw PIDs stay visible but profile-derived horsepower/torque/fuel are marked as resting on unconfirmed inputs (README.md:76-79 ↔ README.zh-TW.md:66-68). Both halves are required — 尚未確認 alone reads as an error, 仍可估算 alone reads as a validated number.
+**Why it is load-bearing.** `lib/ui/widgets/status/datum_status_copy.dart:96`, written when the string lived on `lib/diagnostics/availability.dart:518` and had no English. The fail-closed derived-value label: raw PIDs stay visible but profile-derived horsepower/torque/fuel are marked as resting on unconfirmed inputs (README.md:85-88 ↔ README.zh-TW.md:73-75). Both halves are required — 尚未確認 alone reads as an error, 仍可估算 alone reads as a validated number.
 
 ### 19. 無法確認車輛已停止；請先中斷連線
 
@@ -327,7 +327,7 @@ ARB entry first. The complement of the previous hedge: a CONFIRMED absence, with
 
 **Shipped as** `connectWhichTitle` (lib/l10n/app_en.arb).
 
-**Why it is load-bearing.** lib/ui/screens/connect/connect_screen.dart:1796; the body at :1808 says '不用管 SPP、GATT 這些名詞。看你的轉接器插上去之後怎麼運作就好：' and the questions come from whichTransportGuidance() (:1814-1817). docs/field-guide.zh-TW.md:63-65: it asks three OBSERVABLE questions rather than requiring the user to know SPP/GATT. The uncertainty is the user's, and the copy is designed to accept it — a confident 'Choose your connection type' would defeat the purpose.
+**Why it is load-bearing.** lib/ui/screens/connect/connect_screen.dart:1796; the body at :1808 says '不用管 SPP、GATT 這些名詞。看你的轉接器插上去之後怎麼運作就好：' and the questions come from whichTransportGuidance() (:1814-1817). docs/field-guide.zh-TW.md:66-68: it asks three OBSERVABLE questions rather than requiring the user to know SPP/GATT. The uncertainty is the user's, and the copy is designed to accept it — a confident 'Choose your connection type' would defeat the purpose.
 
 ### 24. 猜錯不會怎麼樣 —— 連不上就退回來換另一個試。
 
@@ -357,7 +357,7 @@ ARB entry first. The complement of the previous hedge: a CONFIRMED absence, with
 
 **Shipped as** `dtcUnknownMonitor` (lib/l10n/app_en.arb).
 
-**Why it is load-bearing.** `lib/ui/screens/dtc/dtc_screen.dart:1161` and `:1169`, the readiness chip label. Explained at docs/field-guide.zh-TW.md:243-245: the vehicle reported a readiness monitor this app has no name for, and '它照樣會算進「還有 N 項沒有完成」—— 叫不出名字不等於可以當作已完成。' The hedge is that an UNNAMED monitor is still counted as INCOMPLETE; a translation that renders it 'N/A' or 'other' invites the reader to discount it.
+**Why it is load-bearing.** `lib/ui/screens/dtc/dtc_screen.dart:1161` and `:1169`, the readiness chip label. Explained at docs/field-guide.zh-TW.md:246-248: the vehicle reported a readiness monitor this app has no name for, and '它照樣會算進「還有 N 項沒有完成」—— 叫不出名字不等於可以當作已完成。' The hedge is that an UNNAMED monitor is still counted as INCOMPLETE; a translation that renders it 'N/A' or 'other' invites the reader to discount it.
 
 ### 27. 永久故障碼（Mode 0A）無法清除。
 

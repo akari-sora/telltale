@@ -1,0 +1,116 @@
+{
+  "classification": "public-summary",
+  "date": "2026-10-13",
+  "device": {
+    "model": "Samsung Galaxy Note9 (SM-N960F)",
+    "android": 10,
+    "api": 29
+  },
+  "android_auto": {
+    "version": "17.8.663874-release",
+    "version_code": 178663874
+  },
+  "telltale": {
+    "package": "com.cbstudio.telltale",
+    "version": "1.0.19",
+    "version_code": 2022,
+    "abi": "arm64-v8a",
+    "official_release": "https://gitlab.com/aa22396584/telltale/-/releases/v1.0.19",
+    "apk_sha256": "b58de59743d573539157b7db58eaf2451dc57d9e1da508e5444004c816cea279",
+    "signer_certificate_sha256": "362133c004bee5e4f458f77d4a5d199948a3c5cdb9f0868be27d6f5d9109a579",
+    "same_apk_hash_after_overlay": true,
+    "installer_before": null,
+    "installer_after": "com.android.vending",
+    "initiating_install_source": "UNAVAILABLE_ON_ANDROID_10",
+    "retained_data_indicators": {
+      "uid_preserved": true,
+      "data_inode_preserved": true,
+      "first_install_time_preserved": true,
+      "package_permissions_preserved": true
+    },
+    "app_data_content_audit": "NOT_RUN"
+  },
+  "kinginstaller": {
+    "official_release": "https://github.com/fcaronte/KingInstaller/releases/tag/2.3",
+    "version": "2.3",
+    "version_code": 10,
+    "apk_sha256": "2dfa867b27ba7de4cf5a6948c1bc894d5861c20abe3d46a62e764476a7aa9ec1",
+    "method": "CLASSIC_GOOGLE_PACKAGE_INSTALLER",
+    "root_enabled": false,
+    "shizuku_enabled": false,
+    "oppo_realme_oneplus_enabled": false,
+    "same_signature_overlay": true,
+    "uninstalled_telltale": false,
+    "cleared_telltale_data": false
+  },
+  "comparison": {
+    "direct_install": {
+      "phone_launcher_visible": false,
+      "target_car_validator": "DENIED"
+    },
+    "aa_settings_stages": [
+      {
+        "stage": "AA_DEVELOPER_MODE_ONLY",
+        "unknown_sources_enabled": false,
+        "phone_launcher_visible": false,
+        "target_car_validator": "DENIED"
+      },
+      {
+        "stage": "APPLICATION_MODE_DEVELOPER",
+        "unknown_sources_enabled": false,
+        "phone_launcher_visible": false,
+        "target_car_validator": "DENIED"
+      },
+      {
+        "stage": "UNKNOWN_SOURCES_ENABLED_WITH_DEVELOPER_MODE",
+        "unknown_sources_enabled": true,
+        "phone_launcher_visible": false,
+        "target_car_validator": "DENIED"
+      }
+    ],
+    "classic_overlay": {
+      "phone_launcher_visible": true,
+      "phone_launcher_checked": true
+    },
+    "after_permission_cleanup": {
+      "phone_launcher_visible": true,
+      "phone_launcher_checked": true
+    }
+  },
+  "cleanup": {
+    "kinginstaller_storage_read_permission_revoked": true,
+    "kinginstaller_storage_write_permission_revoked": true,
+    "kinginstaller_install_unknown_apps_permission_disabled": true,
+    "temporary_selected_apk_removed": true,
+    "kinginstaller_remains_installed": true,
+    "kinginstaller_internal_cache": "NOT_INSPECTED",
+    "aa_developer_mode_enabled": false,
+    "aa_application_mode": "RELEASE_EXPLICITLY_SELECTED",
+    "aa_unknown_sources_enabled": false
+  },
+  "acceptance": {
+    "phone_custom_launcher": "PASS",
+    "positive_car_validator_pass": "NOT_ESTABLISHED",
+    "post_overlay_target_validator_lines": 0,
+    "after_cleanup_target_validator_lines": 0,
+    "dhu_in_this_experiment": "NOT_RUN",
+    "physical_head_unit": "NOT_RUN",
+    "real_vehicle": "NOT_RUN",
+    "obd_connection": "NOT_RUN",
+    "obd_iot_category_approval": "UNRESOLVED",
+    "official_play_distribution_or_purchase": "NOT_ESTABLISHED",
+    "v1_0_20_with_this_installation_method": "NOT_RUN",
+    "guaranteed_for_other_devices_or_aa_versions": false
+  },
+  "screenshot": {
+    "file": "launcher-after-cleanup.png",
+    "sha256": "25e49779990fdb497da3e5dbb3b6591b27acf196ea14cb00d77b731336a3674f",
+    "scope": "PHONE_ANDROID_AUTO_CUSTOM_LAUNCHER_SETTINGS",
+    "unmodified_original_capture": true,
+    "manual_privacy_review": "PASS"
+  },
+  "library_original_attachments": {
+    "status": "NOT_DELIVERED",
+    "verified_library_file_ids": []
+  }
+}

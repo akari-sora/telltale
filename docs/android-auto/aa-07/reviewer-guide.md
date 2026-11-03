@@ -32,7 +32,11 @@ Reviewers do **not** need a physical vehicle or an ELM327 OBD-II adapter to revi
    adb forward tcp:5277 tcp:5277
    ./desktop-head-unit
    ```
-4. Telltale will automatically appear on the DHU head unit home screen. Click the app icon to launch.
+4. Check Android Auto's **Customize launcher** list on the phone, then the DHU
+   launcher. Telltale must be listed and selected before launching it; an APK
+   install alone does not guarantee visibility. If it is missing, use the
+   [installation/source troubleshooting guide](../free-apk-installation.md).
+   Its Note9 / KingInstaller result is launcher-only evidence, not this DHU run.
 5. You can now freely inspect:
    - **Vehicle Monitor Home Screen:** Live speed, RPM, coolant, module voltage.
    - **Vehicle Health Screen:** Observed status ("無觀測到警示" / "No observed warnings"), MIL status, DTC count.

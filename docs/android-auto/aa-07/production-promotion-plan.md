@@ -29,6 +29,13 @@ approval or actual vehicle/head-unit compatibility. All CI and signed builds
 must run on the selected Ryzen 9700X, with exact-source acceptance and ephemeral
 signing inputs; the normal public APK/AAB uses one package identity.
 
+The [free-APK installation guide](../free-apk-installation.md) records a separate
+Note9 / AA 17.8 / GitLab 1.0.19 launcher experiment. KingInstaller's classic
+overlay changed the recorded installer to `com.android.vending`; that metadata
+does not prove Play delivery, signer compatibility with Play, or category
+approval. Preserve existing data on signer mismatch. This experiment must not
+substitute for the selected release's Play/DHU/head-unit acceptance.
+
 ## 1. Context & Problem Statement
 
 Prior to Phase AA-07, `docs/android-auto/aa-00-eligibility.md` established an isolation contract:

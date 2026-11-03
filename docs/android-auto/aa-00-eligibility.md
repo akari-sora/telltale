@@ -78,6 +78,10 @@ Google Play production promotion for automotive distribution requires all of:
 
 Engineering integration and internal testing can proceed before that review.
 Real-head-unit installation uses a trusted Play testing source; the Android Auto
-"unknown sources" option does not permit Car App Library apps. A DHU acceptance
+"unknown sources" option does not permit Car App Library apps. The bounded
+[free-APK installation experiment](free-apk-installation.md) restored Note9
+launcher visibility through a third-party installer; it does not establish a
+trusted Play distribution, physical head-unit acceptance, or category approval.
+A DHU acceptance
 record states the actual phone, APK, installation source, and simulated host.
 It does not imply a physical vehicle/head-unit compatibility result.

@@ -36,6 +36,29 @@ Internal App Sharing 會另外重簽章；它不等於 internal test track，也
 GitLab release，最後重新下載公開資產校驗。Google 車用 production 類別核准
 仍是另一個待審程序。
 
+### 免費 APK 的 AA 安裝來源與測試紀錄
+
+使用者的安裝步驟、FAQ 與排錯共用
+[免費 APK Android Auto 指南](../android-auto/free-apk-installation.md)，避免在
+release 文案寫成「手動 APK 一定出現在 AA」或「只開未知來源即可」。
+[2026-10-13 去識別紀錄](../android-auto/evidence/free-apk-installation-20261013/README.md)
+只涵蓋 Note9／Android 10／AA 17.8.663874／GitLab 1.0.19 arm64 APK，以
+KingInstaller 2.3／10 classic 同簽章覆蓋後，手機自訂啟動器可見且勾選。
+之後的版本沒有以此方法在 Note9 重測；各 release 的 DHU 紀錄另行判讀。
+
+回條應分別寫下 APK hash、套件／版本／signer、安裝來源變化、資料保留指標、
+AA 清單、實際主機／OBD 驗收與撤權結果。本次 installer 從 `null` 變成
+`com.android.vending`，不代表真的經 Play 分發；新目標 validator 擷取為空，
+不能寫 validator PASS。清單成功不能替代 DHU、實體車機、真車或 IoT 類別審核。
+換一般 installer 更新可能改變來源標記，列為注意事項，不寫成已證明必然重置。
+
+Play internal testing 可作不使用第三方工具的備案：依
+[Google 規則](https://support.google.com/googleplay/android-developer/answer/9845334)，
+名單最多 100 人，內測者可免費安裝付費 App；open／closed 與 Internal App
+Sharing 不可混稱。仍先核對實際 Play signer，不因 installer 標記相同就假定
+與 GitLab APK 相容，不為排錯擅自卸載或清資料。公開附件只放白名單摘要與
+經隱私檢查的必要畫面；不提交完整 device dump／log、序號或私人檔案路徑。
+
 ## 0. GitLab maintainer release、GitHub community APK 與 Google Play 是三條發布線
 
 以下 Torque checkout 重建步驟保留作為 **1.0.18 以前的歷史流程**。
@@ -468,8 +491,10 @@ $ADB install -r -g build/app/outputs/flutter-apk/app-field-release.apk
 
 對 Android 來說，這兩把金鑰簽出來的是**兩個不同的應用程式**。手機上裝著本機
 build（`installerPackageName=null`）時，從內部測試軌道更新會被以簽章不符拒絕；
-反過來也一樣。唯一的路是先 `adb uninstall`，而那會連 App 資料一起帶走 ——
-自訂 PID、儀表板配置、車輛設定。**這個代價要使用者自己決定，不要替他按下去。**
+反過來也一樣。更改 installer 標記不會修復簽章不相容。先保留既有 App 與資料，
+確認可匯出／復原的範圍；若另行取得使用者明確同意才做簽章線遷移。解除安裝
+會刪除自訂 PID、儀表板配置與車輛設定等本機資料，不能當作一般 AA 排錯步驟。
+**這個代價要使用者自己決定，不要替他按下去。**
 
 **二、封裝。** 本機出的是一個 universal APK；Play 收的是 AAB，再由 Play 依裝置
 切成 split APK 發下去。ABI 拆分、密度拆分、資源縮減都只發生在後者。所以本機
