@@ -154,6 +154,24 @@ Map<String, Object?> _wearProfileJson(
   ],
 };
 
+/// What the dialog's scroll thumb paints now, or nothing while it is faded
+/// out. The painting, not the `thumbVisibility` setting: a thumb that is
+/// switched on but never painted tells the wearer nothing.
+List<RecordedInvocation> _scrollThumbPaint(WidgetTester tester) {
+  final paint = find.descendant(
+    of: find.byType(Dialog),
+    matching: find.byWidgetPredicate(
+      (w) => w is CustomPaint && w.foregroundPainter is ScrollbarPainter,
+    ),
+  );
+  final painter =
+      tester.widget<CustomPaint>(paint).foregroundPainter! as ScrollbarPainter;
+  if (painter.fadeoutOpacityAnimation.value == 0) return const [];
+  final canvas = TestRecordingCanvas();
+  painter.paint(canvas, tester.getSize(paint));
+  return canvas.invocations;
+}
+
 Future<ProviderContainer> _pumpWear(
   WidgetTester tester, {
   required bool connected,
@@ -368,6 +386,11 @@ void main() {
           0,
           reason: 'scrolls in $locale',
         );
+        expect(
+          _scrollThumbPaint(tester),
+          isEmpty,
+          reason: 'scroll thumb with nothing to scroll in $locale',
+        );
 
         await tester.tap(
           find.descendant(of: inDialog, matching: find.text(l10n.wearCancel)),
@@ -435,10 +458,8 @@ void main() {
       find.descendant(of: inDialog, matching: find.byType(Scrollable)),
     );
     expect(scroll.position.maxScrollExtent, greaterThan(0));
-    final bar = tester.widget<Scrollbar>(
-      find.descendant(of: inDialog, matching: find.byType(Scrollbar)),
-    );
-    expect(bar.thumbVisibility, isTrue);
+    // Shown before any scrolling: it is the only sign there is more below.
+    expect(_scrollThumbPaint(tester), isNotEmpty);
 
     final confirm = find.byKey(const Key('wear_disconnect_confirm'));
     await tester.ensureVisible(confirm);
