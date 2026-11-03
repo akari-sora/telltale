@@ -65,7 +65,7 @@ OBD2 故障診斷。它的設計原則是誠實呈現不確定性，不把格式
 不保證能解決。已在 Note9／Android Auto 17.8.663874-release 實測：透過第三方
 KingInstaller 2.3 的 classic／Google installer 方法，以同一份官方 GitLab
 1.0.19 arm64-v8a、同簽章 APK 原地覆蓋更新後，Telltale 出現在清單中。
-這項安裝方法限於上述組合實測，尚未在 Note9 用 1.0.20 重測。步驟、撤回權限與簽章注意事項見
+這項安裝方法只在上述組合實測，之後的版本都沒有用它重測。步驟、撤回權限與簽章注意事項見
 [免費 APK 的 Android Auto 安裝指南](docs/android-auto/free-apk-installation.md)。
 清單可見不代表已驗證 DHU、實體車機或 OBD 連線；Google 車用類別審核仍未解決。
 

@@ -44,7 +44,7 @@ release 文案寫成「手動 APK 一定出現在 AA」或「只開未知來源�
 [2026-10-13 去識別紀錄](../android-auto/evidence/free-apk-installation-20261013/README.md)
 只涵蓋 Note9／Android 10／AA 17.8.663874／GitLab 1.0.19 arm64 APK，以
 KingInstaller 2.3／10 classic 同簽章覆蓋後，手機自訂啟動器可見且勾選。
-1.0.20 已公開，但沒有以此方法在 Note9 重測；各 release 的 DHU 紀錄另行判讀。
+之後的版本沒有以此方法在 Note9 重測；各 release 的 DHU 紀錄另行判讀。
 
 回條應分別寫下 APK hash、套件／版本／signer、安裝來源變化、資料保留指標、
 AA 清單、實際主機／OBD 驗收與撤權結果。本次 installer 從 `null` 變成

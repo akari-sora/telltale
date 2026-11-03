@@ -16,9 +16,8 @@
 同一份 APK 用 KingInstaller 2.3 的一般 classic／Google installer 方法覆蓋後，
 Telltale 出現且已勾選；撤回工具的臨時權限後仍可見。
 
-最新公開版在本頁更新時是 [1.0.20](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.20)。
-**本次 Note9／KingInstaller 方法沒有測過 1.0.20**，也不保證其他手機、Android
-或 AA 版本。不要為了重現紀錄而降版。完整版本、校驗碼與結果見
+**本次 Note9／KingInstaller 方法只測過 1.0.19，之後的版本都沒有重測**，也不保證
+其他手機、Android 或 AA 版本。不要為了重現紀錄而降版。完整版本、校驗碼與結果見
 [簡化測試紀錄](evidence/free-apk-installation-20261013/README.md)。
 
 ### 可選的 KingInstaller 方法
@@ -79,8 +78,7 @@ APK hash、UID、資料 inode、首次安裝時間及權限均保留，但未逐
 內資料內容。覆蓋後未擷取到新的目標 validator 紀錄，**沒有 validator PASS
 的證據**。本次 DHU、實體車機、真車與 OBD 連線均 **NOT_RUN**；
 OBD 是否適合 IoT 類別的 [Google 車用審核問題](aa-07/category-fit.md) 仍未解。
-1.0.20 release 的其他 DHU 驗收有自己的環境與範圍，不能當成本方法的 Note9
-驗收。
+各版本 release 的 DHU 驗收有自己的環境與範圍，不能當成本方法的 Note9 驗收。
 
 ## English
 
@@ -98,10 +96,8 @@ Updating in place with the **same APK** through KingInstaller 2.3's classic /
 Google installer method made Telltale visible and checked. It remained visible
 after the tool's temporary permissions were revoked.
 
-The latest public version when this page was updated is
-[1.0.20](https://gitlab.com/aa22396584/telltale/-/releases/v1.0.20).
-**This Note9 / KingInstaller experiment did not test 1.0.20**, other phones,
-Android versions, or AA versions. Do not downgrade to reproduce the record.
+**This Note9 / KingInstaller experiment tested only 1.0.19; later versions have
+not been retested**, nor have other phones, Android versions, or AA versions. Do not downgrade to reproduce the record.
 See the [public test record](evidence/free-apk-installation-20261013/README.md)
 for exact versions, hashes, and results.
 
@@ -177,5 +173,5 @@ were not audited. No new target validator entries were captured after the
 overlay, so **validator PASS was not established**. DHU, physical head units,
 real vehicles, and OBD connections were **NOT_RUN in this experiment**.
 [OBD / IoT category eligibility](aa-07/category-fit.md) remains unresolved.
-The separate 1.0.20 release DHU acceptance has its own scope and environment;
-it does not qualify this installation method on Note9.
+Each release's DHU acceptance has its own scope and environment; it does not
+qualify this installation method on Note9.

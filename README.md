@@ -74,7 +74,7 @@ Auto's unknown-sources option alone does not guarantee a fix. On a Note9 with
 Android Auto 17.8.663874-release, the official GitLab 1.0.19 arm64-v8a APK became
 visible after updating in place with the same signed APK through third-party
 KingInstaller 2.3's classic / Google installer method. This installation method
-was tested on that combination; it has not been retested with 1.0.20 on Note9. See the
+was tested on that combination only; later versions have not been retested with it. See the
 [free APK Android Auto installation guide](docs/android-auto/free-apk-installation.md)
 for steps, permission cleanup, and signature precautions. Launcher visibility
 does not verify a DHU, physical head unit, or OBD connection, and Google's
