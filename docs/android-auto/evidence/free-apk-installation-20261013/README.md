@@ -10,9 +10,9 @@ On 2026-10-13, Samsung Galaxy Note9 (Android 10 / API 29) with Android Auto 17.8
 
 [公開測試收據](test-receipt.json) 記錄 APK 雜湊、版本、設定比較與驗收範圍。installer 欄位由 `null` 變成 `com.android.vending`，不代表正式 Play 分發或購買。UID、資料 inode、首次安裝時間與套件權限保留，但未稽核 App 資料內容。
 
-The image below is an original **phone settings capture**, not a head-unit image. This experiment did not run DHU, a physical head unit, a real vehicle or an OBD connection. No new target `CAR.VALIDATOR` lines were returned after overlay or cleanup, so a positive validator PASS is **NOT_ESTABLISHED**. OBD's IoT category approval remains **UNRESOLVED**. Version 1.0.20 was not tested with this method; results are not guaranteed for other devices or Android Auto versions.
+The image below is an original **phone settings capture**, not a head-unit image. This experiment did not run DHU, a physical head unit, a real vehicle or an OBD connection. No new target `CAR.VALIDATOR` lines were returned after overlay or cleanup, so a positive validator PASS is **NOT_ESTABLISHED**. OBD's IoT category approval remains **UNRESOLVED**. Version 1.0.20, the next release at the time, was not tested with this method, and later versions have not been retested either; results are not guaranteed for other devices or Android Auto versions.
 
-下圖是原始**手機設定畫面**，不是車機畫面。本次未測 DHU、實體車機、實車或 OBD 連線；覆蓋與撤權後均未擷取到新的目標 `CAR.VALIDATOR` 訊息，因此正向 validator PASS 為 **NOT_ESTABLISHED**。OBD 的 IoT 類別審核仍為 **UNRESOLVED**。1.0.20 未以此方法測試，也不保證其他手機或 Android Auto 版本結果相同。
+下圖是原始**手機設定畫面**，不是車機畫面。本次未測 DHU、實體車機、實車或 OBD 連線；覆蓋與撤權後均未擷取到新的目標 `CAR.VALIDATOR` 訊息，因此正向 validator PASS 為 **NOT_ESTABLISHED**。OBD 的 IoT 類別審核仍為 **UNRESOLVED**。當時的下一版 1.0.20 未以此方法測試，之後的版本也沒有重測，也不保證其他手機或 Android Auto 版本結果相同。
 
 ![Telltale checked in the phone's Android Auto custom launcher after permission cleanup / 撤權後手機 Android Auto 自訂啟動器內勾選 Telltale](launcher-after-cleanup.png)
 
