@@ -74,7 +74,7 @@
     <!-- AA-05 In-Template Alert & Host Speed Strings -->
     <string name="car_alert_high">Hoch</string>
     <string name="car_alert_attention">Achtung</string>
-    <string name="car_action_enable_speed">Fahrzeuggeschwindigkeit aktivieren</string>
+    <string name="car_action_enable_speed">Geschwindigkeit aktivieren</string>
     <string name="car_speed_permission_phone_handoff">Erteilen Sie im Stand die Berechtigung für die Fahrzeuggeschwindigkeit auf Ihrem Smartphone.</string>
     <string name="car_speed_permission_handoff">Erteilen Sie im Stand die Berechtigung für die Fahrzeuggeschwindigkeit.</string>
 </resources>
