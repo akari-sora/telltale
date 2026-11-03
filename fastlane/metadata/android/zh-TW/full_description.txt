@@ -31,8 +31,9 @@ Bluetooth Classic (RFCOMM/SPP)、Bluetooth LE (GATT UART)、Wi-Fi (TCP)，以及
 
 〇開源
 
-原始碼在 GitLab，GPL-3.0，你可以自己編譯自己用：
+原始碼在 GitLab，GitHub 上有鏡像，GPL-3.0，你可以自己編譯自己用：
 https://gitlab.com/aa22396584/telltale
+https://github.com/akari-sora/telltale
 
 Play 上的付費版功能完全一樣，沒有閹割版 —— 是給不想自己編譯的人，以及願意支持繼續開發的人。
 
