@@ -64,7 +64,7 @@ See also [do-not-translate.md](do-not-translate.md) and [hedge-register.md](hedg
 | 增壓壓力 | boost pressure | lib/l10n/app_en.arb:655 ↔ lib/l10n/app_zh_Hant.arb:180 (T1 same ARB key `dtcMonitorBoostPressure`) | evidenced | Label moved out of ReadinessMonitor.boostPressure into the ARBs (L04) so lib/obd stays Flutter-free; the enum still carries the identity. |
 | 多幀 | multi-frame | docs/verification/review-log.md:41 '### C2 · 多幀長度行被當成資料' + :43 naming `_parse` ↔ lib/obd/elm327_client.dart:4 'multi-frame reassembly' and :6753 "a multi-frame envelope's total length" (T3, same named function) | inferred | zh at docs/verification/review-log.md:41; en at lib/obd/elm327_client.dart:4. Both are this project's words, never written side by side. |
 | 失火監控 | misfire | lib/l10n/app_en.arb:2774 ↔ lib/l10n/app_zh_Hant.arb:189 (T1 same ARB key) | evidenced | Label moved out of ReadinessMonitor.misfire into the ARBs (L04) so lib/obd stays Flutter-free; the enum still carries the identity. |
-| 定址 | addressing | docs/protocol-deviations.zh-TW.md:101 '正確定址被丟掉了' ↔ docs/protocol-deviations.zh-TW.md:107 names `lib/obd/addressing.dart:1` and 'addressing' (T3) | evidenced | 'functional addressing' = 功能定址 (field-guide:211); 'physical header' = 實體標頭 (protocol-deviations:107). |
+| 定址 | addressing | docs/protocol-deviations.zh-TW.md:101 '正確定址被丟掉了' ↔ docs/protocol-deviations.zh-TW.md:107 names `lib/obd/addressing.dart:1` and 'addressing' (T3) | evidenced | 'functional addressing' = 功能定址 (field-guide:214); 'physical header' = 實體標頭 (protocol-deviations:107). |
 | 已儲存 | stored | lib/l10n/app_en.arb:494 ↔ lib/l10n/app_zh_Hant.arb:788 (T1 same ARB key) | evidenced | Moved out of DtcKind when lib/obd/ stopped carrying screen copy. The enum still holds 已儲存 as `transcriptLabel`, which is export copy and stays Chinese in every locale — do not cite that as the UI translation. |
 | 底盤 | chassis | lib/l10n/app_en.arb:2756 ↔ lib/l10n/app_zh_Hant.arb:795 (T1 same ARB key `dtcSystemChassis`) | evidenced |  |
 | 待確認 | pending | lib/l10n/app_en.arb:494 ↔ lib/l10n/app_zh_Hant.arb:789 (T1 same ARB key) | evidenced | Not 'detected' and not 'confirmed': a Mode 07 code has been seen once and has not reached the confirmation threshold. |
@@ -77,16 +77,16 @@ See also [do-not-translate.md](do-not-translate.md) and [hedge-register.md](hedg
 | 標頭 | header | lib/l10n/app_en.arb:33 ↔ lib/l10n/app_zh_Hant.arb:123 (T1 same ARB key) | evidenced |  |
 | 故障燈 | MIL | lib/obd/polling_engine.dart:3418 'whose MIL is lit' (T3) | inferred | The app ships 故障燈 in Chinese prose and MIL in this comment (and in the English PID name `Distance Travelled With MIL On`); no place writes both, so the pairing is this glossary's. Spell it out on first mention in English if the audience may not know the acronym |
 | 永久 | permanent | lib/l10n/app_en.arb:2736 ↔ lib/l10n/app_zh_Hant.arb:790 (T1 same ARB key) | evidenced | A permanent code is NOT clearable, and English copy must never imply that pressing Clear removes it. dtcKindPermanentExplanation (lib/l10n/app_en.arb:2748 ↔ lib/l10n/app_zh_Hant.arb:793) carries 無法用診斷儀清除，需修復後由 ECU 自行確認 and its English; dtcClearDialogBody (lib/l10n/app_en.arb:494 ↔ lib/l10n/app_zh_Hant.arb:144) repeats it beside the Clear button. #45 names this explicitly |
-| 汽油微粒濾清器（GPF） | gasoline particulate filter (GPF) | lib/l10n/app_en.arb:683 ↔ lib/l10n/app_zh_Hant.arb:187 (T1 same ARB key `dtcMonitorGasolineParticulateFilter`) | evidenced | LOAD-BEARING: field-guide:247-249 says many OBD tables mistranslate this bit as 空調冷媒 (A/C refrigerant) and that is wrong. Keep GPF in the string. |
+| 汽油微粒濾清器（GPF） | gasoline particulate filter (GPF) | lib/l10n/app_en.arb:683 ↔ lib/l10n/app_zh_Hant.arb:187 (T1 same ARB key `dtcMonitorGasolineParticulateFilter`) | evidenced | LOAD-BEARING: field-guide:250-252 says many OBD tables mistranslate this bit as 空調冷媒 (A/C refrigerant) and that is wrong. Keep GPF in the string. |
 | 無回應，稍後重試 | no answer | lib/l10n/app_en.arb:817 ↔ lib/l10n/app_zh_Hant.arb:126 (T1 same ARB key) | evidenced |  |
 | 燃油系統監控 | fuel system | lib/l10n/app_en.arb:679 ↔ lib/l10n/app_zh_Hant.arb:186 (T1 same ARB key `dtcMonitorFuelSystem`) | evidenced | Label moved out of ReadinessMonitor.fuelSystem into the ARBs (L04) so lib/obd stays Flutter-free; the enum still carries the identity. |
-| 監控項目 | readiness monitor | lib/obd/readiness.dart:1 'The emissions readiness monitors' + enum `ReadinessMonitor` :41 ↔ docs/field-guide.zh-TW.md:243,243-245 '監控項目' (T3 identifier ↔ zh prose) | inferred | zh at docs/field-guide.zh-TW.md:243; en at lib/obd/readiness.dart:1. Assembled from two documents. |
+| 監控項目 | readiness monitor | lib/obd/readiness.dart:1 'The emissions readiness monitors' + enum `ReadinessMonitor` :41 ↔ docs/field-guide.zh-TW.md:243,246-248 '監控項目' (T3 identifier ↔ zh prose) | inferred | zh at docs/field-guide.zh-TW.md:243; en at lib/obd/readiness.dart:1. Assembled from two documents. |
 | 綜合元件監控 | components | lib/l10n/app_en.arb:663 ↔ lib/l10n/app_zh_Hant.arb:182 (T1 same ARB key) | evidenced |  |
 | 網路 | network | lib/l10n/app_en.arb:52 ↔ lib/l10n/app_zh_Hant.arb:797 (T1 same ARB key) | evidenced |  |
 | 自訂 PID | custom PID | README.md:97 'custom PIDs' ↔ README.zh-TW.md:84 '自訂 PID' (T1) | evidenced |  |
 | 蒸發排放系統 | evaporative | lib/l10n/app_en.arb:673 ↔ lib/l10n/app_zh_Hant.arb:184 (T1 same ARB key) | evidenced | The English ships as "Evaporative system" — the evaporative emission system, not the exhaust. Label moved out of ReadinessMonitor.evaporative into the ARBs (L04) so lib/obd stays Flutter-free; the enum still carries the identity. |
 | 觸媒轉換器 | catalyst | lib/l10n/app_en.arb:687 ↔ lib/l10n/app_zh_Hant.arb:181 (T1 same ARB key) | evidenced | Label moved out of ReadinessMonitor.catalyst into the ARBs (L04) so lib/obd stays Flutter-free; the enum still carries the identity. |
-| 診斷紀錄 | diagnostic transcript | README.md:98 ↔ README.zh-TW.md:85 (T1); also README.md:137 ↔ README.zh-TW.md:114; docs/field-guide.zh-TW.md:125,289 UI path 設定 → 診斷紀錄 | evidenced |  |
+| 診斷紀錄 | diagnostic transcript | README.md:98 ↔ README.zh-TW.md:85 (T1); also README.md:137 ↔ README.zh-TW.md:114; docs/field-guide.zh-TW.md:125,292 UI path 設定 → 診斷紀錄 | evidenced |  |
 | 車身 | body | lib/l10n/app_en.arb:2760 ↔ lib/l10n/app_zh_Hant.arb:796 (T1 same ARB key) | evidenced |  |
 | 車輛即時遙測 | Live vehicle telemetry | lib/l10n/app_en.arb:30 ↔ lib/l10n/app_zh_Hant.arb:18 (T1 same ARB key) | evidenced | Also the Google Play store name suffix. Use verbatim for appTagline. |
 | 輪詢 | polling | README.md:129 'scheduled polling' ↔ README.zh-TW.md:108 '排程輪詢' (T1); README.md:201 'idle polling' ↔ README.zh-TW.md:169 '閒置輪詢' | evidenced |  |
@@ -99,7 +99,7 @@ See also [do-not-translate.md](do-not-translate.md) and [hedge-register.md](hedg
 
 | 繁體中文 | English | Evidence | Status | Note |
 |---|---|---|---|---|
-| Bluetooth Classic | Bluetooth Classic | README.md:93 ↔ README.zh-TW.md:80 (T1 — unchanged) | evidenced | Transport product names stay English; generic 'bluetooth' becomes 藍牙 (docs/field-guide.zh-TW.md:21 '系統藍牙設定', :66 '藍牙配對清單'). Context rule, not one pair. |
+| Bluetooth Classic | Bluetooth Classic | README.md:93 ↔ README.zh-TW.md:80 (T1 — unchanged) | evidenced | Transport product names stay English; generic 'bluetooth' becomes 藍牙 (docs/field-guide.zh-TW.md:21 '系統藍牙設定', :70 '藍牙配對清單'). Context rule, not one pair. |
 | Bluetooth LE | Bluetooth LE | README.md:94 ↔ README.zh-TW.md:81 (T1 — unchanged); docs/field-guide.zh-TW.md:23 'App 裡選 Bluetooth LE' | evidenced |  |
 | GATT UART service | GATT UART service | README.md:94 'a GATT UART service' ↔ README.zh-TW.md:81 '（GATT UART service）' (T1 — unchanged) | evidenced |  |
 | RFCOMM/SPP | RFCOMM/SPP | README.md:93 ↔ README.zh-TW.md:80 (T1 — unchanged) | evidenced |  |
@@ -228,7 +228,7 @@ See also [do-not-translate.md](do-not-translate.md) and [hedge-register.md](hedg
 | 測試證據 | test evidence | README.md:207 'Start with [test evidence]' ↔ README.zh-TW.md:175 '[測試證據]' (T1) | evidenced |  |
 | 裝置驗證 | device verification | README.md:208 ↔ README.zh-TW.md:176 (T1) | evidenced |  |
 | 車輛資料來源 | Vehicle data sources | README.md:231 doc table ↔ README.zh-TW.md:198 (T2) | evidenced |  |
-| 驗證馬具矩陣 | verification rig matrix | README.md:209-210 'verification rig matrix' ↔ README.zh-TW.md:179 '驗證馬具矩陣' (T1) | evidenced | 'rig' = 馬具 in prose but stays `rig` as a flavor/identifier (README.zh-TW.md:163,180). |
+| 驗證馬具矩陣 | verification rig matrix | README.md:209-210 'verification rig matrix' ↔ README.zh-TW.md:179 '驗證馬具矩陣' (T1) | evidenced | 'rig' = 馬具 in prose but stays `rig` as a flavor/identifier (README.zh-TW.md:163,187). |
 
 ## Known gaps
 

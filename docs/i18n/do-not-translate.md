@@ -129,7 +129,7 @@ not. The line is whether the token is *addressed to a machine or a search*, or t
 - `BMS`
 - `ECU`
 - `ECM`
-- `VIN` — `docs/field-guide.zh-TW.md:52` glosses it once as 車身號碼 on first mention for a reader who has not met the acronym. That is the only place; everywhere else it stays VIN
+- `VIN` — `docs/field-guide.zh-TW.md:55` glosses it once as 車身號碼 on first mention for a reader who has not met the acronym. That is the only place; everywhere else it stays VIN
 - `MAF`
 - `MAP`
 - `VE`
@@ -183,7 +183,7 @@ not. The line is whether the token is *addressed to a machine or a search*, or t
 - `com.cbstudio.telltale`
 - `torque_obd (pubspec name — deliberately not renamed)`
 - ``field` (build flavor id)`
-- ``rig` (build flavor id — but the prose word 'rig' IS translated: 馬具, README.zh-TW.md:142)`
+- ``rig` (build flavor id — but the prose word 'rig' IS translated: 馬具, README.zh-TW.md:149)`
 - `flavor (build term, kept English in zh prose)`
 - `GPL-3.0`
 - `BSD-3-Clause`
@@ -205,12 +205,12 @@ not. The line is whether the token is *addressed to a machine or a search*, or t
 - `MAT403096BNL00000`
 - `TORQUEDEMO0000001`
 - ``researchOnly` (catalog source label)`
-- ``community` (catalog source label — NOT the ordinary word: README.md:204 'community expectations' IS translated, as 社群互動規範)`
+- ``community` (catalog source label — NOT the ordinary word: README.md:213 'community expectations' IS translated, as 社群互動規範)`
 - ``experimental` (catalog source label)`
 - `classicTransportAvailable`
 - `fastMode`
 - `PIDs/s`
-- `schema v3 / schema-v3 (README.md:58; docs/README.md:13)`
+- `schema v3 / schema-v3 (README.md:58; docs/README.md:17)`
 - `Elm327Client.initSequence`
 - `lib/obd/addressing.dart`
 - `BusAddressing.shouldTransmit`
