@@ -43,15 +43,18 @@ fun isSemanticAlertEdge(oldPhase: CarAlertPhase, newPhase: CarAlertPhase): Boole
 }
 
 /**
- * Resolves a [CarAlertSnapshot] only if it strictly matches the current telemetry frame's [connectionEpoch].
+ * Resolves a [CarAlertSnapshot] only if it strictly matches the current or stale telemetry connection's [connectionEpoch].
  * Prevents alert state from previous vehicle sessions or connections leaking into a newly connected vehicle (AA05 Blocker 3).
  */
 fun matchingAlertSnapshot(
     telemetryState: CarTelemetryState,
     alertSnapshot: CarAlertSnapshot,
 ): CarAlertSnapshot? {
-    val currentFrame = (telemetryState as? CarTelemetryState.Current)?.frame ?: return null
-    val frameEpoch = currentFrame.connectionEpoch
+    val frameEpoch = when (telemetryState) {
+        is CarTelemetryState.Current -> telemetryState.frame.connectionEpoch
+        is CarTelemetryState.Stale -> telemetryState.connectionEpoch
+        is CarTelemetryState.Awaiting, is CarTelemetryState.Incompatible -> null
+    } ?: return null
     if (alertSnapshot.connectionEpoch != frameEpoch) {
         return null
     }

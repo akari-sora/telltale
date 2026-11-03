@@ -32,7 +32,9 @@ data class AppLocaleMigration(
 object AppLocalePolicy {
     const val MIN_API = 33
 
-    val supportedTags: List<String> = listOf("en", "zh-Hant", "de")
+    val supportedTags: List<String> = listOf(
+        "en", "zh-Hant", "de", "ja", "ko", "es", "fr", "pt-BR", "zh-Hans", "it", "nl",
+    )
 
     private val supportedTagSet: Set<String> = supportedTags.toSet()
 
@@ -70,6 +72,9 @@ object AppLocalePolicy {
             "en" -> listOf("en")
             "zh_Hant" -> listOf("zh-Hant")
             "de" -> listOf("de")
+            "ja", "ko", "es", "fr", "it", "nl" -> listOf(storedId)
+            "pt" -> listOf("pt-BR")
+            "zh_Hans" -> listOf("zh-Hans")
             else -> emptyList()
         }
 
@@ -78,6 +83,9 @@ object AppLocalePolicy {
             "en" -> "en"
             "zh-Hant" -> "zh_Hant"
             "de" -> "de"
+            "ja", "ko", "es", "fr", "it", "nl" -> tag
+            "pt-BR" -> "pt"
+            "zh-Hans" -> "zh_Hans"
             else -> "system"
         }
 
@@ -121,7 +129,7 @@ object AppLocalePolicy {
      *
      * Script beats a conflicting region: `zh-Hans-TW` is still Hans and is
      * not 繁體中文. `de-AT` / `de-CH` are German. Unknown languages stay
-     * unknown so a Japanese OS override is not silently rewritten to English.
+     * unknown so an unsupported OS override is not silently rewritten to English.
      */
     fun mapToSupported(raw: String): String? {
         val tag = raw.trim().replace('_', '-')
@@ -129,16 +137,19 @@ object AppLocalePolicy {
         val parts = tag.split('-').filter { it.isNotEmpty() }
         if (parts.isEmpty()) return null
         val language = parts[0].lowercase()
-        if (language == "en") return "en"
-        if (language == "de") return "de"
+        if (language in setOf("en", "de", "ja", "ko", "es", "fr", "it", "nl")) return language
+        if (language == "pt") return "pt-BR"
         if (language != "zh") return null
-        val subtags = parts.drop(1)
-        val script = subtags.firstOrNull { it.length == 4 }?.lowercase()
-        if (script == "hans") return null
+        // Extension and private-use subtags cannot supply a script or region.
+        val subtags = parts.drop(1).takeWhile { it.length != 1 }
+        val script = subtags.firstOrNull { it.matches(Regex("[A-Za-z]{4}")) }?.lowercase()
+        if (script == "hans") return "zh-Hans"
         if (script == "hant") return "zh-Hant"
-        val region = subtags.firstOrNull { it.length == 2 }?.uppercase()
+        val region = subtags.firstOrNull { it.matches(Regex("[A-Za-z]{2}|[0-9]{3}")) }?.uppercase()
+        if (region == "CN" || region == "SG") return "zh-Hans"
         if (region == "TW" || region == "HK" || region == "MO") return "zh-Hant"
-        if (subtags.isEmpty()) return "zh-Hant"
+        // An unrecognized script has no effect when no region is specified.
+        if (subtags.isEmpty() || (script != null && region == null)) return "zh-Hant"
         return null
     }
 }

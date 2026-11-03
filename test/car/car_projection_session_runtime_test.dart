@@ -10,6 +10,7 @@ import 'package:torque_obd/car/car_projection_runtime.dart';
 import 'package:torque_obd/car/car_projection_session_runtime.dart';
 import 'package:torque_obd/car/generated/car_projection_session.g.dart';
 import 'package:torque_obd/car/generated/car_telemetry.g.dart';
+import 'package:torque_obd/obd/elm327_client.dart';
 import 'package:torque_obd/obd/pid/pid_library.dart';
 import 'package:torque_obd/obd/telemetry_demand.dart';
 import 'package:torque_obd/state/obd_session.dart';
@@ -276,6 +277,71 @@ Iterable<TelemetryDemand> _projectionDemands(ObdSession session) => session
     .demands
     .leases
     .where((demand) => demand.owner == DemandOwner.projection);
+
+/// Counts the session's own automatic reconnects (#112). Projection reconnects
+/// go through `carProjectionReconnectProvider`, which each test overrides, so
+/// every call that arrives here is the automatic one.
+class _AutoReconnectSession extends ObdSession {
+  _AutoReconnectSession(this._transport);
+
+  final ObdTransport Function() _transport;
+  int automaticReconnects = 0;
+
+  @override
+  Future<bool> reconnectRememberedAdapter(LastAdapter adapter) {
+    automaticReconnects++;
+    return connectForTest(_transport(), adapter.kind, adapter: adapter);
+  }
+}
+
+class _HeldDemoTransport extends DemoTransport {
+  final gate = Completer<void>();
+
+  @override
+  Future<void> connect() async {
+    await gate.future;
+    await super.connect();
+  }
+}
+
+class _SlowToCloseDemoTransport extends DemoTransport {
+  final release = Completer<void>();
+
+  @override
+  Future<void> disconnect() async {
+    await release.future;
+    await super.disconnect();
+  }
+}
+
+const _rememberedClassic = LastAdapter(
+  id: '00:1D:A5:68:98:8B',
+  name: 'OBDII',
+  kind: TransportKind.bluetoothClassic,
+);
+
+Future<(ProviderContainer, _AutoReconnectSession)> _autoReconnectContainer({
+  required ObdTransport Function() automaticTransport,
+  required CarProjectionReconnect projectionReconnect,
+}) async {
+  SharedPreferences.setMockInitialValues({
+    'last_adapter_v1': _rememberedClassic.encode(),
+  });
+  final prefs = await SharedPreferences.getInstance();
+  final container = ProviderContainer(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      obdSessionProvider.overrideWith(
+        () => _AutoReconnectSession(automaticTransport),
+      ),
+      carProjectionReconnectProvider.overrideWithValue(projectionReconnect),
+    ],
+  );
+  return (
+    container,
+    container.read(obdSessionProvider.notifier) as _AutoReconnectSession,
+  );
+}
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -569,6 +635,118 @@ void main() {
       await host.sendLease(current);
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(reconnects, 0);
+    },
+  );
+
+  // #112: the session reconnects a silent adapter once by itself, and an
+  // active lease reconnects the remembered adapter too. Both reach the same
+  // physical adapter, which accepts exactly one link.
+  test(
+    'an automatic reconnect in flight keeps a lease from starting another',
+    () async {
+      final held = _HeldDemoTransport();
+      var projectionReconnects = 0;
+      final (container, session) = await _autoReconnectContainer(
+        automaticTransport: () => held,
+        projectionReconnect: (_) async {
+          projectionReconnects++;
+          return false;
+        },
+      );
+      addTearDown(container.dispose);
+      var now = Duration.zero;
+      session.automaticReconnectClock = () => now;
+      final inactive = _lease(active: false, generation: 0, armed: false);
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => inactive)
+        ..armContinuity = ((_, _) async => inactive);
+      host.install();
+      addTearDown(host.uninstall);
+      expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+
+      expect(
+        await session.connectForTest(
+          DemoTransport(),
+          TransportKind.bluetoothClassic,
+          adapter: _rememberedClassic,
+        ),
+        isTrue,
+      );
+      now += const Duration(seconds: 11);
+      session.client!.reportConnectionLostForTest(
+        ConnectionLossCause.adapterSilent,
+      );
+      await _eventually(
+        () =>
+            session.automaticReconnects == 1 &&
+            container.read(obdSessionProvider).isBusy,
+      );
+
+      await host.sendLease(_lease(active: true, generation: 80, armed: false));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(projectionReconnects, 0);
+
+      held.gate.complete();
+      await _eventually(() => container.read(obdSessionProvider).isConnected);
+      expect(session.client!.transport, same(held));
+      expect(projectionReconnects, 0);
+      expect(session.automaticReconnects, 1);
+    },
+  );
+
+  test(
+    "a lease that reconnects during the drop's teardown is the only reconnect",
+    () async {
+      final slow = _SlowToCloseDemoTransport();
+      late _AutoReconnectSession session;
+      final projected = DemoTransport();
+      var projectionReconnects = 0;
+      final (container, built) = await _autoReconnectContainer(
+        automaticTransport: DemoTransport.new,
+        projectionReconnect: (adapter) {
+          projectionReconnects++;
+          return session.connectForTest(
+            projected,
+            adapter.kind,
+            adapter: adapter,
+          );
+        },
+      );
+      session = built;
+      addTearDown(container.dispose);
+      var now = Duration.zero;
+      session.automaticReconnectClock = () => now;
+      final inactive = _lease(active: false, generation: 0, armed: false);
+      final host = _NativeProjectionHost(messenger)
+        ..currentLease = (() async => inactive)
+        ..armContinuity = ((_, _) async => inactive);
+      host.install();
+      addTearDown(host.uninstall);
+      expect(container.read(carProjectionSessionRuntimeProvider), isNotNull);
+
+      expect(
+        await session.connectForTest(
+          slow,
+          TransportKind.bluetoothClassic,
+          adapter: _rememberedClassic,
+        ),
+        isTrue,
+      );
+      now += const Duration(seconds: 11);
+      session.client!.reportConnectionLostForTest(
+        ConnectionLossCause.adapterSilent,
+      );
+      expect(container.read(obdSessionProvider).phase, ConnectionPhase.failed);
+
+      await host.sendLease(_lease(active: true, generation: 81, armed: false));
+      await _eventually(() => projectionReconnects == 1);
+      slow.release.complete();
+
+      await _eventually(() => container.read(obdSessionProvider).isConnected);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(session.client!.transport, same(projected));
+      expect(session.automaticReconnects, 0);
+      expect(projectionReconnects, 1);
     },
   );
 

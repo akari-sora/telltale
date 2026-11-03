@@ -32,6 +32,19 @@ AUTHORIZED_OBD_EXACT_FILES = {
     # contract review instead of inheriting a permanent path exception.
     "lib/obd/telemetry_demand.dart":
         "41f3f4571919e93238c4528b7625a1ada903b2f83a30e4b6feb86c24087e47ac",
+    # #110 ELM session pipeline. Profile timings/caps and the live Mode 01
+    # grouping limit on PriorityScheduler. Content-bound for the same reason:
+    # this MR reviews the exact blobs; later edits need a new contract pass.
+    "lib/obd/elm_session_profile.dart":
+        "8144eb6032f47fee04d13278b493111f4f792487cbb0315c5edebe3bbc99a42c",
+    "lib/obd/pid/priority_scheduler.dart":
+        "55ba52dc5ebd4aa910225e3e25f5195d0dda75ca00edf9494be6953456f5016d",
+    # #114 observed-round freshness in Reading; #115 widens only the veryLow
+    # tier to three observed rounds (90-120 s). high/medium/low, which the car
+    # surfaces and driving-safety checks read, keep their 2-10 s bounds. Bound
+    # to the exact blob so future telemetry changes need a new contract review.
+    "lib/obd/telemetry.dart":
+        "f80e1dfffa82186b30b460bb288d47bb2a56dcf87757e5e92fc3a625499e3b78",
 }
 
 

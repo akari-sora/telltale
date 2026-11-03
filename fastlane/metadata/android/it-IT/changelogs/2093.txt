@@ -1,0 +1,1 @@
+Indicatori Android Auto più grandi con colori giorno/notte. Velocità intera; tocca l’icona info per vedere lo stato. I PID a priorità molto bassa restano aggiornati. Senza 7E8, il supporto viene rilevato da tutti i moduli e i PID non supportati non vengono più interrogati. Testato solo con Demo/DHU; veicoli e adattatori segnalati e unità reali non verificati.

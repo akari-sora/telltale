@@ -1,0 +1,47 @@
+Leia seu carro por um adaptador ELM327: RPM, velocidade, arrefecimento, carga e temperatura de admissão ao vivo, códigos de falha e o estado completo do veículo registrado no momento em que a falha ocorreu.
+
+Este app se organiza em torno de uma frase:
+
+Um número errado que parece plausível é pior do que nenhum número.
+
+Resultados de diagnóstico viram ação com ferramenta. Uma leitura de −40 °C no arrefecimento leva à troca de um sensor; "nenhum código de falha" manda alguém embora em um carro que ainda tem problema. Por isso cada regra aqui existe para fazer a incerteza parecer incerteza, em vez de parecer uma resposta.
+
+〇O que ele faz
+
+• Seis medidores desenhados à mão em cinco skins — não só recoloridos: o formato do mostrador, o ponteiro e o movimento diferem. Fundos escuros e claros
+• Códigos de falha: Mode 03 armazenados, Mode 07 pendentes, Mode 0A permanentes, cada um rotulado com o controlador que o reportou
+• Quadro congelado: o estado do veículo no momento em que a falha foi confirmada — RPM, arrefecimento, carga, trim de combustível. É o único registro no app das condições enquanto a falha acontecia, e limpar os códigos o destrói permanentemente, então o app pergunta antes
+• Prontidão de emissões: veja quais monitores foram concluídos antes de uma inspeção
+• Valores derivados: potência, torque, consumo, fluxo de ar. OBD genérico ainda funciona sem VIN e sem correspondência de catálogo; as estimativas são rotuladas com a fórmula e as premissas do veículo em que se apoiam, e não são medições
+• PIDs personalizados: escreva suas próprias fórmulas, com importação e exportação CSV
+• Teste de aceleração: cronometrado partindo da imobilidade até uma velocidade-alvo
+• Transcrição de diagnóstico: cada byte trocado com o adaptador é guardado e pode ser exportado quando a conexão falha; gravação e exportação mantêm seus rótulos de status
+• English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano e Nederlands: altere o idioma na tela de conexão e nas configurações ou siga o idioma do sistema. Algumas mensagens ainda estão disponíveis apenas em chinês tradicional
+
+〇Quatro formas de conectar
+
+Bluetooth Classic (RFCOMM/SPP), Bluetooth LE (GATT UART), Wi-Fi (TCP) e um simulador Demo embutido — todas as telas funcionam sem adaptador e sem veículo.
+
+〇O que ele deliberadamente se recusa a fazer
+
+• Não transforma "os controladores que responderam não reportaram códigos" em "este veículo não tem códigos de falha"
+• Quando dois controladores respondem à mesma pergunta de forma diferente, não usa nenhuma das respostas — escolher uma é escolher ao acaso
+• Leituras não verificadas continuam usáveis e rotuladas com origem e estado (não verificado / estimado / anômalo); um pacote malformado nunca vira um número que parece plausível
+• Sem anúncios, sem rastreamento, sem coleta de dados pessoais
+
+〇Código aberto
+
+O código-fonte está no GitLab sob GPL-3.0, e você mesmo pode compilá-lo:
+https://gitlab.com/aa22396584/telltale
+
+A edição paga do Play tem exatamente os mesmos recursos — nada é retido. É para quem prefere não compilar, e para quem quer apoiar o desenvolvimento contínuo.
+
+As builds do F-Droid, do GitLab release e do Google Play usam três chaves de assinatura diferentes. Elas não podem ser instaladas como atualizações umas das outras; isso é intencional.
+
+〇O que você precisa
+
+Um adaptador OBD2 ELM327 (Bluetooth ou Wi-Fi) e um veículo compatível com OBD2. Ainda conecta e lê sem entrada de catálogo ou dados do veículo.
+
+〇Aviso
+
+Este app não é afiliado ao Torque ou Torque Pro de Ian Hawkins, nem é endossado por eles ou deles derivado. A implementação OBD2 segue padrões públicos, incluindo SAE J1979 e o datasheet do ELM327.

@@ -541,6 +541,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get datumStatusFollowsData => 'Der Status richtet sich nach den Daten';
 
   @override
+  String get datumStatusDetailsHint => 'Für Details zum Datenstatus tippen';
+
+  @override
+  String get datumStatusUnverifiedExplanation =>
+      'Unverifiziert bedeutet, dass hier kein Abgleich dieser Dekodierung mit Ihrem Fahrzeug dokumentiert ist. Das bedeutet weder, dass der Messwert falsch ist, noch bestätigt es seine Genauigkeit. Aktualität und Fehler werden separat angezeigt.';
+
+  @override
   String get datumStatusFormula => 'Formel';
 
   @override
@@ -4876,4 +4883,8 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get performanceNoAnalysisBody =>
       'Dieser Lauf wurde gestoppt, bevor genügend Geschwindigkeitsproben aufgezeichnet wurden, um ein Diagramm oder Teilergebnis zu erstellen.';
+
+  @override
+  String get connectActivityReconnectingAutomatically =>
+      'Der Adapter reagiert nicht mehr. Die Verbindung wird automatisch neu aufgebaut…';
 }

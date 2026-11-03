@@ -147,10 +147,11 @@ GitHub APK 發布順序：
    為什麼要有 (b)：`v1.0.12` 以前每一份 release 內文都只講這份 build **不是**
    什麼（誰簽的、走查到哪、還沒驗什麼），一個字沒講它**是**什麼。
    `CHANGELOG.md` 一直都寫著，只是沒有任何路徑把它送到 release 頁面上，而使用
-   者是在 GitHub 上讀不到才說的。內文放英文原文。繁體中文版本維護在
-   `store/metadata/zh-TW/changelogs/`，由 `store/upload.sh` 送到 Play 的
-   「最新動態」—— 那是另一條發布線，**只發到 GitHub 的 beta 不會有對應的中文
-   商店文案**。兩邊各自維護，腳本不做機器翻譯。
+   者是在 GitHub 上讀不到才說的。內文放英文原文。Play「最新動態」由 `store/upload.sh` 從 `store/metadata/<locale>/changelogs/`
+   送出；每個上架的 Play locale 都要準備更新內容，每則不超過 500 字元。11 種
+   App 介面語言對應 12 個 Play locale，因為西班牙文分為 `es-ES` 與 `es-419`。
+   每個 locale 的截圖需分別準備；新增語言的新版截圖仍待擷取。GitHub beta 是
+   另一條發布線，兩邊各自維護，腳本不做機器翻譯。
 4. 推送 annotated tag，等 Release workflow 自己測試、建置、簽章與上傳：
 
    ```bash
@@ -429,24 +430,10 @@ gplay bundles list --package "$PKG" --edit "$ED"      # versionCode 在不在
 gplay tracks get  --package "$PKG" --edit "$ED" --track production
 ```
 
-**(c) `telltale-try` 這組 service account 沒有商店頁（store presence）權限。**
-
-它可以：開 edit、傳 bundle、指派軌道、commit 一個純發版的 edit —— 1.0.11 就是這樣
-上去的。它不可以：commit 任何**帶商店頁或圖片變更**的 edit，`validate` 與 `commit`
-都回 `Error 403: The caller does not have permission`。所以 `store/upload.sh --apply`
-會把 14 張圖都傳完、最後一步倒在 commit。
-
-二分過，範圍很明確：
-
-| edit 內容 | commit |
-|---|---|
-| 什麼都沒改 | 成功 |
-| 只有 bundle + 軌道 | 成功 |
-| 只有 en-US 文字（新語言，無圖無影片） | **403** |
-| 只有 zh-TW 圖片（既有語言） | **403** |
-
-既有語言也擋，所以**不是「不能新增語言」，是整個商店頁寫不了**。要修得在
-Play Console → 使用者與權限 → 這組 service account，補上這個 app 的商店頁權限。
+**(c) 商店頁權限。** 截至 2026-11-02，`telltale-try` service account 已有
+Telltale app 層級的「管理商店發布情況」權限，可透過 `gplay` 提交商店頁文字與圖片。
+2026-09-07 的真實商店頁變更曾因缺少權限在 commit 回 403；當時寫入原值的 patch
+成功只是空 edit，不能證明寫入權限。每次發布仍應確認實際提交及讀回結果。
 
 **(d) `gplay edits delete` 需要 `--confirm`，沒帶就 exit 1 什麼也不做。**
 
@@ -463,12 +450,6 @@ Play Console → 使用者與權限 → 這組 service account，補上這個 ap
 印到 stderr。驗證方式是在 edit 建立後注入 `false` 再跑，然後 `gplay edits get` 確認
 它真的不見了 —— 2026-09-07 實跑：修之前那個 edit 還在，修之後 `edits get` 回
 `Bad request`（也就是不見了），而這正是 `--confirm` 這件事被發現的經過。
-
-> **一個假的對照組，差點讓我下錯結論。** 中途我用 `listings patch --title` 把 zh-TW
-> 標題寫成**它原本的值**，然後 commit 成功，於是我一度認為「改既有語言可以，只有新增
-> 語言被擋」。那是空 edit：Play 對沒有實際變更的 patch 不產生變更，commit 當然過。
-> 直到改跑真的會動到內容的 `--apply zh-TW`（重傳 7 張圖）才看到同樣的 403。
-> **一個寫入等值資料的測試，測不到寫入權限。**
 
 ## 5. 上傳之前：實機走一遍（硬性閘門，不可跳過）
 

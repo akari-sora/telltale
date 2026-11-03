@@ -59,10 +59,21 @@ void main() {
     'app_zh_Hant.arb': zhHant,
     'app_zh.arb': zh,
     'app_de.arb': de,
+    'app_ja.arb': _readArb('app_ja.arb'),
+    'app_ko.arb': _readArb('app_ko.arb'),
+    'app_es.arb': _readArb('app_es.arb'),
+    'app_fr.arb': _readArb('app_fr.arb'),
+    'app_pt.arb': _readArb('app_pt.arb'),
+    'app_zh_Hans.arb': _readArb('app_zh_Hans.arb'),
+    'app_it.arb': _readArb('app_it.arb'),
+    'app_nl.arb': _readArb('app_nl.arb'),
   };
 
   /// The template and everything that has to agree with it.
-  final everyLocale = <String, Map<String, dynamic>>{'app_en.arb': en, ...shipped};
+  final everyLocale = <String, Map<String, dynamic>>{
+    'app_en.arb': en,
+    ...shipped,
+  };
 
   /// Locales that carry their own copy. `app_zh.arb` is excluded because it is
   /// checked against `app_zh_Hant.arb` further down instead.
@@ -200,6 +211,405 @@ void main() {
     // locale so each one is a decision made about that language.
     const coincidental = <String, Set<String>>{
       'app_zh_Hant.arb': <String>{},
+      // Reviewed packet exceptions, with each identical value justified below.
+      'app_ja.arb': <String>{
+        // Shopee is the brand/storefront name used in Japanese and international markets (unlike
+        // Taiwan's 蝦皮) and is also listed in do-not-translate.md.
+        'recommendedPurchaseStoreShopee',
+        // Bluetooth is a standard technical/trademarked name used unchanged in Japanese
+        // Android/Wear OS system UI.
+        'wearPermissionBluetooth',
+        // Bluetooth LE is a transport standard/product name kept in English across the app
+        // (matching connectTransportBleTitle).
+        'connectionLayerBle',
+        // Bluetooth Classic is a transport standard/product name kept in English across the app
+        // (matching connectTransportClassicTitle).
+        'connectionLayerClassic',
+        // Wi-Fi is a standard trademarked networking term used unchanged in Japanese (matching
+        // connectTransportWifiTitle).
+        'connectionLayerWifi',
+      },
+      'app_ko.arb': <String>{
+        // Placeholder-only template ({label} (Mode {mode}) · {count}) where Mode is a DNT token
+        // and Korean uses ASCII parentheses and middle dot
+        'dtcGroupHeader',
+        // Korean uses the standard ASCII comma and space (, ) to join inline fault-code and
+        // controller lists
+        'dtcListSeparator',
+        // Placeholder-only template ({label} (Mode {mode}): {message}) where Mode is a DNT token
+        // and Korean uses ASCII parentheses and colon-space
+        'dtcReadFailureDetail',
+        // Korean uses the standard ASCII comma and space (, ) to separate inline machine tokens
+        'pidListSeparator',
+        // Korean uses the standard ASCII comma and space (, ) to join unconfirmed field names
+        'powertrainFieldListSeparator',
+        // Shopee is the storefront brand name used in international/Korean references outside
+        // Taiwan
+        'recommendedPurchaseStoreShopee',
+        // Korean screen-reader labels use the standard ASCII comma and space (, ) rather than
+        // fullwidth punctuation
+        'semanticsFieldSeparator',
+        // Korean uses the standard ASCII comma and space (, ) to join runtime label lists
+        'settingsListSeparator',
+        // Korean uses a period and space ({first}. {second}) between clauses in composed screen-
+        // reader labels
+        'telemetryPhraseJoin',
+        // Korean uses an ASCII period and space ({first}. {second}) to join complete sentences
+        'telemetrySentenceJoin',
+        // LPG is the universal everyday and technical term for liquefied petroleum gas in South
+        // Korea (LPG 충전소 / LPG 차량)
+        'fuelTypeLpg',
+        // Placeholder-only template ({field} {value} ({origin})) where Korean uses standard ASCII
+        // parentheses with a leading space
+        'assumptionWithOrigin',
+        // Korean uses an ASCII semicolon and space (; ) to separate inline assumption items
+        'assumptionSeparator',
+        // Matches connectTransportBleTitle (in IDENTICAL_ON_PURPOSE); Bluetooth LE is standard
+        // technical notation in Korean
+        'connectionLayerBle',
+        // Matches connectTransportClassicTitle (in IDENTICAL_ON_PURPOSE); Bluetooth Classic is
+        // standard technical notation in Korean
+        'connectionLayerClassic',
+        // Matches connectTransportWifiTitle (in IDENTICAL_ON_PURPOSE); Wi-Fi is standard notation
+        // in Korean UI
+        'connectionLayerWifi',
+      },
+      'app_es.arb': <String>{
+        // UI badge token kept as Experimental (loanword, matches Experimental · unverified pattern
+        // elsewhere)
+        'datumBadgeExperimental',
+        // Format token {system} · {category} punctuation identical
+        'dtcGroupHeader',
+        // list separator punctuation
+        'dtcListSeparator',
+        // placeholder-only / punctuation structure
+        'dtcReadFailureDetail',
+        // list separator punctuation
+        'pidListSeparator',
+        // list separator punctuation
+        'powertrainFieldListSeparator',
+        // Shopee is a do-not-translate store name
+        'recommendedPurchaseStoreShopee',
+        // separator punctuation
+        'semanticsFieldSeparator',
+        // section label uses Experimental loanword
+        'settingsExperimentalSection',
+        // list separator punctuation
+        'settingsListSeparator',
+        // phrase join punctuation
+        'telemetryPhraseJoin',
+        // sentence join punctuation
+        'telemetrySentenceJoin',
+        // byte/bytes unit words identical in Spanish for this scale
+        'transcriptSizeBytes',
+        // Bluetooth is do-not-translate
+        'wearPermissionBluetooth',
+        // skin id/name Minimal kept
+        'gaugeSkinMinimal',
+        // LPG acronym
+        'fuelTypeLpg',
+        // intentionally identical to English (unit, acronym, separator, or borrowed term)
+        'assumptionWithOrigin',
+        // intentionally identical to English (unit, acronym, separator, or borrowed term)
+        'assumptionSeparator',
+        // intentionally identical to English (unit, acronym, separator, or borrowed term)
+        'connectionLayerSoftware',
+        // intentionally identical to English (unit, acronym, separator, or borrowed term)
+        'connectionLayerDemo',
+        // intentionally identical to English (unit, acronym, separator, or borrowed term)
+        'connectionLayerBle',
+        // intentionally identical to English (unit, acronym, separator, or borrowed term)
+        'connectionLayerClassic',
+        // Wi-Fi do-not-translate
+        'connectionLayerWifi',
+        // ICE acronym
+        'settingsCaClassIce',
+        // BEV acronym
+        'settingsCaClassBev',
+        // PHEV acronym
+        'settingsCaClassPhev',
+      },
+      'app_fr.arb': <String>{
+        // Port is the standard French networking term as well as the English one.
+        'connectWifiPortLabel',
+        // The value consists only of unchanged placeholders, Mode and punctuation.
+        'dtcGroupHeader',
+        // Comma and space are also the French list separator here.
+        'dtcListSeparator',
+        // Code/codes and both numeric ICU branches are identical in French.
+        'dtcTotalCodes',
+        // Expression is the correct French mathematical term.
+        'pidEditorFieldEquation',
+        // Maximum is the same French word.
+        'pidEditorFieldMax',
+        // Minimum is the same French word.
+        'pidEditorFieldMin',
+        // Mode is also French and PID is an identifier.
+        'pidEditorFieldModeAndPid',
+        // Comma and space are also the French list separator here.
+        'pidListSeparator',
+        // Comma and space are also the French list separator here.
+        'powertrainFieldListSeparator',
+        // Shopee is the protected proper name of the store.
+        'recommendedPurchaseStoreShopee',
+        // This is a punctuation separator, independent of language.
+        'semanticsFieldSeparator',
+        // The count placeholder is unchanged and cyl is also the standard French abbreviation for
+        // cylindres.
+        'settingsEpaCylinders',
+        // Comma and space are also the French list separator here.
+        'settingsListSeparator',
+        // Pause is the correct French control label.
+        'telemetryPause',
+        // This punctuation join is also correct in French.
+        'telemetryPhraseJoin',
+        // This punctuation join is also correct in French.
+        'telemetrySentenceJoin',
+        // Bluetooth is a protected product/transport name.
+        'wearPermissionBluetooth',
+        // Permanent is the same French adjective for a code.
+        'dtcKindPermanent',
+        // Transmission is the same French automotive term.
+        'dtcSubsystemTransmission',
+        // Minimal is the same French adjective/name for this skin.
+        'gaugeSkinMinimal',
+        // Diesel is the same French fuel name.
+        'fuelTypeDiesel',
+        // The value consists only of unchanged placeholders and punctuation.
+        'assumptionWithOrigin',
+        // Transport is also the French technical term for this layer.
+        'connectionLayerTransport',
+        // Demo is the simulator mode identifier.
+        'connectionLayerDemo',
+        // Bluetooth LE is the protected transport product name.
+        'connectionLayerBle',
+        // Bluetooth Classic is the protected transport product name.
+        'connectionLayerClassic',
+        // Wi-Fi is the protected transport name.
+        'connectionLayerWifi',
+        // Canada has the same French name and NRCan is the dataset agency identifier retained from
+        // the source.
+        'settingsCatalogMarketCa',
+        // ICE is the retained powertrain classification identifier.
+        'settingsCaClassIce',
+        // BEV is the protected powertrain classification identifier.
+        'settingsCaClassBev',
+        // PHEV is the protected powertrain classification identifier.
+        'settingsCaClassPhev',
+      },
+      'app_pt.arb': <String>{
+        // UI badge loanword Experimental kept
+        'datumBadgeExperimental',
+        // short gauge label Torque (also product-family word) kept
+        'derivedTorque',
+        // {label} (Mode {mode}) · {count} format kept
+        'dtcGroupHeader',
+        // list separator ", " kept
+        'dtcListSeparator',
+        // {label} (Mode {mode}): {message} format kept
+        'dtcReadFailureDetail',
+        // Mode {mode} PID {pid} field pattern kept
+        'pidEditorFieldModeAndPid',
+        // list separator kept
+        'pidListSeparator',
+        // list separator kept
+        'powertrainFieldListSeparator',
+        // Shopee product/store name kept
+        'recommendedPurchaseStoreShopee',
+        // accessibility separator kept
+        'semanticsFieldSeparator',
+        // Taiwan market code Tw kept as short label
+        'settingsCatalogMarketTw',
+        // section title Experimental kept
+        'settingsExperimentalSection',
+        // list separator kept
+        'settingsListSeparator',
+        // phrase join token kept
+        'telemetryPhraseJoin',
+        // sentence join token kept
+        'telemetrySentenceJoin',
+        // {size} B unit format kept
+        'transcriptSizeBytes',
+        // Bluetooth permission label kept
+        'wearPermissionBluetooth',
+        // skin name Cluster kept
+        'gaugeSkinCluster',
+        // fuel type Diesel kept
+        'fuelTypeDiesel',
+        // {field} {value} format kept
+        'assumptionWithOrigin',
+        // separator kept
+        'assumptionSeparator',
+        // layer label Software kept
+        'connectionLayerSoftware',
+        // layer label Demo kept
+        'connectionLayerDemo',
+        // BLE transport short label kept
+        'connectionLayerBle',
+        // Classic transport short label kept
+        'connectionLayerClassic',
+        // Wi-Fi transport short label kept
+        'connectionLayerWifi',
+        // vehicle class ICE kept
+        'settingsCaClassIce',
+        // vehicle class BEV kept
+        'settingsCaClassBev',
+        // vehicle class PHEV kept
+        'settingsCaClassPhev',
+      },
+      'app_zh_Hans.arb': <String>{
+        // Store brand self-name; DNT requires Shopee byte-identical (not 虾皮).
+        'recommendedPurchaseStoreShopee',
+        // Vehicle class code BEV; DNT token, kept as English code.
+        'settingsCaClassBev',
+        // Vehicle class code PHEV; DNT token, kept as English code.
+        'settingsCaClassPhev',
+        // Transport layer name: the BLE product name is on do-not-translate.md and the label
+        // carries no other words.
+        'connectionLayerBle',
+      },
+      'app_it.arb': <String>{
+        // Formula is also the Italian noun for formula.
+        'datumStatusFormula',
+        // Controller is established Italian technical usage; the placeholder is unchanged.
+        'dtcControllerLabel',
+        // Only translated label/count placeholders, the protected Mode identifier and punctuation.
+        'dtcGroupHeader',
+        // The source separator is conventional Italian punctuation and spacing.
+        'dtcListSeparator',
+        // Only translated placeholders, the protected Mode identifier and punctuation.
+        'dtcReadFailureDetail',
+        // Formula is also the Italian noun for formula.
+        'pidEditorSectionFormula',
+        // The source separator is conventional Italian punctuation and spacing.
+        'pidListSeparator',
+        // The source separator is conventional Italian punctuation and spacing.
+        'powertrainFieldListSeparator',
+        // Shopee is a protected marketplace name.
+        'recommendedPurchaseStoreShopee',
+        // The source separator is conventional Italian punctuation and spacing.
+        'semanticsFieldSeparator',
+        // The source separator is conventional Italian punctuation and spacing.
+        'settingsListSeparator',
+        // Only translated sentence placeholders with conventional Italian sentence punctuation.
+        'telemetryPhraseJoin',
+        // Only translated sentence placeholders with conventional Italian sentence punctuation.
+        'telemetrySentenceJoin',
+        // Bluetooth is a protected technology name.
+        'wearPermissionBluetooth',
+        // Diesel is also the established Italian fuel name.
+        'fuelTypeDiesel',
+        // Only placeholders, spacing and Italian-compatible parentheses.
+        'assumptionWithOrigin',
+        // The source separator is conventional Italian punctuation and spacing.
+        'assumptionSeparator',
+        // Software is an established Italian borrowing.
+        'connectionLayerSoftware',
+        // Demo is an established Italian borrowing.
+        'connectionLayerDemo',
+        // Bluetooth LE is a protected transport name.
+        'connectionLayerBle',
+        // Bluetooth Classic is a protected transport name.
+        'connectionLayerClassic',
+        // Wi-Fi is a protected technology name.
+        'connectionLayerWifi',
+        // Canada is also the Italian country name; NRCan is the authority acronym.
+        'settingsCatalogMarketCa',
+        // ICE is the source catalog class identifier.
+        'settingsCaClassIce',
+        // BEV is a protected powertrain class identifier.
+        'settingsCaClassBev',
+        // PHEV is a protected powertrain class identifier.
+        'settingsCaClassPhev',
+        // Standard is also the Italian noun; the placeholder is unchanged.
+        'serviceRecipesStandard',
+      },
+      'app_nl.arb': <String>{
+        // 'Trends' is the standard Dutch plural noun for trends/time-series charts.
+        'dashboardWorkspaceTrends',
+        // Template consisting purely of placeholders and the do-not-translate OBD token 'Mode'.
+        'dtcGroupHeader',
+        // Standard Dutch inline list separator (comma followed by space, matching Latin-script
+        // punctuation).
+        'dtcListSeparator',
+        // Template consisting purely of placeholders, colon punctuation, and the do-not-translate
+        // OBD token 'Mode'.
+        'dtcReadFailureDetail',
+        // 'code' (singular) and 'codes' (plural) are standard Dutch spelling.
+        'dtcTotalCodes',
+        // 'Dashboard' is the standard Dutch automotive and software UI term.
+        'navDashboard',
+        // 'Maximum' is the standard Dutch noun for maximum value.
+        'pidEditorFieldMax',
+        // 'Minimum' is the standard Dutch noun for minimum value.
+        'pidEditorFieldMin',
+        // Consists solely of the do-not-translate OBD tokens 'Mode' and 'PID' joined by '+'.
+        'pidEditorFieldModeAndPid',
+        // Standard Dutch inline list separator (comma followed by space).
+        'pidListSeparator',
+        // Standard Dutch inline list separator (comma followed by space).
+        'powertrainFieldListSeparator',
+        // 'Model' is the standard Dutch noun for vehicle model.
+        'powertrainFieldModel',
+        // 'Variant' is the standard Dutch noun for vehicle variant/trim.
+        'powertrainFieldVariant',
+        // 'Model' is standard Dutch and 'NCC' is the untranslated regulatory certification mark.
+        'recommendedPurchaseModelLine',
+        // 'Shopee' is the storefront's proper brand name outside Taiwan.
+        'recommendedPurchaseStoreShopee',
+        // Standard Dutch screen-reader field separator (comma followed by space).
+        'semanticsFieldSeparator',
+        // 'Model' is the standard Dutch noun for vehicle model.
+        'settingsEpaModel',
+        // Standard Dutch inline list separator (comma followed by space).
+        'settingsListSeparator',
+        // Standard Dutch period-and-space separator template joining two phrases.
+        'telemetryPhraseJoin',
+        // Standard Dutch period-and-space separator template joining two sentences.
+        'telemetrySentenceJoin',
+        // 'byte' (singular) and 'bytes' (plural) are standard Dutch spelling.
+        'transcriptSizeBytes',
+        // 'Bluetooth' is a do-not-translate wireless standard proper noun.
+        'wearPermissionBluetooth',
+        // 'Permanent' is the standard Dutch adjective for permanent fault codes.
+        'dtcKindPermanent',
+        // 'Chassis' is the standard Dutch automotive term for the chassis system.
+        'dtcSystemChassis',
+        // 'Cluster' is the standard Dutch instrument-cluster skin name.
+        'gaugeSkinCluster',
+        // 'Diesel' is the standard Dutch noun for diesel fuel.
+        'fuelTypeDiesel',
+        // 'LPG' is the standard Dutch abbreviation for liquefied petroleum gas (autogas).
+        'fuelTypeLpg',
+        // Standard Dutch parenthetical formatting template with ASCII parentheses.
+        'assumptionWithOrigin',
+        // Standard Dutch semicolon-and-space list separator.
+        'assumptionSeparator',
+        // 'Protocol' is the standard Dutch technical noun.
+        'connectionLayerProtocol',
+        // 'Software' is the standard Dutch technical noun.
+        'connectionLayerSoftware',
+        // 'Demo' is the standard Dutch short label for demonstration/simulation mode.
+        'connectionLayerDemo',
+        // 'Bluetooth LE' is a do-not-translate technical standard name.
+        'connectionLayerBle',
+        // 'Bluetooth Classic' is a do-not-translate technical standard name.
+        'connectionLayerClassic',
+        // 'Wi-Fi' is a do-not-translate technical standard name.
+        'connectionLayerWifi',
+        // 'Canada' is spelled identically in Dutch and 'NRCan' is the official agency acronym.
+        'settingsCatalogMarketCa',
+        // Standard automotive drivetrain class acronym (ICE, glossed as Verbrandingsmotor (ICE) in
+        // settingsCaPickerScope) kept compact for segmented chip.
+        'settingsCaClassIce',
+        // Do-not-translate drivetrain class acronym (BEV in docs/i18n/do-not-translate.md,
+        // glossed in settingsCaPickerScope).
+        'settingsCaClassBev',
+        // Do-not-translate drivetrain class acronym (PHEV in docs/i18n/do-not-translate.md,
+        // glossed in settingsCaPickerScope).
+        'settingsCaClassPhev',
+      },
+
       'app_de.arb': <String>{
         // German uses the English word.
         'connectWifiPortLabel',
@@ -231,6 +641,7 @@ void main() {
         'telemetrySentenceJoin',
       },
     };
+    expect(coincidental.keys.toSet(), translations.keys.toSet());
     for (final entry in translations.entries) {
       final allowed = coincidental[entry.key] ?? const <String>{};
       final untranslated = <String>[];
@@ -294,8 +705,10 @@ void main() {
         final value = entry.value[key];
         if (value is! String) continue;
         final simpleArguments = value.replaceAll(icuBlock, '');
-        final used =
-            reference.allMatches(simpleArguments).map((m) => m.group(1)!).toSet();
+        final used = reference
+            .allMatches(simpleArguments)
+            .map((m) => m.group(1)!)
+            .toSet();
         if (used.isEmpty) continue;
         final declared = _placeholders(entry.value, key).isEmpty
             ? _placeholders(en, key)
@@ -320,7 +733,7 @@ void main() {
             'app_zh.arb key "$key" has drifted from app_zh_Hant.arb. The plain-zh '
             'file exists only so a device reporting "zh" with no script subtag '
             'still reads Traditional Chinese; it is not a place to write '
-            'different copy, and Simplified Chinese is not shipped.',
+            'different copy; Simplified Chinese lives in app_zh_Hans.arb.',
       );
     }
   });
@@ -333,7 +746,7 @@ void main() {
         reason: '$locale is offered in supportedAppLocales but has no bundle',
       );
     }
-    // The picker writes these two, and `resolveAppLocale` can return either.
+    // Every explicit picker preference must have a generated bundle.
     for (final preference in LocalePreference.values) {
       final locale = resolveAppLocale(
         preference: preference,

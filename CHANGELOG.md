@@ -6,7 +6,148 @@ which therefore does not always move in step with the name.
 
 Dates are the date the build was made, not the date it reached anyone.
 
-## Unreleased
+## 1.0.27 — 2026-11-02
+
+- Add Japanese, Korean, Spanish, French, Brazilian Portuguese, Simplified Chinese,
+  Italian and Dutch to the app and Android Auto, bringing the app to 11 UI
+  languages. German is now also available in Android Auto. (!153)
+- These LLM translations passed mechanical checks and model review, but have
+  not been reviewed by native speakers. Please report translation issues.
+- Fit the Wear disconnect confirmation on round watches and keep the verb visible in the German/Dutch Android Auto speed button. (!156, !157)
+- No OBD or vehicle-logic changes. Store asset updates are included from
+  !151 and !152; new-language store screenshots and release-build device
+  walks remain pending before publication.
+
+### 繁體中文
+
+- App 與 Android Auto 新增日文、韓文、西班牙文、法文、巴西葡萄牙文、簡體中文、
+  義大利文與荷蘭文，App 共支援 11 種介面語言；Android Auto 現也支援德文。（!153）
+- 這些 LLM 翻譯已通過機械式檢查與模型審閱，未經母語者審閱；歡迎回報翻譯問題。
+- Wear 中斷連線確認框可完整顯示於圓形手錶，德文／荷蘭文 Android Auto 車速按鈕保留可見的動詞。（!156、!157）
+- OBD 與車輛邏輯未變更。包含 !151、!152 的商店素材更新；新增語言的商店截圖
+  與正式版裝置走查仍須在發布前完成。
+
+## 1.0.26 — 2026-11-02
+
+- Learn Mode 01 support from every responder when a vehicle has no `7E8`.
+  Stop polling PIDs that no module supports and show “Not supported by this
+  vehicle”; give battery profile commands more of the polling budget. (#117)
+- Android Auto home uses host-rendered rows and one large speed/RPM gauge
+  image with day/night palettes. Missing, stale and unsupported readings are
+  never drawn as numbers. Earlier Demo-data DHU checks measured 39–61 dp
+  numerals; real head units and vehicles remain unverified. (!131)
+- Show vehicle speed as an integer on the dashboard, performance page and
+  watch dial; other PID formats are unchanged. (#119)
+- Tap each dashboard gauge’s info icon to explain its status. “Unverified”
+  means no on-car comparison record for that decode, not an incorrect value.
+  Very-low-priority PIDs use a cadence-based stale threshold of about
+  90–120 seconds. (#115)
+- Internally remove unused active-test snapshot aliases and fetch the
+  Robolectric runtime from Google’s Maven Central mirror. (!146, !131)
+- Reporter vehicle and adapter validation for #117 and #115 remains pending.
+
+### 繁體中文
+
+- 沒有 `7E8` 的車輛會從所有回應模組學習 Mode 01 支援項目；不受支援的 PID
+  停止輪詢並顯示「此車輛不支援」，電池設定檔指令獲得更多輪詢額度。（#117）
+- Android Auto 首頁改為主機繪製清單與大型車速／轉速儀表圖，支援日夜配色，
+  缺值、過期或不支援的讀值不顯示數字。僅完成 Demo 資料的 DHU 驗證，
+  尚未於實體車機或車輛驗證。（!131）
+- 儀表板、效能頁與手錶面盤的車速改為整數，其他 PID 格式維持原樣。（#119）
+- 儀表資訊圖示可解釋狀態；「尚未驗證」表示該解碼尚無實車比對紀錄，
+  不代表數值錯誤。極低優先級 PID 依更新頻率約 90–120 秒後才視為過期。（#115）
+- 內部移除未使用的主動測試快照別名，並改從 Google Maven Central 鏡像下載
+  Robolectric 執行環境。尚未於回報者車輛與轉接器驗證。（!146、!131）
+
+## 1.0.25 — 2026-10-22
+
+- A complete OBD reply that arrives without the final ELM327 `>` no longer
+  leaves the rest of the session on slow single-PID polling. Grouped polling
+  recovers after healthy prompted replies, so live readings no longer flash
+  stale because one earlier reply omitted its prompt. The latest raw 1.0.24
+  export confirms the reported shape — 55 single-PID commands followed the
+  fifth grouped promptless reply — but the regression uses sanitized reply
+  values and models the behavior rather than replaying that exact chronology.
+  (issue #114)
+- Freshness cadence now restarts after polling stops, a PID is disabled, or a
+  timeout, error, incomplete grouped reply or recovery interrupts polling.
+  The interruption is no longer learned as a normal answer interval, and two
+  uninterrupted answers establish the new cadence, including for PIDs that
+  share one wire reply. (issue #114)
+- Covered by unit tests and a regression using sanitized replies from the real
+  1.0.24 export. Real adapter and vehicle validation remains pending.
+
+## 1.0.24 — 2026-10-21
+
+- When an ELM327 clone goes silent after a command — not even `NO DATA` —
+  the app now probes it with `ATI` before giving up, instead of waiting three
+  seconds and dropping the connection. Three user exports from two
+  ICSolution `ELM327 v1.5` adapters ended this way, and reconnecting by hand
+  always worked, so the adapter was still alive. A watchdog race that could
+  drop the link five seconds after the write, before any probe, is closed
+  too. The session log records whether the probe was answered, unless the
+  session ends or the probe's write times out first. Three commands in a
+  row that each go silent, with only the probe answering, still end the
+  session, and a single-PID read that times out twice in a row rests for a
+  minute like `NO DATA`. (issue #112)
+- When a session ends because the adapter stopped answering — the probe
+  got nothing, only the probe kept answering, or the link stayed silent —
+  the app now reconnects to the same remembered adapter once by itself, and
+  says so on screen. At most twice in ten minutes, only for a session that
+  had been connected for ten seconds, only in the foreground, and not when
+  the connection was reported closed (how an unplugged or out-of-range
+  adapter usually shows up, though not always at once), when the adapter
+  reported an error such as `UNABLE TO CONNECT`, when the probe's write
+  timed out, or in a session in which a fault-code clear was attempted. If
+  the reconnect does not connect, the screen and the exported session log
+  stay those of the session that dropped, with the attempt noted at its
+  end. (issue #112)
+- The watchdog no longer ends a session while a resync is still waiting on
+  its probe, which could cut the probe's outcome out of the session log. A
+  connection the system reports closed can still end the session first.
+- Tested by unit tests, a fault-injection rig (an ELM327 emulator behind a
+  proxy that swallows one reply) and a loopback Wi-Fi test. Not yet
+  validated on a real vehicle or adapter; no adapter or car compatibility
+  is claimed.
+- CI retries `pub get` when cloning the Codeberg-hosted Bluetooth plugin
+  resets the TLS connection, which failed the 1.0.23 main pipeline.
+
+## 1.0.23 — 2026-10-20
+
+- Reworked the ELM327 session pipeline for adapters that swallow the `>`
+  prompt. A `NO DATA` 3× result now rests as `noAnswer` with a 60 s backoff
+  by default, so an intermittent PID on a working car no longer goes grey as
+  unsupported. The five-minute `unsupported` recheck is reserved for `015E`
+  and only in a session that has already completed without a prompt or on a
+  clone (`firmwareNeverReleased`). Conclusive OBD with a swallowed prompt now
+  completes at command timeout (quiet-complete after 550 ms idle, longer than
+  the 450 ms adapter window), and headers-off replies count finished lines
+  against the derived responder count so a late second-ECU line still joins.
+  (issue #110)
+- Tested by offline fixture replay and in CI (4443 passed). Not yet validated
+  on a real vehicle or adapter; no adapter or car compatibility is claimed.
+
+## 1.0.22 — 2026-10-20
+
+- After the functional `7DF` fallback, more than one ECU can answer Mode 01
+  (for example `7E8` and `7E9`). Headers-off replies were refused as
+  duplicate PIDs, which blanked RPM and related gauges. The fallback now
+  keeps headers on (`ATH1`) and accepts only the engine response `7E8`.
+  (issue #109)
+- Tested by replaying user-exported session logs and in CI. Not yet
+  validated on a real vehicle or adapter; no adapter or car compatibility
+  is claimed.
+
+## 1.0.21 — 2026-10-19
+
+- When physical engine addressing (`ATSH 7E0`) is acknowledged but Mode 01
+  queries return `NO DATA`, later engine polls retry the same command on the
+  documented functional header (`7DF` / `18DB33F1`) and remember that header
+  only after a successful vehicle payload. Custom headers such as `7E1` do
+  not inherit the fallback. (issue #109)
+- Evidence is offline replay of one user-exported session log, an emulator
+  rig, and CI. This has not been run on a real adapter or vehicle, and it
+  does not claim compatibility with any adapter or car.
 
 ## 1.0.20 — 2026-10-13
 

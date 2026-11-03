@@ -286,5 +286,7 @@ String? connectionActivityText(
 ) => switch (state.activity) {
   ObdConnectionActivity.abortingPreviousConnection =>
     l10n.connectActivityAbortingPreviousConnection,
+  ObdConnectionActivity.reconnectingAutomatically =>
+    l10n.connectActivityReconnectingAutomatically,
   null => null,
 };

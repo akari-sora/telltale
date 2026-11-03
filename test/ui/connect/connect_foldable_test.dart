@@ -329,7 +329,7 @@ void main() {
       expect(find.text('繁體中文'), findsOneWidget);
     });
 
-    testWidgets('F07-10b: Language picker on compact (360x800) is content-sized (< 0.86 * 800) with all options visible', (tester) async {
+    testWidgets('F07-10b: Compact language picker keeps every option reachable', (tester) async {
       await _pumpConnectScreen(tester, size: const Size(360, 800));
 
       await tester.tap(find.byKey(const Key('connect_language_entry')));
@@ -337,16 +337,21 @@ void main() {
 
       final sheetFinder = find.byKey(const ValueKey('adaptive-modal-bottom-sheet'));
       expect(sheetFinder, findsOneWidget);
+      // The expanded language list may fill the modal's 90% height cap.
+      expect(tester.getRect(sheetFinder).height, lessThanOrEqualTo(0.9 * 800));
 
-      final sheetRect = tester.getRect(sheetFinder);
-      // Content-sized: height should be strictly less than 86% of screen height (688dp)
-      expect(sheetRect.height, lessThan(0.86 * 800));
-
-      // Verify all language options are present and visible within viewport
-      expect(find.byKey(const Key('locale_system')), findsOneWidget);
-      expect(find.byKey(const Key('locale_traditionalChinese')), findsOneWidget);
-      expect(find.byKey(const Key('locale_german')), findsOneWidget);
-      expect(find.byKey(const Key('locale_english')), findsOneWidget);
+      expect(LocalePreference.values, hasLength(12));
+      for (final preference in LocalePreference.values) {
+        final option = find.descendant(
+          of: sheetFinder,
+          matching: find.byKey(Key('locale_${preference.name}')),
+        );
+        expect(option, findsOneWidget);
+        await tester.ensureVisible(option);
+        await tester.pumpAndSettle();
+        expect(option.hitTestable(), findsOneWidget,
+            reason: '${preference.name} must be reachable by scrolling');
+      }
     });
 
     testWidgets('F07-11: Language picker on expanded (1000x800) opens as Dialog', (tester) async {

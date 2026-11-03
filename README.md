@@ -2,6 +2,8 @@
 
 # Telltale
 
+> Canonical repository and issues: https://gitlab.com/aa22396584/telltale. Releases and downloads: https://gitlab.com/aa22396584/telltale/-/releases
+
 > **Development home:** https://gitlab.com/aa22396584/telltale  
 > Please open issues and merge requests there.  
 > **Mirror:** [Codeberg](https://codeberg.org/ImL1s/telltale)  
@@ -263,3 +265,8 @@ sources retain separate
 [third-party notices](THIRD_PARTY_NOTICES_POWERTRAIN_BATTERY.md). Use the app at
 your own risk; no diagnostic result guarantees that a vehicle is safe to
 operate.
+
+
+## Interface languages
+
+English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano, Nederlands. Change the language on the connect screen or in Settings, or follow the system. A few messages remain in Traditional Chinese only.

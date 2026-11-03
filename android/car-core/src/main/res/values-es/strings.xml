@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="car_app_name">Telltale</string>
+    <string name="car_home_status_title">Monitor del vehículo</string>
+    <string name="car_home_status_body">El esqueleto de Android for Cars está activo</string>
+    <string name="car_home_data_title">Datos del vehículo</string>
+    <string name="car_home_data_body">El puente de telemetría no está conectado en AA-01</string>
+    <string name="car_home_safety_title">Proyección de solo lectura</string>
+    <string name="car_home_safety_body">No hay comandos del vehículo ni acciones destructivas disponibles</string>
+    <string name="car_home_speed_title">Velocidad</string>
+    <string name="car_home_rpm_title">RPM</string>
+    <string name="car_home_coolant_title">Refrigerante</string>
+    <string name="car_home_voltage_title">Voltaje del módulo</string>
+    <string name="car_home_boost_title">Sobrealimentación</string>
+    <string name="car_home_load_title">Carga del motor</string>
+    <string name="car_signal_missing">--</string>
+    <string name="car_signal_stale">Desactualizado</string>
+
+    <!-- AA-04 Actions -->
+    <string name="car_action_health">Salud</string>
+    <string name="car_action_powertrain">Tren motriz</string>
+    <string name="car_action_fault_codes">Códigos de fallo</string>
+
+    <!-- AA-04 Health Screen -->
+    <string name="car_health_title">Salud del vehículo</string>
+    <string name="car_health_status_row">Estado observado</string>
+    <string name="car_health_mil_row">MIL</string>
+    <string name="car_health_dtc_row">Códigos de fallo</string>
+    <string name="car_health_coolant_row">Refrigerante</string>
+    <string name="car_health_voltage_row">Voltaje del módulo</string>
+    <string name="car_health_status_attention">Atención</string>
+    <string name="car_health_status_no_warnings">Sin avisos observados</string>
+    <string name="car_health_status_unknown">Desconocido</string>
+    <string name="car_mil_on">Encendida</string>
+    <string name="car_mil_off">Apagada</string>
+    <string name="car_dtc_count_format">%d códigos</string>
+    <string name="car_dtc_none">0 códigos</string>
+
+    <!-- AA-04 Powertrain Screen -->
+    <string name="car_powertrain_title">Tren motriz</string>
+    <string name="car_powertrain_rpm_title">RPM</string>
+    <string name="car_powertrain_coolant_title">Refrigerante</string>
+    <string name="car_powertrain_iat_title">Aire de admisión</string>
+    <string name="car_powertrain_map_title">MAP</string>
+    <string name="car_powertrain_voltage_title">Voltaje del módulo</string>
+    <string name="car_powertrain_speed_title">Velocidad</string>
+
+    <!-- AA-04 DTC Screens -->
+    <string name="car_dtc_summary_title">Códigos de diagnóstico</string>
+    <string name="car_dtc_no_codes">No se observaron códigos de diagnóstico</string>
+    <string name="car_dtc_status_not_scanned">Sin escanear</string>
+    <string name="car_dtc_status_scanning">Escaneo en curso</string>
+    <string name="car_dtc_status_partial_clean">Cobertura incompleta / sin fallos observados en las partes completadas</string>
+    <string name="car_dtc_status_unavailable">Diagnóstico no disponible / incompleto</string>
+    <string name="car_dtc_more_items_format">%d códigos de diagnóstico adicionales sin mostrar</string>
+    <string name="car_dtc_parked_only_notice">Solo estacionado</string>
+    <string name="car_dtc_speed_unavailable">Velocidad del vehículo no disponible. Conecte la telemetría o active la velocidad del vehículo estando estacionado.</string>
+    <string name="car_dtc_detail_title">Detalles del código</string>
+    <string name="car_dtc_detail_class">Clase</string>
+    <string name="car_dtc_detail_controller">Controlador</string>
+    <string name="car_dtc_detail_coverage">Cobertura</string>
+    <string name="car_dtc_coverage_complete">Completa</string>
+    <string name="car_dtc_coverage_partial">Parcial</string>
+    <string name="car_dtc_kind_stored">Almacenado</string>
+    <string name="car_dtc_kind_pending">Pendiente</string>
+    <string name="car_dtc_kind_permanent">Permanente</string>
+    <string name="car_freeze_frame_section">Fotograma congelado</string>
+    <string name="car_freeze_frame_none">No hay fotograma congelado disponible</string>
+    <string name="car_freeze_frame_unknown">Contenido del fotograma congelado ilegible</string>
+    <string name="car_freeze_frame_omitted">%d señales adicionales omitidas</string>
+    <string name="car_freeze_frame_incomplete_summary">Datos incompletos · %d señales sin leer u omitidas</string>
+    <string name="car_freeze_frame_read_incomplete">Datos incompletos · Lectura interrumpida</string>
+
+    <!-- AA-05 In-Template Alert & Host Speed Strings -->
+    <string name="car_alert_high">Alto</string>
+    <string name="car_alert_attention">Atención</string>
+    <string name="car_action_enable_speed">Activar velocidad del vehículo</string>
+    <string name="car_speed_permission_phone_handoff">Complete el permiso de velocidad del vehículo en el teléfono estando estacionado.</string>
+    <string name="car_speed_permission_handoff">Complete el permiso de velocidad del vehículo estando estacionado.</string>
+</resources>

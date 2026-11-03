@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projection_notification_channel_name">OBD-Adapterverbindung</string>
+    <string name="projection_notification_title">Telltale OBD-Adapter verbunden</string>
+    <string name="projection_notification_live_body">Die Live-Fahrzeugtelemetrie für Android Auto läuft weiter</string>
+    <string name="projection_notification_waiting_body">Warten auf Android Auto</string>
+</resources>

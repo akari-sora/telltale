@@ -63,6 +63,14 @@ Future<void> showDatumStatusDetails(
                       ? l10n.datumStatusFollowsData
                       : datumBadgeText(l10n, items[index]),
                 ),
+                if (items[index].origin == DatumOrigin.ecuReported &&
+                    (items[index].badges.contains(DatumBadge.unverified) ||
+                        items[index].badges.contains(
+                          DatumBadge.unverifiedOnThisVehicle,
+                        ))) ...[
+                  const SizedBox(height: Spacing.sm),
+                  Text(l10n.datumStatusUnverifiedExplanation),
+                ],
                 if (datumReasonText(l10n, items[index]) != null) ...[
                   const SizedBox(height: Spacing.sm),
                   Text(datumReasonText(l10n, items[index])!),

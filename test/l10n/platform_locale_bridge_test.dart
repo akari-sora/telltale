@@ -19,6 +19,87 @@ import 'package:torque_obd/state/language_switch_guard.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('every stored preference hands off a configured OS language tag', () {
+    final xml = File('android/app/src/main/res/xml/locales_config.xml')
+        .readAsStringSync();
+    final configured = RegExp(r'android:name="([^"]+)"')
+        .allMatches(xml)
+        .map((match) => match.group(1)!)
+        .toSet();
+    final expected = <String, String>{
+      'en': 'en',
+      'zh_Hant': 'zh-Hant',
+      'de': 'de',
+      'ja': 'ja',
+      'ko': 'ko',
+      'es': 'es',
+      'fr': 'fr',
+      'pt': 'pt-BR',
+      'zh_Hans': 'zh-Hans',
+      'it': 'it',
+      'nl': 'nl',
+    };
+    expect(configured, expected.values.toSet());
+    for (final entry in expected.entries) {
+      expect(tagsForStoredId(entry.key), [entry.value]);
+      expect(storedIdFromOsTags([entry.value]), entry.key);
+      final plan = planSync(
+        apiSupported: true,
+        alreadyMigrated: false,
+        followsSystem: true,
+        osOverrideTags: const [],
+        storedId: entry.key,
+      );
+      expect(plan.action, AppLocalesSyncAction.handoffStoredOnce);
+      expect(plan.osTagsToWrite, [entry.value]);
+    }
+  });
+
+  test('regional OS tags and Chinese scripts map to the shipped choices', () {
+    final cases = <String, String>{
+      'ja-JP': 'ja',
+      'ko-KR': 'ko',
+      'es-MX': 'es',
+      'fr-CA': 'fr',
+      'pt-PT': 'pt',
+      'pt-BR': 'pt',
+      'it-CH': 'it',
+      'nl-BE': 'nl',
+      'zh': 'zh_Hant',
+      'zh-CN': 'zh_Hans',
+      'zh-SG': 'zh_Hans',
+      'zh-TW': 'zh_Hant',
+      'zh-HK': 'zh_Hant',
+      'zh-MO': 'zh_Hant',
+      'zh-Hans-TW': 'zh_Hans',
+      'zh-Hant-CN': 'zh_Hant',
+      'zh-Latn': 'zh_Hant',
+      'zh-Latn-CN': 'zh_Hans',
+      'zh-Latn-SG': 'zh_Hans',
+      'zh-Latn-TW': 'zh_Hant',
+      'zh-Latn-HK': 'zh_Hant',
+      'zh-Latn-MO': 'zh_Hant',
+    };
+    for (final entry in cases.entries) {
+      expect(storedIdFromOsTags([entry.key]), entry.value, reason: entry.key);
+    }
+    expect(storedIdFromOsTags(['zh-US']), 'system');
+    expect(storedIdFromOsTags(['zh-Latn-US']), 'system');
+    expect(storedIdFromOsTags(['sv']), 'system');
+    expect(storedIdFromOsTags(['pt-BR', 'fr']), 'system');
+  });
+
+  test('unknown Chinese script preserves numeric region', () {
+    expect(storedIdFromOsTags(['zh-Latn-419']), 'system');
+  });
+
+  test('Chinese extensions do not supply a region or script', () {
+    expect(storedIdFromOsTags(['zh-Latn-u-nu-hanidec']), 'zh_Hant');
+    expect(storedIdFromOsTags(['zh-Latn-CN-u-nu-hanidec']), 'zh_Hans');
+    expect(storedIdFromOsTags(['zh-Hans-TW-u-nu-hanidec']), 'zh_Hans');
+    expect(storedIdFromOsTags(['zh-u-nu-hanidec']), 'zh_Hant');
+  });
+
   group('planSync first run', () {
     test('API 32 does not write the OS or clobber a stored id', () {
       final plan = planSync(
@@ -83,7 +164,7 @@ void main() {
         apiSupported: true,
         alreadyMigrated: false,
         followsSystem: false,
-        osOverrideTags: const ['ja'],
+        osOverrideTags: const ['sv'],
         storedId: 'en',
       );
       expect(plan.writeOs, isFalse);

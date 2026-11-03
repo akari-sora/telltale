@@ -133,6 +133,8 @@
   "datumStatusAssumptions": "假設",
   "datumStatusClose": "關閉",
   "datumStatusFollowsData": "狀態隨資料",
+  "datumStatusDetailsHint": "點按查看讀值狀態說明",
+  "datumStatusUnverifiedExplanation": "未驗證表示此處沒有這個解碼與本車實際比對的驗證紀錄，不代表讀值錯誤，也不保證讀值準確。更新狀態與異常會另外標示。",
   "datumStatusFormula": "公式",
   "dtcBothSilentDetail": "車輛沒有回應 Mode {mode} 查詢，而 Mode 03 同樣沒有回應 — 因此無法判斷這是車輛不支援，還是這次連線沒有讀到。",
   "dtcCategoryFault": "{category}相關故障",
@@ -1279,6 +1281,7 @@
   "performanceGuideStep4": "4. 到達目標車速後即完成本次計時",
   "performanceRecordingTrace": "加速中... 正在記錄速度點位",
   "performanceNoAnalysisTitle": "沒有足夠的分析資料",
-  "performanceNoAnalysisBody": "本次計時在取得足夠的車速樣本前已中止，因此無法產生速度軌跡或分段成績。"
+  "performanceNoAnalysisBody": "本次計時在取得足夠的車速樣本前已中止，因此無法產生速度軌跡或分段成績。",
+  "connectActivityReconnectingAutomatically": "轉接器停止回應，正在自動重新連線…"
 }
 

@@ -1,0 +1,47 @@
+Lisez votre voiture via un adaptateur ELM327 : régime, vitesse, liquide de refroidissement, charge et température d’admission en direct, codes défaut et état complet du véhicule enregistré lors d’un défaut.
+
+Cette app s’articule autour d’une phrase :
+
+Un chiffre faux mais plausible est pire qu’aucun chiffre.
+
+Un diagnostic pousse à prendre une clé. Une mesure de température du liquide de refroidissement à −40 °C fait remplacer un capteur ; « aucun code défaut » fait repartir quelqu’un dans une voiture encore en panne. Ici, chaque règle vise à montrer l’incertitude comme telle, plutôt que comme une réponse.
+
+〇Fonctions
+
+• Six cadrans dessinés à la main, cinq habillages : la forme, l’aiguille et le mouvement varient, pas seulement la couleur. Fonds clairs et sombres
+• Codes défaut : Mode 03 mémorisés, Mode 07 en attente, Mode 0A permanents, chacun avec le calculateur qui l’a signalé
+• Trame figée : état du véhicule à la confirmation du défaut — régime, liquide de refroidissement, charge, correction de richesse. Seule trace dans l’app des conditions lors du défaut ; effacer les codes la détruit définitivement, donc l’app demande d’abord
+• État de préparation antipollution : voir quels moniteurs sont terminés avant un contrôle
+• Valeurs dérivées : puissance, couple, consommation, débit d’air. L’OBD générique fonctionne sans VIN ni correspondance au catalogue ; les estimations indiquent leur formule et leurs hypothèses sur le véhicule, et ne sont pas des mesures
+• PID personnalisés : vos propres formules, import et export CSV
+• Test d’accélération : chronométré de l’arrêt à une vitesse cible
+• Journal de diagnostic : chaque octet échangé avec l’adaptateur est conservé et exportable en cas d’échec de connexion ; enregistrement et export gardent les libellés d’état
+• English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano et Nederlands : changez de langue sur l’écran de connexion et dans les paramètres, ou suivez la langue du système. Quelques messages restent uniquement en chinois traditionnel
+
+〇Quatre modes de connexion
+
+Bluetooth Classic (RFCOMM/SPP), Bluetooth LE (GATT UART), Wi-Fi (TCP) et simulateur Demo intégré : chaque écran fonctionne sans adaptateur ni véhicule.
+
+〇Ce que l’app refuse délibérément
+
+• Elle ne transforme pas « les calculateurs qui ont répondu n’ont signalé aucun code » en « ce véhicule n’a aucun code défaut »
+• Si deux calculateurs répondent différemment à une même question, elle n’utilise aucune réponse : en choisir une serait choisir au hasard
+• Les valeurs non vérifiées restent utilisables, avec leur source et leur état (non vérifiées / estimées / anormales) ; un paquet mal formé ne devient jamais un chiffre plausible
+• Aucune publicité, aucun suivi, aucune donnée personnelle collectée
+
+〇Code ouvert
+
+Le code est sur GitLab sous GPL-3.0 ; vous pouvez compiler l’app :
+https://gitlab.com/aa22396584/telltale
+
+L’édition Play payante offre exactement les mêmes fonctions, sans restriction. Elle s’adresse à ceux qui préfèrent ne pas compiler et à ceux qui souhaitent soutenir le développement.
+
+Les versions F-Droid, GitLab et Google Play ont trois clés de signature différentes. Elles ne peuvent pas se mettre à jour mutuellement sur place ; c’est voulu.
+
+〇Prérequis
+
+Un adaptateur ELM327 OBD2 (Bluetooth ou Wi-Fi) et un véhicule conforme OBD2. Connexion et lecture restent possibles sans entrée de catalogue ni données du véhicule.
+
+〇Avis
+
+Cette app n’est ni affiliée à Torque ou Torque Pro d’Ian Hawkins, ni approuvée par eux, ni dérivée de ces produits. L’implémentation OBD2 suit les normes publiques, dont SAE J1979, et la fiche technique ELM327.

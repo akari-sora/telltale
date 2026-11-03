@@ -42,8 +42,9 @@ class DialGauge extends StatefulWidget {
     this.minorPerMajor = 4,
     this.isStale = false,
     this.footnote,
+    this.decimalPlaces,
     super.key,
-  });
+  }) : assert(decimalPlaces == null || (decimalPlaces >= 0 && decimalPlaces <= 20));
 
   /// The reading, or null when there is none.
   ///
@@ -70,6 +71,10 @@ class DialGauge extends StatefulWidget {
 
   /// Optional line under the readout, e.g. "推算值" for derived figures.
   final String? footnote;
+
+  /// Readout precision, or null for magnitude-based formatting.
+  /// Use zero for integer-resolution signals such as OBD road speed.
+  final int? decimalPlaces;
 
   double get _span => (maxValue - minValue).abs() < 1e-9 ? 1 : maxValue - minValue;
 
@@ -247,6 +252,7 @@ class _DialGaugeState extends State<DialGauge>
                 ),
                 _GaugeReadout(
                   value: widget.value,
+                  decimalPlaces: widget.decimalPlaces,
                   units: widget.units,
                   label: widget.label,
                   // With the numbers no longer dimmed, the words carry the
@@ -317,7 +323,8 @@ class _DialGaugeState extends State<DialGauge>
   /// 0.85. Two of this app's users hearing different numbers off one dial is
   /// the same defect as two parts of a screen disagreeing, arriving somewhere
   /// nobody looks.
-  String _semanticValue(double v) => formatGaugeReadout(v);
+  String _semanticValue(double v) =>
+      formatGaugeReadout(v, decimalPlaces: widget.decimalPlaces);
 }
 
 /// The number a dial prints, and says.
@@ -326,9 +333,9 @@ class _DialGaugeState extends State<DialGauge>
 /// drift: a list read at rest can afford two decimals below ten, and a dial
 /// glanced at from a driving seat is easier to read with one. What must not
 /// differ is what this dial shows and what it announces.
-String formatGaugeReadout(double value) {
+String formatGaugeReadout(double value, {int? decimalPlaces}) {
   if (value.isNaN || value.isInfinite) return '--';
-  return value.toStringAsFixed(value.abs() >= 100 ? 0 : 1);
+  return value.toStringAsFixed(decimalPlaces ?? (value.abs() >= 100 ? 0 : 1));
 }
 
 String _formatBound(double value, double span) {
@@ -389,6 +396,7 @@ class _EndpointLabels extends StatelessWidget {
 class _GaugeReadout extends StatelessWidget {
   const _GaugeReadout({
     required this.value,
+    required this.decimalPlaces,
     required this.units,
     required this.label,
     required this.footnote,
@@ -398,6 +406,7 @@ class _GaugeReadout extends StatelessWidget {
   });
 
   final double? value;
+  final int? decimalPlaces;
   final String units;
   final String label;
   final String? footnote;
@@ -408,7 +417,7 @@ class _GaugeReadout extends StatelessWidget {
   String get _formatted {
     final v = value;
     if (v == null) return '--';
-    return formatGaugeReadout(v);
+    return formatGaugeReadout(v, decimalPlaces: decimalPlaces);
   }
 
   @override

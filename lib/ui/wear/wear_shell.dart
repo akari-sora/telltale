@@ -400,22 +400,61 @@ class _WearDialPageState extends ConsumerState<_WearDialPage> {
 
   Future<void> _confirmDisconnect() async {
     final l10n = AppLocalizations.of(context);
+    // Not an AlertDialog: its phone-sized insets and padding left a round
+    // 227-point face one line of text, so a longer question (Korean) lost its
+    // second line and the buttons broke words in half. Same round margin as
+    // [_RoundInset] sideways, full-width stacked buttons, and a scroll view so
+    // a question that still does not fit can be read rather than clipped. The
+    // thumb shows only when there is something to scroll to: at a large text
+    // size on a small face, Disconnect starts below the edge.
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        content: Text(l10n.wearDisconnectQuestion),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(l10n.wearCancel),
+      builder: (context) {
+        final shortest = MediaQuery.sizeOf(context).shortestSide;
+        return Dialog(
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: shortest * 0.12,
+            vertical: shortest * 0.06,
           ),
-          FilledButton(
-            key: const Key('wear_disconnect_confirm'),
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(l10n.wearDisconnect),
+          child: Scrollbar(
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              // Tight top and bottom: a 192-point face has no height to spare.
+              padding: const EdgeInsets.symmetric(
+                horizontal: Spacing.sm,
+                vertical: Spacing.xs,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+                    child: Text(
+                      l10n.wearDisconnectQuestion,
+                      key: const Key('wear_disconnect_question'),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text(l10n.wearCancel, textAlign: TextAlign.center),
+                  ),
+                  FilledButton(
+                    key: const Key('wear_disconnect_confirm'),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: Text(
+                      l10n.wearDisconnect,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
     if (confirmed == true && mounted) {
       await ref.read(obdSessionProvider.notifier).disconnect();
@@ -449,6 +488,7 @@ class _WearDialPageState extends ConsumerState<_WearDialPage> {
               hue: hue,
               redlineFrom: pid.redlineFrom,
               isStale: snapshot.isStale(pid),
+              decimalPlaces: pid.id == PidLibrary.vehicleSpeed.id ? 0 : null,
             ),
           ),
         ),

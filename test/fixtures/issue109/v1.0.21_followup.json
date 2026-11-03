@@ -1,0 +1,45 @@
+{
+  "issue": 109,
+  "app": "1.0.21",
+  "commit": "fe7e40a",
+  "evidence_status": "user-exported session replay; not adapter or on-vehicle validation",
+  "redaction": "deviceIdentifier replaced with AA:BB:CC:11:22:33; no VIN in the source transcripts",
+  "protocol": "AUTO, ISO 15765-4 (CAN 11/500)",
+  "atdpn": "A6",
+  "adapter": {
+    "ati": "ELM327 v1.5",
+    "at_at1": "ICSolution",
+    "atpps": "answered (clone identification table present)"
+  },
+  "responders": {
+    "functional_request": "7DF",
+    "engine_request": "7E0",
+    "engine_response": "7E8",
+    "other_response": "7E9",
+    "note": "ISO 15765-4 ECU#1 request 7E0 pairs with response 7E8; ECU#2 7E1/7E9. Census ATH1 0100 in both logs printed 7E8 then 7E9."
+  },
+  "headered_census_0100": [
+    "7E8064100BE3FA813",
+    "7E906410098188011"
+  ],
+  "engine_off": {
+    "headerless_010C": ["410C0000", "410C0000"],
+    "headerless_0120": ["4120A007B011", "412080018001"],
+    "headerless_0140": ["4140FED08410", "414040000000"],
+    "no_data": ["015E", "0160"]
+  },
+  "engine_on": {
+    "headerless_010C_differing": ["410C14F6", "410C14AA"],
+    "headerless_010C_counts": {
+      "pairs_with_two_lines": 150,
+      "pairs_with_unequal_payloads": 58
+    },
+    "note": "Live 010C in the capture was ATH0, so which line is 7E8 is not observed on those lines. The reconstructed headered form below labels 7E8/7E9 from the census pairing, for replay only."
+  },
+  "reconstructed_headered_010C_engine_on": {
+    "7E8": "7E804410C14F6",
+    "7E9": "7E904410C14AA",
+    "engine_rpm_from_7E8": 1341.5,
+    "other_rpm_from_7E9": 1322.5
+  }
+}

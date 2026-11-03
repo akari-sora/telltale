@@ -1,0 +1,1 @@
+Live OBD readings no longer repeatedly turn stale after an adapter omits the end-of-response prompt. Polling returns to grouped requests after recovery. Freshness timing restarts after pauses and errors. Tested with regressions based on a user session log; real adapter and vehicle validation remains pending.

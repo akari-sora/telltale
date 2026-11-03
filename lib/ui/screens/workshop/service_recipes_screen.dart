@@ -625,7 +625,7 @@ String resolveMode08IncompletionText(
           : l10n.mode08ReasonNegative(blockStr, nrcStr);
     case Mode08IncompletionReason.malformedResponse:
       final reasonDesc = result.malformedReason != null
-          ? _resolveMalformedReasonDescription(l10n, result.malformedReason!)
+          ? resolveMalformedReasonDescription(l10n, result.malformedReason!)
           : null;
       final details = reasonDesc != null
           ? '$reasonDesc ($markerStr)'
@@ -653,11 +653,16 @@ String resolveMode08IncompletionText(
   }
 }
 
-String _resolveMalformedReasonDescription(
+/// The Chinese wording here is Traditional, so only the Traditional bundles
+/// (`zh`, `zh_Hant`) get it; Simplified falls back to English like the other
+/// locales without their own wording.
+@visibleForTesting
+String resolveMalformedReasonDescription(
   AppLocalizations l10n,
   Mode08MalformedReason reason,
 ) {
-  final isZh = l10n.localeName.startsWith('zh');
+  final isZh =
+      l10n.localeName == 'zh' || l10n.localeName.startsWith('zh_Hant');
   final isDe = l10n.localeName.startsWith('de');
   return switch (reason) {
     Mode08MalformedReason.truncated => isZh

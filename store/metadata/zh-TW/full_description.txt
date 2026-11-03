@@ -11,12 +11,12 @@
 • 六個自繪儀表，五種樣式 —— 不只換顏色，刻度盤形狀、指針、動態都不一樣。深色與淺色底都能用
 • 故障碼：Mode 03 已儲存、Mode 07 待確認、Mode 0A 永久，每一筆都標明是哪一個控制器回報的
 • 凍結幀：故障被確認那一刻的完整車況 —— 轉速、水溫、負荷、燃油修正。這是全 App 唯一一份「故障正在發生時」的資料，而清除故障碼會永久銷毀它，所以清除前會先問
-• 排放就緒狀態：驗車前先知道會不會過
+• 排放就緒狀態：驗車前先看哪些監測項目已完成
 • 推算數值：馬力、扭力、油耗、空氣流量。沒有 VIN 或型錄匹配時仍可跑通用 OBD；估算會標示公式與車輛假設，不是實測
 • 自訂 PID：自己寫公式，支援 CSV 匯入匯出
 • 加速測試：由靜止起步計時至目標車速
 • 診斷紀錄：與轉接器之間往返的每一個位元組都留下來，連不上時可以匯出；錄製與匯出會保留狀態標籤
-• 全介面繁體中文與英文雙語，可在連線畫面或設定切換，也可跟隨系統；少數連線失敗訊息目前僅有繁體中文
+• English, 繁體中文, Deutsch, 日本語, 한국어, Español, Français, Português (Brasil), 简体中文, Italiano 和 Nederlands，可在連線畫面及設定中切換，或設定為跟隨系統。少數訊息仍僅有繁體中文
 
 〇四種連線方式
 
@@ -31,15 +31,13 @@ Bluetooth Classic (RFCOMM/SPP)、Bluetooth LE (GATT UART)、Wi-Fi (TCP)，以及
 
 〇開源
 
-原始碼在 Codeberg，GPL-3.0，你可以自己編譯自己用：
-https://codeberg.org/ImL1s/telltale
-鏡像也在 GitLab 與 GitHub：
+原始碼在 GitLab，GitHub 上有鏡像，GPL-3.0，你可以自己編譯自己用：
 https://gitlab.com/aa22396584/telltale
-https://gitlab.com/aa22396584/telltale
+https://github.com/akari-sora/telltale
 
 Play 上的付費版功能完全一樣，沒有閹割版 —— 是給不想自己編譯的人，以及願意支持繼續開發的人。
 
-F-Droid、社群版（GitHub／Codeberg／GitLab Release）與 Google Play 使用三把不同的簽章金鑰，彼此不能覆蓋安裝，這是刻意的安全邊界。
+F-Droid、GitLab Release 與 Google Play 使用三把不同的簽章金鑰，彼此不能覆蓋安裝，這是刻意的安全邊界。
 
 〇需要什麼
 

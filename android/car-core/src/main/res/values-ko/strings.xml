@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="car_app_name">Telltale</string>
+    <string name="car_home_status_title">차량 모니터</string>
+    <string name="car_home_status_body">Android for Cars 기본 골격이 활성화됨</string>
+    <string name="car_home_data_title">차량 데이터</string>
+    <string name="car_home_data_body">AA-01에서 텔레메트리 브리지가 연결되지 않음</string>
+    <string name="car_home_safety_title">읽기 전용 프로젝션</string>
+    <string name="car_home_safety_body">차량 명령이나 파괴적인 작업을 사용할 수 없습니다</string>
+    <string name="car_home_speed_title">속도</string>
+    <string name="car_home_rpm_title">RPM</string>
+    <string name="car_home_coolant_title">냉각수</string>
+    <string name="car_home_voltage_title">모듈 전압</string>
+    <string name="car_home_boost_title">부스트</string>
+    <string name="car_home_load_title">엔진 부하</string>
+    <string name="car_signal_missing">--</string>
+    <string name="car_signal_stale">오래됨</string>
+
+    <!-- AA-04 Actions -->
+    <string name="car_action_health">차량 상태</string>
+    <string name="car_action_powertrain">파워트레인</string>
+    <string name="car_action_fault_codes">고장 코드</string>
+
+    <!-- AA-04 Health Screen -->
+    <string name="car_health_title">차량 상태</string>
+    <string name="car_health_status_row">관측 상태</string>
+    <string name="car_health_mil_row">고장 표시등</string>
+    <string name="car_health_dtc_row">고장 코드</string>
+    <string name="car_health_coolant_row">냉각수</string>
+    <string name="car_health_voltage_row">모듈 전압</string>
+    <string name="car_health_status_attention">주의</string>
+    <string name="car_health_status_no_warnings">관측된 경고 없음</string>
+    <string name="car_health_status_unknown">알 수 없음</string>
+    <string name="car_mil_on">켜짐</string>
+    <string name="car_mil_off">꺼짐</string>
+    <string name="car_dtc_count_format">코드 %d개</string>
+    <string name="car_dtc_none">코드 0개</string>
+
+    <!-- AA-04 Powertrain Screen -->
+    <string name="car_powertrain_title">파워트레인</string>
+    <string name="car_powertrain_rpm_title">RPM</string>
+    <string name="car_powertrain_coolant_title">냉각수</string>
+    <string name="car_powertrain_iat_title">흡기 온도</string>
+    <string name="car_powertrain_map_title">MAP</string>
+    <string name="car_powertrain_voltage_title">모듈 전압</string>
+    <string name="car_powertrain_speed_title">속도</string>
+
+    <!-- AA-04 DTC Screens -->
+    <string name="car_dtc_summary_title">진단 고장 코드</string>
+    <string name="car_dtc_no_codes">관측된 진단 고장 코드 없음</string>
+    <string name="car_dtc_status_not_scanned">스캔하지 않음</string>
+    <string name="car_dtc_status_scanning">스캔 중</string>
+    <string name="car_dtc_status_partial_clean">조회 범위 불완전 · 완료된 범위에서 관측된 고장 없음</string>
+    <string name="car_dtc_status_unavailable">진단 사용 불가 / 불완전</string>
+    <string name="car_dtc_more_items_format">진단 고장 코드 추가 %d개 미표시</string>
+    <string name="car_dtc_parked_only_notice">주차 시에만 사용 가능</string>
+    <string name="car_dtc_speed_unavailable">차량 속도를 확인할 수 없습니다. 주차 상태에서 텔레메트리를 연결하거나 차량 속도를 활성화하십시오.</string>
+    <string name="car_dtc_detail_title">코드 상세</string>
+    <string name="car_dtc_detail_class">분류</string>
+    <string name="car_dtc_detail_controller">제어기</string>
+    <string name="car_dtc_detail_coverage">조회 범위</string>
+    <string name="car_dtc_coverage_complete">완전</string>
+    <string name="car_dtc_coverage_partial">부분</string>
+    <string name="car_dtc_kind_stored">저장됨</string>
+    <string name="car_dtc_kind_pending">보류 중</string>
+    <string name="car_dtc_kind_permanent">영구</string>
+    <string name="car_freeze_frame_section">프리즈 프레임</string>
+    <string name="car_freeze_frame_none">사용 가능한 프리즈 프레임 없음</string>
+    <string name="car_freeze_frame_unknown">프리즈 프레임 내용을 읽을 수 없음</string>
+    <string name="car_freeze_frame_omitted">추가 신호 %d개 생략됨</string>
+    <string name="car_freeze_frame_incomplete_summary">불완전한 데이터 · 신호 %d개 미판독 또는 생략됨</string>
+    <string name="car_freeze_frame_read_incomplete">불완전한 데이터 · 읽기 중단됨</string>
+
+    <!-- AA-05 In-Template Alert & Host Speed Strings -->
+    <string name="car_alert_high">높음</string>
+    <string name="car_alert_attention">주의</string>
+    <string name="car_action_enable_speed">차량 속도 활성화</string>
+    <string name="car_speed_permission_phone_handoff">주차 상태에서 휴대폰으로 차량 속도 권한 설정을 완료하십시오.</string>
+    <string name="car_speed_permission_handoff">주차 상태에서 차량 속도 권한 설정을 완료하십시오.</string>
+</resources>

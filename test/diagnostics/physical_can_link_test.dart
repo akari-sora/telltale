@@ -367,8 +367,8 @@ void main() {
     test('responseTimeout independent of deadline', () async {
       final pair = await _createConnectedPair(
         protocol: BusProtocol.can11,
-        faults: const AdapterFaults(swallowPromptFor: {'22B046'}),
       );
+      pair.transport.silenceFor.add('22B046');
       final link = Elm327DiagnosticLink(pair.client);
 
       final req = DiagnosticRequest(

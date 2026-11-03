@@ -241,8 +241,8 @@ not. The line is whether the token is *addressed to a machine or a search*, or t
 - `locale_preference_v1`
 - `English (picker self-name — lib/ui/widgets/language_picker.dart:13-15; never render as 英文)`
 - `繁體中文 (picker self-name — never render as Traditional Chinese)`
-- `Language / 語言 (bilingual section title, byte-identical in both ARBs)`
-- `System default / 跟隨系統 (bilingual picker option)`
+- `Language / 語言 (bilingual section title; zh-Hans uses Language / 语言)`
+- `System default / 跟隨系統 (bilingual picker option; zh-Hans uses System default / 跟随系统)`
 - `# Telltale OBD 工作階段紀錄 v1`
 - `# Telltale 無車測試馬具證據 v1`
 - `https://play.google.com/store/apps/details?id=com.cbstudio.telltale`

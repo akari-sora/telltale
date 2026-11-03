@@ -173,6 +173,69 @@ class TelltaleCarAppServiceTest {
     }
 
     @Test
+    fun session_reRendersTopScreenOnlyWhenDayNightOrDensityChanges() {
+        val session = TelltaleCarSession()
+        var invalidations = 0
+        session.invalidateTopScreen = { invalidations++ }
+        SessionController(session, carContext, Intent()).moveToState(Lifecycle.State.CREATED)
+        session.onCreateScreen(Intent())
+
+        fun applyConfiguration(night: Boolean? = null, densityDpi: Int? = null) {
+            val configuration = android.content.res.Configuration(carContext.resources.configuration)
+            night?.let {
+                val mode = if (it) android.content.res.Configuration.UI_MODE_NIGHT_YES else android.content.res.Configuration.UI_MODE_NIGHT_NO
+                configuration.uiMode = (configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK.inv()) or mode
+            }
+            densityDpi?.let { configuration.densityDpi = it }
+            @Suppress("DEPRECATION")
+            carContext.resources.updateConfiguration(configuration, carContext.resources.displayMetrics)
+            session.onCarConfigurationChanged(configuration)
+        }
+
+        val startedDark = carContext.isDarkMode
+        applyConfiguration() // Unrelated change: no new template request.
+        assertEquals(0, invalidations)
+        applyConfiguration(night = !startedDark)
+        assertEquals(!startedDark, carContext.isDarkMode)
+        assertEquals(1, invalidations)
+        applyConfiguration(night = !startedDark) // Repeated mode: still one request.
+        assertEquals(1, invalidations)
+        applyConfiguration(densityDpi = carContext.resources.configuration.densityDpi * 2)
+        assertEquals(2, invalidations)
+
+        // A host that is not accepting invalidations must not crash the session.
+        session.invalidateTopScreen = { throw IllegalStateException("No screen") }
+        applyConfiguration(night = startedDark)
+        session.invalidateTopScreen = { invalidations++ }
+        applyConfiguration(night = startedDark) // Failed invalidation is retried for the same appearance.
+        assertEquals(3, invalidations)
+        applyConfiguration(night = startedDark)
+        assertEquals(3, invalidations)
+    }
+
+    @Test
+    fun session_tracksTheDisplayDensityUsedByTheGaugeEvenWhenConfigurationDpiIsUnchanged() {
+        val session = TelltaleCarSession()
+        var invalidations = 0
+        session.invalidateTopScreen = { invalidations++ }
+        SessionController(session, carContext, Intent()).moveToState(Lifecycle.State.CREATED)
+        session.onCreateScreen(Intent())
+
+        val metrics = carContext.resources.displayMetrics
+        val originalDensity = metrics.density
+        val configuration = android.content.res.Configuration(carContext.resources.configuration)
+        try {
+            metrics.density = originalDensity * 1.5f
+            session.onCarConfigurationChanged(configuration)
+            assertEquals(1, invalidations)
+            session.onCarConfigurationChanged(configuration)
+            assertEquals(1, invalidations)
+        } finally {
+            metrics.density = originalDensity
+        }
+    }
+
+    @Test
     fun createHostValidator_whenDebuggable_returnsAllowAll() {
         val service = Robolectric.buildService(TelltaleCarAppService::class.java).create().get()
         service.applicationInfo.flags = service.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE

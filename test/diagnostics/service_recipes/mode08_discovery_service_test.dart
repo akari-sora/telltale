@@ -273,7 +273,6 @@ void main() {
     test('handles timeout fail-closed as unknown support', () async {
       final fake = FakeElm327(
         protocol: BusProtocol.can11,
-        faults: const AdapterFaults(swallowPromptFor: {'0800'}),
         ecus: [
           FakeEcu(
             name: 'ECM',
@@ -286,6 +285,7 @@ void main() {
           ),
         ],
       );
+      fake.silenceFor.add('0800');
       final client = await _connect(
         fake,
         commandTimeout: const Duration(milliseconds: 50),
@@ -388,7 +388,6 @@ void main() {
     test('preserves discovered TIDs as partial discovery when subsequent block times out', () async {
       final fake = FakeElm327(
         protocol: BusProtocol.can11,
-        faults: const AdapterFaults(swallowPromptFor: {'0820'}),
         ecus: [
           FakeEcu(
             name: 'ECM',
@@ -401,6 +400,7 @@ void main() {
           ),
         ],
       );
+      fake.silenceFor.add('0820');
       final client = await _connect(
         fake,
         commandTimeout: const Duration(milliseconds: 50),
