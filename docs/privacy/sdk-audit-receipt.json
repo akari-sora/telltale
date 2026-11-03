@@ -261,7 +261,7 @@
     "lib/ui/screens/workshop/service_recipes_screen.dart": "2fc8833c9111f4f2fc1b3b087076be563b051e8712290a2076d743deb4ea446b",
     "lib/ui/shell.dart": "f10b52446b834360b8290b2c7daf8d7279c84f270522535dca012aaa87a03fd7",
     "lib/ui/wear/wear_permission_copy.dart": "7f19d94621039d91e16a175a9399fd4fab650066509192b923a7095c17b47e36",
-    "lib/ui/wear/wear_shell.dart": "35bf8a7cd612a4af488cde35f86a34150c883be3efcb0eb03b4cd1e251682775",
+    "lib/ui/wear/wear_shell.dart": "fbd0a32d500176443fd628c20479026635f45fd6fd477501d81105931d9708e7",
     "lib/ui/widgets/field_event_markers.dart": "78e41d0bf009c9b00f8de256e2081c46338043609fd669b12dbfaa698d428591",
     "lib/ui/widgets/gauges/dial_gauge.dart": "20c073d775cf89c4bb669efe217a9fc1c17da8db20f38e6f7e50252ced4c35ae",
     "lib/ui/widgets/gauges/linear_gauge.dart": "c4f3a8107d0684ae1525b57a2938c5dc4cd44f892c0f24c839f04e15194ba7a7",

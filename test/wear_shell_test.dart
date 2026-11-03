@@ -49,6 +49,15 @@ final class _FixedSession extends ObdSession {
   void publish(ObdConnectionState next) {
     state = next;
   }
+
+  /// Disconnects the UI asked for. Counted, not performed: these tests are
+  /// about which answer reaches the session, not about teardown.
+  int disconnects = 0;
+
+  @override
+  Future<void> disconnect() async {
+    disconnects++;
+  }
 }
 
 Map<String, Object?> _wearProfileJson(
@@ -150,6 +159,7 @@ Future<ProviderContainer> _pumpWear(
   required bool connected,
   TelemetrySnapshot snapshot = const TelemetrySnapshot(),
   Locale locale = testUiLocale,
+  double face = 227,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
@@ -171,7 +181,7 @@ Future<ProviderContainer> _pumpWear(
       telemetryProvider.overrideWith((ref) => Stream.value(snapshot)),
     ],
   );
-  tester.view.physicalSize = const Size(454, 454);
+  tester.view.physicalSize = Size(face * 2, face * 2);
   tester.view.devicePixelRatio = 2.0;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -242,90 +252,214 @@ void main() {
 
   // 454 px at 2.0 is a 227-point round face. AlertDialog's phone insets left
   // it one line: Korean lost the second half of its question in 1.0.27 QA.
-  for (final locale in AppLocalizations.supportedLocales) {
-    testWidgets('the disconnect question fits the round face in $locale', (
-      tester,
-    ) async {
-      final container = await _pumpWear(
-        tester,
-        connected: true,
-        locale: locale,
-      );
-      addTearDown(container.dispose);
-      final l10n = lookupAppLocalizations(locale);
+  // 192 and 240 points bracket the round watches in use; at the default text
+  // size everything must be on the first screen, with nothing to scroll.
+  for (final face in const [192.0, 227.0, 240.0]) {
+    for (final locale in AppLocalizations.supportedLocales) {
+      testWidgets('the disconnect question fits a ${face.round()}-point round '
+          'face in $locale', (tester) async {
+        final container = await _pumpWear(
+          tester,
+          connected: true,
+          locale: locale,
+          face: face,
+        );
+        addTearDown(container.dispose);
+        final l10n = lookupAppLocalizations(locale);
 
-      await tester.longPress(find.byKey(const Key('wear_dial')));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
+        await tester.longPress(find.byKey(const Key('wear_dial')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
 
-      final card = tester.getRect(
-        find
-            .descendant(
-              of: find.byType(Dialog),
-              matching: find.byType(Material),
-            )
-            .first,
-      );
-      const center = Offset(113.5, 113.5);
-      void readable(Finder finder, String what) {
-        expect(finder, findsOneWidget, reason: '$what in $locale');
-        final paragraph = tester.renderObject<RenderParagraph>(
-          find.descendant(of: finder, matching: find.byType(RichText)).first,
+        final card = tester.getRect(
+          find
+              .descendant(
+                of: find.byType(Dialog),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        final radius = face / 2;
+        final center = Offset(radius, radius);
+        void readable(Finder finder, String what) {
+          expect(finder, findsOneWidget, reason: '$what in $locale');
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.descendant(of: finder, matching: find.byType(RichText)).first,
+          );
+          // Height alone misses a line limit with an ellipsis: the intrinsic
+          // height obeys the same limit.
+          expect(
+            paragraph.didExceedMaxLines,
+            isFalse,
+            reason: '$what is cut short in $locale',
+          );
+          expect(
+            paragraph.size.height,
+            greaterThanOrEqualTo(
+              paragraph.getMaxIntrinsicHeight(paragraph.size.width) - 0.5,
+            ),
+            reason: '$what is cut short in $locale',
+          );
+          final rect = tester.getRect(finder);
+          for (final corner in [
+            rect.topLeft,
+            rect.topRight,
+            rect.bottomLeft,
+            rect.bottomRight,
+          ]) {
+            expect(
+              card.inflate(0.5).contains(corner),
+              isTrue,
+              reason: '$what leaves the dialog in $locale',
+            );
+          }
+          // The round face is checked against the glyphs drawn, not the
+          // stretched text box, whose centred line leaves its corners empty.
+          final origin = paragraph.localToGlobal(Offset.zero);
+          final glyphs = paragraph.getBoxesForSelection(
+            TextSelection(
+              baseOffset: 0,
+              extentOffset: paragraph.text.toPlainText().length,
+            ),
+          );
+          expect(glyphs, isNotEmpty, reason: '$what draws nothing in $locale');
+          for (final box in glyphs) {
+            final ink = box.toRect().shift(origin);
+            for (final corner in [
+              ink.topLeft,
+              ink.topRight,
+              ink.bottomLeft,
+              ink.bottomRight,
+            ]) {
+              expect(
+                (corner - center).distance,
+                lessThanOrEqualTo(radius),
+                reason: '$what leaves the round face in $locale',
+              );
+            }
+          }
+        }
+
+        final inDialog = find.byType(Dialog);
+        readable(
+          find.descendant(
+            of: inDialog,
+            matching: find.text(l10n.wearDisconnectQuestion),
+          ),
+          'question',
+        );
+        readable(
+          find.descendant(of: inDialog, matching: find.text(l10n.wearCancel)),
+          'cancel',
+        );
+        readable(
+          find.descendant(
+            of: find.byKey(const Key('wear_disconnect_confirm')),
+            matching: find.text(l10n.wearDisconnect),
+          ),
+          'disconnect',
+        );
+
+        final scroll = tester.state<ScrollableState>(
+          find.descendant(of: inDialog, matching: find.byType(Scrollable)),
         );
         expect(
-          paragraph.size.height,
-          greaterThanOrEqualTo(
-            paragraph.getMaxIntrinsicHeight(paragraph.size.width) - 0.5,
-          ),
-          reason: '$what is cut short in $locale',
+          scroll.position.maxScrollExtent,
+          0,
+          reason: 'scrolls in $locale',
         );
-        final rect = tester.getRect(finder);
-        for (final corner in [
-          rect.topLeft,
-          rect.topRight,
-          rect.bottomLeft,
-          rect.bottomRight,
-        ]) {
-          expect(
-            card.inflate(0.5).contains(corner),
-            isTrue,
-            reason: '$what leaves the dialog in $locale',
-          );
-          expect(
-            (corner - center).distance,
-            lessThanOrEqualTo(113.5),
-            reason: '$what leaves the round face in $locale',
-          );
-        }
-      }
 
-      final inDialog = find.byType(Dialog);
-      readable(
-        find.descendant(
-          of: inDialog,
-          matching: find.text(l10n.wearDisconnectQuestion),
-        ),
-        'question',
-      );
-      readable(
-        find.descendant(of: inDialog, matching: find.text(l10n.wearCancel)),
-        'cancel',
-      );
-      readable(
-        find.descendant(
-          of: find.byKey(const Key('wear_disconnect_confirm')),
-          matching: find.text(l10n.wearDisconnect),
-        ),
-        'disconnect',
-      );
-
-      await tester.tap(
-        find.descendant(of: inDialog, matching: find.text(l10n.wearCancel)),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('wear_disconnect_confirm')), findsNothing);
-    });
+        await tester.tap(
+          find.descendant(of: inDialog, matching: find.text(l10n.wearCancel)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('wear_disconnect_confirm')), findsNothing);
+      });
+    }
   }
+
+  testWidgets('only Disconnect disconnects; Cancel and dismissing do not', (
+    tester,
+  ) async {
+    final container = await _pumpWear(tester, connected: true);
+    addTearDown(container.dispose);
+    final session =
+        container.read(obdSessionProvider.notifier) as _FixedSession;
+    final l10n = lookupAppLocalizations(testUiLocale);
+
+    Future<void> ask() async {
+      await tester.longPress(find.byKey(const Key('wear_dial')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('wear_disconnect_confirm')), findsOneWidget);
+    }
+
+    await ask();
+    await tester.tap(find.text(l10n.wearCancel));
+    await tester.pumpAndSettle();
+    expect(session.disconnects, 0);
+
+    await ask();
+    // Outside the card: the barrier.
+    await tester.tapAt(const Offset(113.5, 4));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('wear_disconnect_confirm')), findsNothing);
+    expect(session.disconnects, 0);
+
+    await ask();
+    await tester.tap(find.byKey(const Key('wear_disconnect_confirm')));
+    await tester.pumpAndSettle();
+    expect(session.disconnects, 1);
+  });
+
+  testWidgets('at double text size on a small face, Disconnect is a scroll '
+      'away and the scroll is shown', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    const locale = Locale('es');
+    final container = await _pumpWear(
+      tester,
+      connected: true,
+      locale: locale,
+      face: 192,
+    );
+    addTearDown(container.dispose);
+    final session =
+        container.read(obdSessionProvider.notifier) as _FixedSession;
+
+    await tester.longPress(find.byKey(const Key('wear_dial')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    final inDialog = find.byType(Dialog);
+    final scroll = tester.state<ScrollableState>(
+      find.descendant(of: inDialog, matching: find.byType(Scrollable)),
+    );
+    expect(scroll.position.maxScrollExtent, greaterThan(0));
+    final bar = tester.widget<Scrollbar>(
+      find.descendant(of: inDialog, matching: find.byType(Scrollbar)),
+    );
+    expect(bar.thumbVisibility, isTrue);
+
+    final confirm = find.byKey(const Key('wear_disconnect_confirm'));
+    await tester.ensureVisible(confirm);
+    await tester.pumpAndSettle();
+    final label = tester.getRect(
+      find.descendant(
+        of: confirm,
+        matching: find.text(lookupAppLocalizations(locale).wearDisconnect),
+      ),
+    );
+    final card = tester.getRect(
+      find.descendant(of: inDialog, matching: find.byType(Material)).first,
+    );
+    // Only the top: at double size the test font's label can be taller than
+    // the card. The tap below is what proves the button can be reached.
+    expect(card.inflate(0.5).contains(label.topLeft), isTrue);
+
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+    expect(session.disconnects, 1);
+  });
 
   testWidgets('no battery page without installed profile signals', (
     tester,
