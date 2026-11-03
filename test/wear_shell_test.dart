@@ -154,10 +154,11 @@ Map<String, Object?> _wearProfileJson(
   ],
 };
 
-/// What the dialog's scroll thumb paints now, or nothing while it is faded
-/// out. The painting, not the `thumbVisibility` setting: a thumb that is
-/// switched on but never painted tells the wearer nothing.
-List<RecordedInvocation> _scrollThumbPaint(WidgetTester tester) {
+/// The scroll thumbs the wearer can see in the dialog now: rectangles the
+/// scrollbar paints with some opacity and some area, shorter than the track.
+/// The painting, not the `thumbVisibility` setting: a thumb that is switched
+/// on but faded out, transparent or zero wide tells the wearer nothing.
+List<Rect> _visibleScrollThumbs(WidgetTester tester) {
   final paint = find.descendant(
     of: find.byType(Dialog),
     matching: find.byWidgetPredicate(
@@ -166,10 +167,25 @@ List<RecordedInvocation> _scrollThumbPaint(WidgetTester tester) {
   );
   final painter =
       tester.widget<CustomPaint>(paint).foregroundPainter! as ScrollbarPainter;
-  if (painter.fadeoutOpacityAnimation.value == 0) return const [];
+  final size = tester.getSize(paint);
   final canvas = TestRecordingCanvas();
-  painter.paint(canvas, tester.getSize(paint));
-  return canvas.invocations;
+  painter.paint(canvas, size);
+  final thumbs = <Rect>[];
+  for (final call in canvas.invocations) {
+    final args = call.invocation.positionalArguments;
+    final rect = switch (call.invocation.memberName) {
+      #drawRect => args[0] as Rect,
+      #drawRRect => (args[0] as RRect).outerRect,
+      _ => null,
+    };
+    if (rect == null || (args[1] as Paint).color.a == 0) continue;
+    // The track runs the full height; a thumb is shorter when there is
+    // something to scroll.
+    if (rect.width > 0 && rect.height > 0 && rect.height < size.height - 0.5) {
+      thumbs.add(rect);
+    }
+  }
+  return thumbs;
 }
 
 Future<ProviderContainer> _pumpWear(
@@ -387,7 +403,7 @@ void main() {
           reason: 'scrolls in $locale',
         );
         expect(
-          _scrollThumbPaint(tester),
+          _visibleScrollThumbs(tester),
           isEmpty,
           reason: 'scroll thumb with nothing to scroll in $locale',
         );
@@ -459,7 +475,7 @@ void main() {
     );
     expect(scroll.position.maxScrollExtent, greaterThan(0));
     // Shown before any scrolling: it is the only sign there is more below.
-    expect(_scrollThumbPaint(tester), isNotEmpty);
+    expect(_visibleScrollThumbs(tester), hasLength(1));
 
     final confirm = find.byKey(const Key('wear_disconnect_confirm'));
     await tester.ensureVisible(confirm);
