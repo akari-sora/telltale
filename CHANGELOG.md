@@ -13,6 +13,7 @@ Dates are the date the build was made, not the date it reached anyone.
   languages. German is now also available in Android Auto. (!153)
 - These LLM translations passed mechanical checks and model review, but have
   not been reviewed by native speakers. Please report translation issues.
+- Fit the Wear disconnect confirmation on round watches and keep the verb visible in the German/Dutch Android Auto speed button. (!156, !157)
 - No OBD or vehicle-logic changes. Store asset updates are included from
   !151 and !152; new-language store screenshots and release-build device
   walks remain pending before publication.
@@ -22,6 +23,7 @@ Dates are the date the build was made, not the date it reached anyone.
 - App 與 Android Auto 新增日文、韓文、西班牙文、法文、巴西葡萄牙文、簡體中文、
   義大利文與荷蘭文，App 共支援 11 種介面語言；Android Auto 現也支援德文。（!153）
 - 這些 LLM 翻譯已通過機械式檢查與模型審閱，未經母語者審閱；歡迎回報翻譯問題。
+- Wear 中斷連線確認框可完整顯示於圓形手錶，德文／荷蘭文 Android Auto 車速按鈕保留可見的動詞。（!156、!157）
 - OBD 與車輛邏輯未變更。包含 !151、!152 的商店素材更新；新增語言的商店截圖
   與正式版裝置走查仍須在發布前完成。
 
