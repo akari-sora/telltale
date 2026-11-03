@@ -205,7 +205,7 @@ not. The line is whether the token is *addressed to a machine or a search*, or t
 - `MAT403096BNL00000`
 - `TORQUEDEMO0000001`
 - ``researchOnly` (catalog source label)`
-- ``community` (catalog source label — NOT the ordinary word: README.md:213 'community expectations' IS translated, as 社群互動規範)`
+- ``community` (catalog source label — NOT the ordinary word: README.md:249 'community expectations' IS translated, as 社群互動規範)`
 - ``experimental` (catalog source label)`
 - `classicTransportAvailable`
 - `fastMode`

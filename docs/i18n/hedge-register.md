@@ -180,7 +180,7 @@ are anchored at the start of a line.
 
 **English** — no diagnostic result guarantees that a vehicle is safe to operate.
 
-**Why it is load-bearing.** README.zh-TW.md:192 ↔ README.md:224-225 (T1). Final sentence of the README in both languages. Absolute negation (任何…都不 / 'no…guarantees'); any hedge-softening here is a liability change, not a style change.
+**Why it is load-bearing.** README.zh-TW.md:223 ↔ README.md:266-267 (T1). Final sentence of the README in both languages. Absolute negation (任何…都不 / 'no…guarantees'); any hedge-softening here is a liability change, not a style change.
 
 ### 9. 請只在停妥時操作，或交由乘客操作。清除 DTC 前先保存診斷證據，也不要以本 App 取代專業檢查。
 
@@ -188,7 +188,7 @@ are anchored at the start of a line.
 
 **English** — Use the app only while parked or as a passenger. Save diagnostic evidence before clearing DTCs, and do not treat this app as a substitute for professional inspection.
 
-**Why it is load-bearing.** README.zh-TW.md:181-182 ↔ README.md:210-212 (T1). Three safety imperatives in one breath. 只在/'only' scopes the first; the clear-before-save ordering is causal (clearing destroys the freeze frame — docs/field-guide.zh-TW.md:238); 取代/'substitute' must stay.
+**Why it is load-bearing.** README.zh-TW.md:212-213 ↔ README.md:246-248 (T1). Three safety imperatives in one breath. 只在/'only' scopes the first; the clear-before-save ordering is causal (clearing destroys the freeze frame — docs/field-guide.zh-TW.md:238); 取代/'substitute' must stay.
 
 ### 10. Telltale 不會主動上傳資料。
 
@@ -196,7 +196,7 @@ are anchored at the start of a line.
 
 **English** — Telltale proactively uploads nothing.
 
-**Why it is load-bearing.** README.zh-TW.md:176 ↔ README.md:204 (T1). 主動/'proactively' is the entire hedge — the app does not upload on its own, but the user CAN export and share, and OS backup may copy app data (README.zh-TW.md:176-177 ↔ README.md:205-207). Dropping 主動 turns a scoped claim into a false absolute.
+**Why it is load-bearing.** README.zh-TW.md:207 ↔ README.md:240 (T1). 主動/'proactively' is the entire hedge — the app does not upload on its own, but the user CAN export and share, and OS backup may copy app data (README.zh-TW.md:207-208 ↔ README.md:241-243). Dropping 主動 turns a scoped claim into a false absolute.
 
 ### 11. 這次沒有讀到凍結幀 —— 不代表車上沒有。
 
