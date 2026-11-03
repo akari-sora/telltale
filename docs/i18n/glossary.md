@@ -217,10 +217,10 @@ See also [do-not-translate.md](do-not-translate.md) and [hedge-register.md](hedg
 | 繁體中文 | English | Evidence | Status | Note |
 |---|---|---|---|---|
 | flavor | flavor | README.md:189-190 'The `field` flavor … the isolated `rig` flavor' ↔ README.zh-TW.md:160-161 (T1 — unchanged) | evidenced |  |
-| 協定差異 | Protocol deviations | README.md:229 doc table ↔ README.zh-TW.md:196 (T2); the zh doc's own H1 is '公式與 AT 指令的交叉驗證記錄' (docs/protocol-deviations.zh-TW.md:1) | evidenced |  |
+| 協定差異 | Protocol deviations | README.md:232 doc table ↔ README.zh-TW.md:199 (T2); the zh doc's own H1 is '公式與 AT 指令的交叉驗證記錄' (docs/protocol-deviations.zh-TW.md:1) | evidenced |  |
 | 可重現的模擬器 | deterministic simulators | README.md:219 ↔ README.zh-TW.md:186 (T1) | evidenced |  |
 | 契約 | contract | README.md:217 'Unit, contract, parser, and widget tests' ↔ README.zh-TW.md:184 '單元、契約、parser 與 widget 測試' (T1) | evidenced | 'parser' and 'widget' stay English inside the zh row; 'unit' and 'contract' are translated.; context: test |
-| 實車指南 | Field guide | README.md:228 doc table ↔ README.zh-TW.md:195 (T2); the zh doc's own H1 is '上車前速查' (docs/field-guide.zh-TW.md:1) | evidenced | The doc's H1 (上車前速查) and its table label (實車指南) differ on purpose. Do not unify. |
+| 實車指南 | Field guide | README.md:231 doc table ↔ README.zh-TW.md:198 (T2); the zh doc's own H1 is '上車前速查' (docs/field-guide.zh-TW.md:1) | evidenced | The doc's H1 (上車前速查) and its table label (實車指南) differ on purpose. Do not unify. |
 | 專案目錄 | Repository layout | README.md:212 heading ↔ README.zh-TW.md:179 heading (T1) | evidenced |  |
 | 工具鏈 | toolchain | README.md:176 'Use the pinned Flutter 3.47.0 toolchain' ↔ README.zh-TW.md:147 '使用固定的 Flutter 3.47.0 工具鏈' (T1) | evidenced |  |
 | 平台整合 | platform integration | README.md:220 ↔ README.zh-TW.md:187 (T1) | evidenced |  |
