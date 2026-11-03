@@ -521,30 +521,6 @@ final class ActiveTestAuthorizationIssuer {
   }
 }
 
-/// Snapshot of the live qualification and support state for an active test.
-final class ActiveTestSupportSnapshot {
-  const ActiveTestSupportSnapshot({
-    required this.profileId,
-    required this.ecuSupport,
-    required this.definitionAvailable,
-    required this.benchQualified,
-    required this.vehicleQualified,
-    required this.provenanceKind,
-    this.isRevoked = false,
-  });
-
-  final String profileId;
-  final EcuSupportStatus ecuSupport;
-  final bool definitionAvailable;
-  final bool benchQualified;
-  final bool vehicleQualified;
-  final ProvenanceKind provenanceKind;
-  final bool isRevoked;
-
-  /// Whether this profile is qualified on either bench or vehicle.
-  bool get isHardwareQualified => benchQualified || vehicleQualified;
-}
-
 /// Fail-closed eligibility gate evaluator for read-only preview.
 final class ActiveTestEligibilityGate {
   const ActiveTestEligibilityGate._();
