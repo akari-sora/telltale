@@ -74,7 +74,7 @@
     <!-- AA-05 In-Template Alert & Host Speed Strings -->
     <string name="car_alert_high">Hoog</string>
     <string name="car_alert_attention">Aandacht</string>
-    <string name="car_action_enable_speed">Voertuigsnelheid inschakelen</string>
+    <string name="car_action_enable_speed">Snelheid inschakelen</string>
     <string name="car_speed_permission_phone_handoff">Regel de toestemming voor voertuigsnelheid op je telefoon terwijl je geparkeerd staat.</string>
     <string name="car_speed_permission_handoff">Regel de toestemming voor voertuigsnelheid terwijl je geparkeerd staat.</string>
 </resources>
