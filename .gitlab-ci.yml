@@ -6,6 +6,7 @@ default:
   interruptible: true
 
 variables:
+  GIT_DEPTH: "20"
   PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
   GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false -Djava.net.preferIPv4Stack=true"
   ANDROID_HOME: "/opt/android"
@@ -20,6 +21,13 @@ variables:
     key: pub-3.47.0
     paths: [.pub-cache/]
   before_script:
+    # GIT_DEPTH is shallow; contract tests diff against origin/main...HEAD.
+    - |
+      git fetch --no-tags --depth=200 origin "+refs/heads/main:refs/remotes/origin/main"
+      if ! git merge-base origin/main HEAD >/dev/null 2>&1; then
+        git fetch --no-tags --unshallow origin "+refs/heads/main:refs/remotes/origin/main" || git fetch --no-tags --deepen=100000 origin
+      fi
+      git merge-base origin/main HEAD
     - bash tool/ci/prepare_gate.sh
   script:
     - |
