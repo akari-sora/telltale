@@ -6,6 +6,7 @@ default:
   interruptible: true
 
 variables:
+  GIT_DEPTH: "20"
   PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
   GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false -Djava.net.preferIPv4Stack=true"
   ANDROID_HOME: "/opt/android"
