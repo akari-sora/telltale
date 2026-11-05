@@ -47,6 +47,8 @@ full-gate:
 # Fork MRs still cannot use this project's runner via these rules.
 full-gate-mr:
   extends: .gate-common
+  artifacts:
+    expire_in: 3 days
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_PROJECT_ID == "86385809" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID'
     - if: '$CI_GATE_RUNNER == "hosted" && $CI_PROJECT_ID == "86385809" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web") && $CI_COMMIT_BRANCH'
